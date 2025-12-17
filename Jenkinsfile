@@ -10,11 +10,6 @@ pipeline {
         SECRETS_DIR = '/var/jenkins_home/secrets'
         BUILD_DIR = "${WORKSPACE}/build"
         MW_DIR = "${BUILD_DIR}/mediawiki"
-
-        // NFS deployment target (not secrets)
-        NFS_HOST = 'ssh.nyc1.nearlyfreespeech.net'
-        NFS_USER = 'jmyles_pickipedia'  // TODO: confirm this username
-        NFS_PATH = '/home/public'
     }
 
     stages {
@@ -95,32 +90,14 @@ pipeline {
             }
         }
 
-        stage('Deploy to NFS') {
-            when {
-                branch 'main'
-            }
-            steps {
-                sh '''#!/bin/bash
-                    set -e
-
-                    echo "Deploying to ${NFS_USER}@${NFS_HOST}:${NFS_PATH}"
-
-                    rsync -avz --delete \
-                        --exclude='.git' \
-                        --exclude='cache/*' \
-                        --exclude='images/*' \
-                        "${MW_DIR}/" \
-                        "${NFS_USER}@${NFS_HOST}:${NFS_PATH}/"
-
-                    echo "Deploy complete"
-                '''
-            }
-        }
+        // TODO: Add production deploy stage once hunter preview is working
+        // Will use marker-file pattern like justinholmes.com for security
     }
 
     post {
         success {
             echo "Build ${BUILD_NUMBER} succeeded"
+            echo "MediaWiki ${MEDIAWIKI_VERSION} built at ${MW_DIR}"
         }
         failure {
             echo "Build ${BUILD_NUMBER} failed"
