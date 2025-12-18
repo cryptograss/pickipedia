@@ -2,7 +2,8 @@
     "repositories": [
         {
             "type": "vcs",
-            "url": "https://github.com/StarCitizenWiki/mediawiki-extensions-EmbedVideo.git"
+            "url": "https://github.com/StarCitizenWiki/mediawiki-extensions-EmbedVideo.git",
+            "no-api": true
         }
     ],
     "require": {

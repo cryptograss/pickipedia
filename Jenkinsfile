@@ -59,25 +59,20 @@ pipeline {
 
         stage('Install Extensions') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'github-token', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
-                    sh '''#!/bin/bash
-                        set -e
+                sh '''#!/bin/bash
+                    set -e
 
-                        # Copy our configuration into MediaWiki
-                        cp LocalSettings.php "${MW_DIR}/"
-                        cp LocalSettings.local.php "${MW_DIR}/"
+                    # Copy our configuration into MediaWiki
+                    cp LocalSettings.php "${MW_DIR}/"
+                    cp LocalSettings.local.php "${MW_DIR}/"
 
-                        # Copy composer.json as composer.local.json for MediaWiki
-                        cp composer.json "${MW_DIR}/composer.local.json"
+                    # Copy composer.json as composer.local.json for MediaWiki
+                    cp composer.json "${MW_DIR}/composer.local.json"
 
-                        # Configure composer to use GitHub token for VCS repositories
-                        composer config --global github-oauth.github.com "${GH_TOKEN}"
-
-                        # Install composer dependencies
-                        cd "${MW_DIR}"
-                        composer update --no-dev --optimize-autoloader
-                    '''
-                }
+                    # Install composer dependencies
+                    cd "${MW_DIR}"
+                    composer update --no-dev --optimize-autoloader
+                '''
             }
         }
 
