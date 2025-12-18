@@ -51,8 +51,9 @@ RUN git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-YouTub
 # Copy custom extensions (if any)
 COPY extensions/ /var/www/html/custom-extensions/
 
-# Apache configuration
+# Apache configuration - enable rewrite and AllowOverride for .htaccess
 RUN a2enmod rewrite
+RUN sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 RUN chown -R www-data:www-data /var/www/html
 
 # PHP configuration for MediaWiki
