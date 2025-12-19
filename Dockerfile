@@ -51,6 +51,9 @@ RUN git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-YouTub
 # Copy custom extensions (if any)
 COPY extensions/ /var/www/html/custom-extensions/
 
+# Copy custom assets (logo, etc.)
+COPY assets/ /var/www/html/assets/
+
 # Apache configuration - enable rewrite and AllowOverride for .htaccess
 RUN a2enmod rewrite
 RUN sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf

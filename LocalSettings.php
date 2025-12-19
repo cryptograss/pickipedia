@@ -47,7 +47,7 @@ $wgUseInstantCommons = true;
 
 ## Logos
 $wgLogos = [
-    '1x' => "$wgResourceBasePath/resources/assets/wiki.png",
+    '1x' => "$wgResourceBasePath/assets/logo.png",
 ];
 
 ## Skins
