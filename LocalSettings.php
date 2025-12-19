@@ -51,8 +51,9 @@ $wgLogos = [
 ];
 
 ## Skins
+wfLoadSkin( 'MonoBook' );
 wfLoadSkin( 'Vector' );
-$wgDefaultSkin = "vector";
+$wgDefaultSkin = "monobook";
 
 ## Rights
 $wgRightsPage = "";
