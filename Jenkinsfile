@@ -104,8 +104,79 @@ pipeline {
             }
         }
 
-        // TODO: Add production deploy stage once hunter preview is working
-        // Will use marker-file pattern like justinholmes.com for security
+        stage('Copy Assets') {
+            steps {
+                sh '''#!/bin/bash
+                    set -e
+                    # Copy logo and other assets
+                    if [ -d "${WORKSPACE}/assets" ]; then
+                        mkdir -p "${MW_DIR}/assets"
+                        cp -r "${WORKSPACE}/assets/"* "${MW_DIR}/assets/"
+                    fi
+                '''
+            }
+        }
+
+        stage('Generate Build Info') {
+            steps {
+                sh '''#!/bin/bash
+                    set -e
+
+                    # Fetch current Ethereum mainnet block height
+                    echo "Fetching current Ethereum block height..."
+                    BLOCK_DATA=$(curl -s "https://api.etherscan.io/api?module=proxy&action=eth_blockNumber")
+                    BLOCK_HEX=$(echo "$BLOCK_DATA" | grep -o '"result":"[^"]*"' | cut -d'"' -f4)
+
+                    if [ -n "$BLOCK_HEX" ]; then
+                        # Convert hex to decimal
+                        BLOCK_HEIGHT=$((${BLOCK_HEX}))
+                        echo "Current block height: ${BLOCK_HEIGHT}"
+                    else
+                        echo "Warning: Could not fetch block height, using 0"
+                        BLOCK_HEIGHT=0
+                    fi
+
+                    # Generate build-info.php
+                    cat > "${MW_DIR}/build-info.php" << PHPEOF
+<?php
+// Auto-generated at build time - do not edit
+\$wgPickipediaBuildInfo = [
+    'blockheight' => ${BLOCK_HEIGHT},
+    'build_number' => '${BUILD_NUMBER}',
+    'commit' => '$(git rev-parse --short HEAD)',
+    'build_time' => '$(date -Iseconds)',
+];
+PHPEOF
+                    echo "Generated build-info.php with block ${BLOCK_HEIGHT}"
+                '''
+            }
+        }
+
+        stage('Stage for Deploy') {
+            when {
+                branch 'production'
+            }
+            steps {
+                sh '''#!/bin/bash
+                    set -e
+
+                    STAGE_DIR="/var/jenkins_home/pickipedia_stage"
+                    MARKER_FILE="${STAGE_DIR}/.deploy-ready"
+
+                    echo "Staging build to ${STAGE_DIR}..."
+                    mkdir -p "${STAGE_DIR}"
+
+                    # Rsync the built MediaWiki to staging
+                    rsync -av --delete "${MW_DIR}/" "${STAGE_DIR}/"
+
+                    # Create deploy marker
+                    COMMIT_SHA=$(git rev-parse HEAD)
+                    echo "commit=${COMMIT_SHA} build=${BUILD_NUMBER} time=$(date -Iseconds)" > "${MARKER_FILE}"
+
+                    echo "Build staged - deploy marker created"
+                '''
+            }
+        }
     }
 
     post {
