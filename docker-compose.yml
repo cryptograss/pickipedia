@@ -14,11 +14,8 @@
 
 services:
   wiki:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        MEDIAWIKI_VERSION: ${MEDIAWIKI_VERSION:-1.43.0}
+    image: pickipedia-wiki:latest
+    # To rebuild: docker build -t pickipedia-wiki:latest --build-arg MEDIAWIKI_VERSION=1.43.0 .
     ports:
       - "${WIKI_PORT:-8888}:80"
     environment:
