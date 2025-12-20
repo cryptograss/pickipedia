@@ -1,6 +1,6 @@
 {
     "require": {
-        "mediawiki/semantic-media-wiki": "dev-master"
+        "mediawiki/semantic-media-wiki": "^5.1"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
