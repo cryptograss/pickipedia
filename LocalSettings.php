@@ -39,8 +39,8 @@ $wgMemCachedServers = [];
 $wgEnableUploads = true;
 $wgUploadPath = "$wgScriptPath/images";
 $wgUploadDirectory = "$IP/images";
-$wgUseImageMagick = true;
-$wgImageMagickConvertCommand = "/usr/bin/convert";
+$wgUseImageMagick = false;
+# GD library is used for thumbnails instead
 
 ## InstantCommons allows wiki to use images from commons.wikimedia.org
 $wgUseInstantCommons = true;
