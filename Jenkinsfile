@@ -86,6 +86,11 @@ pipeline {
                     if [ ! -d "YouTube" ]; then
                         git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-YouTube.git YouTube
                     fi
+
+                    # MsUpload - drag-and-drop multiple file upload
+                    if [ ! -d "MsUpload" ]; then
+                        git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-MsUpload.git MsUpload
+                    fi
                 '''
             }
         }
@@ -122,14 +127,11 @@ pipeline {
                 sh '''#!/bin/bash
                     set -e
 
-                    # Fetch current Ethereum mainnet block height
+                    # Fetch current Ethereum mainnet block height from Blockscout
                     echo "Fetching current Ethereum block height..."
-                    BLOCK_DATA=$(curl -s "https://api.etherscan.io/api?module=proxy&action=eth_blockNumber")
-                    BLOCK_HEX=$(echo "$BLOCK_DATA" | grep -o '"result":"[^"]*"' | cut -d'"' -f4)
+                    BLOCK_HEIGHT=$(curl -s "https://eth.blockscout.com/api/v2/blocks?type=block" | grep -o '"height":[0-9]*' | head -1 | cut -d: -f2)
 
-                    if [ -n "$BLOCK_HEX" ]; then
-                        # Convert hex to decimal
-                        BLOCK_HEIGHT=$((${BLOCK_HEX}))
+                    if [ -n "$BLOCK_HEIGHT" ] && [ "$BLOCK_HEIGHT" -gt 0 ] 2>/dev/null; then
                         echo "Current block height: ${BLOCK_HEIGHT}"
                     else
                         echo "Warning: Could not fetch block height, using 0"
