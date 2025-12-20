@@ -9,12 +9,5 @@
             "composer/installers": true,
             "mediawiki/semantic-media-wiki": true
         }
-    },
-    "extra": {
-        "merge-plugin": {
-            "include": [
-                "extensions/*/composer.json"
-            ]
-        }
     }
 }
