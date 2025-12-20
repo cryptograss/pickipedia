@@ -139,16 +139,21 @@ pipeline {
                     fi
 
                     # Generate build-info.php
-                    cat > "${MW_DIR}/build-info.php" << PHPEOF
+                    cat > "${MW_DIR}/build-info.php" << 'PHPEOF'
 <?php
 // Auto-generated at build time - do not edit
-\$wgPickipediaBuildInfo = [
-    'blockheight' => ${BLOCK_HEIGHT},
-    'build_number' => '${BUILD_NUMBER}',
-    'commit' => '$(git rev-parse --short HEAD)',
-    'build_time' => '$(date -Iseconds)',
+$wgPickipediaBuildInfo = [
+    'blockheight' => BLOCK_HEIGHT_PLACEHOLDER,
+    'build_number' => 'BUILD_NUMBER_PLACEHOLDER',
+    'commit' => 'COMMIT_PLACEHOLDER',
+    'build_time' => 'BUILD_TIME_PLACEHOLDER',
 ];
 PHPEOF
+                    # Replace placeholders with actual values
+                    sed -i "s/BLOCK_HEIGHT_PLACEHOLDER/${BLOCK_HEIGHT}/" "${MW_DIR}/build-info.php"
+                    sed -i "s/BUILD_NUMBER_PLACEHOLDER/${BUILD_NUMBER}/" "${MW_DIR}/build-info.php"
+                    sed -i "s/COMMIT_PLACEHOLDER/$(git rev-parse --short HEAD)/" "${MW_DIR}/build-info.php"
+                    sed -i "s/BUILD_TIME_PLACEHOLDER/$(date -Iseconds)/" "${MW_DIR}/build-info.php"
                     echo "Generated build-info.php with block ${BLOCK_HEIGHT}"
                 '''
             }
