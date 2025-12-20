@@ -41,6 +41,7 @@ $wgUploadPath = "$wgScriptPath/images";
 $wgUploadDirectory = "$IP/images";
 $wgUseImageMagick = false;
 # GD library is used for thumbnails instead
+$wgMaxImageArea = 50e6;  # 50 megapixels (default is 12.5MP)
 
 ## InstantCommons allows wiki to use images from commons.wikimedia.org
 $wgUseInstantCommons = true;
