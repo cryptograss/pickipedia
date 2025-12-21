@@ -86,6 +86,9 @@ $wgMSU_checkAutoCat = true;
 $wgMSU_imgParams = '400px';
 $wgMSU_uploadsize = '100mb';
 
+# HighslideGallery - lightbox image galleries
+wfLoadExtension( 'HighslideGallery' );
+
 ## Email (disabled by default)
 $wgEnableEmail = false;
 $wgEnableUserEmail = false;
