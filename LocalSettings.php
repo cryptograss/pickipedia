@@ -89,6 +89,9 @@ $wgMSU_uploadsize = '100mb';
 # HighslideGallery - lightbox image galleries
 wfLoadExtension( 'HighslideGallery' );
 
+# Variables - define and use variables in wikitext
+wfLoadExtension( 'Variables' );
+
 ## Email (disabled by default)
 $wgEnableEmail = false;
 $wgEnableUserEmail = false;

@@ -93,6 +93,11 @@ pipeline {
                         git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-MsUpload.git MsUpload
                     fi
 
+                    # Variables - parser functions for defining and using variables
+                    if [ ! -d "Variables" ]; then
+                        git clone --depth 1 --branch REL1_43 https://gerrit.wikimedia.org/r/mediawiki/extensions/Variables.git Variables
+                    fi
+
                 '''
             }
         }
