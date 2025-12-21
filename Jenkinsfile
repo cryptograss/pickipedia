@@ -93,19 +93,6 @@ pipeline {
                         git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-MsUpload.git MsUpload
                     fi
 
-                    # HighslideGallery - lightbox galleries with slideshow
-                    if [ ! -d "HighslideGallery" ]; then
-                        git clone --depth 1 https://github.com/kodene/HighslideGallery.git HighslideGallery
-
-                        # Download Highslide JS library (required by the extension)
-                        cd HighslideGallery
-                        curl -fSL "https://highslide.com/download/highslide-5.0.0.zip" -o highslide.zip
-                        unzip -q highslide.zip
-                        cp highslide/highslide-full.js highslide.js
-                        cp -r highslide/graphics .
-                        rm -rf highslide highslide.zip
-                        cd ..
-                    fi
                 '''
             }
         }

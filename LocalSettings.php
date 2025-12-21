@@ -86,8 +86,8 @@ $wgMSU_checkAutoCat = true;
 $wgMSU_imgParams = '400px';
 $wgMSU_uploadsize = '100mb';
 
-# HighslideGallery - lightbox image galleries (legacy extension, uses require_once)
-require_once "$IP/extensions/HighslideGallery/HighslideGallery.php";
+# HighslideGallery - lightbox image galleries
+wfLoadExtension( 'HighslideGallery' );
 
 ## Email (disabled by default)
 $wgEnableEmail = false;
