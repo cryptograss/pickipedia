@@ -53,6 +53,9 @@ RUN git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-YouTub
 # Copy custom extensions (if any)
 COPY extensions/ /var/www/html/custom-extensions/
 
+# Override HighslideGallery with our patched version (latest upstream + thumbnail fix)
+COPY extensions/HighslideGallery/ /var/www/html/extensions/HighslideGallery/
+
 # Copy custom assets (logo, etc.)
 COPY assets/ /var/www/html/assets/
 

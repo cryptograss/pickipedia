@@ -13,10 +13,6 @@
  *
  * You should have received a copy of the GNU General Public License along with this program; if not, see
  * < https://www.gnu.org/licenses/ >.
- *
- * PATCHED by PickiPedia/Magent: Modified onFunctionHsgImg() to use actual thumbnails
- * instead of full-size images with CSS max-width. This dramatically reduces page load
- * times for galleries with large images.
  */
 
 if ( !defined( 'MEDIAWIKI' ) ) {
@@ -521,25 +517,20 @@ class HighslideGallery {
 			self::$hsgLabel = null;
 		}
 
-		// -----------------------------------------------------------------
+		$hs = '<a href="' . $hrefEsc . '" class="image highslide-link" title="' . $captionEsc . '">';
+
 		// PICKIPEDIA PATCH: Use actual thumbnails instead of full-size images
-		// -----------------------------------------------------------------
-		// For the thumbnail display (img src), use a generated thumbnail if available.
-		// The href (link target) still points to the full-size image for the lightbox.
-		$thumbSrc = $href; // default to full-size
-		if ( $fileObj && $width > 0 ) {
-			$thumb = $fileObj->transform( [ 'width' => $width ] );
+		$w = (int)$width;
+		$thumbSrc = $href;
+		if ( $fileObj && $w > 0 ) {
+			$thumb = $fileObj->transform( [ 'width' => $w ] );
 			if ( $thumb && !$thumb->isError() ) {
 				$thumbSrc = $thumb->getUrl();
 			}
 		}
 		$thumbSrcEsc = htmlspecialchars( $thumbSrc, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' );
-		// -----------------------------------------------------------------
 		// END PICKIPEDIA PATCH
-		// -----------------------------------------------------------------
 
-		$hs = '<a href="' . $hrefEsc . '" class="image highslide-link" title="' . $captionEsc . '">';
-		// PATCHED: Use $thumbSrcEsc for the img src instead of $hrefEsc
 		$hsimg = '<img class="hsimg" src="' . $thumbSrcEsc . '" alt="' . $captionEsc . '"';
 
 		$w = (int)$width;
@@ -696,7 +687,7 @@ class HighslideGallery {
 			$width = (int)$attributes['width'];
 			unset( $attributes['width'] );
 		}
-
+		
 		// Determine inline mode:
 		// - Tags (<hsyoutube>, <hsgytb>): default inline text
 		// - Parser function (#hsgytb): default thumbnail
@@ -894,7 +885,7 @@ class HighslideGallery {
 				self::$hsgId = $galleryIdMatches[2];
 				self::$hsgLabel = $galleryIdMatches[2]; // label starts as the explicit id
 			} else {
-				// No id after = → treat as "no group"
+				// No id after = → treat as “no group”
 				self::$hsgId = null;
 				self::$hsgLabel = null;
 			}

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="32"
+   height="32"
+   viewBox="0 0 8.4666662 8.4666662"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#">
+  <defs
+     id="defs1" />
+  <g
+     id="layer1"
+     transform="translate(-21.948694,-35.999999)"
+     style="fill:#d0d0d0;fill-opacity:1">
+    <path
+       style="fill:#d0d0d0;fill-opacity:1;stroke-width:0.264583"
+       id="path1"
+       d="m 95.206692,113.47868 -43.8181,-7.8797 L 7.5704937,97.719284 36.303563,63.711545 65.03663,29.703808 80.121662,71.591245 Z"
+       transform="matrix(0.05498414,-0.05371262,0.046522,0.0635396,18.697343,38.135085)" />
+  </g>
+  <metadata
+     id="metadata1">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <cc:license
+           rdf:resource="http://creativecommons.org/publicdomain/zero/1.0/" />
+      </cc:Work>
+      <cc:License
+         rdf:about="http://creativecommons.org/publicdomain/zero/1.0/">
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Reproduction" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Distribution" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#DerivativeWorks" />
+      </cc:License>
+    </rdf:RDF>
+  </metadata>
+</svg>

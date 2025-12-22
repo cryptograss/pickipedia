@@ -1,0 +1,24 @@
+{
+	"@metadata": {
+		"authors": [
+			"Brian McCloskey",
+			"David Van Winkle",
+			"Step Modifications, Inc."
+		]
+	},
+	"hsg-desc": "Extension description shown on Special:Version. Summarise that HighslideGallery provides Highslide-powered galleries for images and YouTube, offers thumbnails or inline links, supports slideshow grouping via hsgid, keeps captions in the overlay, and includes both legacy <hsyoutube> tag and modern parser functions.",
+	"hsgimg-desc": "Description for parser function {{#hsgimg:}}. Used on Special:Version and in localisation; describes that it renders Highslide-enabled images (thumb or inline) and can join a slideshow group via hsgid.",
+	"hsgytb-desc": "Description for parser function {{#hsgytb:}}. Used on Special:Version and in localisation; describes that it renders Highslide-enabled YouTube videos (thumb or inline) and can join a slideshow group via hsgid.",
+	"hsg-hover-instructions": "Tooltip text shown by Highslide when hovering over images in the overlay. Explains dragging and keyboard shortcuts (arrows, space, f, Esc) for manipulating the HSG. Used by JS module ext.highslideGallery.",
+	"hsg-loading-text": "Status text shown while media loads.",
+	"hsg-loading-title": "Tooltip on the loading indicator; usually explains you can click to cancel.",
+	"hsg-focus-title": "Tooltip hint for bringing the expander to the front.",
+	"hsg-full-expand-title": "Tooltip for the zoom toggle control; reflects the fit/zoom behavior (f key).",
+	"hsg-previous-title": "Tooltip for the Previous control (and keyboard arrow left).",
+	"hsg-next-title": "Tooltip for the Next control (and keyboard arrow right).",
+	"hsg-move-title": "Tooltip for the Move control.",
+	"hsg-close-title": "Tooltip for the Close control (Esc).",
+	"hsg-play-title": "Tooltip for the Play control (spacebar).",
+	"hsg-pause-title": "Tooltip for the Pause control (spacebar).",
+	"hsg-number": "Caption string for the member counter; placeholders %1 and %2 are current index and total."
+}
