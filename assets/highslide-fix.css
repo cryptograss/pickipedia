@@ -1,1 +1,36 @@
-/* No custom CSS fixes needed - using latest upstream HighslideGallery */
+/* PickiPedia: Fix HighslideGallery caption/controls/thumbstrip overlap */
+
+/*
+ * In the "classic" preset:
+ * - Thumbstrip is at bottom of viewport (y ~ 883, height 117)
+ * - Controls are at bottom of viewport (y ~ 971)
+ * - Caption is attached to bottom of image wrapper (y ~ 940)
+ *
+ * They all compete for the same space. We fix this by:
+ * 1. Moving the caption higher (using negative transform)
+ * 2. Making the caption not block the thumbstrip
+ */
+
+/* Move the caption above the thumbstrip area */
+.floating-caption .highslide-caption {
+    transform: translateY(-150px) !important;
+    background: rgba(0, 0, 0, 0.85) !important;
+    padding: 10px 16px !important;
+    border-radius: 4px !important;
+    max-width: 80% !important;
+    margin: 0 auto !important;
+}
+
+/* Make thumbstrip clearly visible with its own background */
+.highslide-thumbstrip {
+    background: rgba(0, 0, 0, 0.7) !important;
+    padding: 5px 0 !important;
+}
+
+/* Style the controls bar */
+.text-controls .highslide-controls {
+    background: rgba(30, 30, 30, 0.9) !important;
+    padding: 8px 14px !important;
+    border-radius: 22px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+}

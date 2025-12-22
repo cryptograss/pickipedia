@@ -88,6 +88,7 @@ $wgMSU_uploadsize = '100mb';
 
 # HighslideGallery - lightbox image galleries
 wfLoadExtension( 'HighslideGallery' );
+# Using default 'classic' preset - controls at bottom
 
 # Custom CSS fix for HighslideGallery controls visibility
 $wgHooks['BeforePageDisplay'][] = function( OutputPage &$out, Skin &$skin ) {
