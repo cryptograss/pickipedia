@@ -89,6 +89,11 @@ $wgMSU_uploadsize = '100mb';
 # HighslideGallery - lightbox image galleries
 wfLoadExtension( 'HighslideGallery' );
 
+# Custom CSS fix for HighslideGallery controls visibility
+$wgHooks['BeforePageDisplay'][] = function( OutputPage &$out, Skin &$skin ) {
+    $out->addStyle( $out->getConfig()->get('ScriptPath') . '/assets/highslide-fix.css' );
+};
+
 # Variables - define and use variables in wikitext
 wfLoadExtension( 'Variables' );
 

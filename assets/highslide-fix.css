@@ -1,0 +1,53 @@
+/* Fix HighslideGallery controls being hidden under caption */
+
+/*
+ * Problem: The controls overlay is positioned at 'bottom center' with offsetY: -3,
+ * which puts it at the very bottom edge of the viewport. The caption bar and
+ * thumbstrip are rendered above it, making the controls invisible.
+ *
+ * Solution: Position the controls within the caption area itself using CSS.
+ * We'll move the controls visually using transform to appear above the thumbstrip.
+ */
+
+/* Make the caption bar a flex container to include the controls */
+.floating-caption .highslide-caption {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    background: rgba(0, 0, 0, 0.85) !important;
+    padding: 10px 16px !important;
+    min-height: 40px !important;
+}
+
+/* Move the controls overlay UP using transform (works even with inline positioning) */
+.highslide-viewport .text-controls {
+    transform: translateY(-140px) !important;
+    z-index: 100000 !important;
+}
+
+/* Ensure controls have a visible background that stands out */
+.text-controls .highslide-controls {
+    background: rgba(40, 40, 40, 0.9) !important;
+    padding: 8px 16px !important;
+    border-radius: 24px !important;
+    z-index: 100001 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Make control buttons more visible */
+.text-controls .highslide-controls a {
+    background-color: #e0e0e0 !important;
+    width: 32px !important;
+    height: 32px !important;
+}
+
+.text-controls .highslide-controls a:hover {
+    background-color: #fff !important;
+}
+
+/* Reduce thumbstrip margin since controls are moved up */
+.highslide-thumbstrip-horizontal {
+    margin-bottom: 5px !important;
+}
