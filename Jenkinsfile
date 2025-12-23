@@ -19,7 +19,7 @@ pipeline {
                     # Copy LocalSettings.local.php from secrets
                     if [ -f "${SECRETS_DIR}/pickipedia/LocalSettings.local.php" ]; then
                         cp "${SECRETS_DIR}/pickipedia/LocalSettings.local.php" LocalSettings.local.php
-                        chmod 600 LocalSettings.local.php
+                        chmod 644 LocalSettings.local.php
                     else
                         echo "ERROR: LocalSettings.local.php not found in secrets"
                         exit 1
@@ -65,6 +65,7 @@ pipeline {
                     # Copy our configuration into MediaWiki
                     cp LocalSettings.php "${MW_DIR}/"
                     cp LocalSettings.local.php "${MW_DIR}/"
+                    cp .htaccess "${MW_DIR}/"
 
                     # Copy composer.json as composer.local.json for MediaWiki
                     cp composer.json "${MW_DIR}/composer.local.json"
@@ -91,6 +92,12 @@ pipeline {
                     if [ ! -d "MsUpload" ]; then
                         git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-MsUpload.git MsUpload
                     fi
+
+                    # Variables - parser functions for defining and using variables
+                    if [ ! -d "Variables" ]; then
+                        git clone --depth 1 --branch REL1_43 https://gerrit.wikimedia.org/r/mediawiki/extensions/Variables.git Variables
+                    fi
+
                 '''
             }
         }
@@ -139,25 +146,29 @@ pipeline {
                     fi
 
                     # Generate build-info.php
-                    cat > "${MW_DIR}/build-info.php" << PHPEOF
+                    cat > "${MW_DIR}/build-info.php" << 'PHPEOF'
 <?php
 // Auto-generated at build time - do not edit
-\$wgPickipediaBuildInfo = [
-    'blockheight' => ${BLOCK_HEIGHT},
-    'build_number' => '${BUILD_NUMBER}',
-    'commit' => '$(git rev-parse --short HEAD)',
-    'build_time' => '$(date -Iseconds)',
+$wgPickipediaBuildInfo = [
+    'blockheight' => BLOCK_HEIGHT_PLACEHOLDER,
+    'build_number' => 'BUILD_NUMBER_PLACEHOLDER',
+    'commit' => 'COMMIT_PLACEHOLDER',
+    'build_time' => 'BUILD_TIME_PLACEHOLDER',
 ];
 PHPEOF
+                    # Replace placeholders with actual values
+                    sed -i "s/BLOCK_HEIGHT_PLACEHOLDER/${BLOCK_HEIGHT}/" "${MW_DIR}/build-info.php"
+                    sed -i "s/BUILD_NUMBER_PLACEHOLDER/${BUILD_NUMBER}/" "${MW_DIR}/build-info.php"
+                    sed -i "s/COMMIT_PLACEHOLDER/$(git rev-parse --short HEAD)/" "${MW_DIR}/build-info.php"
+                    sed -i "s/BUILD_TIME_PLACEHOLDER/$(date -Iseconds)/" "${MW_DIR}/build-info.php"
                     echo "Generated build-info.php with block ${BLOCK_HEIGHT}"
                 '''
             }
         }
 
         stage('Stage for Deploy') {
-            when {
-                branch 'production'
-            }
+            // Note: This job only builds production branch (configured in job definition)
+            // so no branch conditional needed
             steps {
                 sh '''#!/bin/bash
                     set -e

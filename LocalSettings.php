@@ -39,8 +39,9 @@ $wgMemCachedServers = [];
 $wgEnableUploads = true;
 $wgUploadPath = "$wgScriptPath/images";
 $wgUploadDirectory = "$IP/images";
-$wgUseImageMagick = true;
-$wgImageMagickConvertCommand = "/usr/bin/convert";
+$wgUseImageMagick = false;
+# GD library is used for thumbnails instead
+$wgMaxImageArea = 50e6;  # 50 megapixels (default is 12.5MP)
 
 ## InstantCommons allows wiki to use images from commons.wikimedia.org
 $wgUseInstantCommons = true;
@@ -68,8 +69,7 @@ $wgGroupPermissions['*']['read'] = true;
 
 ## Extensions
 
-# Semantic MediaWiki
-wfLoadExtension( 'SemanticMediaWiki' );
+# Semantic MediaWiki (installed via Composer, enableSemantics still required)
 enableSemantics( parse_url($wgServer, PHP_URL_HOST) );
 
 # YouTube - for embedding YouTube videos
@@ -91,6 +91,18 @@ $wgMSU_showAutoCat = true;
 $wgMSU_checkAutoCat = true;
 $wgMSU_imgParams = '400px';
 $wgMSU_uploadsize = '100mb';
+
+# HighslideGallery - lightbox image galleries
+wfLoadExtension( 'HighslideGallery' );
+# Using default 'classic' preset - controls at bottom
+
+# Custom CSS fix for HighslideGallery controls visibility
+$wgHooks['BeforePageDisplay'][] = function( OutputPage &$out, Skin &$skin ) {
+    $out->addStyle( $out->getConfig()->get('ScriptPath') . '/assets/highslide-fix.css' );
+};
+
+# Variables - define and use variables in wikitext
+wfLoadExtension( 'Variables' );
 
 ## Email (disabled by default)
 $wgEnableEmail = false;

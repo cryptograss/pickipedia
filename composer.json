@@ -1,6 +1,7 @@
 {
     "require": {
-        "mediawiki/semantic-media-wiki": "dev-master"
+        "mediawiki/semantic-media-wiki": "^6.0",
+        "mediawikiext/highslidegallery": "*"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
@@ -8,13 +9,6 @@
         "allow-plugins": {
             "composer/installers": true,
             "mediawiki/semantic-media-wiki": true
-        }
-    },
-    "extra": {
-        "merge-plugin": {
-            "include": [
-                "extensions/*/composer.json"
-            ]
         }
     }
 }

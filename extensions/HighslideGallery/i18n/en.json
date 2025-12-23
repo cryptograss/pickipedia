@@ -1,0 +1,24 @@
+{
+	"@metadata": {
+		"authors": [
+			"Brian McCloskey",
+			"David Van Winkle",
+			"Step Modifications, Inc."
+		]
+	},
+	"hsg-desc": "Leverages Highslide JS-powered galleries for images and YouTube videos: supports thumbnails or inline anchor text, slideshow grouping via hsgid and MediaWiki-style captions within an interactive overlay.",
+	"hsgimg-desc": "Parser function {{#hsgimg:}} inserts a Highslide-enabled image (thumbnail or inline anchor text) with optional gallery grouping.",
+	"hsgytb-desc": "Parser function {{#hsgytb:}} inserts a Highslide-enabled YouTube video (thumbnail or inline anchor text) with optional gallery grouping.",
+	"hsg-hover-instructions": "Click/drag to move image. Use controls or keyboard arrow keys to navigate, f key to zoom in/out, spacebar to play/pause. Press Esc, or click close/margins to exit.",
+	"hsg-loading-text": "Loading…",
+	"hsg-loading-title": "Click to cancel",
+	"hsg-focus-title": "Click to bring to front",
+	"hsg-full-expand-title": "Toggle zoom (f)",
+	"hsg-previous-title": "Previous (arrow left)",
+	"hsg-next-title": "Next (arrow right)",
+	"hsg-move-title": "Move",
+	"hsg-close-title": "Close (esc)",
+	"hsg-play-title": "Play slideshow (spacebar)",
+	"hsg-pause-title": "Pause slideshow (spacebar)",
+	"hsg-number": "Member %1 of %2"
+}

@@ -1,0 +1,374 @@
+/*
+ * HighslideGallery adds highslide-style image/galleries and YouTube overlays to MediaWiki pages.
+ * @Copyright (C) 2012 Brian McCloskey, David Van Winkle, Step Modifications, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of the
+ * GNU General Public License as published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program; if not, see
+ * < https://www.gnu.org/licenses/ >.
+ */
+
+/*
+ * HighslideGallery CSS overrides for Highslide 5.x
+ * Vendor styles: modules/highslide.css
+ */
+
+/* -------------------------------------------------------------------------
+ * Variables
+ * ------------------------------------------------------------------------- */
+:root {
+	--hsg-caption-number: #777;
+	--hsg-caption-gallery: #b0b0b0;
+	--hsg-caption-title: #b0b0b0;
+	--hsg-caption-caption: #ff9012;
+	--hsg-caption-text: #777;
+	--hsg-caption-thumb-title: #b0b0b0;
+	--hsg-caption-thumb-caption: #b0b0b0;
+	--hsg-caption-thumb-text: #777;
+	--hsg-dimmer: rgba(0, 0, 0, 0.75);
+	--hsg-frame-bg: #000;
+	--hsg-frame-border: #888;
+	--hsg-frame-shadow: rgba(0, 0, 0, 0.9);
+	--hsg-tile-gap: 12px;
+	--hsg-tile-min: 210px;
+	--hsg-ts-border: #ff9012;
+	--hsg-ts-border-hover: #aaa;
+	--hsg-ytb-bg: #000;
+}
+
+/* -------------------------------------------------------------------------
+ * Touch (coarse pointers)
+ * ------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+	.highslide,
+	.highslide-wrapper,
+	.highslide-image {
+		touch-action: none;
+	}
+}
+
+/* -------------------------------------------------------------------------
+ * Frame & caption
+ * ------------------------------------------------------------------------- */
+/* Base frame used by HSG (images & YouTube) */
+.highslide-wrapper.hsg-frame {
+	left: 50% !important;
+	transform: translateX(-50%);
+}
+
+/* Number + caption tone */
+.highslide-number {
+	color: var(--hsg-caption-number);
+}
+
+.floating-caption .highslide-caption,
+.you-tube .highslide-caption {
+	color: var(--hsg-caption-text);
+}
+
+.thumbcaption.hsg-caption {
+	color: var(--hsg-caption-thumb-text);
+}
+
+.highslide-caption .hsg-caption-gallery {
+	color: var(--hsg-caption-gallery);
+}
+
+.thumbcaption.hsg-caption .hsg-caption-gallery {
+	color: var(--hsg-caption-thumb-gallery);
+}
+
+.highslide-caption .hsg-caption-title {
+	color: var(--hsg-caption-title);
+}
+
+.thumbcaption.hsg-caption .hsg-caption-title {
+	color: var(--hsg-caption-thumb-title);
+}
+
+.highslide-caption .hsg-caption-caption {
+	color: var(--hsg-caption-caption);
+}
+
+.thumbcaption.hsg-caption .hsg-caption-caption {
+	color: var(--hsg-caption-thumb-caption);
+}
+
+/* -------------------------------------------------------------------------
+ * HSG dimmer, expander/wrapper, and close control
+ * ------------------------------------------------------------------------- */
+
+/* Dimmer color */
+.highslide-dimming {
+	background-color: var(--hsg-dimmer);
+}
+
+/* Ensure the dimmer covers the viewport in Firefox */
+@-moz-document url-prefix() {
+	.highslide-dimming.highslide-viewport-size {
+		position: fixed;
+		left: 0;
+		top: 0;
+		width: 100%;
+		height: 100%;
+	}
+}
+
+/* Image edge + neutral cursor */
+.highslide-image {
+	box-shadow: 0 0 40px 6px var(--hsg-ytb-bg);
+	cursor: default !important;
+	border: none;
+}
+
+/* Close control: pin to viewport top-right for all browsers */
+.controls.close {
+	position: fixed;
+	top: 12px;
+	right: 12px;
+	z-index: 99999;
+	opacity: 0.75;
+}
+
+/* Close control hover */
+.close:not(:disabled):not(.disabled):hover,
+.close:not(:disabled):not(.disabled):focus {
+	opacity: 0.95;
+}
+
+/* Close control button */
+.controls.close a {
+	display: block;
+	width: 2.0rem;
+	height: 2.0rem;
+	background: url(graphics/close.png) no-repeat 50% 50%;
+	background-size: 2.0rem;
+	text-indent: -9999px;
+	overflow: hidden;
+}
+
+/* Prevent bottom-clipping of text-based controls */
+.text-controls.highslide-controls,
+.text-controls .highslide-controls {
+	padding: 0 10px 0;
+}
+
+.text-controls .highslide-controls a span,
+.text-controls.highslide-controls a span {
+	height: auto;
+	line-height: 1.1rem;
+}
+
+/* Icon-only controls using shipped SVGs */
+.highslide-viewport .highslide-thumbstrip-horizontal table {
+	margin-left: 0;
+}
+
+.text-controls li {
+	margin-left: 5px;
+}
+
+.text-controls .highslide-controls {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	margin: 0 0 0 -2px;
+	padding: 0;
+	background: none;
+}
+
+.text-controls .highslide-controls li {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	list-style: none;
+	background: none !important;
+}
+
+.text-controls .highslide-controls a {
+	width: 26px;
+	height: 26px;
+	left: 0;
+	border-radius: 50%;
+	background-color: #d0d0d0 !important;
+	background-position: center center !important;
+	background-size: 15px 15px !important;
+}
+
+.text-controls .highslide-controls a.disabled {
+	opacity: 0.75;
+	filter: contrast(30%);
+	-webkit-filter: contrast(30%);
+	background-position: center center !important;
+}
+
+.text-controls .highslide-controls a span {
+	display: none;
+}
+
+.text-controls .highslide-controls .highslide-previous a {
+	background-image: url("graphics/previous-dark.svg") !important;
+}
+
+.text-controls .highslide-controls .highslide-next a {
+	background-image: url("graphics/next-dark.svg") !important;
+}
+
+.text-controls .highslide-controls .highslide-play a {
+	background-image: url("graphics/play-dark.svg") !important;
+}
+
+.text-controls .highslide-controls .highslide-full-expand a {
+	background-image: url("graphics/full-screen-dark.svg") !important;
+}
+
+.text-controls .highslide-controls .highslide-full-expand a.hsg-zoomed {
+	background-image: url("graphics/close-full-screen-dark.svg") !important;
+}
+
+.text-controls .highslide-controls .highslide-move,
+.text-controls .highslide-controls .highslide-pause,
+.text-controls .highslide-controls .highslide-close {
+	display: none !important;
+}
+
+/* -------------------------------------------------------------------------
+ * Thumbstrip tweaks
+ * ------------------------------------------------------------------------- */
+
+.highslide-thumbstrip td {
+	padding-bottom: 22px;
+}
+
+/* Thumbs have uniform width; height follows aspect ratio */
+.highslide-thumbstrip-horizontal img {
+	width: 120px !important;
+	height: auto !important;
+	max-height: 80px;
+	border: none;
+}
+
+/* optionally disable the border carat on the thumb of the currently-selected member */
+.highslide-viewport .highslide-thumbstrip-horizontal .highslide-marker {
+	border: none;
+}
+
+.highslide-thumbstrip-horizontal .highslide-scroll-up,
+.highslide-thumbstrip-horizontal .highslide-scroll-up div,
+.highslide-thumbstrip-horizontal .highslide-scroll-down,
+.highslide-thumbstrip-horizontal .highslide-scroll-down div {
+	height: 82px;
+}
+
+/* Thumb opacity/hover state */
+.highslide-thumbstrip img {
+	opacity: 0.65;
+	border: 1px solid var(--hsg-frame-border) !important;
+}
+
+.highslide-thumbstrip img:hover {
+	opacity: 1;
+	border: 1px solid var(--hsg-ts-border-hover) !important;
+}
+
+.highslide-thumbstrip .highslide-active-anchor img {
+	opacity: 1;
+	border: 1px solid var(--hsg-ts-border) !important;
+}
+
+/* -------------------------------------------------------------------------
+ * Page thumbs and list layout
+ * ------------------------------------------------------------------------- */
+
+/* Optionally disable the border */
+.highslide img {
+	border: none;
+}
+
+/* Flex wrapper for list-based galleries (JS-applied) */
+.hsg-list-gallery-wrap {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+}
+
+/* Flex wrapper for non-list gallery runs (JS-applied) */
+.hsg-gallery-wrap {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+}
+
+/* Optional tiling layouts (opt-in per wrapper; supports % or px via vars) */
+.hsg-gallery-wrap.hsg-tiles-horizontal,
+.hsg-list-gallery-wrap.hsg-tiles-horizontal {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(var(--hsg-tile-min), 1fr));
+	gap: var(--hsg-tile-gap);
+}
+
+.hsg-tiles-horizontal .thumbinner {
+	width: 100% !important;
+}
+
+.hsg-tiles-horizontal .thumbcaption.hsg-caption {
+	text-align: center;
+}
+
+.hsg-thumb-list-item .hsg-thumb-normalized {
+	margin-bottom: 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Inline and YouTube link/popup tweaks
+ * ------------------------------------------------------------------------- */
+
+.hsg-inline {
+	background:
+		url("graphics/image-lite.svg") center left no-repeat,
+		url("graphics/image-lite.svg") center right no-repeat;
+	background-size: 1rem 1rem;
+	padding: 0 1.1rem 0 1.1rem;
+	margin: 0 0.1rem 0 0.3rem;
+}
+
+/* Decorate ONLY plain text YouTube links, not thumbs */
+a.link-youtube:not(.hsg-ytb-thumb) {
+	background:
+		url("graphics/youtube.svg") center left no-repeat,
+		url("graphics/youtube.svg") center right no-repeat;
+	background-size: 1rem 1rem;
+	padding: 0 1.1rem 0 1.1rem;
+	margin: 0 0.1rem 0 0.1rem;
+}
+
+/* YouTube popup shell */
+.you-tube .highslide-footer,
+.you-tube .highslide-header,
+.you-tube .highslide-move {
+	display: none;
+}
+
+.you-tube .highslide-caption,
+.you-tube.highslide-wrapper {
+	background: var(--hsg-ytb-bg);
+	font-weight: bold;
+}
+
+.you-tube .highslide-html,
+.you-tube .highslide-html-content,
+.you-tube .highslide-html-content table,
+.you-tube .highslide-html-content td,
+.you-tube .highslide-html-content tr {
+	background: var(--hsg-ytb-bg) !important;
+	border: 0 !important;
+	padding: 0 !important;
+	margin: 0 !important;
+}

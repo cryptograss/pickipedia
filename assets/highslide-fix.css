@@ -1,0 +1,29 @@
+/* PickiPedia: Fix HighslideGallery layout by hiding thumbstrip */
+
+/*
+ * The "classic" preset tries to show caption, thumbstrip, and controls
+ * all at the viewport bottom, causing overlaps. The extension's layout
+ * architecture doesn't properly coordinate these elements.
+ *
+ * Workaround: Hide the thumbstrip to get a clean caption + controls layout.
+ * Users can still navigate via prev/next controls or keyboard arrows.
+ */
+
+/* Hide the thumbstrip - it overlaps with caption and causes layout issues */
+.highslide-thumbstrip {
+    display: none !important;
+}
+
+/* Caption styling - clean dark background */
+.floating-caption .highslide-caption {
+    background: rgba(0, 0, 0, 0.85) !important;
+    padding: 10px 16px !important;
+}
+
+/* Style the controls bar */
+.text-controls .highslide-controls {
+    background: rgba(20, 20, 20, 0.95) !important;
+    padding: 8px 16px !important;
+    border-radius: 24px !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6) !important;
+}
