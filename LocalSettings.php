@@ -69,7 +69,8 @@ $wgGroupPermissions['*']['read'] = true;
 
 ## Extensions
 
-# Semantic MediaWiki (installed via Composer, enableSemantics still required)
+# Semantic MediaWiki (installed via Composer)
+wfLoadExtension( 'SemanticMediaWiki' );
 enableSemantics( parse_url($wgServer, PHP_URL_HOST) );
 
 # YouTube - for embedding YouTube videos
