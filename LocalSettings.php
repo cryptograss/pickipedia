@@ -113,7 +113,7 @@ $wgEnableUserEmail = false;
 $wgShowExceptionDetails = false;
 $wgShowDBErrorBacktrace = false;
 $wgShowSQLErrors = false;
-$wgDevelopmentWarnings = false;
+$wgDevelopmentWarnings = (getenv('WIKI_DEV_MODE') === 'true');
 
 ## Build info footer (generated at build time)
 if ( file_exists( __DIR__ . '/build-info.php' ) ) {
