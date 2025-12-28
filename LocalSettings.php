@@ -14,6 +14,16 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 ## Load secrets from local config
 require_once __DIR__ . '/LocalSettings.local.php';
 
+## Error tracking with Sentry/GlitchTip
+# DSN is set in LocalSettings.local.php as $wgSentryDsn
+if ( !empty( $wgSentryDsn ) ) {
+    \Sentry\init([
+        'dsn' => $wgSentryDsn,
+        'environment' => getenv('WIKI_DEV_MODE') === 'true' ? 'development' : 'production',
+        'release' => $wgPickipediaBuildInfo['commit'] ?? 'unknown',
+    ]);
+}
+
 ## Site identity
 $wgSitename = getenv('WIKI_NAME') ?: "PickiPedia";
 $wgMetaNamespace = "PickiPedia";
@@ -104,6 +114,9 @@ $wgMSU_uploadsize = '100mb';
 # TimedMediaHandler - video/audio playback with transcoding
 wfLoadExtension( 'TimedMediaHandler' );
 $wgFFmpegLocation = '/usr/local/bin/ffmpeg';
+
+# HitCounters - page view statistics (installed via Composer)
+wfLoadExtension( 'HitCounters' );
 
 ## Email (disabled by default)
 $wgEnableEmail = false;

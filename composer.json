@@ -1,6 +1,8 @@
 {
     "require": {
-        "mediawiki/semantic-media-wiki": "^6.0"
+        "mediawiki/semantic-media-wiki": "^6.0",
+        "sentry/sentry": "^4.0",
+        "mediawiki/hit-counters": "^0.6"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
