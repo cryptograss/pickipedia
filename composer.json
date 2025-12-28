@@ -2,7 +2,7 @@
     "require": {
         "mediawiki/semantic-media-wiki": "^6.0",
         "sentry/sentry": "^4.0",
-        "mediawiki/hit-counters": "^0.6"
+        "mediawiki/hit-counters": "^0.3"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
