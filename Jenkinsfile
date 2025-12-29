@@ -75,7 +75,7 @@ pipeline {
                     cd "${MW_DIR}"
                     rm -f composer.lock
                     rm -rf vendor
-                    composer update --no-dev --optimize-autoloader
+                    composer update --no-dev --optimize-autoloader --ignore-platform-reqs
                 '''
             }
         }

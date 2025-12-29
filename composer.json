@@ -2,6 +2,8 @@
     "require": {
         "mediawiki/semantic-media-wiki": "^6.0",
         "sentry/sentry": "^3.0",
+        "php-http/curl-client": "^2.0",
+        "guzzlehttp/psr7": "^2.0",
         "mediawiki/hit-counters": "^0.3"
     },
     "minimum-stability": "dev",
