@@ -7,6 +7,8 @@ pipeline {
 
     environment {
         MEDIAWIKI_VERSION = '1.43.6'
+        // Bump this to force rebuild of cached MediaWiki + extensions
+        BUILD_CACHE_VERSION = '2'
         SECRETS_DIR = '/var/jenkins_home/secrets'
         BUILD_DIR = "${WORKSPACE}/build"
         MW_DIR = "${BUILD_DIR}/mediawiki"
@@ -38,9 +40,10 @@ pipeline {
                     MW_TARBALL="mediawiki-${MEDIAWIKI_VERSION}.tar.gz"
                     MW_URL="https://releases.wikimedia.org/mediawiki/${MEDIAWIKI_VERSION%.*}/mediawiki-${MEDIAWIKI_VERSION}.tar.gz"
 
-                    # Check if we have cached version
-                    if [ -f "${BUILD_DIR}/.mw-version" ] && [ "$(cat "${BUILD_DIR}/.mw-version")" = "${MEDIAWIKI_VERSION}" ]; then
-                        echo "Using cached MediaWiki ${MEDIAWIKI_VERSION}"
+                    # Check if we have cached version (includes BUILD_CACHE_VERSION to force rebuilds)
+                    CACHE_KEY="${MEDIAWIKI_VERSION}-${BUILD_CACHE_VERSION}"
+                    if [ -f "${BUILD_DIR}/.mw-version" ] && [ "$(cat "${BUILD_DIR}/.mw-version")" = "${CACHE_KEY}" ]; then
+                        echo "Using cached MediaWiki ${MEDIAWIKI_VERSION} (cache v${BUILD_CACHE_VERSION})"
                     else
                         echo "Downloading MediaWiki ${MEDIAWIKI_VERSION}..."
                         curl -fSL "${MW_URL}" -o "${BUILD_DIR}/${MW_TARBALL}"
@@ -50,7 +53,7 @@ pipeline {
                         mkdir -p "${MW_DIR}"
                         tar -xzf "${BUILD_DIR}/${MW_TARBALL}" -C "${MW_DIR}" --strip-components=1
 
-                        echo "${MEDIAWIKI_VERSION}" > "${BUILD_DIR}/.mw-version"
+                        echo "${CACHE_KEY}" > "${BUILD_DIR}/.mw-version"
                         rm "${BUILD_DIR}/${MW_TARBALL}"
                     fi
                 '''
