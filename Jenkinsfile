@@ -101,6 +101,11 @@ pipeline {
                         git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-TimedMediaHandler.git TimedMediaHandler
                         cd TimedMediaHandler && composer install --no-dev && cd ..
                     fi
+
+                    # RSS - embed RSS feeds in wiki pages
+                    if [ ! -d "RSS" ]; then
+                        git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-RSS.git RSS
+                    fi
                 '''
             }
         }

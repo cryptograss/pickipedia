@@ -118,6 +118,9 @@ $wgFFmpegLocation = '/usr/local/bin/ffmpeg';
 # HitCounters - page view statistics (installed via Composer)
 wfLoadExtension( 'HitCounters' );
 
+# RSS - embed RSS feeds in wiki pages
+wfLoadExtension( 'RSS' );
+
 ## Email (disabled by default)
 $wgEnableEmail = false;
 $wgEnableUserEmail = false;
