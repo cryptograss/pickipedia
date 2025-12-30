@@ -22,6 +22,30 @@ if ( !empty( $wgSentryDsn ) ) {
         'environment' => getenv('WIKI_DEV_MODE') === 'true' ? 'development' : 'production',
         'release' => $wgPickipediaBuildInfo['commit'] ?? 'unknown',
     ]);
+
+    // Register custom error and exception handlers to capture errors in Sentry
+    set_exception_handler( function ( Throwable $e ) {
+        \Sentry\captureException( $e );
+        // Re-throw to let MediaWiki's handler deal with it too
+        throw $e;
+    });
+
+    set_error_handler( function ( $severity, $message, $file, $line ) {
+        if ( !( error_reporting() & $severity ) ) {
+            return false;
+        }
+        \Sentry\captureException( new \ErrorException( $message, 0, $severity, $file, $line ) );
+        return false; // Let PHP's default handler run too
+    });
+
+    register_shutdown_function( function () {
+        $error = error_get_last();
+        if ( $error !== null && in_array( $error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR] ) ) {
+            \Sentry\captureException( new \ErrorException(
+                $error['message'], 0, $error['type'], $error['file'], $error['line']
+            ) );
+        }
+    });
 }
 
 ## Site identity
