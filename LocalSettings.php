@@ -23,21 +23,13 @@ if ( !empty( $wgSentryDsn ) ) {
         'release' => $wgPickipediaBuildInfo['commit'] ?? 'unknown',
     ]);
 
-    // Register custom error and exception handlers to capture errors in Sentry
-    set_exception_handler( function ( Throwable $e ) {
+    // Use MediaWiki's LogException hook to capture ALL exceptions, including
+    // those caught internally by MediaWiki (like DBQueryError)
+    $wgHooks['LogException'][] = function ( Throwable $e, bool $suppressed ) {
         \Sentry\captureException( $e );
-        // Re-throw to let MediaWiki's handler deal with it too
-        throw $e;
-    });
+    };
 
-    set_error_handler( function ( $severity, $message, $file, $line ) {
-        if ( !( error_reporting() & $severity ) ) {
-            return false;
-        }
-        \Sentry\captureException( new \ErrorException( $message, 0, $severity, $file, $line ) );
-        return false; // Let PHP's default handler run too
-    });
-
+    // Also keep shutdown handler for fatal errors that bypass exception handling
     register_shutdown_function( function () {
         $error = error_get_last();
         if ( $error !== null && in_array( $error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR] ) ) {
