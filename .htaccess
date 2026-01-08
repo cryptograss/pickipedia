@@ -1,9 +1,18 @@
-RewriteEngine On
+# Large file uploads (1GB for Blue Railroad video submissions)
+php_value upload_max_filesize 1073741824
+php_value post_max_size 1073741824
+php_value memory_limit 1342177280
+php_value max_execution_time 600
+php_value max_input_time 600
 
-# Block aggressive bots eating bandwidth
-RewriteCond %{HTTP_USER_AGENT} meta-externalagent [NC,OR]
-RewriteCond %{HTTP_USER_AGENT} Amazonbot [NC]
-RewriteRule .* - [F,L]
+# Block aggressive bots eating bandwidth (SetEnvIf works on NFS, RewriteCond doesn't)
+SetEnvIfNoCase User-Agent "meta-externalagent" bad_bot
+SetEnvIfNoCase User-Agent "Amazonbot" bad_bot
+Order Allow,Deny
+Allow from all
+Deny from env=bad_bot
+
+RewriteEngine On
 
 # Short URL rewrite for MediaWiki
 # Maps /wiki/Page_Name to index.php?title=Page_Name
