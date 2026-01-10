@@ -108,7 +108,7 @@ $wgRightsIcon = "";
 
 ## Permissions
 $wgGroupPermissions['*']['createaccount'] = false;
-$wgGroupPermissions['*']['edit'] = false;
+$wgGroupPermissions['*']['edit'] = true;
 $wgGroupPermissions['*']['read'] = true;
 
 ## Extensions
