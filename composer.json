@@ -1,6 +1,7 @@
 {
     "require": {
         "mediawiki/semantic-media-wiki": "^6.0",
+        "mediawiki/page-forms": "^6.0",
         "sentry/sentry": "^3.0",
         "php-http/curl-client": "^2.0",
         "guzzlehttp/psr7": "^2.0",

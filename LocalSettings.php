@@ -117,6 +117,9 @@ $wgGroupPermissions['*']['read'] = true;
 wfLoadExtension( 'SemanticMediaWiki' );
 enableSemantics( parse_url($wgServer, PHP_URL_HOST) );
 
+# Page Forms - create forms for SMW data entry (installed via Composer)
+wfLoadExtension( 'PageForms' );
+
 # YouTube - for embedding YouTube videos
 wfLoadExtension( 'YouTube' );
 
