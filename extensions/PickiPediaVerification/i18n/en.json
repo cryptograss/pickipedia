@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": ["Magent", "Justin Holmes"]
+	},
+	"pickipediaverification-desc": "Enforces verification workflow for bot/AI edits on PickiPedia",
+	"pickipediaverification-bot-needs-proposed": "Bot edits must include verification markers. For template-based pages (Show, Venue, etc.), add <code>|status=proposed</code>. For other pages, wrap content with <code>{{Bot_proposes}}</code>.",
+	"verifybotedits": "Verify Bot Edits",
+	"verifybotedits-summary": "Review and verify edits made by bots"
+}

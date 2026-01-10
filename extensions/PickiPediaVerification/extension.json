@@ -1,0 +1,44 @@
+{
+	"name": "PickiPediaVerification",
+	"version": "0.2.0",
+	"author": ["Magent", "Justin Holmes"],
+	"url": "https://github.com/cryptograss/pickipedia",
+	"descriptionmsg": "pickipediaverification-desc",
+	"license-name": "GPL-2.0-or-later",
+	"type": "other",
+	"requires": {
+		"MediaWiki": ">= 1.43.0"
+	},
+	"AutoloadNamespaces": {
+		"MediaWiki\\Extension\\PickiPediaVerification\\": "src/"
+	},
+	"SpecialPages": {
+		"VerifyBotEdits": "MediaWiki\\Extension\\PickiPediaVerification\\SpecialVerifyBotEdits"
+	},
+	"HookHandlers": {
+		"main": {
+			"class": "MediaWiki\\Extension\\PickiPediaVerification\\Hooks"
+		}
+	},
+	"Hooks": {
+		"EditFilterMergedContent": "main"
+	},
+	"MessagesDirs": {
+		"PickiPediaVerification": ["i18n"]
+	},
+	"config": {
+		"PickiPediaVerificationBotGroups": {
+			"value": ["bot"],
+			"description": "User groups whose edits require verification"
+		},
+		"PickiPediaVerificationNamespaces": {
+			"value": [0],
+			"description": "Namespaces where verification is enforced (0 = main)"
+		},
+		"PickiPediaVerificationTemplate": {
+			"value": "Bot_proposes",
+			"description": "Template to wrap bot edits with"
+		}
+	},
+	"manifest_version": 2
+}
