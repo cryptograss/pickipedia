@@ -51,8 +51,15 @@ define( "NS_CRYPTOGRASS_TALK", 3001 );
 $wgExtraNamespaces[NS_CRYPTOGRASS] = "Cryptograss";
 $wgExtraNamespaces[NS_CRYPTOGRASS_TALK] = "Cryptograss_talk";
 
+# BlueRailroad namespace for NFT token pages
+define( "NS_BLUERAILROAD", 3002 );
+define( "NS_BLUERAILROAD_TALK", 3003 );
+$wgExtraNamespaces[NS_BLUERAILROAD] = "BlueRailroad";
+$wgExtraNamespaces[NS_BLUERAILROAD_TALK] = "BlueRailroad_talk";
+
 # Make Cryptograss namespace searchable by default
 $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
+$wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
 
 ## URLs
 $wgServer = getenv('WIKI_URL') ?: "https://pickipedia.xyz";
@@ -158,6 +165,9 @@ wfLoadExtension( 'Gadgets' );
 # PickiPediaVerification - enforce verification workflow for bot edits
 # Also provides Special:VerifyBotEdits for bulk verification
 wfLoadExtension( 'PickiPediaVerification' );
+
+# BlueRailroadIntegration - import Blue Railroad token data from chain data
+wfLoadExtension( 'BlueRailroadIntegration' );
 
 ## Email (disabled by default)
 $wgEnableEmail = false;

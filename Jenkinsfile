@@ -140,6 +140,27 @@ pipeline {
             }
         }
 
+        stage('Copy Chain Data') {
+            steps {
+                sh '''#!/bin/bash
+                    set -e
+
+                    CHAIN_DATA_SOURCE="/var/jenkins_home/shared/chain_data"
+                    CHAIN_DATA_DEST="${MW_DIR}/chain-data"
+
+                    if [ -d "${CHAIN_DATA_SOURCE}" ] && [ -f "${CHAIN_DATA_SOURCE}/chainData.json" ]; then
+                        echo "Copying chain data from ${CHAIN_DATA_SOURCE}..."
+                        mkdir -p "${CHAIN_DATA_DEST}"
+                        cp "${CHAIN_DATA_SOURCE}/chainData.json" "${CHAIN_DATA_DEST}/"
+                        echo "Chain data copied successfully"
+                    else
+                        echo "Warning: Chain data not found at ${CHAIN_DATA_SOURCE}"
+                        echo "Blue Railroad token data will not be available"
+                    fi
+                '''
+            }
+        }
+
         stage('Generate Build Info') {
             steps {
                 sh '''#!/bin/bash
