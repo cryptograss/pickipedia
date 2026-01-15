@@ -1,0 +1,22 @@
+{
+	"name": "BlueRailroadIntegration",
+	"version": "1.0.0",
+	"author": ["Cryptograss"],
+	"url": "https://github.com/cryptograss/pickipedia",
+	"descriptionmsg": "bluerailroad-desc",
+	"license-name": "GPL-2.0-or-later",
+	"type": "other",
+	"requires": {
+		"MediaWiki": ">= 1.43.0",
+		"extensions": {
+			"SemanticMediaWiki": "*"
+		}
+	},
+	"MessagesDirs": {
+		"BlueRailroadIntegration": ["i18n"]
+	},
+	"AutoloadNamespaces": {
+		"MediaWiki\\Extension\\BlueRailroadIntegration\\": "src/"
+	},
+	"manifest_version": 2
+}

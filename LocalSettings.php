@@ -51,8 +51,15 @@ define( "NS_CRYPTOGRASS_TALK", 3001 );
 $wgExtraNamespaces[NS_CRYPTOGRASS] = "Cryptograss";
 $wgExtraNamespaces[NS_CRYPTOGRASS_TALK] = "Cryptograss_talk";
 
+# BlueRailroad namespace for NFT token pages
+define( "NS_BLUERAILROAD", 3002 );
+define( "NS_BLUERAILROAD_TALK", 3003 );
+$wgExtraNamespaces[NS_BLUERAILROAD] = "BlueRailroad";
+$wgExtraNamespaces[NS_BLUERAILROAD_TALK] = "BlueRailroad_talk";
+
 # Make Cryptograss namespace searchable by default
 $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
+$wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
 
 ## URLs
 $wgServer = getenv('WIKI_URL') ?: "https://pickipedia.xyz";
@@ -138,7 +145,8 @@ $wgMSU_useDragDrop = true;
 $wgMSU_showAutoCat = true;
 $wgMSU_checkAutoCat = true;
 $wgMSU_imgParams = '400px';
-$wgMSU_uploadsize = '100mb';
+$wgMSU_uploadsize = '1024mb';
+$wgMaxUploadSize = 1024 * 1024 * 1024;  // 1GB in bytes
 
 # TimedMediaHandler - video/audio playback with transcoding
 wfLoadExtension( 'TimedMediaHandler' );
@@ -157,6 +165,24 @@ wfLoadExtension( 'Gadgets' );
 # PickiPediaVerification - enforce verification workflow for bot edits
 # Also provides Special:VerifyBotEdits for bulk verification
 wfLoadExtension( 'PickiPediaVerification' );
+
+# BlueRailroadIntegration - import Blue Railroad token data from chain data
+wfLoadExtension( 'BlueRailroadIntegration' );
+
+# EmbedVideo - embed external video files (MP4, etc.)
+wfLoadExtension( 'EmbedVideo' );
+
+# Add custom 'videolink' service for direct MP4 URLs
+$wgHooks['SetupAfterCache'][] = function() {
+    \EmbedVideo\VideoService::addService('videolink', [
+        'embed' => '<video width="%2$d" controls><source src="%1$s" type="video/mp4">Your browser does not support video.</video>',
+        'default_width' => 320,
+        'default_ratio' => 1.77777777777778,
+        'https_enabled' => true,
+        'url_regex' => ['#^(https?://.+\.mp4)$#is'],
+        'id_regex' => ['#^(https?://.+\.mp4)$#is']
+    ]);
+};
 
 ## Email (disabled by default)
 $wgEnableEmail = false;
