@@ -137,6 +137,20 @@ class ImportBlueRailroads extends Maintenance {
         $ownerDisplay = $token['ownerDisplay'] ?? $owner;
         $uri = $token['uri'] ?? '';
 
+        // Determine URI type for template (since MediaWiki lacks string functions)
+        $uriType = 'unknown';
+        if (strpos($uri, 'ipfs://') === 0) {
+            $uriType = 'ipfs';
+        } elseif (strpos($uri, 'https://') === 0) {
+            $uriType = 'https';
+        }
+
+        // Extract IPFS CID if applicable
+        $ipfsCid = '';
+        if ($uriType === 'ipfs') {
+            $ipfsCid = substr($uri, 7); // Remove 'ipfs://' prefix
+        }
+
         // Convert date from YYYYMMDD to readable format
         $dateStr = (string)$date;
         $formattedDate = '';
@@ -157,6 +171,8 @@ class ImportBlueRailroads extends Maintenance {
             "|owner=$owner",
             "|owner_display=$ownerDisplay",
             "|uri=$uri",
+            "|uri_type=$uriType",
+            "|ipfs_cid=$ipfsCid",
             "}}",
             "",
             "[[Category:Blue Railroad Tokens]]",
