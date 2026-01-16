@@ -120,6 +120,11 @@ pipeline {
                     if [ ! -d "RSS" ]; then
                         git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-RSS.git RSS
                     fi
+
+                    # CodeMirror - syntax highlighting in the editor
+                    if [ ! -d "CodeMirror" ]; then
+                        git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-CodeMirror.git CodeMirror
+                    fi
                 '''
             }
         }

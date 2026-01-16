@@ -136,6 +136,10 @@ wfLoadExtension( 'ParserFunctions' );
 # WikiEditor - enhanced editing toolbar (bundled with MediaWiki)
 wfLoadExtension( 'WikiEditor' );
 
+# CodeMirror - syntax highlighting in the editor
+wfLoadExtension( 'CodeMirror' );
+$wgDefaultUserOptions['usecodemirror'] = 1;  # Enable by default for all users
+
 # MultimediaViewer - modern lightbox for images (bundled with MediaWiki)
 wfLoadExtension( 'MultimediaViewer' );
 
