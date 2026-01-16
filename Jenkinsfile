@@ -73,12 +73,23 @@ pipeline {
                     # Copy composer.json as composer.local.json for MediaWiki
                     cp composer.json "${MW_DIR}/composer.local.json"
 
-                    # Install composer dependencies
-                    # Delete cached composer state to ensure clean install with merged extensions
+                    # Install composer dependencies - only if composer.json changed
                     cd "${MW_DIR}"
-                    rm -f composer.lock
-                    rm -rf vendor
-                    composer update --no-dev --optimize-autoloader --ignore-platform-reqs
+                    COMPOSER_HASH=$(md5sum composer.local.json | cut -d' ' -f1)
+                    CACHED_HASH=""
+                    if [ -f ".composer-hash" ]; then
+                        CACHED_HASH=$(cat .composer-hash)
+                    fi
+
+                    if [ "$COMPOSER_HASH" != "$CACHED_HASH" ] || [ ! -d "vendor" ]; then
+                        echo "composer.json changed or vendor missing - running composer update..."
+                        rm -f composer.lock
+                        rm -rf vendor
+                        composer update --no-dev --optimize-autoloader --ignore-platform-reqs
+                        echo "$COMPOSER_HASH" > .composer-hash
+                    else
+                        echo "composer.json unchanged - using cached vendor/"
+                    fi
                 '''
             }
         }
