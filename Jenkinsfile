@@ -129,6 +129,22 @@ pipeline {
             }
         }
 
+        stage('Initialize Submodules') {
+            steps {
+                sh '''#!/bin/bash
+                    set -e
+                    # Initialize and update git submodules (e.g., RambutanMode extension)
+                    if [ -f "${WORKSPACE}/.gitmodules" ]; then
+                        echo "Initializing git submodules..."
+                        cd "${WORKSPACE}"
+                        git submodule update --init --recursive
+                    else
+                        echo "No submodules to initialize"
+                    fi
+                '''
+            }
+        }
+
         stage('Copy Custom Extensions') {
             steps {
                 sh '''#!/bin/bash
