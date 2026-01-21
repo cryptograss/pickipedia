@@ -145,9 +145,12 @@ class ImportBlueRailroads extends Maintenance {
             'leaderboards' => []
         ];
 
+        // Strip content inside <pre> tags to avoid matching example/documentation templates
+        $textWithoutPre = preg_replace('/<pre>.*?<\/pre>/s', '', $text);
+
         // Parse {{BlueRailroadSource|...}} template calls from raw wikitext
         // Match template calls, handling newlines within the template
-        preg_match_all('/\{\{BlueRailroadSource\s*\n?((?:[^{}]|\{[^{]|\}[^}])*)\}\}/s', $text, $sourceMatches);
+        preg_match_all('/\{\{BlueRailroadSource\s*\n?((?:[^{}]|\{[^{]|\}[^}])*)\}\}/s', $textWithoutPre, $sourceMatches);
         foreach ($sourceMatches[1] as $sourceStr) {
             $source = $this->parseTemplateParams($sourceStr);
             if (!empty($source)) {
@@ -156,7 +159,7 @@ class ImportBlueRailroads extends Maintenance {
         }
 
         // Parse {{BlueRailroadLeaderboard|...}} template calls from raw wikitext
-        preg_match_all('/\{\{BlueRailroadLeaderboard\s*\n?((?:[^{}]|\{[^{]|\}[^}])*)\}\}/s', $text, $leaderboardMatches);
+        preg_match_all('/\{\{BlueRailroadLeaderboard\s*\n?((?:[^{}]|\{[^{]|\}[^}])*)\}\}/s', $textWithoutPre, $leaderboardMatches);
         foreach ($leaderboardMatches[1] as $lbStr) {
             $leaderboard = $this->parseTemplateParams($lbStr);
             if (!empty($leaderboard['page'])) {
