@@ -137,7 +137,7 @@ class ImportBlueRailroads extends Maintenance {
 
     /**
      * Parse configuration from wiki page content
-     * Looks for hidden div markers placed by templates
+     * Parses raw wikitext template calls like {{BlueRailroadLeaderboard|page=...|filter_song_id=...}}
      */
     private function parseConfig($text) {
         $config = [
@@ -145,9 +145,9 @@ class ImportBlueRailroads extends Maintenance {
             'leaderboards' => []
         ];
 
-        // Parse BLUERAILROAD_SOURCE markers
-        // Format: BLUERAILROAD_SOURCE|network_id=10|contract=0x...|chain_data_key=blueRailroads|name=...
-        preg_match_all('/BLUERAILROAD_SOURCE\|([^<]+)/', $text, $sourceMatches);
+        // Parse {{BlueRailroadSource|...}} template calls from raw wikitext
+        // Match template calls, handling newlines within the template
+        preg_match_all('/\{\{BlueRailroadSource\s*\n?((?:[^{}]|\{[^{]|\}[^}])*)\}\}/s', $text, $sourceMatches);
         foreach ($sourceMatches[1] as $sourceStr) {
             $source = $this->parseTemplateParams($sourceStr);
             if (!empty($source)) {
@@ -155,9 +155,8 @@ class ImportBlueRailroads extends Maintenance {
             }
         }
 
-        // Parse BLUERAILROAD_LEADERBOARD markers
-        // Format: BLUERAILROAD_LEADERBOARD|page=...|title=...|filter_song_id=...|description=...
-        preg_match_all('/BLUERAILROAD_LEADERBOARD\|([^<]+)/', $text, $leaderboardMatches);
+        // Parse {{BlueRailroadLeaderboard|...}} template calls from raw wikitext
+        preg_match_all('/\{\{BlueRailroadLeaderboard\s*\n?((?:[^{}]|\{[^{]|\}[^}])*)\}\}/s', $text, $leaderboardMatches);
         foreach ($leaderboardMatches[1] as $lbStr) {
             $leaderboard = $this->parseTemplateParams($lbStr);
             if (!empty($leaderboard['page'])) {
