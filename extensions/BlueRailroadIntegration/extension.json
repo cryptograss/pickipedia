@@ -18,5 +18,14 @@
 	"AutoloadNamespaces": {
 		"MediaWiki\\Extension\\BlueRailroadIntegration\\": "src/"
 	},
+	"ResourceModules": {
+		"ext.bluerailroad.datepicker": {
+			"scripts": ["resources/ext.bluerailroad.datepicker.js"],
+			"targets": ["desktop", "mobile"]
+		}
+	},
+	"Hooks": {
+		"BeforePageDisplay": "MediaWiki\\Extension\\BlueRailroadIntegration\\Hooks::onBeforePageDisplay"
+	},
 	"manifest_version": 2
 }
