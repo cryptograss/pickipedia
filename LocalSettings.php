@@ -179,9 +179,6 @@ wfLoadExtension( 'Gadgets' );
 # Also provides Special:VerifyBotEdits for bulk verification
 wfLoadExtension( 'PickiPediaVerification' );
 
-# BlueRailroadIntegration - import Blue Railroad token data from chain data
-wfLoadExtension( 'BlueRailroadIntegration' );
-
 # RambutanMode - adds "Rambutan" as a middle name/alias to person and band articles
 # Users can toggle via sidebar; auto-disables at midnight Florida time
 wfLoadExtension( 'RambutanMode' );
