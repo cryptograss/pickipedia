@@ -8,7 +8,7 @@ pipeline {
     environment {
         MEDIAWIKI_VERSION = '1.43.6'
         // Bump this to force rebuild of cached MediaWiki + extensions
-        BUILD_CACHE_VERSION = '2'
+        BUILD_CACHE_VERSION = '3'
         SECRETS_DIR = '/var/jenkins_home/secrets'
         BUILD_DIR = "${WORKSPACE}/build"
         MW_DIR = "${BUILD_DIR}/mediawiki"
