@@ -194,6 +194,11 @@ wfLoadExtension( 'Echo' );
 # Thanks - thank editors for contributions
 wfLoadExtension( 'Thanks' );
 
+# WikiSEO - Open Graph, Twitter Cards, meta descriptions for social sharing
+wfLoadExtension( 'WikiSEO' );
+$wgWikiSeoDefaultImage = "$wgServer/w/images/pickipedia-card.png";
+$wgTwitterSiteHandle = "@cryptograss";
+
 # Add custom 'videolink' service for direct video URLs (MP4 or IPFS gateway)
 $wgHooks['SetupAfterCache'][] = function() {
     \EmbedVideo\VideoService::addService('videolink', [

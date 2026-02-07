@@ -1,3 +1,6 @@
 [submodule "extensions/RambutanMode"]
 	path = extensions/RambutanMode
 	url = https://github.com/cryptograss/RambutanMode.git
+[submodule "extensions/WikiSEO"]
+	path = extensions/WikiSEO
+	url = https://github.com/wikimedia/mediawiki-extensions-WikiSEO.git
