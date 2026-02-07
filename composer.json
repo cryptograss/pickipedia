@@ -6,7 +6,8 @@
         "sentry/sentry": "^3.0",
         "php-http/curl-client": "^2.0",
         "guzzlehttp/psr7": "^2.0",
-        "mediawiki/hit-counters": "dev-REL1_43"
+        "mediawiki/hit-counters": "dev-REL1_43",
+        "octfx/wiki-seo": "^2.7"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

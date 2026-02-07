@@ -194,8 +194,7 @@ wfLoadExtension( 'Echo' );
 # Thanks - thank editors for contributions
 wfLoadExtension( 'Thanks' );
 
-# WikiSEO - Open Graph, Twitter Cards, meta descriptions for social sharing
-wfLoadExtension( 'WikiSEO' );
+# WikiSEO config (extension loaded via composer)
 $wgWikiSeoDefaultImage = "$wgServer/w/images/pickipedia-card.png";
 $wgTwitterSiteHandle = "@cryptograss";
 
