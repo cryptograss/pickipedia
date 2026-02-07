@@ -140,6 +140,7 @@ wfLoadExtension( 'YouTube' );
 
 # ParserFunctions - {{#if:}}, {{#switch:}}, etc. for templates (bundled with MediaWiki)
 wfLoadExtension( 'ParserFunctions' );
+$wgPFEnableStringFunctions = true;  # Enable #explode, #sub, #len, etc. for parsing
 
 # WikiEditor - enhanced editing toolbar (bundled with MediaWiki)
 wfLoadExtension( 'WikiEditor' );
