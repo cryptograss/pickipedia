@@ -97,6 +97,8 @@ $wgGroupPermissions['user']['upload_by_url'] = true;
 
 # Allow video uploads (HTML5 playback, no transcoding)
 $wgFileExtensions = array_merge( $wgFileExtensions, ['mp4', 'webm', 'mov', 'ogv'] );
+# Disable strict MIME verification for iPhone HEVC videos (mov containers)
+$wgVerifyMimeType = false;
 
 ## InstantCommons allows wiki to use images from commons.wikimedia.org
 $wgUseInstantCommons = true;
