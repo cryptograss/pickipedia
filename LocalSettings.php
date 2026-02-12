@@ -224,6 +224,9 @@ $wgDevelopmentWarnings = (getenv('WIKI_DEV_MODE') === 'true');
 # Note: Deprecation warnings are suppressed at the top of this file to prevent
 # them from corrupting ResourceLoader JS output (EmbedVideo has compatibility issues)
 
+## Allow embedding in iframes (for rabbithole integration)
+$wgEditPageFrameOptions = false;
+
 ## Build info footer (generated at build time)
 if ( file_exists( __DIR__ . '/build-info.php' ) ) {
     require_once __DIR__ . '/build-info.php';
