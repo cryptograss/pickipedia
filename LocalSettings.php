@@ -84,6 +84,9 @@ $wgShowExceptionDetails = false;
 $wgShowDBErrorBacktrace = false;
 $wgShowSQLErrors = false;
 
+## Allow embedding in iframes (for rabbithole integration)
+$wgEditPageFrameOptions = false;
+
 ## Build info footer (generated at build time)
 if ( file_exists( __DIR__ . '/build-info.php' ) ) {
     require_once __DIR__ . '/build-info.php';
