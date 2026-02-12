@@ -10,6 +10,10 @@ SetEnvIfNoCase User-Agent "Amazonbot" bad_bot
     Require not env bad_bot
 </RequireAll>
 
+# Allow iframe embedding (for Rabbithole integration)
+Header unset X-Frame-Options
+Header always unset X-Frame-Options
+
 RewriteEngine On
 
 # Short URL rewrite for MediaWiki
