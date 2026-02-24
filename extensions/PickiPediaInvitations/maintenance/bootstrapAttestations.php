@@ -46,7 +46,7 @@ class BootstrapAttestations extends Maintenance {
 		$dbr = $services->getDBLoadBalancer()->getConnection( DB_REPLICA );
 
 		// Get system user for creating pages
-		$systemUser = User::newSystemUser( 'PickiPedia Invitations', [ 'steal' => true ] );
+		$systemUser = User::newSystemUser( 'Invitations-bot', [ 'steal' => false ] );
 		if ( !$systemUser && !$dryRun ) {
 			$this->fatalError( "Could not create system user\n" );
 		}

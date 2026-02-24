@@ -130,7 +130,7 @@ WIKITEXT;
 		$wikiPage = $wikiPageFactory->newFromTitle( $title );
 
 		// Use the MediaWiki system user for creating attestation pages
-		$systemUser = User::newSystemUser( 'PickiPedia Invitations', [ 'steal' => true ] );
+		$systemUser = User::newSystemUser( 'Invitations-bot', [ 'steal' => false ] );
 
 		if ( !$systemUser ) {
 			wfDebugLog( 'PickiPediaInvitations',
