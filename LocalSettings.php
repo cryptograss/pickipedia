@@ -185,6 +185,10 @@ wfLoadExtension( 'PickiPediaVerification' );
 # Users can toggle via sidebar; auto-disables at midnight Florida time
 wfLoadExtension( 'RambutanMode' );
 
+# PickiPediaInvitations - gate account creation behind invite codes
+# Creates an accountability chain via EntityAttestation pages
+wfLoadExtension( 'PickiPediaInvitations' );
+
 # EmbedVideo - embed external video files (MP4, etc.)
 wfLoadExtension( 'EmbedVideo' );
 

@@ -1,0 +1,83 @@
+{
+	"@metadata": {
+		"authors": ["Magent", "Justin Holmes"]
+	},
+	"pickipediainvitations-desc": "Gates account creation behind invite codes with entity attestations",
+
+	"createinvite": "Create Invite",
+	"manageinvites": "Manage Invites",
+
+	"pickipediainvitations-must-be-logged-in": "You must be logged in to create invites.",
+
+	"pickipediainvitations-createinvite-intro": "Use this form to create an invite code for a new user. The invite code can only be used by the specified username.",
+
+	"pickipediainvitations-field-inviteename": "Username for invitee",
+	"pickipediainvitations-field-inviteename-placeholder": "Enter the username",
+	"pickipediainvitations-field-inviteename-help": "The exact username the invitee will use to register. They cannot register with a different name.",
+
+	"pickipediainvitations-field-entitytype": "Entity type",
+	"pickipediainvitations-entitytype-human": "Human",
+	"pickipediainvitations-entitytype-bot": "Bot",
+	"pickipediainvitations-field-entitytype-help": "Is this account for a human or a bot? This creates an attestation on their user page.",
+
+	"pickipediainvitations-field-expiredays": "Days until expiration",
+	"pickipediainvitations-field-expiredays-help": "Set to 0 for no expiration. Default is 30 days.",
+
+	"pickipediainvitations-create-button": "Create Invite",
+
+	"pickipediainvitations-error-badtoken": "Invalid security token. Please try again.",
+	"pickipediainvitations-error-noname": "Please enter a username for the invitee.",
+	"pickipediainvitations-error-create-failed": "Failed to create invite:",
+
+	"pickipediainvitations-success-title": "Invite Created!",
+	"pickipediainvitations-success-message": "An invite has been created for $1.",
+	"pickipediainvitations-success-link-label": "Share this link with them:",
+	"pickipediainvitations-success-share-instructions": "Send this link to the invitee. They must register with the exact username specified above.",
+
+	"pickipediainvitations-myinvites-heading": "My Invites",
+	"pickipediainvitations-myinvites-none": "You haven't created any invites yet.",
+
+	"pickipediainvitations-th-id": "ID",
+	"pickipediainvitations-th-inviter": "Invited by",
+	"pickipediainvitations-th-invitee": "Invitee",
+	"pickipediainvitations-th-type": "Type",
+	"pickipediainvitations-th-created": "Created",
+	"pickipediainvitations-th-expires": "Expires",
+	"pickipediainvitations-th-status": "Status",
+	"pickipediainvitations-th-actions": "Actions",
+
+	"pickipediainvitations-never": "Never",
+	"pickipediainvitations-status-pending": "Pending",
+	"pickipediainvitations-status-used": "Used",
+	"pickipediainvitations-status-expired": "Expired",
+
+	"pickipediainvitations-manageinvites-intro": "This page shows all invites in the system. You can view invitation chains and revoke unused invites.",
+	"pickipediainvitations-manageinvites-none": "No invites have been created yet.",
+
+	"pickipediainvitations-action-viewchain": "View chain",
+	"pickipediainvitations-action-revoke": "Revoke",
+
+	"pickipediainvitations-prev": "← Previous",
+	"pickipediainvitations-next": "Next →",
+
+	"pickipediainvitations-revoke-success": "Invite has been revoked.",
+	"pickipediainvitations-revoke-failed": "Failed to revoke invite. It may have already been used.",
+	"pickipediainvitations-error-noinvite": "No invite specified.",
+
+	"pickipediainvitations-chain-nouser": "No user specified.",
+	"pickipediainvitations-chain-usernotfound": "User not found.",
+	"pickipediainvitations-chain-title": "Invitation chain for $1",
+	"pickipediainvitations-chain-genesis": "$1 is a genesis user (created before the invitation system or bootstrapped).",
+	"pickipediainvitations-chain-intro": "The following shows who invited $1 and the chain of invitations leading back to genesis users:",
+	"pickipediainvitations-chain-explanation": "The first person in the list is the user, followed by who invited them, then who invited that person, and so on.",
+	"pickipediainvitations-chain-backtolist": "← Back to invite list",
+
+	"pickipediainvitations-code-required": "An invite code is required to create an account.",
+	"pickipediainvitations-validation-error": "Invalid invite: $1",
+
+	"pickipediainvitations-field-invitecode": "Invite code",
+	"pickipediainvitations-field-invitecode-help": "Enter the invite code you received from an existing user.",
+
+	"pickipediainvitations-provider": "PickiPedia Invitations",
+	"pickipediainvitations-has-code": "Invite code provided"
+}
