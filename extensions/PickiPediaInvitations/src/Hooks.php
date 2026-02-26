@@ -88,7 +88,12 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, LocalUserCreatedHook {
 		}
 
 		$request = \RequestContext::getMain()->getRequest();
-		$inviteCode = $request->getVal( 'wpInviteCode' ) ?? $request->getVal( 'invite' );
+		// Check various possible field names:
+		// - wpinviteCode: MediaWiki's wp prefix + field name from AuthRequest
+		// - invite: URL parameter for pre-filled invites
+		$inviteCode = $request->getVal( 'wpinviteCode' )
+			?? $request->getVal( 'inviteCode' )
+			?? $request->getVal( 'invite' );
 
 		if ( !$inviteCode ) {
 			// No invite code - might be a sysop-created account or invites not required
