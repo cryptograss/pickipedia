@@ -6,6 +6,7 @@
 
 	"createinvite": "Create Invite",
 	"manageinvites": "Manage Invites",
+	"bulkdeleteusers": "Bulk Delete Users",
 
 	"pickipediainvitations-must-be-logged-in": "You must be logged in to create invites.",
 
