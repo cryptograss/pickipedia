@@ -89,14 +89,13 @@
 	"pickipediainvitations-attestation-field-subject-placeholder": "Username",
 	"pickipediainvitations-attestation-field-subject-help": "Enter the username of the person you want to vouch for.",
 
-	"pickipediainvitations-attestation-field-type": "Attestation type",
-	"pickipediainvitations-attestation-field-type-help": "What kind of attestation is this?",
+	"pickipediainvitations-attestation-field-type": "How do you know this person?",
+	"pickipediainvitations-attestation-field-type-help": "Choose the highest level that applies.",
 
-	"pickipediainvitations-attestation-type-musician": "Musician (I've heard them play)",
-	"pickipediainvitations-attestation-type-collaborator": "Collaborator (We've worked together)",
-	"pickipediainvitations-attestation-type-met-in-person": "Met in person",
-	"pickipediainvitations-attestation-type-online-only": "Online only (never met in person)",
-	"pickipediainvitations-attestation-type-vouches-for": "General vouch",
+	"pickipediainvitations-attestation-type-recorded-or-performed": "We have played on a record or together at a show",
+	"pickipediainvitations-attestation-type-collaborated": "We have worked together on some other project(s)",
+	"pickipediainvitations-attestation-type-seen-perform": "I've seen them play / they've seen me play",
+	"pickipediainvitations-attestation-type-met-in-person": "I've met them in person and confirmed they're human",
 
 	"pickipediainvitations-attestation-field-text": "Your attestation",
 	"pickipediainvitations-attestation-field-text-placeholder": "Write about how you know this person, what you can vouch for, etc. You can use wikitext including links and images.",

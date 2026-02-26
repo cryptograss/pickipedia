@@ -17,13 +17,12 @@ use ContentHandler;
  */
 class SpecialCreateAttestation extends SpecialPage {
 
-	/** @var array Valid attestation types */
+	/** @var array Valid attestation types (ordered from strongest to weakest) */
 	private const ATTESTATION_TYPES = [
-		'musician' => 'pickipediainvitations-attestation-type-musician',
-		'collaborator' => 'pickipediainvitations-attestation-type-collaborator',
+		'recorded-or-performed' => 'pickipediainvitations-attestation-type-recorded-or-performed',
+		'collaborated' => 'pickipediainvitations-attestation-type-collaborated',
+		'seen-perform' => 'pickipediainvitations-attestation-type-seen-perform',
 		'met-in-person' => 'pickipediainvitations-attestation-type-met-in-person',
-		'online-only' => 'pickipediainvitations-attestation-type-online-only',
-		'vouches-for' => 'pickipediainvitations-attestation-type-vouches-for',
 	];
 
 	public function __construct() {
