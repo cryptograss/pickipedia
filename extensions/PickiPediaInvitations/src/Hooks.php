@@ -15,10 +15,13 @@ use DatabaseUpdater;
  */
 class Hooks implements LoadExtensionSchemaUpdatesHook, LocalUserCreatedHook {
 
+	/** @var string System user name for creating attestation pages */
+	public const SYSTEM_USER_NAME = 'Invitations-bot';
+
 	/**
 	 * Hook: LoadExtensionSchemaUpdates
 	 *
-	 * Register database schema updates.
+	 * Register database schema updates and create system user.
 	 *
 	 * @param DatabaseUpdater $updater
 	 */
@@ -29,6 +32,44 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, LocalUserCreatedHook {
 			'pickipedia_invites',
 			"$dir/sql/tables.sql"
 		);
+
+		// Create the system user immediately to prevent username squatting.
+		// This runs during update.php before the wiki is publicly accessible.
+		$updater->addExtensionUpdate( [
+			[ __CLASS__, 'createSystemUser' ]
+		] );
+	}
+
+	/**
+	 * Create the system user account used for attestation pages.
+	 *
+	 * Called during update.php to ensure the account exists before
+	 * anyone can register it through normal signup.
+	 *
+	 * @return bool
+	 */
+	public static function createSystemUser(): bool {
+		$user = User::newSystemUser( self::SYSTEM_USER_NAME, [ 'steal' => false ] );
+
+		if ( $user ) {
+			echo "System user '" . self::SYSTEM_USER_NAME . "' is ready.\n";
+			return true;
+		}
+
+		// Check if it already exists as a regular user (someone squatted it)
+		$existingUser = MediaWikiServices::getInstance()
+			->getUserFactory()
+			->newFromName( self::SYSTEM_USER_NAME );
+
+		if ( $existingUser && $existingUser->getId() > 0 ) {
+			// User exists but isn't a system user - this is a problem
+			echo "WARNING: User '" . self::SYSTEM_USER_NAME . "' exists but is not a system user!\n";
+			echo "Consider renaming that account or using 'steal' => true.\n";
+			return false;
+		}
+
+		echo "Failed to create system user '" . self::SYSTEM_USER_NAME . "'.\n";
+		return false;
 	}
 
 	/**
@@ -130,7 +171,8 @@ WIKITEXT;
 		$wikiPage = $wikiPageFactory->newFromTitle( $title );
 
 		// Use the MediaWiki system user for creating attestation pages
-		$systemUser = User::newSystemUser( 'Invitations-bot', [ 'steal' => false ] );
+		// (created during update.php to prevent username squatting)
+		$systemUser = User::newSystemUser( self::SYSTEM_USER_NAME, [ 'steal' => false ] );
 
 		if ( !$systemUser ) {
 			wfDebugLog( 'PickiPediaInvitations',
