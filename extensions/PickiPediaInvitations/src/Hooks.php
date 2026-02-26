@@ -3,7 +3,7 @@
 namespace MediaWiki\Extension\PickiPediaInvitations;
 
 use MediaWiki\Installer\Hook\LoadExtensionSchemaUpdatesHook;
-use MediaWiki\Hook\LocalUserCreatedHook;
+use MediaWiki\Auth\Hook\LocalUserCreatedHook;
 use MediaWiki\User\User;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Title\Title;
