@@ -70,23 +70,6 @@ class SpecialCreateInvite extends SpecialPage {
 		$html .= Html::hidden( 'action', 'create' );
 		$html .= Html::hidden( 'token', $this->getUser()->getEditToken() );
 
-		// Invitee name field
-		$html .= Html::rawElement( 'div', [ 'class' => 'mw-createinvite-field' ],
-			Html::label(
-				wfMessage( 'pickipediainvitations-field-inviteename' )->text(),
-				'inviteeName'
-			) .
-			Html::input( 'inviteeName', '', 'text', [
-				'id' => 'inviteeName',
-				'required' => true,
-				'size' => 40,
-				'placeholder' => wfMessage( 'pickipediainvitations-field-inviteename-placeholder' )->text(),
-			] ) .
-			Html::element( 'p', [ 'class' => 'mw-createinvite-help' ],
-				wfMessage( 'pickipediainvitations-field-inviteename-help' )->text()
-			)
-		);
-
 		// Entity type field
 		$html .= Html::rawElement( 'div', [ 'class' => 'mw-createinvite-field' ],
 			Html::label(
@@ -166,22 +149,12 @@ class SpecialCreateInvite extends SpecialPage {
 			return;
 		}
 
-		$inviteeName = trim( $request->getVal( 'inviteeName', '' ) );
 		$entityType = $request->getVal( 'entityType', 'human' );
 		$expireDays = (int)$request->getVal( 'expireDays', 30 );
-
-		if ( $inviteeName === '' ) {
-			$out->addHTML( Html::rawElement( 'div', [ 'class' => 'mw-createinvite-error' ],
-				wfMessage( 'pickipediainvitations-error-noname' )->escaped()
-			) );
-			$this->showForm();
-			return;
-		}
 
 		// Create the invite
 		$result = InviteStore::createInvite(
 			$user->getId(),
-			$inviteeName,
 			$entityType,
 			$expireDays
 		);
@@ -206,7 +179,7 @@ class SpecialCreateInvite extends SpecialPage {
 				wfMessage( 'pickipediainvitations-success-title' )->text()
 			) .
 			Html::element( 'p', [],
-				wfMessage( 'pickipediainvitations-success-message', $inviteeName )->text()
+				wfMessage( 'pickipediainvitations-success-message' )->text()
 			) .
 			Html::rawElement( 'p', [],
 				wfMessage( 'pickipediainvitations-success-link-label' )->escaped() .
@@ -245,25 +218,34 @@ class SpecialCreateInvite extends SpecialPage {
 
 		$html = Html::openElement( 'table', [ 'class' => 'wikitable sortable' ] );
 		$html .= Html::rawElement( 'tr', [],
-			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-invitee' )->text() ) .
 			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-type' )->text() ) .
 			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-created' )->text() ) .
 			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-expires' )->text() ) .
-			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-status' )->text() )
+			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-status' )->text() ) .
+			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-usedby' )->text() )
 		);
+
+		$userFactory = MediaWikiServices::getInstance()->getUserFactory();
 
 		foreach ( $invites as $invite ) {
 			$status = $this->getInviteStatus( $invite );
 
+			// Show who used the invite (if used)
+			$usedBy = '';
+			if ( $invite->ppi_used_by_id ) {
+				$usedByUser = $userFactory->newFromId( (int)$invite->ppi_used_by_id );
+				$usedBy = $usedByUser ? $usedByUser->getName() : '(unknown)';
+			}
+
 			$html .= Html::rawElement( 'tr', [],
-				Html::element( 'td', [], $invite->ppi_invitee_name ) .
 				Html::element( 'td', [], $invite->ppi_entity_type ) .
 				Html::element( 'td', [], $this->formatTimestamp( $invite->ppi_created_at ) ) .
 				Html::element( 'td', [], $invite->ppi_expires_at
 					? $this->formatTimestamp( $invite->ppi_expires_at )
 					: wfMessage( 'pickipediainvitations-never' )->text()
 				) .
-				Html::element( 'td', [], $status )
+				Html::element( 'td', [], $status ) .
+				Html::element( 'td', [], $usedBy )
 			);
 		}
 

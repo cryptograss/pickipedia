@@ -9,11 +9,7 @@
 
 	"pickipediainvitations-must-be-logged-in": "You must be logged in to create invites.",
 
-	"pickipediainvitations-createinvite-intro": "Use this form to create an invite code for a new user. The invite code can only be used by the specified username.",
-
-	"pickipediainvitations-field-inviteename": "Username for invitee",
-	"pickipediainvitations-field-inviteename-placeholder": "Enter the username",
-	"pickipediainvitations-field-inviteename-help": "The exact username the invitee will use to register. They cannot register with a different name.",
+	"pickipediainvitations-createinvite-intro": "Use this form to create an invite code for a new user. Anyone with the code can use it to create an account.",
 
 	"pickipediainvitations-field-entitytype": "Entity type",
 	"pickipediainvitations-entitytype-human": "Human",
@@ -26,21 +22,20 @@
 	"pickipediainvitations-create-button": "Create Invite",
 
 	"pickipediainvitations-error-badtoken": "Invalid security token. Please try again.",
-	"pickipediainvitations-error-noname": "Please enter a username for the invitee.",
 	"pickipediainvitations-error-create-failed": "Failed to create invite:",
 
 	"pickipediainvitations-success-title": "Invite Created!",
-	"pickipediainvitations-success-message": "An invite has been created for $1.",
-	"pickipediainvitations-success-link-label": "Share this link with them:",
-	"pickipediainvitations-success-share-instructions": "Send this link to the invitee. They must register with the exact username specified above.",
+	"pickipediainvitations-success-message": "Your invite code has been created.",
+	"pickipediainvitations-success-link-label": "Share this link:",
+	"pickipediainvitations-success-share-instructions": "Send this link to the person you want to invite. They can use it to create an account with any username they choose.",
 
 	"pickipediainvitations-myinvites-heading": "My Invites",
 	"pickipediainvitations-myinvites-none": "You haven't created any invites yet.",
 
 	"pickipediainvitations-th-id": "ID",
 	"pickipediainvitations-th-inviter": "Invited by",
-	"pickipediainvitations-th-invitee": "Invitee",
 	"pickipediainvitations-th-type": "Type",
+	"pickipediainvitations-th-usedby": "Used by",
 	"pickipediainvitations-th-created": "Created",
 	"pickipediainvitations-th-expires": "Expires",
 	"pickipediainvitations-th-status": "Status",

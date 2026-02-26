@@ -17,14 +17,12 @@ class InviteStore {
 	 * Create a new invite code.
 	 *
 	 * @param int $inviterId User ID of the person creating the invite
-	 * @param string $inviteeName Intended username for the invitee
 	 * @param string $entityType 'human' or 'bot'
 	 * @param int|null $expireDays Days until expiration (null = use config default, 0 = never)
 	 * @return array ['success' => bool, 'code' => string|null, 'error' => string|null]
 	 */
 	public static function createInvite(
 		int $inviterId,
-		string $inviteeName,
 		string $entityType = 'human',
 		?int $expireDays = null
 	): array {
@@ -44,39 +42,6 @@ class InviteStore {
 			];
 		}
 
-		// Validate invitee name is a valid username
-		$userFactory = MediaWikiServices::getInstance()->getUserFactory();
-		$userNameUtils = MediaWikiServices::getInstance()->getUserNameUtils();
-
-		$canonicalName = $userNameUtils->getCanonical( $inviteeName );
-		if ( $canonicalName === false ) {
-			return [
-				'success' => false,
-				'code' => null,
-				'error' => 'Invalid username format.'
-			];
-		}
-
-		// Check if user already exists
-		$existingUser = $userFactory->newFromName( $canonicalName );
-		if ( $existingUser && $existingUser->getId() > 0 ) {
-			return [
-				'success' => false,
-				'code' => null,
-				'error' => 'A user with this name already exists.'
-			];
-		}
-
-		// Check if there's already an unused invite for this name
-		$existingInvite = self::getUnusedInviteByName( $canonicalName );
-		if ( $existingInvite ) {
-			return [
-				'success' => false,
-				'code' => null,
-				'error' => 'An unused invite for this username already exists.'
-			];
-		}
-
 		// Generate random code
 		$code = bin2hex( random_bytes( 16 ) ); // 32 hex chars
 
@@ -92,7 +57,7 @@ class InviteStore {
 			[
 				'ppi_code' => $code,
 				'ppi_inviter_id' => $inviterId,
-				'ppi_invitee_name' => $canonicalName,
+				'ppi_invitee_name' => '',  // No longer used - kept for schema compatibility
 				'ppi_entity_type' => $entityType,
 				'ppi_created_at' => wfTimestamp( TS_MW ),
 				'ppi_expires_at' => $expiresAt,
@@ -113,21 +78,9 @@ class InviteStore {
 	 * Validate an invite code for use during signup.
 	 *
 	 * @param string $code The invite code
-	 * @param string $username The username being registered
 	 * @return array ['valid' => bool, 'invite' => stdClass|null, 'error' => string|null]
 	 */
-	public static function validateCode( string $code, string $username ): array {
-		$userNameUtils = MediaWikiServices::getInstance()->getUserNameUtils();
-		$canonicalName = $userNameUtils->getCanonical( $username );
-
-		if ( $canonicalName === false ) {
-			return [
-				'valid' => false,
-				'invite' => null,
-				'error' => 'Invalid username format.'
-			];
-		}
-
+	public static function validateCode( string $code ): array {
 		$invite = self::getInviteByCode( $code );
 
 		if ( !$invite ) {
@@ -157,15 +110,6 @@ class InviteStore {
 					'error' => 'This invite code has expired.'
 				];
 			}
-		}
-
-		// Check if username matches
-		if ( $invite->ppi_invitee_name !== $canonicalName ) {
-			return [
-				'valid' => false,
-				'invite' => null,
-				'error' => 'This invite code was created for a different username.'
-			];
 		}
 
 		return [

@@ -15,7 +15,6 @@ use StatusValue;
  * 1. A valid invite code is provided
  * 2. The code hasn't been used
  * 3. The code hasn't expired
- * 4. The requested username matches the invite's intended recipient
  */
 class InviteAuthProvider extends AbstractPreAuthenticationProvider {
 
@@ -68,7 +67,7 @@ class InviteAuthProvider extends AbstractPreAuthenticationProvider {
 		}
 
 		// Validate the code
-		$validation = InviteStore::validateCode( $req->inviteCode, $user->getName() );
+		$validation = InviteStore::validateCode( $req->inviteCode );
 
 		if ( !$validation['valid'] ) {
 			return StatusValue::newFatal(
