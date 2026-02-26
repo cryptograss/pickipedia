@@ -14,7 +14,8 @@ use MediaWiki\MediaWikiServices;
 class SpecialManageInvites extends SpecialPage {
 
 	public function __construct() {
-		parent::__construct( 'ManageInvites', 'sysop' );
+		// Any logged-in user can view and manage invites (wiki philosophy)
+		parent::__construct( 'ManageInvites' );
 	}
 
 	/**
@@ -22,7 +23,7 @@ class SpecialManageInvites extends SpecialPage {
 	 */
 	public function execute( $par ) {
 		$this->setHeaders();
-		$this->checkPermissions();
+		$this->requireLogin();
 		$this->checkReadOnly();
 
 		$out = $this->getOutput();

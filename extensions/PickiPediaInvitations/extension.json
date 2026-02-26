@@ -14,7 +14,8 @@
 	},
 	"SpecialPages": {
 		"CreateInvite": "MediaWiki\\Extension\\PickiPediaInvitations\\SpecialCreateInvite",
-		"ManageInvites": "MediaWiki\\Extension\\PickiPediaInvitations\\SpecialManageInvites"
+		"ManageInvites": "MediaWiki\\Extension\\PickiPediaInvitations\\SpecialManageInvites",
+		"CreateAttestation": "MediaWiki\\Extension\\PickiPediaInvitations\\SpecialCreateAttestation"
 	},
 	"HookHandlers": {
 		"main": {
@@ -23,7 +24,10 @@
 	},
 	"Hooks": {
 		"LoadExtensionSchemaUpdates": "main",
-		"LocalUserCreated": "main"
+		"LocalUserCreated": "main",
+		"EditFilterMergedContent": "main",
+		"SidebarBeforeOutput": "main",
+		"SkinTemplateNavigation::Universal": "main"
 	},
 	"AuthManagerAutoConfig": {
 		"preauth": {

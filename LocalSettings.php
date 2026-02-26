@@ -121,8 +121,10 @@ $wgRightsText = "";
 $wgRightsIcon = "";
 
 ## Permissions
+# Account creation requires an invite code (handled by PickiPediaInvitations extension)
 $wgGroupPermissions['*']['createaccount'] = true;
-$wgGroupPermissions['*']['edit'] = true;
+# Anonymous users can read but not edit
+$wgGroupPermissions['*']['edit'] = false;
 $wgGroupPermissions['*']['read'] = true;
 
 ## Extensions

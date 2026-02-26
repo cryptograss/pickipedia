@@ -34,6 +34,7 @@
 
 	"pickipediainvitations-th-id": "ID",
 	"pickipediainvitations-th-inviter": "Invited by",
+	"pickipediainvitations-th-invitee": "Invitee",
 	"pickipediainvitations-th-type": "Type",
 	"pickipediainvitations-th-usedby": "Used by",
 	"pickipediainvitations-th-created": "Created",
@@ -75,5 +76,48 @@
 	"pickipediainvitations-field-invitecode-help": "Enter the invite code you received from an existing user.",
 
 	"pickipediainvitations-provider": "PickiPedia Invitations",
-	"pickipediainvitations-has-code": "Invite code provided"
+	"pickipediainvitations-has-code": "Invite code provided",
+
+	"createattestation": "Create Attestation",
+
+	"pickipediainvitations-attestation-must-be-logged-in": "You must be logged in to create attestations.",
+
+	"pickipediainvitations-attestation-intro": "Use this form to create an attestation vouching for another user. Your attestation will appear on their user page and creates a web-of-trust record.",
+
+	"pickipediainvitations-attestation-field-subject": "User to attest",
+	"pickipediainvitations-attestation-field-subject-placeholder": "Username",
+	"pickipediainvitations-attestation-field-subject-help": "Enter the username of the person you want to vouch for.",
+
+	"pickipediainvitations-attestation-field-type": "Attestation type",
+	"pickipediainvitations-attestation-field-type-help": "What kind of attestation is this?",
+
+	"pickipediainvitations-attestation-type-musician": "Musician (I've heard them play)",
+	"pickipediainvitations-attestation-type-collaborator": "Collaborator (We've worked together)",
+	"pickipediainvitations-attestation-type-met-in-person": "Met in person",
+	"pickipediainvitations-attestation-type-online-only": "Online only (never met in person)",
+	"pickipediainvitations-attestation-type-vouches-for": "General vouch",
+
+	"pickipediainvitations-attestation-field-text": "Your attestation",
+	"pickipediainvitations-attestation-field-text-placeholder": "Write about how you know this person, what you can vouch for, etc. You can use wikitext including links and images.",
+	"pickipediainvitations-attestation-field-text-help": "Write a freeform attestation. You can include wikitext formatting, links, and images.",
+
+	"pickipediainvitations-attestation-create-button": "Create Attestation",
+
+	"pickipediainvitations-attestation-error-invalid-username": "Invalid username format.",
+	"pickipediainvitations-attestation-error-user-not-found": "User not found. They must have an account to be attested.",
+	"pickipediainvitations-attestation-error-self": "You cannot create an attestation for yourself.",
+	"pickipediainvitations-attestation-error-exists": "You have already created an attestation for this user. Edit the existing page instead.",
+	"pickipediainvitations-attestation-error-create-failed": "Failed to create attestation:",
+
+	"pickipediainvitations-attestation-success-title": "Attestation Created!",
+	"pickipediainvitations-attestation-success-message": "Your attestation has been recorded.",
+	"pickipediainvitations-attestation-success-view": "View it at:",
+
+	"pickipediainvitations-attestation-edit-summary": "Created attestation for $1",
+	"pickipediainvitations-attestation-edit-denied": "You can only edit your own attestations. This attestation belongs to another user.",
+
+	"pickipediainvitations-sidebar-attest-user": "Attest this user",
+	"pickipediainvitations-sidebar-view-attestation": "View your attestation",
+
+	"pickipediainvitations-personal-invite": "Invite someone"
 }

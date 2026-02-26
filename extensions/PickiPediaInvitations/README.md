@@ -1,6 +1,6 @@
 # PickiPediaInvitations
 
-A MediaWiki extension that gates account creation behind invite codes, creating an accountability chain for all users.
+A MediaWiki extension that gates account creation behind invite codes, creating an accountability chain and web of trust for all users.
 
 ## Why This Exists
 
@@ -8,27 +8,48 @@ PickiPedia was getting hit by bot spam. Rather than playing whack-a-mole with CA
 
 1. **A barrier to spam** - bots can't self-register
 2. **An accountability chain** - every user can be traced back to who invited them
-3. **Entity attestations** - each user has a tamper-protected page declaring whether they're human or bot
+3. **A web of trust** - users can vouch for each other with attestations
 
 ## How It Works
 
-### For Users
+### For New Users
 
-1. An existing user visits `Special:CreateInvite`
-2. They enter the intended username and whether it's for a human or bot
-3. They get an invite link like `https://pickipedia.xyz/wiki/Special:CreateAccount?invite=abc123...`
-4. They send this link to the invitee
-5. The invitee clicks the link, which pre-fills the invite code
-6. The invitee registers with the **exact username** specified in the invite
-7. On success, an `EntityAttestation` page is automatically created at `User:TheirName/EntityAttestation`
+1. Get an invite link from an existing member
+2. Click the link (pre-fills the invite code on the signup form)
+3. Choose your username and password
+4. On signup, an `invite-record` page is automatically created at `User:YourName/Attestations/invite-record`
 
-### For Admins
+### For Existing Users
 
-- `Special:ManageInvites` shows all invites (used, unused, expired)
-- Can view invitation chains (who invited whom, going back to genesis)
-- Can revoke unused invites
+**Creating invites:**
+1. Visit `Special:CreateInvite`
+2. Select entity type (human or bot)
+3. Get a shareable invite link
+4. Send it to whoever you want to invite
 
-### Entity Attestations
+**Vouching for others:**
+1. Visit someone's user page
+2. Click "Attest this user" in the sidebar
+3. Choose attestation type and write your vouch
+4. Creates a page at `User:TheirName/Attestations/by-YourName`
+
+### For Everyone
+
+`Special:ManageInvites` shows all invites in the system:
+- View invitation chains (who invited whom, going back to genesis)
+- Revoke unused invites (wiki philosophy: any user can revoke any unused invite)
+- Filter by status (pending, used, expired)
+
+## Attestation Structure
+
+All attestation pages live under `User:X/Attestations/`:
+
+| Page | Description | Created by |
+|------|-------------|------------|
+| `invite-record` | Foundational record from signup | System (automatic) |
+| `by-{Attester}` | User vouching for this person | The attester |
+
+### Invite Record
 
 Every user gets a protected subpage documenting:
 - **Entity type**: human or bot
@@ -36,7 +57,14 @@ Every user gets a protected subpage documenting:
 - **Invited at**: when they joined
 - **Semantic properties**: `[[Entity type::human]]`, `[[Invited by::User:X]]`
 
-These pages are protected so only sysops can edit them - the whole point is tamper-resistance.
+These pages are protected so only sysops can edit them.
+
+### User Attestations
+
+Users can create attestations vouching for each other:
+- **Attestation types**: musician, collaborator, met-in-person, online-only, general vouch
+- **Freeform text**: wikitext-enabled description
+- **Edit protection**: only the attester (or sysops) can edit their attestation
 
 ## Installation
 
@@ -45,6 +73,9 @@ These pages are protected so only sysops can edit them - the whole point is tamp
 2. Add to `LocalSettings.php`:
    ```php
    wfLoadExtension( 'PickiPediaInvitations' );
+
+   // Recommended: prevent anonymous edits
+   $wgGroupPermissions['*']['edit'] = false;
    ```
 
 3. Run database update:
@@ -52,9 +83,14 @@ These pages are protected so only sysops can edit them - the whole point is tamp
    php maintenance/update.php
    ```
 
-4. Create `Template:EntityAttestation` on the wiki (see below)
+4. Create templates on the wiki:
+   - `Template:InviteRecord` - for invite records (blue styling)
+   - `Template:Attestation` - for user attestations (green styling)
 
-5. Bootstrap existing users:
+5. Create signup welcome message:
+   - Edit `MediaWiki:Signupstart` to explain the invite system
+
+6. Bootstrap existing users:
    ```bash
    # Dry run first
    php extensions/PickiPediaInvitations/maintenance/bootstrapAttestations.php --dry-run
@@ -84,62 +120,41 @@ Creates table `pickipedia_invites`:
 | `ppi_id` | INT | Primary key |
 | `ppi_code` | VARCHAR(32) | Random hex invite code |
 | `ppi_inviter_id` | INT | User ID who created invite |
-| `ppi_invitee_name` | VARCHAR(255) | Intended username |
+| `ppi_invitee_name` | VARCHAR(255) | (Legacy, unused) |
 | `ppi_entity_type` | ENUM | 'human' or 'bot' |
 | `ppi_created_at` | BINARY(14) | Creation timestamp |
 | `ppi_expires_at` | BINARY(14) | Expiration (NULL = never) |
 | `ppi_used_at` | BINARY(14) | When used (NULL = unused) |
 | `ppi_used_by_id` | INT | User ID created with this invite |
 
-## Template:EntityAttestation
-
-Create this template on the wiki:
-
-```wikitext
-<noinclude>
-Documents the entity type and invitation chain for a user account.
-This template is automatically added to user subpages by the PickiPediaInvitations extension.
-
-'''Do not edit EntityAttestation pages manually''' - they are protected for tamper-resistance.
-
-[[Category:Templates]]
-</noinclude><includeonly>{{#if:{{{genesis|}}}|
-{| class="wikitable" style="float:right; margin-left:1em;"
-|-
-! colspan="2" | Entity Attestation
-|-
-| '''Type''' || {{{entity_type|human}}}
-|-
-| '''Status''' || Genesis User
-|-
-| '''Attested''' || {{{invited_at|unknown}}}
-|}
-[[Category:Genesis Users]]
-|
-{| class="wikitable" style="float:right; margin-left:1em;"
-|-
-! colspan="2" | Entity Attestation
-|-
-| '''Type''' || {{{entity_type|human}}}
-|-
-| '''Invited by''' || [[{{{invited_by|Unknown}}}]]
-|-
-| '''Invited''' || {{{invited_at|unknown}}}
-|}
-}}
-</includeonly>
-```
-
 ## Special Pages
 
-- **Special:CreateInvite** - Create invite codes (any logged-in user)
-- **Special:ManageInvites** - View/revoke invites, see chains (sysops only)
+| Page | Access | Description |
+|------|--------|-------------|
+| `Special:CreateInvite` | Any logged-in user | Create invite codes |
+| `Special:ManageInvites` | Any logged-in user | View/revoke invites, see chains |
+| `Special:CreateAttestation` | Any logged-in user | Vouch for another user |
 
-## Permissions
+## UI Integration
 
-- **Sysops and bureaucrats** can create accounts without invite codes (for manual account creation)
-- **Any logged-in user** can create invites
-- **Only sysops** can edit EntityAttestation pages
+- **Personal tools**: "Invite someone" link appears between Contributions and Log out
+- **Sidebar on user pages**: "Attest this user" or "View your attestation" links
+- **Signup page**: Welcome message from `MediaWiki:Signupstart`
+
+## Querying the Web of Trust
+
+With Semantic MediaWiki, you can query invitation and attestation relationships:
+
+```wikitext
+{{!-- Who did Justin invite? --}}
+{{#ask:
+ [[Invited by::User:Justin]]
+ |?Entity type
+}}
+
+{{!-- All attestations for a user --}}
+Special:PrefixIndex/User:SomeName/Attestations/
+```
 
 ## Files
 
@@ -147,6 +162,7 @@ This template is automatically added to user subpages by the PickiPediaInvitatio
 PickiPediaInvitations/
 ├── extension.json                 # Extension manifest
 ├── README.md                      # This file
+├── PickiPediaInvitations.alias.php # Special page aliases
 ├── i18n/
 │   └── en.json                    # English messages
 ├── maintenance/
@@ -154,30 +170,17 @@ PickiPediaInvitations/
 ├── sql/
 │   └── tables.sql                 # Database schema
 └── src/
-    ├── Hooks.php                  # Schema + LocalUserCreated hooks
+    ├── Hooks.php                  # Schema + attestation creation + UI hooks
     ├── InviteAuthProvider.php     # Pre-auth provider (gates signup)
     ├── InviteStore.php            # Database operations
+    ├── SpecialCreateAttestation.php # Create attestation UI
     ├── SpecialCreateInvite.php    # Create invites UI
-    └── SpecialManageInvites.php   # Admin management UI
+    └── SpecialManageInvites.php   # View/manage all invites
 ```
-
-## Querying the Accountability Chain
-
-With Semantic MediaWiki, you can query invitation relationships:
-
-```wikitext
-{{#ask:
- [[Invited by::User:Justin]]
- |?Entity type
- |?Invited by
-}}
-```
-
-This shows everyone Justin has invited.
 
 ## System User
 
-The extension creates pages using a system user account called `Invitations-bot`. This account is created automatically and is used so that attestation pages aren't attributed to the new user or the inviter.
+The extension creates pages using a system user account called `Invitations-bot`. This account is created automatically during `update.php` and is used so that invite-record pages aren't attributed to the new user or the inviter.
 
 ## Authors
 

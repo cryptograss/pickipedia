@@ -12,4 +12,5 @@ $specialPageAliases = [];
 $specialPageAliases['en'] = [
 	'CreateInvite' => [ 'CreateInvite', 'Create Invite' ],
 	'ManageInvites' => [ 'ManageInvites', 'Manage Invites' ],
+	'CreateAttestation' => [ 'CreateAttestation', 'Create Attestation', 'Attest' ],
 ];
