@@ -201,6 +201,9 @@ wfLoadExtension( 'Echo' );
 # Thanks - thank editors for contributions
 wfLoadExtension( 'Thanks' );
 
+# UserMerge - merge and delete user accounts (for bot cleanup)
+wfLoadExtension( 'UserMerge' );
+
 # WikiSEO - social sharing cards and SEO meta tags (installed via Composer)
 # DISABLED in test environment (not in Docker image)
 # wfLoadExtension( 'WikiSEO' );
