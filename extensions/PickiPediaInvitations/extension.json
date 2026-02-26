@@ -36,6 +36,9 @@
 	"MessagesDirs": {
 		"PickiPediaInvitations": ["i18n"]
 	},
+	"ExtensionMessagesFiles": {
+		"PickiPediaInvitationsAlias": "PickiPediaInvitations.alias.php"
+	},
 	"config": {
 		"PickiPediaInvitesRequired": {
 			"value": true,
