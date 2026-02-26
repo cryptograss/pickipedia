@@ -126,6 +126,8 @@ $wgGroupPermissions['*']['createaccount'] = true;
 # Anonymous users can read but not edit
 $wgGroupPermissions['*']['edit'] = false;
 $wgGroupPermissions['*']['read'] = true;
+# Allow sysops to merge/delete users (for bot cleanup)
+$wgGroupPermissions['sysop']['usermerge'] = true;
 
 ## Extensions
 
