@@ -1,0 +1,57 @@
+{
+	"name": "PickiPediaInvitations",
+	"version": "1.0.0",
+	"author": ["Magent", "Justin Holmes"],
+	"url": "https://github.com/cryptograss/pickipedia",
+	"descriptionmsg": "pickipediainvitations-desc",
+	"license-name": "GPL-2.0-or-later",
+	"type": "other",
+	"requires": {
+		"MediaWiki": ">= 1.43.0"
+	},
+	"AutoloadNamespaces": {
+		"MediaWiki\\Extension\\PickiPediaInvitations\\": "src/"
+	},
+	"SpecialPages": {
+		"CreateInvite": "MediaWiki\\Extension\\PickiPediaInvitations\\SpecialCreateInvite",
+		"ManageInvites": "MediaWiki\\Extension\\PickiPediaInvitations\\SpecialManageInvites",
+		"CreateAttestation": "MediaWiki\\Extension\\PickiPediaInvitations\\SpecialCreateAttestation"
+	},
+	"HookHandlers": {
+		"main": {
+			"class": "MediaWiki\\Extension\\PickiPediaInvitations\\Hooks"
+		}
+	},
+	"Hooks": {
+		"LoadExtensionSchemaUpdates": "main",
+		"LocalUserCreated": "main",
+		"EditFilterMergedContent": "main",
+		"SidebarBeforeOutput": "main",
+		"SkinTemplateNavigation::Universal": "main"
+	},
+	"AuthManagerAutoConfig": {
+		"preauth": {
+			"PickiPediaInviteProvider": {
+				"class": "MediaWiki\\Extension\\PickiPediaInvitations\\InviteAuthProvider",
+				"sort": 0
+			}
+		}
+	},
+	"MessagesDirs": {
+		"PickiPediaInvitations": ["i18n"]
+	},
+	"ExtensionMessagesFiles": {
+		"PickiPediaInvitationsAlias": "PickiPediaInvitations.alias.php"
+	},
+	"config": {
+		"PickiPediaInvitesRequired": {
+			"value": true,
+			"description": "Whether invite codes are required for account creation"
+		},
+		"PickiPediaInviteExpireDays": {
+			"value": 30,
+			"description": "Default expiration time for invites in days (0 = never expires)"
+		}
+	},
+	"manifest_version": 2
+}

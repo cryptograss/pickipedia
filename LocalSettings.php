@@ -121,8 +121,10 @@ $wgRightsText = "";
 $wgRightsIcon = "";
 
 ## Permissions
+# Account creation requires an invite code (handled by PickiPediaInvitations extension)
 $wgGroupPermissions['*']['createaccount'] = true;
-$wgGroupPermissions['*']['edit'] = true;
+# Anonymous users can read but not edit
+$wgGroupPermissions['*']['edit'] = false;
 $wgGroupPermissions['*']['read'] = true;
 
 ## Extensions
@@ -148,8 +150,9 @@ $wgPFEnableStringFunctions = true;  # Enable #explode, #sub, #len, etc. for pars
 wfLoadExtension( 'WikiEditor' );
 
 # CodeMirror - syntax highlighting in the editor
-wfLoadExtension( 'CodeMirror' );
-$wgDefaultUserOptions['usecodemirror'] = 1;  # Enable by default for all users
+# DISABLED in test environment (not in Docker image)
+# wfLoadExtension( 'CodeMirror' );
+# $wgDefaultUserOptions['usecodemirror'] = 1;  # Enable by default for all users
 
 # MultimediaViewer - modern lightbox for images (bundled with MediaWiki)
 wfLoadExtension( 'MultimediaViewer' );
@@ -185,6 +188,10 @@ wfLoadExtension( 'PickiPediaVerification' );
 # Users can toggle via sidebar; auto-disables at midnight Florida time
 wfLoadExtension( 'RambutanMode' );
 
+# PickiPediaInvitations - gate account creation behind invite codes
+# Creates an accountability chain via EntityAttestation pages
+wfLoadExtension( 'PickiPediaInvitations' );
+
 # EmbedVideo - embed external video files (MP4, etc.)
 wfLoadExtension( 'EmbedVideo' );
 
@@ -195,9 +202,10 @@ wfLoadExtension( 'Echo' );
 wfLoadExtension( 'Thanks' );
 
 # WikiSEO - social sharing cards and SEO meta tags (installed via Composer)
-wfLoadExtension( 'WikiSEO' );
-$wgWikiSeoDefaultImage = "$wgServer/w/images/pickipedia-card.png";
-$wgTwitterSiteHandle = "@cryptograss";
+# DISABLED in test environment (not in Docker image)
+# wfLoadExtension( 'WikiSEO' );
+# $wgWikiSeoDefaultImage = "$wgServer/w/images/pickipedia-card.png";
+# $wgTwitterSiteHandle = "@cryptograss";
 
 # Add custom 'videolink' service for direct video URLs (MP4 or IPFS gateway)
 $wgHooks['SetupAfterCache'][] = function() {
