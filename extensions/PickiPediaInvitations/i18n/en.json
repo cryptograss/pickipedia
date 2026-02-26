@@ -58,6 +58,7 @@
 	"pickipediainvitations-revoke-success": "Invite has been revoked.",
 	"pickipediainvitations-revoke-failed": "Failed to revoke invite. It may have already been used.",
 	"pickipediainvitations-error-noinvite": "No invite specified.",
+	"pickipediainvitations-error-notowner": "You can only revoke your own invites.",
 
 	"pickipediainvitations-chain-nouser": "No user specified.",
 	"pickipediainvitations-chain-usernotfound": "User not found.",

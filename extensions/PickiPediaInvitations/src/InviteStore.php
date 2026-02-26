@@ -146,6 +146,25 @@ class InviteStore {
 	}
 
 	/**
+	 * Get an invite by its ID.
+	 *
+	 * @param int $id
+	 * @return stdClass|null
+	 */
+	public static function getInviteById( int $id ): ?stdClass {
+		$dbr = self::getDBConnection( DB_REPLICA );
+
+		$row = $dbr->selectRow(
+			'pickipedia_invites',
+			'*',
+			[ 'ppi_id' => $id ],
+			__METHOD__
+		);
+
+		return $row ?: null;
+	}
+
+	/**
 	 * Get an invite by its code.
 	 *
 	 * @param string $code

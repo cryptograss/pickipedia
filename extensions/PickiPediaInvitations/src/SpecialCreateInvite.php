@@ -40,9 +40,14 @@ class SpecialCreateInvite extends SpecialPage {
 		$out->addModuleStyles( 'mediawiki.special' );
 
 		// Handle form submission
-		if ( $request->wasPosted() && $request->getVal( 'action' ) === 'create' ) {
-			$this->handleSubmission( $request, $user );
-			return;
+		if ( $request->wasPosted() ) {
+			$action = $request->getVal( 'action' );
+			if ( $action === 'create' ) {
+				$this->handleSubmission( $request, $user );
+				return;
+			} elseif ( $action === 'revoke' ) {
+				$this->handleRevoke( $request, $user );
+			}
 		}
 
 		// Show the form
@@ -196,6 +201,52 @@ class SpecialCreateInvite extends SpecialPage {
 	}
 
 	/**
+	 * Handle invite revocation.
+	 */
+	private function handleRevoke( $request, $user ): void {
+		$out = $this->getOutput();
+
+		if ( !$user->matchEditToken( $request->getVal( 'token' ) ) ) {
+			$out->addHTML( Html::rawElement( 'div', [ 'class' => 'mw-createinvite-error' ],
+				wfMessage( 'pickipediainvitations-error-badtoken' )->escaped()
+			) );
+			return;
+		}
+
+		$inviteId = (int)$request->getVal( 'inviteId' );
+		if ( !$inviteId ) {
+			$out->addHTML( Html::rawElement( 'div', [ 'class' => 'mw-createinvite-error' ],
+				wfMessage( 'pickipediainvitations-error-noinvite' )->escaped()
+			) );
+			return;
+		}
+
+		// Verify the user owns this invite (or is a sysop)
+		$invite = InviteStore::getInviteById( $inviteId );
+		$userGroupManager = MediaWikiServices::getInstance()->getUserGroupManager();
+		$isSysop = in_array( 'sysop', $userGroupManager->getUserGroups( $user ) );
+
+		if ( !$invite || ( $invite->ppi_inviter_id != $user->getId() && !$isSysop ) ) {
+			$out->addHTML( Html::rawElement( 'div', [ 'class' => 'mw-createinvite-error' ],
+				wfMessage( 'pickipediainvitations-error-notowner' )->escaped()
+			) );
+			return;
+		}
+
+		$success = InviteStore::revokeInvite( $inviteId );
+
+		if ( $success ) {
+			$out->addHTML( Html::rawElement( 'div', [ 'class' => 'mw-createinvite-success' ],
+				wfMessage( 'pickipediainvitations-revoke-success' )->escaped()
+			) );
+		} else {
+			$out->addHTML( Html::rawElement( 'div', [ 'class' => 'mw-createinvite-error' ],
+				wfMessage( 'pickipediainvitations-revoke-failed' )->escaped()
+			) );
+		}
+	}
+
+	/**
 	 * Show the user's existing invites.
 	 */
 	private function showMyInvites(): void {
@@ -222,7 +273,8 @@ class SpecialCreateInvite extends SpecialPage {
 			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-created' )->text() ) .
 			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-expires' )->text() ) .
 			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-status' )->text() ) .
-			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-usedby' )->text() )
+			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-usedby' )->text() ) .
+			Html::element( 'th', [], wfMessage( 'pickipediainvitations-th-actions' )->text() )
 		);
 
 		$userFactory = MediaWikiServices::getInstance()->getUserFactory();
@@ -237,6 +289,24 @@ class SpecialCreateInvite extends SpecialPage {
 				$usedBy = $usedByUser ? $usedByUser->getName() : '(unknown)';
 			}
 
+			// Show revoke button for unused invites
+			$actions = '';
+			if ( $invite->ppi_used_at === null ) {
+				$actions = Html::rawElement( 'form', [
+					'method' => 'post',
+					'action' => $this->getPageTitle()->getLocalURL(),
+					'style' => 'display: inline; margin: 0;',
+				],
+					Html::hidden( 'action', 'revoke' ) .
+					Html::hidden( 'inviteId', $invite->ppi_id ) .
+					Html::hidden( 'token', $this->getUser()->getEditToken() ) .
+					Html::submitButton(
+						wfMessage( 'pickipediainvitations-action-revoke' )->text(),
+						[ 'class' => 'mw-htmlform-submit' ]
+					)
+				);
+			}
+
 			$html .= Html::rawElement( 'tr', [],
 				Html::element( 'td', [], $invite->ppi_entity_type ) .
 				Html::element( 'td', [], $this->formatTimestamp( $invite->ppi_created_at ) ) .
@@ -245,7 +315,8 @@ class SpecialCreateInvite extends SpecialPage {
 					: wfMessage( 'pickipediainvitations-never' )->text()
 				) .
 				Html::element( 'td', [], $status ) .
-				Html::element( 'td', [], $usedBy )
+				Html::element( 'td', [], $usedBy ) .
+				Html::rawElement( 'td', [], $actions )
 			);
 		}
 
