@@ -137,6 +137,11 @@ pipeline {
                     if [ ! -d "Thanks" ]; then
                         git clone --depth 1 --branch REL1_43 https://gerrit.wikimedia.org/r/mediawiki/extensions/Thanks.git Thanks
                     fi
+
+                    # UserMerge - merge and delete user accounts (for bot cleanup)
+                    if [ ! -d "UserMerge" ]; then
+                        git clone --depth 1 --branch REL1_43 https://gerrit.wikimedia.org/r/mediawiki/extensions/UserMerge.git UserMerge
+                    fi
                 '''
             }
         }
