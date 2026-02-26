@@ -1,6 +1,13 @@
 {
+    "_comment": "Cache bust test - safe to remove",
     "require": {
-        "mediawiki/semantic-media-wiki": "dev-master"
+        "mediawiki/semantic-media-wiki": "^6.0",
+        "mediawiki/page-forms": "^6.0",
+        "sentry/sentry": "^3.0",
+        "php-http/curl-client": "^2.0",
+        "guzzlehttp/psr7": "^2.0",
+        "mediawiki/hit-counters": "dev-REL1_43",
+        "octfx/wiki-seo": "^2.7"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
@@ -8,13 +15,6 @@
         "allow-plugins": {
             "composer/installers": true,
             "mediawiki/semantic-media-wiki": true
-        }
-    },
-    "extra": {
-        "merge-plugin": {
-            "include": [
-                "extensions/*/composer.json"
-            ]
         }
     }
 }

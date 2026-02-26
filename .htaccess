@@ -1,5 +1,14 @@
-# Short URL rewrite for MediaWiki
-# Maps /wiki/Page_Name to index.php
+# PHP values moved to /home/conf/php.ini on NFS (php_value not supported)
+# upload_max_filesize, post_max_size, memory_limit, max_execution_time, max_input_time
+
+# Block aggressive bots eating bandwidth (Apache 2.4 syntax)
+SetEnvIfNoCase User-Agent "meta-externalagent" bad_bot
+SetEnvIfNoCase User-Agent "Amazonbot" bad_bot
+
+<RequireAll>
+    Require all granted
+    Require not env bad_bot
+</RequireAll>
 
 # Allow iframe embedding (for Rabbithole integration)
 Header unset X-Frame-Options
@@ -7,8 +16,12 @@ Header always unset X-Frame-Options
 
 RewriteEngine On
 
-# Short URL for wiki pages
-RewriteRule ^wiki/(.*)$ %{DOCUMENT_ROOT}/index.php [L]
+# Short URL rewrite for MediaWiki
+# Maps /wiki/Page_Name to index.php?title=Page_Name
+RewriteBase /
 
-# Redirect /wiki to Main_Page
-RewriteRule ^wiki/*$ %{DOCUMENT_ROOT}/index.php [L]
+# Short URL for wiki pages
+RewriteRule ^wiki/(.*)$ index.php?title=$1 [QSA,L]
+
+# Redirect bare /wiki to Main_Page
+RewriteRule ^wiki$ index.php?title=Main_Page [QSA,L]

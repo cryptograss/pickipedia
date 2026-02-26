@@ -21,16 +21,38 @@ docker-compose up -d
 ## Deployment
 
 Production deploys happen via Jenkins. The pipeline:
-1. Pulls specified MediaWiki version
-2. Installs composer dependencies (SMW, EmbedVideo)
-3. Copies configuration (secrets from Vault)
-4. Rsyncs to NearlyFreeSpeech
+1. Pulls specified MediaWiki version (cached between builds)
+2. Installs composer dependencies (SMW, HitCounters, Sentry)
+3. Clones non-composer extensions (YouTube, MsUpload, TimedMediaHandler, RSS)
+4. Copies configuration (secrets from Vault)
+5. Rsyncs to NearlyFreeSpeech
+
+### Adding New Extensions
+
+When adding a new extension to the Jenkinsfile, bump `BUILD_CACHE_VERSION` in the environment block to force a fresh build. The cache key includes both the MediaWiki version and this cache version, so incrementing it will invalidate the cached MediaWiki directory and run all git clones fresh.
+
+```groovy
+environment {
+    MEDIAWIKI_VERSION = '1.43.6'
+    BUILD_CACHE_VERSION = '3'  // Bump this when adding extensions
+    ...
+}
+```
 
 ## Extensions
 
+**Via Composer** (composer.json):
 - **Semantic MediaWiki**: Structured data, queries, RDF export
-- **EmbedVideo**: YouTube/Vimeo embeds for tune references
-- Custom extensions go in `extensions/`
+- **HitCounters**: Page view statistics
+- **Sentry**: Error tracking (reports to GlitchTip)
+
+**Via Git Clone** (Jenkinsfile):
+- **YouTube**: YouTube video embeds
+- **MsUpload**: Drag-and-drop file uploads
+- **TimedMediaHandler**: Video/audio playback
+- **RSS**: Embed RSS feeds in wiki pages
+
+Custom extensions go in `extensions/`
 
 ## Configuration
 
