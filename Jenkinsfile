@@ -85,9 +85,9 @@ pipeline {
                         echo "composer.json changed or vendor missing - running composer update..."
                         rm -f composer.lock
                         rm -rf vendor
-                        # Ignore PHPUnit security advisory (dev-only dependency, MW pins exact version)
-                        jq '.config.audit.ignore = ["PKSA-z3gr-8qht-p93v"]' composer.json > composer.tmp && mv composer.tmp composer.json
-                        composer update --no-dev --optimize-autoloader --ignore-platform-reqs
+                        # Ignore PHPUnit advisory (PKSA-z3gr-8qht-p93v) - it's dev-only, MW pins exact version
+                        COMPOSER_AUDIT_IGNORED_ADVISORIES=PKSA-z3gr-8qht-p93v \
+                            composer update --no-dev --optimize-autoloader --ignore-platform-reqs
                         echo "$COMPOSER_HASH" > .composer-hash
                     else
                         echo "composer.json unchanged - using cached vendor/"

@@ -27,6 +27,9 @@
 	"MessagesDirs": {
 		"PickiPediaVerification": ["i18n"]
 	},
+	"ExtensionMessagesFiles": {
+		"PickiPediaVerificationAlias": "PickiPediaVerification.alias.php"
+	},
 	"config": {
 		"PickiPediaVerificationBotGroups": {
 			"value": ["bot"],

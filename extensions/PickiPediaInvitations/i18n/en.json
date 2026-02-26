@@ -1,0 +1,123 @@
+{
+	"@metadata": {
+		"authors": ["Magent", "Justin Holmes"]
+	},
+	"pickipediainvitations-desc": "Gates account creation behind invite codes with entity attestations",
+
+	"createinvite": "Create Invite",
+	"manageinvites": "Manage Invites",
+
+	"pickipediainvitations-must-be-logged-in": "You must be logged in to create invites.",
+
+	"pickipediainvitations-createinvite-intro": "Use this form to create an invite code for a new user. Anyone with the code can use it to create an account.",
+
+	"pickipediainvitations-field-entitytype": "Entity type",
+	"pickipediainvitations-entitytype-human": "Human",
+	"pickipediainvitations-entitytype-bot": "Bot",
+	"pickipediainvitations-field-entitytype-help": "Is this account for a human or a bot? This creates an attestation on their user page.",
+
+	"pickipediainvitations-field-expiredays": "Days until expiration",
+	"pickipediainvitations-field-expiredays-help": "Set to 0 for no expiration. Default is 30 days.",
+
+	"pickipediainvitations-create-button": "Create Invite",
+
+	"pickipediainvitations-error-badtoken": "Invalid security token. Please try again.",
+	"pickipediainvitations-error-create-failed": "Failed to create invite:",
+
+	"pickipediainvitations-success-title": "Invite Created!",
+	"pickipediainvitations-success-message": "Your invite code has been created.",
+	"pickipediainvitations-success-link-label": "Share this link:",
+	"pickipediainvitations-success-share-instructions": "Send this link to the person you want to invite. They can use it to create an account with any username they choose.",
+
+	"pickipediainvitations-myinvites-heading": "My Invites",
+	"pickipediainvitations-myinvites-none": "You haven't created any invites yet.",
+
+	"pickipediainvitations-th-id": "ID",
+	"pickipediainvitations-th-inviter": "Invited by",
+	"pickipediainvitations-th-invitee": "Invitee",
+	"pickipediainvitations-th-type": "Type",
+	"pickipediainvitations-th-usedby": "Used by",
+	"pickipediainvitations-th-created": "Created",
+	"pickipediainvitations-th-expires": "Expires",
+	"pickipediainvitations-th-status": "Status",
+	"pickipediainvitations-th-actions": "Actions",
+
+	"pickipediainvitations-never": "Never",
+	"pickipediainvitations-status-pending": "Pending",
+	"pickipediainvitations-status-used": "Used",
+	"pickipediainvitations-status-expired": "Expired",
+
+	"pickipediainvitations-manageinvites-intro": "This page shows all invites in the system. You can view invitation chains and revoke unused invites.",
+	"pickipediainvitations-manageinvites-none": "No invites have been created yet.",
+
+	"pickipediainvitations-action-viewchain": "View chain",
+	"pickipediainvitations-action-revoke": "Revoke",
+
+	"pickipediainvitations-prev": "← Previous",
+	"pickipediainvitations-next": "Next →",
+
+	"pickipediainvitations-revoke-success": "Invite has been revoked.",
+	"pickipediainvitations-revoke-failed": "Failed to revoke invite. It may have already been used.",
+	"pickipediainvitations-error-noinvite": "No invite specified.",
+	"pickipediainvitations-error-notowner": "You can only revoke your own invites.",
+
+	"pickipediainvitations-chain-nouser": "No user specified.",
+	"pickipediainvitations-chain-usernotfound": "User not found.",
+	"pickipediainvitations-chain-title": "Invitation chain for $1",
+	"pickipediainvitations-chain-genesis": "$1 is a genesis user (created before the invitation system or bootstrapped).",
+	"pickipediainvitations-chain-intro": "The following shows who invited $1 and the chain of invitations leading back to genesis users:",
+	"pickipediainvitations-chain-explanation": "The first person in the list is the user, followed by who invited them, then who invited that person, and so on.",
+	"pickipediainvitations-chain-backtolist": "← Back to invite list",
+
+	"pickipediainvitations-code-required": "An invite code is required to create an account.",
+	"pickipediainvitations-validation-error": "Invalid invite: $1",
+
+	"pickipediainvitations-field-invitecode": "Invite code",
+	"pickipediainvitations-field-invitecode-help": "Enter the invite code you received from an existing user.",
+
+	"pickipediainvitations-provider": "PickiPedia Invitations",
+	"pickipediainvitations-has-code": "Invite code provided",
+
+	"createattestation": "Create Attestation",
+
+	"pickipediainvitations-attestation-must-be-logged-in": "You must be logged in to create attestations.",
+
+	"pickipediainvitations-attestation-intro": "Use this form to create an attestation vouching for another user. Your attestation will appear on their user page and creates a web-of-trust record.",
+
+	"pickipediainvitations-attestation-field-subject": "User to attest",
+	"pickipediainvitations-attestation-field-subject-placeholder": "Username",
+	"pickipediainvitations-attestation-field-subject-help": "Enter the username of the person you want to vouch for.",
+
+	"pickipediainvitations-attestation-field-type": "Attestation type",
+	"pickipediainvitations-attestation-field-type-help": "What kind of attestation is this?",
+
+	"pickipediainvitations-attestation-type-musician": "Musician (I've heard them play)",
+	"pickipediainvitations-attestation-type-collaborator": "Collaborator (We've worked together)",
+	"pickipediainvitations-attestation-type-met-in-person": "Met in person",
+	"pickipediainvitations-attestation-type-online-only": "Online only (never met in person)",
+	"pickipediainvitations-attestation-type-vouches-for": "General vouch",
+
+	"pickipediainvitations-attestation-field-text": "Your attestation",
+	"pickipediainvitations-attestation-field-text-placeholder": "Write about how you know this person, what you can vouch for, etc. You can use wikitext including links and images.",
+	"pickipediainvitations-attestation-field-text-help": "Write a freeform attestation. You can include wikitext formatting, links, and images.",
+
+	"pickipediainvitations-attestation-create-button": "Create Attestation",
+
+	"pickipediainvitations-attestation-error-invalid-username": "Invalid username format.",
+	"pickipediainvitations-attestation-error-user-not-found": "User not found. They must have an account to be attested.",
+	"pickipediainvitations-attestation-error-self": "You cannot create an attestation for yourself.",
+	"pickipediainvitations-attestation-error-exists": "You have already created an attestation for this user. Edit the existing page instead.",
+	"pickipediainvitations-attestation-error-create-failed": "Failed to create attestation:",
+
+	"pickipediainvitations-attestation-success-title": "Attestation Created!",
+	"pickipediainvitations-attestation-success-message": "Your attestation has been recorded.",
+	"pickipediainvitations-attestation-success-view": "View it at:",
+
+	"pickipediainvitations-attestation-edit-summary": "Created attestation for $1",
+	"pickipediainvitations-attestation-edit-denied": "You can only edit your own attestations. This attestation belongs to another user.",
+
+	"pickipediainvitations-sidebar-attest-user": "Attest this user",
+	"pickipediainvitations-sidebar-view-attestation": "View your attestation",
+
+	"pickipediainvitations-personal-invite": "Invite someone"
+}
