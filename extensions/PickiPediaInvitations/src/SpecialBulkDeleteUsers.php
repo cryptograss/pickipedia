@@ -5,6 +5,7 @@ namespace MediaWiki\Extension\PickiPediaInvitations;
 use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Html\Html;
 use MediaWiki\MediaWikiServices;
+use Title;
 
 /**
  * Special page for bulk deleting spam bot accounts.
