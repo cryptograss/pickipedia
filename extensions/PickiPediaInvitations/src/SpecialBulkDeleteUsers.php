@@ -5,6 +5,7 @@ namespace MediaWiki\Extension\PickiPediaInvitations;
 use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Html\Html;
 use MediaWiki\MediaWikiServices;
+use Wikimedia\Rdbms\IDatabase;
 
 /**
  * Special page for bulk deleting spam bot accounts.
@@ -201,7 +202,7 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 						$dbr->makeList( [
 							'page_namespace != ' . NS_USER,
 							'page_title NOT LIKE ' . $dbr->addQuotes( $ownPageTitle . '%' ),
-						], $dbr::LIST_OR ),
+						], IDatabase::LIST_OR ),
 					],
 					__METHOD__
 				);
