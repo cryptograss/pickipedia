@@ -6,6 +6,7 @@ use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Html\Html;
 use MediaWiki\MediaWikiServices;
 use Title;
+use WikiPage;
 
 /**
  * Special page for bulk deleting spam bot accounts.
@@ -87,6 +88,36 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 			// This is simpler than using UserMerge for bulk operations
 			try {
 				$userId = $targetUser->getId();
+				$deletePageService = $services->getDeletePageFactory();
+
+				// Delete user page and all subpages
+				$userPageTitle = Title::makeTitle( NS_USER, $username );
+				$pagesToDelete = [ $userPageTitle ];
+
+				// Find all subpages
+				$subpages = $dbw->select(
+					'page',
+					[ 'page_title' ],
+					[
+						'page_namespace' => NS_USER,
+						'page_title LIKE ' . $dbw->addQuotes(
+							str_replace( ' ', '_', $username ) . '/%'
+						),
+					],
+					__METHOD__
+				);
+				foreach ( $subpages as $row ) {
+					$pagesToDelete[] = Title::makeTitle( NS_USER, $row->page_title );
+				}
+
+				// Delete each page
+				foreach ( $pagesToDelete as $pageTitle ) {
+					if ( $pageTitle->exists() ) {
+						$wikiPage = $services->getWikiPageFactory()->newFromTitle( $pageTitle );
+						$deletePage = $deletePageService->newDeletePage( $wikiPage, $user );
+						$deletePage->deleteUnsafe( 'Bulk spam cleanup' );
+					}
+				}
 
 				// Delete from user table
 				$dbw->delete( 'user', [ 'user_id' => $userId ], __METHOD__ );
