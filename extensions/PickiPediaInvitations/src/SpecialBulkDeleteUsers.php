@@ -157,9 +157,8 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 		$dbr = $services->getDBLoadBalancer()->getConnection( DB_REPLICA );
 
 		// Filters
-		$showOnlyOwnPageEdits = $request->getBool( 'ownpageonly', true );
-		$showOnlyNoAttestations = $request->getBool( 'noattestations', true );
-		$createdAfter = $request->getVal( 'after', '20260101000000' );
+		$showOnlyNoAttestations = $request->getBool( 'noattestations', false );
+		$createdAfter = $request->getVal( 'after', '' );
 		$limit = min( (int)$request->getVal( 'limit', 100 ), 500 );
 		$offset = (int)$request->getVal( 'offset', 0 );
 
@@ -214,38 +213,6 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 
 			$row->has_attestation = $hasAttestation;
 
-			// Check if user only edited their own user page (bot pattern)
-			// This requires checking the revision table
-			$onlyOwnPage = false;
-			if ( $row->user_editcount == 0 ) {
-				$onlyOwnPage = true; // No edits at all counts as "only own page"
-			} else {
-				// Get count of edits to pages OTHER than their own user page
-				$ownPageTitle = str_replace( ' ', '_', $row->user_name );
-				// Count edits NOT to their own user page (namespace != NS_USER OR title doesn't match)
-				$otherEdits = $dbr->selectField(
-					[ 'revision', 'page', 'actor' ],
-					'COUNT(*)',
-					[
-						'actor_user' => $row->user_id,
-						'rev_actor = actor_id',
-						'rev_page = page_id',
-						// Not their own user page or subpages - using raw SQL for the OR
-						'(page_namespace != ' . NS_USER . ' OR page_title NOT LIKE ' .
-							$dbr->addQuotes( $ownPageTitle . '%' ) . ')',
-					],
-					__METHOD__
-				);
-				$onlyOwnPage = ( $otherEdits == 0 );
-			}
-
-			$row->only_own_page = $onlyOwnPage;
-
-			// Filter by "only edited own page" if requested
-			if ( $showOnlyOwnPageEdits && !$onlyOwnPage ) {
-				continue;
-			}
-
 			// Filter by attestation status if requested
 			if ( $showOnlyNoAttestations && $hasAttestation ) {
 				continue;
@@ -263,10 +230,6 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 		$out->addHTML( Html::openElement( 'form', [ 'method' => 'get' ] ) );
 		$out->addHTML( Html::openElement( 'fieldset' ) );
 		$out->addHTML( Html::element( 'legend', [], 'Filters' ) );
-
-		$out->addHTML( Html::check( 'ownpageonly', $showOnlyOwnPageEdits, [ 'id' => 'ownpageonly' ] ) );
-		$out->addHTML( Html::label( ' Only users who edited nothing but their own user page (bot pattern)', 'ownpageonly' ) );
-		$out->addHTML( Html::element( 'br' ) );
 
 		$out->addHTML( Html::check( 'noattestations', $showOnlyNoAttestations, [ 'id' => 'noattestations' ] ) );
 		$out->addHTML( Html::label( ' Only users without attestations', 'noattestations' ) );
@@ -328,7 +291,6 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 			Html::element( 'th', [], 'Username' ) .
 			Html::element( 'th', [], 'Created' ) .
 			Html::element( 'th', [], 'Edits' ) .
-			Html::element( 'th', [], 'Bot Pattern' ) .
 			Html::element( 'th', [], 'Attested' )
 		) );
 
@@ -338,15 +300,9 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 				: 'Unknown';
 
 			$attestedDisplay = $row->has_attestation ? '✓' : '';
-			$botPatternDisplay = $row->only_own_page ? '🤖' : '';
 
-			// Green if attested (safe), red-ish if bot pattern and not attested
-			$rowStyle = '';
-			if ( $row->has_attestation ) {
-				$rowStyle = 'background: #efe;';
-			} elseif ( $row->only_own_page ) {
-				$rowStyle = 'background: #fee;';
-			}
+			// Green if attested (safe)
+			$rowStyle = $row->has_attestation ? 'background: #efe;' : '';
 
 			$out->addHTML( Html::rawElement( 'tr', [ 'style' => $rowStyle ],
 				Html::rawElement( 'td', [],
@@ -360,7 +316,6 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 				) .
 				Html::element( 'td', [], $created ) .
 				Html::element( 'td', [], $row->user_editcount ) .
-				Html::element( 'td', [ 'style' => 'text-align: center;' ], $botPatternDisplay ) .
 				Html::element( 'td', [ 'style' => 'text-align: center;' ], $attestedDisplay )
 			) );
 		}
@@ -375,7 +330,6 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 				'href' => $this->getPageTitle()->getLocalURL( [
 					'offset' => max( 0, $offset - $limit ),
 					'limit' => $limit,
-					'ownpageonly' => $showOnlyOwnPageEdits ? 1 : 0,
 					'noattestations' => $showOnlyNoAttestations ? 1 : 0,
 					'after' => $createdAfter,
 				] )
@@ -386,7 +340,6 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 				'href' => $this->getPageTitle()->getLocalURL( [
 					'offset' => $offset + $limit,
 					'limit' => $limit,
-					'ownpageonly' => $showOnlyOwnPageEdits ? 1 : 0,
 					'noattestations' => $showOnlyNoAttestations ? 1 : 0,
 					'after' => $createdAfter,
 				] )
