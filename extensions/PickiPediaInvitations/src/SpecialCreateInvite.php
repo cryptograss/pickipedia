@@ -175,6 +175,39 @@ class SpecialCreateInvite extends SpecialPage {
 			.mw-createinvite-invite-link { font-family: monospace; background: #f5f5f5; padding: 0.5em; display: block; margin: 0.5em 0; word-break: break-all; }
 		' );
 
+		// JS to show/hide relationship options based on entity type
+		$out->addInlineScript( '
+			function updateRelationshipOptions() {
+				var entityType = document.getElementById("entityType").value;
+				var relSelect = document.getElementById("relationshipType");
+				var options = relSelect.options;
+
+				for (var i = 0; i < options.length; i++) {
+					var opt = options[i];
+					var forBot = opt.getAttribute("data-for-bot") === "true";
+
+					if (entityType === "bot") {
+						// For bots, show operator, hide human-relationship types
+						if (forBot) {
+							opt.style.display = "";
+							opt.selected = true;
+						} else {
+							opt.style.display = "none";
+						}
+					} else {
+						// For humans, hide operator, show others
+						if (forBot) {
+							opt.style.display = "none";
+						} else {
+							opt.style.display = "";
+						}
+					}
+				}
+			}
+			// Run on page load
+			document.addEventListener("DOMContentLoaded", updateRelationshipOptions);
+		' );
+
 		$out->addHTML( $html );
 
 		// Show user's existing invites
