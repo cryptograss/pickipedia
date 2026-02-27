@@ -41,6 +41,13 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, LocalUserCreatedHook, Edi
 			"$dir/sql/tables.sql"
 		);
 
+		// Add relationship_type column if missing
+		$updater->addExtensionField(
+			'pickipedia_invites',
+			'ppi_relationship_type',
+			"$dir/sql/patch-add-relationship-type.sql"
+		);
+
 		// Create the system user immediately to prevent username squatting.
 		// This runs during update.php before the wiki is publicly accessible.
 		$updater->addExtensionUpdate( [
@@ -166,21 +173,32 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, LocalUserCreatedHook, Edi
 
 		// Build page content
 		$entityType = $invite->ppi_entity_type;
+		$relationshipType = $invite->ppi_relationship_type ?? 'irl-buds';
+		$intendedFor = $invite->ppi_invitee_name ?? '';
 		$categoryName = ucfirst( $entityType ) . ' Users';
 		$createdDate = wfTimestamp( TS_ISO_8601, $invite->ppi_used_at );
 		$dateFormatted = date( 'Y-m-d', strtotime( $createdDate ) );
 
+		// Note if username differs from intended
+		$usernameNote = '';
+		if ( $intendedFor && $intendedFor !== $user->getName() ) {
+			$usernameNote = "|intended_username={$intendedFor}";
+		}
+
 		$content = <<<WIKITEXT
 {{InviteRecord
 |entity_type={$entityType}
+|relationship_type={$relationshipType}
 |invited_by=User:{$inviterName}
 |invited_at={$dateFormatted}
-|invite_code_id={$invite->ppi_id}
+|invite_code_id={$invite->ppi_id}{$usernameNote}
 }}
 
 [[Category:{$categoryName}]]
+[[Category:Attestations]]
 [[Invited by::User:{$inviterName}]]
 [[Entity type::{$entityType}]]
+[[Attestation type::{$relationshipType}]]
 WIKITEXT;
 
 		// Create the page using a system user

@@ -12,10 +12,17 @@
 
 	"pickipediainvitations-createinvite-intro": "Use this form to create an invite code for a new user. Anyone with the code can use it to create an account.",
 
+	"pickipediainvitations-field-intendedfor": "Who is this invite for?",
+	"pickipediainvitations-field-intendedfor-placeholder": "Their intended username (optional)",
+	"pickipediainvitations-field-intendedfor-help": "If you know what username they'll use, enter it here. This is recorded but not enforced.",
+
 	"pickipediainvitations-field-entitytype": "Entity type",
 	"pickipediainvitations-entitytype-human": "Human",
 	"pickipediainvitations-entitytype-bot": "Bot",
-	"pickipediainvitations-field-entitytype-help": "Is this account for a human or a bot? This creates an attestation on their user page.",
+	"pickipediainvitations-field-entitytype-help": "Is this account for a human or a bot?",
+
+	"pickipediainvitations-field-relationship": "How do you know them?",
+	"pickipediainvitations-field-relationship-help": "Choose the highest level that applies. This is recorded as your initial attestation of them.",
 
 	"pickipediainvitations-field-expiredays": "Days until expiration",
 	"pickipediainvitations-field-expiredays-help": "Set to 0 for no expiration. Default is 30 days.",
@@ -95,7 +102,10 @@
 	"pickipediainvitations-attestation-type-recorded-or-performed": "We have played on a record or together at a show",
 	"pickipediainvitations-attestation-type-collaborated": "We have worked together on some other project(s)",
 	"pickipediainvitations-attestation-type-seen-perform": "I've seen them play / they've seen me play",
-	"pickipediainvitations-attestation-type-met-in-person": "I've met them in person and confirmed they're human",
+	"pickipediainvitations-attestation-type-irl-buds": "Someone I know personally / IRL friends",
+	"pickipediainvitations-attestation-type-met-in-person": "I've met them in person",
+	"pickipediainvitations-attestation-type-online-only": "I know them online (haven't met IRL)",
+	"pickipediainvitations-attestation-type-operator": "I operate/control this bot",
 
 	"pickipediainvitations-attestation-field-text": "Your attestation",
 	"pickipediainvitations-attestation-field-text-placeholder": "Write about how you know this person, what you can vouch for, etc. You can use wikitext including links and images.",

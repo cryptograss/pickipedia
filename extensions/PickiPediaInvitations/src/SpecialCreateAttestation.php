@@ -18,11 +18,14 @@ use ContentHandler;
 class SpecialCreateAttestation extends SpecialPage {
 
 	/** @var array Valid attestation types (ordered from strongest to weakest) */
-	private const ATTESTATION_TYPES = [
+	public const ATTESTATION_TYPES = [
 		'recorded-or-performed' => 'pickipediainvitations-attestation-type-recorded-or-performed',
 		'collaborated' => 'pickipediainvitations-attestation-type-collaborated',
 		'seen-perform' => 'pickipediainvitations-attestation-type-seen-perform',
+		'irl-buds' => 'pickipediainvitations-attestation-type-irl-buds',
 		'met-in-person' => 'pickipediainvitations-attestation-type-met-in-person',
+		'online-only' => 'pickipediainvitations-attestation-type-online-only',
+		'operator' => 'pickipediainvitations-attestation-type-operator',
 	];
 
 	public function __construct() {

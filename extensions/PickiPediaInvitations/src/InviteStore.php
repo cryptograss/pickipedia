@@ -19,12 +19,16 @@ class InviteStore {
 	 * @param int $inviterId User ID of the person creating the invite
 	 * @param string $entityType 'human' or 'bot'
 	 * @param int|null $expireDays Days until expiration (null = use config default, 0 = never)
+	 * @param string|null $intendedFor Intended username (soft tracking, not enforced)
+	 * @param string $relationshipType How the inviter knows the invitee
 	 * @return array ['success' => bool, 'code' => string|null, 'error' => string|null]
 	 */
 	public static function createInvite(
 		int $inviterId,
 		string $entityType = 'human',
-		?int $expireDays = null
+		?int $expireDays = null,
+		?string $intendedFor = null,
+		string $relationshipType = 'irl-buds'
 	): array {
 		$config = MediaWikiServices::getInstance()->getMainConfig();
 
@@ -57,8 +61,9 @@ class InviteStore {
 			[
 				'ppi_code' => $code,
 				'ppi_inviter_id' => $inviterId,
-				'ppi_invitee_name' => '',  // No longer used - kept for schema compatibility
+				'ppi_invitee_name' => $intendedFor,
 				'ppi_entity_type' => $entityType,
+				'ppi_relationship_type' => $relationshipType,
 				'ppi_created_at' => wfTimestamp( TS_MW ),
 				'ppi_expires_at' => $expiresAt,
 				'ppi_used_at' => null,

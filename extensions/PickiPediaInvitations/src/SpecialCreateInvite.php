@@ -75,6 +75,22 @@ class SpecialCreateInvite extends SpecialPage {
 		$html .= Html::hidden( 'action', 'create' );
 		$html .= Html::hidden( 'token', $this->getUser()->getEditToken() );
 
+		// Intended username field
+		$html .= Html::rawElement( 'div', [ 'class' => 'mw-createinvite-field' ],
+			Html::label(
+				wfMessage( 'pickipediainvitations-field-intendedfor' )->text(),
+				'intendedFor'
+			) .
+			Html::input( 'intendedFor', '', 'text', [
+				'id' => 'intendedFor',
+				'size' => 40,
+				'placeholder' => wfMessage( 'pickipediainvitations-field-intendedfor-placeholder' )->text(),
+			] ) .
+			Html::element( 'p', [ 'class' => 'mw-createinvite-help' ],
+				wfMessage( 'pickipediainvitations-field-intendedfor-help' )->text()
+			)
+		);
+
 		// Entity type field
 		$html .= Html::rawElement( 'div', [ 'class' => 'mw-createinvite-field' ],
 			Html::label(
@@ -84,6 +100,7 @@ class SpecialCreateInvite extends SpecialPage {
 			Html::rawElement( 'select', [
 				'id' => 'entityType',
 				'name' => 'entityType',
+				'onchange' => 'updateRelationshipOptions()',
 			],
 				Html::element( 'option', [ 'value' => 'human', 'selected' => true ],
 					wfMessage( 'pickipediainvitations-entitytype-human' )->text()
@@ -94,6 +111,31 @@ class SpecialCreateInvite extends SpecialPage {
 			) .
 			Html::element( 'p', [ 'class' => 'mw-createinvite-help' ],
 				wfMessage( 'pickipediainvitations-field-entitytype-help' )->text()
+			)
+		);
+
+		// Relationship type field
+		$relationshipOptions = '';
+		foreach ( SpecialCreateAttestation::ATTESTATION_TYPES as $value => $msgKey ) {
+			// Skip 'operator' for humans, show it for bots
+			$relationshipOptions .= Html::element( 'option', [
+				'value' => $value,
+				'data-for-bot' => ( $value === 'operator' ) ? 'true' : 'false',
+				'selected' => ( $value === 'irl-buds' ),
+			], wfMessage( $msgKey )->text() );
+		}
+
+		$html .= Html::rawElement( 'div', [ 'class' => 'mw-createinvite-field' ],
+			Html::label(
+				wfMessage( 'pickipediainvitations-field-relationship' )->text(),
+				'relationshipType'
+			) .
+			Html::rawElement( 'select', [
+				'id' => 'relationshipType',
+				'name' => 'relationshipType',
+			], $relationshipOptions ) .
+			Html::element( 'p', [ 'class' => 'mw-createinvite-help' ],
+				wfMessage( 'pickipediainvitations-field-relationship-help' )->text()
 			)
 		);
 
@@ -154,14 +196,23 @@ class SpecialCreateInvite extends SpecialPage {
 			return;
 		}
 
+		$intendedFor = trim( $request->getVal( 'intendedFor', '' ) );
 		$entityType = $request->getVal( 'entityType', 'human' );
+		$relationshipType = $request->getVal( 'relationshipType', 'irl-buds' );
 		$expireDays = (int)$request->getVal( 'expireDays', 30 );
+
+		// Validate relationship type
+		if ( !array_key_exists( $relationshipType, SpecialCreateAttestation::ATTESTATION_TYPES ) ) {
+			$relationshipType = 'irl-buds';
+		}
 
 		// Create the invite
 		$result = InviteStore::createInvite(
 			$user->getId(),
 			$entityType,
-			$expireDays
+			$expireDays,
+			$intendedFor ?: null,
+			$relationshipType
 		);
 
 		if ( !$result['success'] ) {

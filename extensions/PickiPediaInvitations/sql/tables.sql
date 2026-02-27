@@ -11,11 +11,14 @@ CREATE TABLE IF NOT EXISTS /*_*/pickipedia_invites (
     -- User ID of the person who created the invite
     ppi_inviter_id INT UNSIGNED NOT NULL,
 
-    -- Intended username for the invitee
-    ppi_invitee_name VARCHAR(255) NOT NULL,
+    -- Intended username for the invitee (soft tracking, not enforced)
+    ppi_invitee_name VARCHAR(255) NULL,
 
     -- Type of entity: 'human' or 'bot'
     ppi_entity_type ENUM('human', 'bot') NOT NULL DEFAULT 'human',
+
+    -- Relationship type: how the inviter knows the invitee
+    ppi_relationship_type VARCHAR(32) NOT NULL DEFAULT 'irl-buds',
 
     -- When the invite was created
     ppi_created_at BINARY(14) NOT NULL,
