@@ -5,7 +5,6 @@ namespace MediaWiki\Extension\PickiPediaInvitations;
 use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Html\Html;
 use MediaWiki\MediaWikiServices;
-use Wikimedia\Rdbms\IDatabase;
 
 /**
  * Special page for bulk deleting spam bot accounts.
@@ -191,6 +190,7 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 			} else {
 				// Get count of edits to pages OTHER than their own user page
 				$ownPageTitle = str_replace( ' ', '_', $row->user_name );
+				// Count edits NOT to their own user page (namespace != NS_USER OR title doesn't match)
 				$otherEdits = $dbr->selectField(
 					[ 'revision', 'page', 'actor' ],
 					'COUNT(*)',
@@ -198,11 +198,9 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 						'actor_user' => $row->user_id,
 						'rev_actor = actor_id',
 						'rev_page = page_id',
-						// Not their own user page or subpages
-						$dbr->makeList( [
-							'page_namespace != ' . NS_USER,
-							'page_title NOT LIKE ' . $dbr->addQuotes( $ownPageTitle . '%' ),
-						], IDatabase::LIST_OR ),
+						// Not their own user page or subpages - using raw SQL for the OR
+						'(page_namespace != ' . NS_USER . ' OR page_title NOT LIKE ' .
+							$dbr->addQuotes( $ownPageTitle . '%' ) . ')',
 					],
 					__METHOD__
 				);
