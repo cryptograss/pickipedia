@@ -126,6 +126,7 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 
 		// Filters
 		$showOnlyNoEdits = $request->getBool( 'noedits', true );
+		$showOnlyNoAttestations = $request->getBool( 'noattestations', true );
 		$createdAfter = $request->getVal( 'after', '20260101000000' );
 		$limit = min( (int)$request->getVal( 'limit', 100 ), 500 );
 		$offset = (int)$request->getVal( 'offset', 0 );
@@ -162,6 +163,34 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 
 		$users = [];
 		foreach ( $res as $row ) {
+			// Check if user has any attestation pages
+			$attestationPrefix = "User:{$row->user_name}/Attestations/";
+			$attestationTitle = Title::newFromText( $attestationPrefix );
+
+			$hasAttestation = false;
+			if ( $attestationTitle ) {
+				// Check if any subpages exist
+				$subpages = $dbr->selectField(
+					'page',
+					'COUNT(*)',
+					[
+						'page_namespace' => NS_USER,
+						'page_title LIKE ' . $dbr->addQuotes(
+							str_replace( ' ', '_', $row->user_name ) . '/Attestations/%'
+						),
+					],
+					__METHOD__
+				);
+				$hasAttestation = $subpages > 0;
+			}
+
+			$row->has_attestation = $hasAttestation;
+
+			// Filter by attestation status if requested
+			if ( $showOnlyNoAttestations && $hasAttestation ) {
+				continue;
+			}
+
 			$users[] = $row;
 		}
 
@@ -177,6 +206,10 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 
 		$out->addHTML( Html::check( 'noedits', $showOnlyNoEdits, [ 'id' => 'noedits' ] ) );
 		$out->addHTML( Html::label( ' Only users with 0 edits', 'noedits' ) );
+		$out->addHTML( Html::element( 'br' ) );
+
+		$out->addHTML( Html::check( 'noattestations', $showOnlyNoAttestations, [ 'id' => 'noattestations' ] ) );
+		$out->addHTML( Html::label( ' Only users without attestations', 'noattestations' ) );
 		$out->addHTML( Html::element( 'br' ) );
 
 		$out->addHTML( Html::label( 'Created after (YYYYMMDD): ', 'after' ) );
@@ -229,12 +262,13 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 			'onclick' => 'return confirm("Delete selected users? This cannot be undone!");'
 		] ) );
 
-		$out->addHTML( Html::openElement( 'table', [ 'class' => 'wikitable' ] ) );
+		$out->addHTML( Html::openElement( 'table', [ 'class' => 'wikitable sortable' ] ) );
 		$out->addHTML( Html::rawElement( 'tr', [],
 			Html::element( 'th', [], '' ) .
 			Html::element( 'th', [], 'Username' ) .
 			Html::element( 'th', [], 'Created' ) .
-			Html::element( 'th', [], 'Edits' )
+			Html::element( 'th', [], 'Edits' ) .
+			Html::element( 'th', [], 'Attested' )
 		) );
 
 		foreach ( $users as $row ) {
@@ -242,7 +276,10 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 				? $this->getLanguage()->userTimeAndDate( $row->user_registration, $this->getUser() )
 				: 'Unknown';
 
-			$out->addHTML( Html::rawElement( 'tr', [],
+			$attestedDisplay = $row->has_attestation ? '✓' : '';
+			$rowStyle = $row->has_attestation ? 'background: #efe;' : '';
+
+			$out->addHTML( Html::rawElement( 'tr', [ 'style' => $rowStyle ],
 				Html::rawElement( 'td', [],
 					Html::check( 'users[]', false, [ 'value' => $row->user_name ] )
 				) .
@@ -253,7 +290,8 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 					], $row->user_name )
 				) .
 				Html::element( 'td', [], $created ) .
-				Html::element( 'td', [], $row->user_editcount )
+				Html::element( 'td', [], $row->user_editcount ) .
+				Html::element( 'td', [ 'style' => 'text-align: center;' ], $attestedDisplay )
 			) );
 		}
 
@@ -268,6 +306,7 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 					'offset' => max( 0, $offset - $limit ),
 					'limit' => $limit,
 					'noedits' => $showOnlyNoEdits ? 1 : 0,
+					'noattestations' => $showOnlyNoAttestations ? 1 : 0,
 					'after' => $createdAfter,
 				] )
 			], '← Previous' ) . ' ';
@@ -278,6 +317,7 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 					'offset' => $offset + $limit,
 					'limit' => $limit,
 					'noedits' => $showOnlyNoEdits ? 1 : 0,
+					'noattestations' => $showOnlyNoAttestations ? 1 : 0,
 					'after' => $createdAfter,
 				] )
 			], 'Next →' );
