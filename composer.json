@@ -15,6 +15,10 @@
         "allow-plugins": {
             "composer/installers": true,
             "mediawiki/semantic-media-wiki": true
+        },
+        "audit": {
+            "abandoned": "ignore",
+            "ignore": ["PKSA-z3gr-8qht-p93v"]
         }
     }
 }
