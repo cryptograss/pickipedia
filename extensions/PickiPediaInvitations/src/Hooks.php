@@ -140,6 +140,12 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, LocalUserCreatedHook, Edi
 			return;
 		}
 
+		// If this is a bot account, add to the bot user group
+		if ( $invite->ppi_entity_type === 'bot' ) {
+			$userGroupManager = MediaWikiServices::getInstance()->getUserGroupManager();
+			$userGroupManager->addUserToGroup( $user, 'bot' );
+		}
+
 		// Create the invite-record attestation page
 		$this->createInviteRecord( $user, $invite );
 	}

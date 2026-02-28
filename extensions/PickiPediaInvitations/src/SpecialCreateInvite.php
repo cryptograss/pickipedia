@@ -114,14 +114,20 @@ class SpecialCreateInvite extends SpecialPage {
 			)
 		);
 
-		// Relationship type field
+		// Relationship type field - human types
 		$relationshipOptions = '';
 		foreach ( SpecialCreateAttestation::ATTESTATION_TYPES as $value => $msgKey ) {
-			// Skip 'operator' for humans, show it for bots
 			$relationshipOptions .= Html::element( 'option', [
 				'value' => $value,
-				'data-for-bot' => ( $value === 'operator' ) ? 'true' : 'false',
+				'data-for-entity' => 'human',
 				'selected' => ( $value === 'irl-buds' ),
+			], wfMessage( $msgKey )->text() );
+		}
+		// Bot types
+		foreach ( SpecialCreateAttestation::BOT_ATTESTATION_TYPES as $value => $msgKey ) {
+			$relationshipOptions .= Html::element( 'option', [
+				'value' => $value,
+				'data-for-entity' => 'bot',
 			], wfMessage( $msgKey )->text() );
 		}
 
@@ -198,27 +204,26 @@ class SpecialCreateInvite extends SpecialPage {
 				var entityType = document.getElementById("entityType").value;
 				var relSelect = document.getElementById("relationshipType");
 				var options = relSelect.options;
+				var firstVisible = null;
 
 				for (var i = 0; i < options.length; i++) {
 					var opt = options[i];
-					var forBot = opt.getAttribute("data-for-bot") === "true";
+					var forEntity = opt.getAttribute("data-for-entity");
 
-					if (entityType === "bot") {
-						// For bots, show operator, hide human-relationship types
-						if (forBot) {
-							opt.style.display = "";
-							opt.selected = true;
-						} else {
-							opt.style.display = "none";
+					if (forEntity === entityType) {
+						opt.style.display = "";
+						if (!firstVisible) {
+							firstVisible = opt;
 						}
 					} else {
-						// For humans, hide operator, show others
-						if (forBot) {
-							opt.style.display = "none";
-						} else {
-							opt.style.display = "";
-						}
+						opt.style.display = "none";
+						opt.selected = false;
 					}
+				}
+
+				// Select the first visible option
+				if (firstVisible) {
+					firstVisible.selected = true;
 				}
 			}
 			// Run on page load
@@ -253,8 +258,9 @@ class SpecialCreateInvite extends SpecialPage {
 		$notes = trim( $request->getVal( 'notes', '' ) );
 
 		// Validate relationship type
-		if ( !array_key_exists( $relationshipType, SpecialCreateAttestation::ATTESTATION_TYPES ) ) {
-			$relationshipType = 'irl-buds';
+		$allTypes = SpecialCreateAttestation::getAllAttestationTypes();
+		if ( !array_key_exists( $relationshipType, $allTypes ) ) {
+			$relationshipType = ( $entityType === 'bot' ) ? 'operator' : 'irl-buds';
 		}
 
 		// Create the invite

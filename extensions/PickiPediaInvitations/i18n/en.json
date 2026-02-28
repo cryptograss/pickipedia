@@ -110,6 +110,9 @@
 	"pickipediainvitations-attestation-type-met-in-person": "I've met them in person",
 	"pickipediainvitations-attestation-type-online-only": "I know them online (haven't met IRL)",
 	"pickipediainvitations-attestation-type-operator": "I operate/control this bot",
+	"pickipediainvitations-attestation-type-authorized": "I authorize this bot to edit on my behalf",
+	"pickipediainvitations-attestation-type-reviewed": "I've reviewed this bot's code/behavior",
+	"pickipediainvitations-attestation-type-vouched": "I vouch for this bot's usefulness",
 
 	"pickipediainvitations-attestation-field-text": "Your attestation",
 	"pickipediainvitations-attestation-field-text-placeholder": "Write about how you know this person, what you can vouch for, etc. You can use wikitext including links and images.",

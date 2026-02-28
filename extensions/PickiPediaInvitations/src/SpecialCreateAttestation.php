@@ -17,7 +17,7 @@ use ContentHandler;
  */
 class SpecialCreateAttestation extends SpecialPage {
 
-	/** @var array Valid attestation types (ordered from strongest to weakest) */
+	/** @var array Valid attestation types for humans (ordered from strongest to weakest) */
 	public const ATTESTATION_TYPES = [
 		'recorded-or-performed' => 'pickipediainvitations-attestation-type-recorded-or-performed',
 		'collaborated' => 'pickipediainvitations-attestation-type-collaborated',
@@ -25,8 +25,23 @@ class SpecialCreateAttestation extends SpecialPage {
 		'irl-buds' => 'pickipediainvitations-attestation-type-irl-buds',
 		'met-in-person' => 'pickipediainvitations-attestation-type-met-in-person',
 		'online-only' => 'pickipediainvitations-attestation-type-online-only',
-		'operator' => 'pickipediainvitations-attestation-type-operator',
 	];
+
+	/** @var array Valid attestation types for bots */
+	public const BOT_ATTESTATION_TYPES = [
+		'operator' => 'pickipediainvitations-attestation-type-operator',
+		'authorized' => 'pickipediainvitations-attestation-type-authorized',
+		'reviewed' => 'pickipediainvitations-attestation-type-reviewed',
+		'vouched' => 'pickipediainvitations-attestation-type-vouched',
+	];
+
+	/**
+	 * Get all attestation types (human + bot).
+	 * @return array
+	 */
+	public static function getAllAttestationTypes(): array {
+		return array_merge( self::ATTESTATION_TYPES, self::BOT_ATTESTATION_TYPES );
+	}
 
 	public function __construct() {
 		parent::__construct( 'CreateAttestation' );
@@ -104,12 +119,21 @@ class SpecialCreateAttestation extends SpecialPage {
 			)
 		);
 
-		// Attestation type field
+		// Attestation type field - human types
 		$typeOptions = '';
 		foreach ( self::ATTESTATION_TYPES as $value => $msgKey ) {
-			$typeOptions .= Html::element( 'option', [ 'value' => $value ],
-				wfMessage( $msgKey )->text()
-			);
+			$typeOptions .= Html::element( 'option', [
+				'value' => $value,
+				'data-for-entity' => 'human',
+			], wfMessage( $msgKey )->text() );
+		}
+		// Bot types
+		foreach ( self::BOT_ATTESTATION_TYPES as $value => $msgKey ) {
+			$typeOptions .= Html::element( 'option', [
+				'value' => $value,
+				'data-for-entity' => 'bot',
+				'style' => 'display: none;', // Hidden by default, shown via JS if subject is bot
+			], wfMessage( $msgKey )->text() );
 		}
 
 		$html .= Html::rawElement( 'div', [ 'class' => 'mw-createattestation-field' ],
@@ -217,8 +241,9 @@ class SpecialCreateAttestation extends SpecialPage {
 		}
 
 		// Validate attestation type
-		if ( !array_key_exists( $attestationType, self::ATTESTATION_TYPES ) ) {
-			$attestationType = 'vouches-for';
+		$allTypes = self::getAllAttestationTypes();
+		if ( !array_key_exists( $attestationType, $allTypes ) ) {
+			$attestationType = 'irl-buds';
 		}
 
 		// Create the attestation page
