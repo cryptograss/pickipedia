@@ -8,7 +8,7 @@ pipeline {
     environment {
         MEDIAWIKI_VERSION = '1.43.6'
         // Bump this to force rebuild of cached MediaWiki + extensions
-        BUILD_CACHE_VERSION = '4'
+        BUILD_CACHE_VERSION = '3'
         SECRETS_DIR = '/var/jenkins_home/secrets'
         BUILD_DIR = "${WORKSPACE}/build"
         MW_DIR = "${BUILD_DIR}/mediawiki"
@@ -85,9 +85,7 @@ pipeline {
                         echo "composer.json changed or vendor missing - running composer update..."
                         rm -f composer.lock
                         rm -rf vendor
-                        # PHPUnit advisory (PKSA-z3gr-8qht-p93v) is dev-only and MW pins exact version
-                        # Disable audit completely - COMPOSER_NO_AUDIT works on older Composer versions
-                        COMPOSER_NO_AUDIT=1 composer update --no-dev --optimize-autoloader --ignore-platform-reqs
+                        composer update --no-dev --optimize-autoloader --ignore-platform-reqs
                         echo "$COMPOSER_HASH" > .composer-hash
                     else
                         echo "composer.json unchanged - using cached vendor/"
