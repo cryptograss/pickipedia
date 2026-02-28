@@ -338,12 +338,6 @@ class SpecialCreateAttestation extends SpecialPage {
 }}
 
 {$text}
-
-[[Category:Attestations]]
-[[Category:Attestations by {$attesterName}]]
-[[Attested by::User:{$attesterName}]]
-[[Subject of attestation::User:{$subjectName}]]
-[[Attestation type::{$type}]]
 WIKITEXT;
 
 		// Create the page as the attester (not system user)

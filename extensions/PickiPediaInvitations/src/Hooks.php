@@ -211,12 +211,6 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, LocalUserCreatedHook, Edi
 }}
 
 {$notes}
-
-[[Category:{$categoryName}]]
-[[Category:Attestations]]
-[[Invited by::User:{$inviterName}]]
-[[Entity type::{$entityType}]]
-[[Attestation type::{$relationshipType}]]
 WIKITEXT;
 
 		// Create the page using a system user
