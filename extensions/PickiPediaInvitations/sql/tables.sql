@@ -30,7 +30,10 @@ CREATE TABLE IF NOT EXISTS /*_*/pickipedia_invites (
     ppi_used_at BINARY(14) NULL,
 
     -- User ID of the account that was created with this invite
-    ppi_used_by_id INT UNSIGNED NULL
+    ppi_used_by_id INT UNSIGNED NULL,
+
+    -- Freeform notes about the invitee (becomes part of attestation)
+    ppi_notes TEXT NULL
 ) /*$wgDBTableOptions*/;
 
 -- Index on code for fast lookups during signup

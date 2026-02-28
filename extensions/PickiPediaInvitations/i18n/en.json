@@ -27,6 +27,10 @@
 	"pickipediainvitations-field-expiredays": "Days until expiration",
 	"pickipediainvitations-field-expiredays-help": "Set to 0 for no expiration. Default is 30 days.",
 
+	"pickipediainvitations-field-notes": "About this person",
+	"pickipediainvitations-field-notes-placeholder": "How do you know them? Context that will help others trust them...",
+	"pickipediainvitations-field-notes-help": "This text becomes part of their invite-record attestation. Write about how you know them, what you can vouch for, etc.",
+
 	"pickipediainvitations-create-button": "Create Invite",
 
 	"pickipediainvitations-error-badtoken": "Invalid security token. Please try again.",

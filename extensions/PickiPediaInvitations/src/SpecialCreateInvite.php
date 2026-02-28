@@ -156,6 +156,23 @@ class SpecialCreateInvite extends SpecialPage {
 			)
 		);
 
+		// Notes field
+		$html .= Html::rawElement( 'div', [ 'class' => 'mw-createinvite-field' ],
+			Html::label(
+				wfMessage( 'pickipediainvitations-field-notes' )->text(),
+				'notes'
+			) .
+			Html::textarea( 'notes', '', [
+				'id' => 'notes',
+				'rows' => 4,
+				'cols' => 60,
+				'placeholder' => wfMessage( 'pickipediainvitations-field-notes-placeholder' )->text(),
+			] ) .
+			Html::element( 'p', [ 'class' => 'mw-createinvite-help' ],
+				wfMessage( 'pickipediainvitations-field-notes-help' )->text()
+			)
+		);
+
 		$html .= Html::rawElement( 'div', [ 'class' => 'mw-createinvite-submit' ],
 			Html::submitButton(
 				wfMessage( 'pickipediainvitations-create-button' )->text(),
@@ -233,6 +250,7 @@ class SpecialCreateInvite extends SpecialPage {
 		$entityType = $request->getVal( 'entityType', 'human' );
 		$relationshipType = $request->getVal( 'relationshipType', 'irl-buds' );
 		$expireDays = (int)$request->getVal( 'expireDays', 30 );
+		$notes = trim( $request->getVal( 'notes', '' ) );
 
 		// Validate relationship type
 		if ( !array_key_exists( $relationshipType, SpecialCreateAttestation::ATTESTATION_TYPES ) ) {
@@ -245,7 +263,8 @@ class SpecialCreateInvite extends SpecialPage {
 			$entityType,
 			$expireDays,
 			$intendedFor ?: null,
-			$relationshipType
+			$relationshipType,
+			$notes ?: null
 		);
 
 		if ( !$result['success'] ) {

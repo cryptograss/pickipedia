@@ -21,6 +21,7 @@ class InviteStore {
 	 * @param int|null $expireDays Days until expiration (null = use config default, 0 = never)
 	 * @param string|null $intendedFor Intended username (soft tracking, not enforced)
 	 * @param string $relationshipType How the inviter knows the invitee
+	 * @param string|null $notes Freeform notes about the invitee
 	 * @return array ['success' => bool, 'code' => string|null, 'error' => string|null]
 	 */
 	public static function createInvite(
@@ -28,7 +29,8 @@ class InviteStore {
 		string $entityType = 'human',
 		?int $expireDays = null,
 		?string $intendedFor = null,
-		string $relationshipType = 'irl-buds'
+		string $relationshipType = 'irl-buds',
+		?string $notes = null
 	): array {
 		$config = MediaWikiServices::getInstance()->getMainConfig();
 
@@ -68,6 +70,7 @@ class InviteStore {
 				'ppi_expires_at' => $expiresAt,
 				'ppi_used_at' => null,
 				'ppi_used_by_id' => null,
+				'ppi_notes' => $notes,
 			],
 			__METHOD__
 		);
