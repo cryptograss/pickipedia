@@ -12,9 +12,9 @@
 
 	"pickipediainvitations-createinvite-intro": "Use this form to create an invite code for a new user. Anyone with the code can use it to create an account.",
 
-	"pickipediainvitations-field-intendedfor": "Who is this invite for?",
-	"pickipediainvitations-field-intendedfor-placeholder": "Their intended username (optional)",
-	"pickipediainvitations-field-intendedfor-help": "If you know what username they'll use, enter it here. This is recorded but not enforced.",
+	"pickipediainvitations-field-intendedfor": "The name by which you know this entity",
+	"pickipediainvitations-field-intendedfor-placeholder": "e.g. their real name, handle, band name...",
+	"pickipediainvitations-field-intendedfor-help": "How do you know them? This is recorded for accountability but doesn't restrict what username they choose.",
 
 	"pickipediainvitations-field-entitytype": "Entity type",
 	"pickipediainvitations-entitytype-human": "Human",
