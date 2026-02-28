@@ -85,6 +85,13 @@ pipeline {
                         echo "composer.json changed or vendor missing - running composer update..."
                         rm -f composer.lock
                         rm -rf vendor
+                        # Add audit ignore for PHPUnit advisory to root composer.json
+                        # (composer.local.json config doesn't apply to root requirements)
+                        php -r '
+                            $json = json_decode(file_get_contents("composer.json"), true);
+                            $json["config"]["audit"] = ["abandoned" => "ignore", "ignore" => ["PKSA-z3gr-8qht-p93v"]];
+                            file_put_contents("composer.json", json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                        '
                         composer update --no-dev --optimize-autoloader --ignore-platform-reqs
                         echo "$COMPOSER_HASH" > .composer-hash
                     else
