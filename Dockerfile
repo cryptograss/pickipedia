@@ -50,16 +50,23 @@ RUN git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-YouTub
     && git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-MsUpload.git extensions/MsUpload \
     && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-TimedMediaHandler.git extensions/TimedMediaHandler \
     && cd extensions/TimedMediaHandler && composer install --no-dev && cd ../.. \
-    && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-RSS.git extensions/RSS
+    && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-RSS.git extensions/RSS \
+    && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-LinkSuggest.git extensions/LinkSuggest
 
-# Copy custom extensions (if any)
+# Copy custom extensions and create symlinks in extensions/
 COPY extensions/ /var/www/html/custom-extensions/
+RUN for ext in /var/www/html/custom-extensions/*/; do \
+        name=$(basename "$ext"); \
+        if [ "$name" != "*" ] && [ -d "$ext" ]; then \
+            ln -sf "$ext" "/var/www/html/extensions/$name"; \
+        fi; \
+    done
 
 # Copy custom assets (logo, etc.)
 COPY assets/ /var/www/html/assets/
 
-# Apache configuration - enable rewrite and AllowOverride for .htaccess
-RUN a2enmod rewrite
+# Apache configuration - enable rewrite, headers and AllowOverride for .htaccess
+RUN a2enmod rewrite headers
 RUN sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 RUN chown -R www-data:www-data /var/www/html
 

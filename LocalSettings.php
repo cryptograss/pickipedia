@@ -151,6 +151,28 @@ $wgPFEnableStringFunctions = true;  # Enable #explode, #sub, #len, etc. for pars
 # WikiEditor - enhanced editing toolbar (bundled with MediaWiki)
 wfLoadExtension( 'WikiEditor' );
 
+# LinkSuggest - autocomplete when typing [[ or {{ in standard editor
+wfLoadExtension( 'LinkSuggest' );
+
+# VisualEditor - rich editing experience (available, but source editing is default)
+wfLoadExtension( 'VisualEditor' );
+$wgVisualEditorParsoidAutoConfig = true;  # Parsoid runs in-process (MW 1.35+)
+$wgDefaultUserOptions['visualeditor-enable'] = 1;  # VE available
+$wgDefaultUserOptions['visualeditor-newwikitext'] = 0;  # Use classic WikiEditor for source, not 2017 wikitext
+$wgDefaultUserOptions['visualeditor-editor'] = 'wikitext';  # Default to source editing
+$wgDefaultUserOptions['usebetatoolbar'] = 0;  # Disable WikiEditor toolbar
+$wgVisualEditorUseSingleEditTab = false;  # Show both "Edit" and "Edit source" tabs
+$wgVisualEditorAvailableNamespaces = [
+    NS_MAIN => true,
+    NS_USER => true,
+    NS_PROJECT => true,
+    NS_TEMPLATE => true,
+    NS_HELP => true,
+    NS_CATEGORY => true,
+    NS_CRYPTOGRASS => true,
+    NS_BLUERAILROAD => true,
+];
+
 # CodeMirror - syntax highlighting in the editor
 # DISABLED in test environment (not in Docker image)
 # wfLoadExtension( 'CodeMirror' );
@@ -204,7 +226,8 @@ wfLoadExtension( 'Echo' );
 wfLoadExtension( 'Thanks' );
 
 # UserMerge - merge and delete user accounts (for bot cleanup)
-wfLoadExtension( 'UserMerge' );
+# DISABLED: Not in Docker image
+# wfLoadExtension( 'UserMerge' );
 
 # WikiSEO - social sharing cards and SEO meta tags (installed via Composer)
 # DISABLED in test environment (not in Docker image)
