@@ -1,0 +1,265 @@
+<?php
+/**
+ * Content class for Release pages with YAML metadata
+ *
+ * @file
+ * @ingroup Extensions
+ */
+
+namespace MediaWiki\Extension\PickiPediaReleases;
+
+use Content;
+use MediaWiki\Content\AbstractContent;
+use MediaWiki\Content\TextContent;
+use StatusValue;
+use Symfony\Component\Yaml\Yaml;
+use Symfony\Component\Yaml\Exception\ParseException;
+
+class ReleaseContent extends AbstractContent {
+
+	/** @var string Raw YAML text */
+	private string $yamlText;
+
+	/** @var array|null Parsed data, cached */
+	private ?array $parsedData = null;
+
+	/** @var ParseException|null Parse error, if any */
+	private ?ParseException $parseError = null;
+
+	/**
+	 * @param string $text Raw YAML text
+	 */
+	public function __construct( string $text ) {
+		parent::__construct( 'release-yaml' );
+		$this->yamlText = $text;
+	}
+
+	/**
+	 * Get the raw YAML text
+	 *
+	 * @return string
+	 */
+	public function getText(): string {
+		return $this->yamlText;
+	}
+
+	/**
+	 * Parse and return the YAML data as an associative array
+	 *
+	 * @return array Parsed data, or empty array on parse failure
+	 */
+	public function getData(): array {
+		if ( $this->parsedData === null ) {
+			$this->parseYaml();
+		}
+		return $this->parsedData ?? [];
+	}
+
+	/**
+	 * Get any parse error that occurred
+	 *
+	 * @return ParseException|null
+	 */
+	public function getParseError(): ?ParseException {
+		if ( $this->parsedData === null && $this->parseError === null ) {
+			$this->parseYaml();
+		}
+		return $this->parseError;
+	}
+
+	/**
+	 * Parse the YAML text
+	 */
+	private function parseYaml(): void {
+		try {
+			$data = Yaml::parse( $this->yamlText );
+			$this->parsedData = is_array( $data ) ? $data : [];
+			$this->parseError = null;
+		} catch ( ParseException $e ) {
+			$this->parsedData = [];
+			$this->parseError = $e;
+		}
+	}
+
+	/**
+	 * Get the IPFS CID from the release
+	 *
+	 * @return string|null
+	 */
+	public function getIpfsCid(): ?string {
+		$data = $this->getData();
+		return $data['ipfs_cid'] ?? null;
+	}
+
+	/**
+	 * Get the BitTorrent infohash
+	 *
+	 * @return string|null
+	 */
+	public function getBittorrentHash(): ?string {
+		$data = $this->getData();
+		return $data['bittorrent_infohash'] ?? null;
+	}
+
+	/**
+	 * Get the release title
+	 *
+	 * @return string|null
+	 */
+	public function getReleaseTitle(): ?string {
+		$data = $this->getData();
+		return $data['title'] ?? null;
+	}
+
+	/**
+	 * Get file type (MIME type)
+	 *
+	 * @return string|null
+	 */
+	public function getFileType(): ?string {
+		$data = $this->getData();
+		return $data['file_type'] ?? null;
+	}
+
+	/**
+	 * Get file size in bytes
+	 *
+	 * @return int|null
+	 */
+	public function getFileSize(): ?int {
+		$data = $this->getData();
+		$size = $data['file_size'] ?? null;
+		return $size !== null ? (int)$size : null;
+	}
+
+	/**
+	 * Get description
+	 *
+	 * @return string|null
+	 */
+	public function getDescription(): ?string {
+		$data = $this->getData();
+		return $data['description'] ?? null;
+	}
+
+	/**
+	 * Get BitTorrent trackers
+	 *
+	 * @return array
+	 */
+	public function getTrackers(): array {
+		$data = $this->getData();
+		return $data['bittorrent_trackers'] ?? [];
+	}
+
+	/**
+	 * Validate the content has required fields
+	 *
+	 * @return StatusValue
+	 */
+	public function validate(): StatusValue {
+		$status = StatusValue::newGood();
+
+		// Check for parse errors first
+		if ( $this->getParseError() !== null ) {
+			$status->fatal(
+				'pickipediareleases-invalid-yaml',
+				$this->parseError->getMessage()
+			);
+			return $status;
+		}
+
+		// Check required fields
+		$requiredFields = $GLOBALS['wgReleaseRequiredFields'] ?? ['title', 'ipfs_cid'];
+		$data = $this->getData();
+
+		foreach ( $requiredFields as $field ) {
+			if ( !isset( $data[$field] ) || $data[$field] === '' ) {
+				$status->fatal( 'pickipediareleases-missing-required-field', $field );
+			}
+		}
+
+		return $status;
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function isValid(): bool {
+		return $this->validate()->isOK();
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getTextForSearchIndex(): string {
+		$data = $this->getData();
+		$searchText = [];
+
+		// Index title and description for search
+		if ( isset( $data['title'] ) ) {
+			$searchText[] = $data['title'];
+		}
+		if ( isset( $data['description'] ) ) {
+			$searchText[] = $data['description'];
+		}
+
+		return implode( "\n", $searchText );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getWikitextForTransclusion(): string {
+		// Return raw YAML when transcluded
+		return $this->yamlText;
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getTextForSummary( int $maxLength = 250 ): string {
+		$title = $this->getReleaseTitle();
+		if ( $title !== null ) {
+			return mb_substr( $title, 0, $maxLength );
+		}
+		return mb_substr( $this->yamlText, 0, $maxLength );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getNativeData(): string {
+		return $this->yamlText;
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getSize(): int {
+		return strlen( $this->yamlText );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function copy(): Content {
+		return new ReleaseContent( $this->yamlText );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function isCountable( $hasLinks = null ): bool {
+		return true;
+	}
+
+	/**
+	 * Convert to human-readable text
+	 *
+	 * @return string
+	 */
+	public function serialize( $format = null ): string {
+		return $this->yamlText;
+	}
+}

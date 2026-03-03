@@ -1,0 +1,63 @@
+{
+	"name": "PickiPediaReleases",
+	"version": "1.0.0",
+	"author": ["CryptoGrass", "Magent"],
+	"url": "https://github.com/cryptograss/pickipedia",
+	"descriptionmsg": "pickipediareleases-desc",
+	"license-name": "GPL-2.0-or-later",
+	"type": "other",
+	"requires": {
+		"MediaWiki": ">= 1.43.0"
+	},
+	"AutoloadNamespaces": {
+		"MediaWiki\\Extension\\PickiPediaReleases\\": "src/"
+	},
+	"namespaces": [
+		{
+			"id": 3004,
+			"constant": "NS_RELEASE",
+			"name": "Release",
+			"defaultcontentmodel": "release-yaml"
+		},
+		{
+			"id": 3005,
+			"constant": "NS_RELEASE_TALK",
+			"name": "Release_talk"
+		}
+	],
+	"ContentHandlers": {
+		"release-yaml": "MediaWiki\\Extension\\PickiPediaReleases\\ReleaseContentHandler"
+	},
+	"APIModules": {
+		"releaselist": {
+			"class": "MediaWiki\\Extension\\PickiPediaReleases\\ApiReleaseList"
+		}
+	},
+	"HookHandlers": {
+		"main": {
+			"class": "MediaWiki\\Extension\\PickiPediaReleases\\Hooks"
+		}
+	},
+	"Hooks": {
+		"LoadExtensionSchemaUpdates": "main"
+	},
+	"MessagesDirs": {
+		"PickiPediaReleases": ["i18n"]
+	},
+	"ResourceModules": {
+		"ext.pickipediaReleases.styles": {
+			"styles": ["ext.pickipediaReleases.css"]
+		}
+	},
+	"ResourceFileModulePaths": {
+		"localBasePath": "resources",
+		"remoteExtPath": "PickiPediaReleases/resources"
+	},
+	"config": {
+		"ReleaseRequiredFields": {
+			"value": ["title", "ipfs_cid"],
+			"description": "Fields that must be present in a Release page"
+		}
+	},
+	"manifest_version": 2
+}

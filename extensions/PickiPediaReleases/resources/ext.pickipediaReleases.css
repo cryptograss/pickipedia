@@ -1,0 +1,78 @@
+/**
+ * Styles for rendered Release pages
+ */
+
+.release-metadata {
+	border: 1px solid #a2a9b1;
+	border-collapse: collapse;
+	margin: 1em 0;
+	background: #f8f9fa;
+}
+
+.release-metadata th,
+.release-metadata td {
+	border: 1px solid #a2a9b1;
+	padding: 0.5em 1em;
+	text-align: left;
+	vertical-align: top;
+}
+
+.release-metadata th {
+	background: #eaecf0;
+	font-weight: bold;
+	width: 200px;
+}
+
+.release-metadata td {
+	background: #fff;
+	font-family: monospace;
+	word-break: break-all;
+}
+
+.release-metadata .release-title td {
+	font-family: inherit;
+	font-weight: bold;
+	font-size: 1.1em;
+}
+
+.release-metadata .release-description td {
+	font-family: inherit;
+	white-space: pre-wrap;
+}
+
+.release-raw-yaml {
+	margin-top: 2em;
+	border-top: 1px solid #a2a9b1;
+	padding-top: 1em;
+}
+
+.release-raw-yaml summary {
+	cursor: pointer;
+	color: #36c;
+}
+
+.release-raw-yaml pre {
+	background: #f8f9fa;
+	border: 1px solid #a2a9b1;
+	padding: 1em;
+	overflow-x: auto;
+	font-size: 0.9em;
+}
+
+.release-ipfs-link,
+.release-torrent-link {
+	font-family: monospace;
+}
+
+.release-validation-error {
+	background: #fee7e6;
+	border: 1px solid #d33;
+	padding: 1em;
+	margin: 1em 0;
+	color: #721c24;
+}
+
+.release-validation-error strong {
+	display: block;
+	margin-bottom: 0.5em;
+}

@@ -140,6 +140,10 @@ enableSemantics( parse_url($wgServer, PHP_URL_HOST) );
 # Enable SMW semantic links for Cryptograss namespace
 $smwgNamespacesWithSemanticLinks[NS_CRYPTOGRASS] = true;
 
+# Enable semantic links for Release namespace (after PickiPediaReleases is loaded)
+# Note: NS_RELEASE (3004) is defined by the PickiPediaReleases extension
+$smwgNamespacesWithSemanticLinks[3004] = true;
+
 # Page Forms - create forms for SMW data entry (installed via Composer)
 wfLoadExtension( 'PageForms' );
 
@@ -220,6 +224,10 @@ wfLoadExtension( 'PickiPediaInvitations' );
 
 # EmbedVideo - embed external video files (MP4, etc.)
 wfLoadExtension( 'EmbedVideo' );
+
+# PickiPediaReleases - Release namespace with YAML content model
+# Stores IPFS CIDs and BitTorrent infohashes for pinning service sync
+wfLoadExtension( 'PickiPediaReleases' );
 
 # Echo - notifications for talk page messages, mentions, watchlist changes
 wfLoadExtension( 'Echo' );

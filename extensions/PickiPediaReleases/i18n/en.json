@@ -1,0 +1,15 @@
+{
+	"@metadata": {
+		"authors": ["CryptoGrass", "Magent"]
+	},
+	"pickipediareleases-desc": "Provides a Release: namespace with YAML content model for tracking IPFS CIDs and BitTorrent infohashes",
+	"release-yaml-desc": "YAML-formatted release metadata",
+	"pickipediareleases-invalid-yaml": "Invalid YAML syntax: $1",
+	"pickipediareleases-missing-required-field": "Missing required field: $1",
+	"pickipediareleases-api-desc": "List all releases with their IPFS CIDs and BitTorrent infohashes",
+	"pickipediareleases-api-help-examples": "Get all releases",
+	"apihelp-releaselist-summary": "List all releases with their IPFS CIDs and BitTorrent infohashes for pinning service synchronization",
+	"apihelp-releaselist-param-filter": "Filter releases: 'all' (default), 'ipfs', 'torrent', 'missing-torrent'",
+	"apihelp-releaselist-example-all": "List all releases",
+	"apihelp-releaselist-example-ipfs": "List releases with IPFS CIDs"
+}
