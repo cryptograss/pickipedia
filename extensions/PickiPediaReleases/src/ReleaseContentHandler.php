@@ -225,16 +225,17 @@ YAML;
 	private function renderBacklinks( $pageRef ): string {
 		$services = \MediaWiki\MediaWikiServices::getInstance();
 		$dbr = $services->getDBLoadBalancer()->getConnection( DB_REPLICA );
-		$titleFormatter = $services->getTitleFormatter();
 
-		// Query pages that link to this release
+		// MediaWiki 1.43+ uses linktarget table instead of pl_namespace/pl_title
+		// Query pages that link to this release via linktarget join
 		$result = $dbr->newSelectQueryBuilder()
 			->select( [ 'page_namespace', 'page_title' ] )
 			->from( 'pagelinks' )
+			->join( 'linktarget', null, 'pl_target_id = lt_id' )
 			->join( 'page', null, 'pl_from = page_id' )
 			->where( [
-				'pl_namespace' => $pageRef->getNamespace(),
-				'pl_title' => $pageRef->getDBkey(),
+				'lt_namespace' => $pageRef->getNamespace(),
+				'lt_title' => $pageRef->getDBkey(),
 			] )
 			->limit( 50 )
 			->caller( __METHOD__ )
