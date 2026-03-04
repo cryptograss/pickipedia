@@ -153,30 +153,20 @@ class ReleaseContent extends AbstractContent {
 	}
 
 	/**
-	 * Validate the content has required fields
+	 * Validate the content - YAML must parse, but no required fields
+	 * The CID comes from the page title, so page body is optional metadata.
 	 *
 	 * @return StatusValue
 	 */
 	public function validate(): StatusValue {
 		$status = StatusValue::newGood();
 
-		// Check for parse errors first
+		// Check for parse errors only - all fields are optional
 		if ( $this->getParseError() !== null ) {
 			$status->fatal(
 				'pickipediareleases-invalid-yaml',
 				$this->parseError->getMessage()
 			);
-			return $status;
-		}
-
-		// Check required fields
-		$requiredFields = $GLOBALS['wgReleaseRequiredFields'] ?? ['title', 'ipfs_cid'];
-		$data = $this->getData();
-
-		foreach ( $requiredFields as $field ) {
-			if ( !isset( $data[$field] ) || $data[$field] === '' ) {
-				$status->fatal( 'pickipediareleases-missing-required-field', $field );
-			}
 		}
 
 		return $status;

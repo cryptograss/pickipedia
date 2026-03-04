@@ -81,20 +81,25 @@ class ApiReleaseList extends ApiBase {
 			$wikiPage = $wikiPageFactory->newFromTitle( $title );
 			$content = $wikiPage->getContent();
 
-			if ( !$content instanceof ReleaseContent ) {
-				continue;
+			// CID is the page title itself
+			$cid = $row->page_title;
+
+			// Get optional metadata from YAML if available
+			$data = [];
+			if ( $content instanceof ReleaseContent ) {
+				$data = $content->getData();
 			}
 
-			$data = $content->getData();
 			$releaseInfo = [
 				'page_id' => (int)$row->page_id,
 				'page_title' => $row->page_title,
+				'ipfs_cid' => $cid,
 				'title' => $data['title'] ?? null,
-				'ipfs_cid' => $data['ipfs_cid'] ?? null,
+				'description' => $data['description'] ?? null,
+				'pinned_on' => $data['pinned_on'] ?? null,
 				'bittorrent_infohash' => $data['bittorrent_infohash'] ?? null,
 				'file_type' => $data['file_type'] ?? null,
 				'file_size' => isset( $data['file_size'] ) ? (int)$data['file_size'] : null,
-				'valid' => $content->isValid(),
 			];
 
 			// Include trackers if present

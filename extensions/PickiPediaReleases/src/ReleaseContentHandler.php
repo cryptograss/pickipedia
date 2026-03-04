@@ -46,20 +46,13 @@ class ReleaseContentHandler extends ContentHandler {
 	 * @inheritDoc
 	 */
 	public function makeEmptyContent(): ReleaseContent {
+		// CID comes from the page title, so body can be empty or have optional metadata
 		$defaultYaml = <<<'YAML'
-# Release metadata
-title:
-ipfs_cid:
-
-# Optional fields
-# bittorrent_infohash:
-# file_type: video/mp4
-# file_size:
+# Optional metadata - the CID is the page title
 # description:
-# created_at:
-# source_url:
-# bittorrent_trackers:
-#   - udp://tracker.opentrackr.org:1337
+# pinned_on:
+#   - delivery-kid
+#   - maybelle
 YAML;
 		return new ReleaseContent( $defaultYaml );
 	}
@@ -102,22 +95,176 @@ YAML;
 			$html .= $this->renderValidationErrors( $validation );
 		}
 
-		// Render the metadata table
+		// Extract CID from page title
+		$pageRef = $cpoParams->getPage();
+		$cid = $pageRef ? $pageRef->getDBkey() : null;
+
+		// Get optional YAML metadata
 		$data = $content->getData();
-		if ( !empty( $data ) ) {
-			$html .= $this->renderMetadataTable( $data );
+
+		// Render the release info
+		$html .= $this->renderReleaseInfo( $cid, $data, $pageRef );
+
+		// Get and render backlinks
+		if ( $pageRef ) {
+			$html .= $this->renderBacklinks( $pageRef );
 		}
 
-		// Add raw YAML view
-		$html .= $this->renderRawYaml( $content->getText() );
+		// Add raw YAML view if there's any content
+		$yamlText = trim( $content->getText() );
+		if ( !empty( $yamlText ) && !$this->isOnlyComments( $yamlText ) ) {
+			$html .= $this->renderRawYaml( $yamlText );
+		}
 
 		$output->setRawText( $html );
 
 		// Add categories for organization
-		$pageRef = $cpoParams->getPage();
 		if ( $pageRef ) {
 			$output->addCategory( 'Releases' );
+
+			// Add category based on pin status
+			if ( !empty( $data['pinned_on'] ) ) {
+				$output->addCategory( 'Pinned_Releases' );
+			}
 		}
+	}
+
+	/**
+	 * Check if YAML content is only comments
+	 *
+	 * @param string $yaml
+	 * @return bool
+	 */
+	private function isOnlyComments( string $yaml ): bool {
+		$lines = explode( "\n", $yaml );
+		foreach ( $lines as $line ) {
+			$trimmed = trim( $line );
+			if ( $trimmed !== '' && $trimmed[0] !== '#' ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Render the main release info section
+	 *
+	 * @param string|null $cid
+	 * @param array $data
+	 * @param mixed $pageRef
+	 * @return string
+	 */
+	private function renderReleaseInfo( ?string $cid, array $data, $pageRef ): string {
+		$html = Html::openElement( 'div', [ 'class' => 'release-info' ] );
+		$html .= Html::openElement( 'table', [ 'class' => 'release-metadata wikitable' ] );
+
+		// CID from page title (primary identifier)
+		if ( $cid ) {
+			$html .= Html::openElement( 'tr', [ 'class' => 'release-cid' ] );
+			$html .= Html::element( 'th', [], 'IPFS CID' );
+			$html .= Html::rawElement( 'td', [], $this->renderIpfsLink( $cid ) );
+			$html .= Html::closeElement( 'tr' );
+		}
+
+		// Pin status from YAML
+		if ( !empty( $data['pinned_on'] ) ) {
+			$html .= Html::openElement( 'tr' );
+			$html .= Html::element( 'th', [], 'Pinned On' );
+			$pinnedList = is_array( $data['pinned_on'] )
+				? implode( ', ', $data['pinned_on'] )
+				: (string)$data['pinned_on'];
+			$html .= Html::element( 'td', [ 'class' => 'release-pinned' ], $pinnedList );
+			$html .= Html::closeElement( 'tr' );
+		}
+
+		// Description from YAML
+		if ( !empty( $data['description'] ) ) {
+			$html .= Html::openElement( 'tr' );
+			$html .= Html::element( 'th', [], 'Description' );
+			$html .= Html::rawElement( 'td', [], nl2br( htmlspecialchars( $data['description'] ) ) );
+			$html .= Html::closeElement( 'tr' );
+		}
+
+		// BitTorrent infohash if present
+		if ( !empty( $data['bittorrent_infohash'] ) ) {
+			$html .= Html::openElement( 'tr' );
+			$html .= Html::element( 'th', [], 'BitTorrent' );
+			$html .= Html::rawElement( 'td', [],
+				$this->renderTorrentLink( $data['bittorrent_infohash'], $data['title'] ?? $cid )
+			);
+			$html .= Html::closeElement( 'tr' );
+		}
+
+		// File info if present
+		if ( !empty( $data['file_type'] ) || !empty( $data['file_size'] ) ) {
+			$html .= Html::openElement( 'tr' );
+			$html .= Html::element( 'th', [], 'File Info' );
+			$info = [];
+			if ( !empty( $data['file_type'] ) ) {
+				$info[] = htmlspecialchars( $data['file_type'] );
+			}
+			if ( !empty( $data['file_size'] ) ) {
+				$info[] = $this->formatFileSize( (int)$data['file_size'] );
+			}
+			$html .= Html::rawElement( 'td', [], implode( ' · ', $info ) );
+			$html .= Html::closeElement( 'tr' );
+		}
+
+		$html .= Html::closeElement( 'table' );
+		$html .= Html::closeElement( 'div' );
+
+		return $html;
+	}
+
+	/**
+	 * Render backlinks from other pages
+	 *
+	 * @param mixed $pageRef
+	 * @return string
+	 */
+	private function renderBacklinks( $pageRef ): string {
+		$services = \MediaWiki\MediaWikiServices::getInstance();
+		$dbr = $services->getDBLoadBalancer()->getConnection( DB_REPLICA );
+		$titleFormatter = $services->getTitleFormatter();
+
+		// Query pages that link to this release
+		$result = $dbr->newSelectQueryBuilder()
+			->select( [ 'page_namespace', 'page_title' ] )
+			->from( 'pagelinks' )
+			->join( 'page', null, 'pl_from = page_id' )
+			->where( [
+				'pl_namespace' => $pageRef->getNamespace(),
+				'pl_title' => $pageRef->getDBkey(),
+			] )
+			->limit( 50 )
+			->caller( __METHOD__ )
+			->fetchResultSet();
+
+		$links = [];
+		foreach ( $result as $row ) {
+			$title = $services->getTitleFactory()->makeTitle(
+				$row->page_namespace,
+				$row->page_title
+			);
+			$links[] = Html::element(
+				'a',
+				[ 'href' => $title->getLocalURL() ],
+				$title->getPrefixedText()
+			);
+		}
+
+		if ( empty( $links ) ) {
+			return '';
+		}
+
+		$html = Html::openElement( 'div', [ 'class' => 'release-backlinks' ] );
+		$html .= Html::element( 'h3', [], 'Referenced by' );
+		$html .= Html::rawElement( 'ul', [],
+			implode( '', array_map( fn( $link ) => Html::rawElement( 'li', [], $link ), $links ) )
+		);
+		$html .= Html::closeElement( 'div' );
+
+		return $html;
 	}
 
 	/**
@@ -139,94 +286,6 @@ YAML;
 		return Html::rawElement( 'div', [ 'class' => 'release-validation-error' ],
 			$errorHtml . $errorList
 		);
-	}
-
-	/**
-	 * Render the release metadata as an HTML table
-	 *
-	 * @param array $data
-	 * @return string
-	 */
-	private function renderMetadataTable( array $data ): string {
-		$html = Html::openElement( 'table', [ 'class' => 'release-metadata wikitable' ] );
-
-		// Define the order and rendering of fields
-		$fieldConfig = [
-			'title' => [
-				'label' => 'Title',
-				'class' => 'release-title',
-				'render' => fn( $v ) => htmlspecialchars( $v )
-			],
-			'ipfs_cid' => [
-				'label' => 'IPFS CID',
-				'render' => fn( $v ) => $this->renderIpfsLink( $v )
-			],
-			'bittorrent_infohash' => [
-				'label' => 'BitTorrent Infohash',
-				'render' => fn( $v ) => $this->renderTorrentLink( $v, $data['title'] ?? '' )
-			],
-			'file_type' => [
-				'label' => 'File Type',
-				'render' => fn( $v ) => htmlspecialchars( $v )
-			],
-			'file_size' => [
-				'label' => 'File Size',
-				'render' => fn( $v ) => $this->formatFileSize( (int)$v )
-			],
-			'description' => [
-				'label' => 'Description',
-				'class' => 'release-description',
-				'render' => fn( $v ) => nl2br( htmlspecialchars( $v ) )
-			],
-			'created_at' => [
-				'label' => 'Created',
-				'render' => fn( $v ) => htmlspecialchars( $v )
-			],
-			'source_url' => [
-				'label' => 'Source URL',
-				'render' => fn( $v ) => Html::element( 'a',
-					[ 'href' => $v, 'rel' => 'nofollow' ],
-					$v
-				)
-			],
-			'bittorrent_trackers' => [
-				'label' => 'Trackers',
-				'render' => fn( $v ) => $this->renderTrackers( $v )
-			],
-		];
-
-		foreach ( $fieldConfig as $key => $config ) {
-			if ( !isset( $data[$key] ) || $data[$key] === '' || $data[$key] === [] ) {
-				continue;
-			}
-
-			$rowClass = $config['class'] ?? '';
-			$html .= Html::openElement( 'tr', [ 'class' => $rowClass ] );
-			$html .= Html::element( 'th', [], $config['label'] );
-			$html .= Html::rawElement( 'td', [], $config['render']( $data[$key] ) );
-			$html .= Html::closeElement( 'tr' );
-		}
-
-		// Render any additional fields not in the config
-		$extraFields = array_diff_key( $data, $fieldConfig );
-		foreach ( $extraFields as $key => $value ) {
-			if ( $value === '' || $value === [] ) {
-				continue;
-			}
-			$html .= Html::openElement( 'tr' );
-			$html .= Html::element( 'th', [], ucfirst( str_replace( '_', ' ', $key ) ) );
-			if ( is_array( $value ) ) {
-				$html .= Html::rawElement( 'td', [],
-					Html::element( 'pre', [], json_encode( $value, JSON_PRETTY_PRINT ) )
-				);
-			} else {
-				$html .= Html::element( 'td', [], (string)$value );
-			}
-			$html .= Html::closeElement( 'tr' );
-		}
-
-		$html .= Html::closeElement( 'table' );
-		return $html;
 	}
 
 	/**
@@ -283,25 +342,6 @@ YAML;
 
 		return round( $size, 2 ) . ' ' . $units[$unitIndex] .
 			' (' . number_format( $bytes ) . ' bytes)';
-	}
-
-	/**
-	 * Render tracker list
-	 *
-	 * @param array $trackers
-	 * @return string
-	 */
-	private function renderTrackers( array $trackers ): string {
-		if ( empty( $trackers ) ) {
-			return '';
-		}
-
-		$html = Html::openElement( 'ul', [ 'style' => 'margin: 0; padding-left: 1.5em;' ] );
-		foreach ( $trackers as $tracker ) {
-			$html .= Html::element( 'li', [], $tracker );
-		}
-		$html .= Html::closeElement( 'ul' );
-		return $html;
 	}
 
 	/**

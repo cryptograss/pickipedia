@@ -53,11 +53,6 @@
 		"localBasePath": "resources",
 		"remoteExtPath": "PickiPediaReleases/resources"
 	},
-	"config": {
-		"ReleaseRequiredFields": {
-			"value": ["title", "ipfs_cid"],
-			"description": "Fields that must be present in a Release page"
-		}
-	},
+	"config": {},
 	"manifest_version": 2
 }
