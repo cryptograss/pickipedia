@@ -102,8 +102,16 @@ YAML;
 		// Get optional YAML metadata
 		$data = $content->getData();
 
+		// Determine if this release is a video:
+		// 1. Explicit file_type in YAML
+		// 2. Inferred from backlinks (pages using HLSVideo template link here)
+		$isVideo = !empty( $data['file_type'] ) && str_starts_with( $data['file_type'], 'video/' );
+		if ( !$isVideo && $pageRef ) {
+			$isVideo = $this->hasHLSVideoBacklink( $pageRef );
+		}
+
 		// Render the release info
-		$html .= $this->renderReleaseInfo( $cid, $data, $pageRef );
+		$html .= $this->renderReleaseInfo( $cid, $data, $pageRef, $isVideo );
 
 		// Get and render backlinks
 		if ( $pageRef ) {
@@ -154,11 +162,11 @@ YAML;
 	 * @param mixed $pageRef
 	 * @return string
 	 */
-	private function renderReleaseInfo( ?string $cid, array $data, $pageRef ): string {
+	private function renderReleaseInfo( ?string $cid, array $data, $pageRef, bool $isVideo = false ): string {
 		$html = Html::openElement( 'div', [ 'class' => 'release-info' ] );
 
 		// Render video player if this release is a video
-		if ( $cid && !empty( $data['file_type'] ) && str_starts_with( $data['file_type'], 'video/' ) ) {
+		if ( $cid && $isVideo ) {
 			$html .= Html::element( 'div', [
 				'class' => 'hls-video-player',
 				'data-cid' => $cid,
@@ -277,6 +285,39 @@ YAML;
 		$html .= Html::closeElement( 'div' );
 
 		return $html;
+	}
+
+	/**
+	 * Check if any page linking to this release uses the HLSVideo template.
+	 *
+	 * Joins pagelinks → page → templatelinks → linktarget to find pages
+	 * that both link to this Release page and transclude Template:HLSVideo.
+	 *
+	 * @param mixed $pageRef
+	 * @return bool
+	 */
+	private function hasHLSVideoBacklink( $pageRef ): bool {
+		$services = \MediaWiki\MediaWikiServices::getInstance();
+		$dbr = $services->getDBLoadBalancer()->getConnection( DB_REPLICA );
+
+		// Find pages that link to this Release AND use Template:HLSVideo
+		$result = $dbr->newSelectQueryBuilder()
+			->select( '1' )
+			->from( 'pagelinks' )
+			->join( 'linktarget', 'lt_release', 'pl_target_id = lt_release.lt_id' )
+			->join( 'templatelinks', null, 'pl_from = tl_from' )
+			->join( 'linktarget', 'lt_template', 'tl_target_id = lt_template.lt_id' )
+			->where( [
+				'lt_release.lt_namespace' => $pageRef->getNamespace(),
+				'lt_release.lt_title' => $pageRef->getDBkey(),
+				'lt_template.lt_namespace' => NS_TEMPLATE,
+				'lt_template.lt_title' => 'HLSVideo',
+			] )
+			->limit( 1 )
+			->caller( __METHOD__ )
+			->fetchResultSet();
+
+		return $result->numRows() > 0;
 	}
 
 	/**
