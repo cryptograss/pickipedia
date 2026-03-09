@@ -1,0 +1,189 @@
+/**
+ * Styles for Special:UploadContent
+ */
+
+.uc-step {
+	display: none;
+	margin: 1.5em 0;
+	padding: 1em;
+	border: 1px solid #a2a9b1;
+	border-radius: 4px;
+	background: #f8f9fa;
+}
+
+.uc-step-active {
+	display: block;
+}
+
+.uc-step h3 {
+	margin-top: 0;
+	border-bottom: 1px solid #a2a9b1;
+	padding-bottom: 0.5em;
+}
+
+/* Status messages */
+.uc-status {
+	margin: 0.75em 0;
+	padding: 0.5em;
+	font-size: 0.95em;
+}
+
+.uc-status:empty {
+	display: none;
+}
+
+.uc-status-success {
+	color: #14866d;
+	background: #d5fdf4;
+	border: 1px solid #14866d;
+	border-radius: 3px;
+	padding: 0.5em 0.75em;
+}
+
+.uc-status-error {
+	color: #d33;
+	background: #fee7e6;
+	border: 1px solid #d33;
+	border-radius: 3px;
+	padding: 0.5em 0.75em;
+}
+
+/* Dropzone */
+.uc-dropzone {
+	border: 2px dashed #a2a9b1;
+	border-radius: 6px;
+	padding: 2em;
+	text-align: center;
+	cursor: pointer;
+	transition: border-color 0.2s, background 0.2s;
+	margin-bottom: 1em;
+}
+
+.uc-dropzone:hover,
+.uc-dropzone-active {
+	border-color: #36c;
+	background: #eaf3ff;
+}
+
+.uc-hint {
+	font-size: 0.85em;
+	color: #72777d;
+}
+
+/* File list */
+.uc-file-list {
+	margin-bottom: 1em;
+}
+
+.uc-file-item {
+	display: flex;
+	align-items: center;
+	padding: 0.4em 0.6em;
+	margin: 0.25em 0;
+	background: #fff;
+	border: 1px solid #c8ccd1;
+	border-radius: 3px;
+}
+
+.uc-file-name {
+	flex: 1;
+	font-family: monospace;
+	font-size: 0.9em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.uc-file-size {
+	margin: 0 0.75em;
+	color: #72777d;
+	font-size: 0.85em;
+}
+
+.uc-file-remove {
+	background: none;
+	border: none;
+	color: #d33;
+	cursor: pointer;
+	font-size: 1.2em;
+	padding: 0 0.3em;
+}
+
+/* Metadata form */
+.uc-metadata-form {
+	margin: 1em 0;
+}
+
+.uc-field {
+	margin-bottom: 0.75em;
+}
+
+.uc-field label {
+	display: block;
+	font-weight: bold;
+	margin-bottom: 0.25em;
+}
+
+.uc-field input[type="text"],
+.uc-field textarea {
+	width: 100%;
+	max-width: 500px;
+	box-sizing: border-box;
+}
+
+.uc-checkbox-field label {
+	display: inline;
+	font-weight: normal;
+}
+
+.uc-draft-expires {
+	font-size: 0.85em;
+	color: #72777d;
+}
+
+/* Progress bar */
+.uc-progress-bar {
+	height: 20px;
+	background: #c8ccd1;
+	border-radius: 10px;
+	overflow: hidden;
+	margin: 1em 0;
+}
+
+.uc-progress-fill {
+	height: 100%;
+	background: #36c;
+	transition: width 0.3s ease;
+	width: 0%;
+}
+
+/* Result card */
+.uc-result-card {
+	margin-top: 1em;
+	padding: 1em;
+	background: #fff;
+	border: 1px solid #a2a9b1;
+	border-radius: 4px;
+}
+
+.uc-result-card h4 {
+	margin-top: 0;
+	color: #14866d;
+}
+
+.uc-result-card .release-cid-cell {
+	font-family: monospace;
+	word-break: break-all;
+	font-size: 0.9em;
+}
+
+/* Button spacing */
+.uc-step button + button {
+	margin-left: 0.5em;
+}
+
+/* Draft info table */
+.uc-draft-info .wikitable {
+	width: 100%;
+	max-width: 700px;
+}
