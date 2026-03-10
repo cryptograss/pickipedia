@@ -29,7 +29,8 @@
 		"release-yaml": "MediaWiki\\Extension\\PickiPediaReleases\\ReleaseContentHandler"
 	},
 	"SpecialPages": {
-		"Releases": "MediaWiki\\Extension\\PickiPediaReleases\\SpecialReleases"
+		"Releases": "MediaWiki\\Extension\\PickiPediaReleases\\SpecialReleases",
+		"UploadContent": "MediaWiki\\Extension\\PickiPediaReleases\\SpecialUploadContent"
 	},
 	"APIModules": {
 		"releaselist": {
@@ -47,15 +48,30 @@
 	"MessagesDirs": {
 		"PickiPediaReleases": ["i18n"]
 	},
+	"ExtensionMessagesFiles": {
+		"PickiPediaReleasesAlias": "PickiPediaReleases.alias.php"
+	},
 	"ResourceModules": {
 		"ext.pickipediaReleases.styles": {
 			"styles": ["ext.pickipediaReleases.css"]
+		},
+"ext.pickipediaReleases.upload.styles": {
+			"styles": ["ext.pickipediaReleases.upload.css"]
 		}
 	},
 	"ResourceFileModulePaths": {
 		"localBasePath": "resources",
 		"remoteExtPath": "PickiPediaReleases/resources"
 	},
-	"config": {},
+	"config": {
+		"DeliveryKidUrl": {
+			"value": "https://delivery-kid.cryptograss.live",
+			"description": "Base URL for the delivery-kid pinning service API"
+		},
+		"DeliveryKidApiKey": {
+			"value": "",
+			"description": "Shared API key for authenticating with delivery-kid pinning service"
+		}
+	},
 	"manifest_version": 2
 }

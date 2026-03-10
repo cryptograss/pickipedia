@@ -15,5 +15,7 @@
 	"special-releases-header": "",
 	"special-releases-mid": "",
 	"special-releases-footer": "",
-	"releases": "Releases"
+	"releases": "Releases",
+	"uploadcontent": "Upload Content",
+	"special-uploadcontent-header": ""
 }

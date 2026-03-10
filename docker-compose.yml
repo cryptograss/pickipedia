@@ -26,6 +26,7 @@ services:
       - MEDIAWIKI_DB_PASSWORD=${DB_PASSWORD:-changeme}
       - WIKI_URL=${WIKI_URL:-https://pickipedia.justin.hunter.cryptograss.live}
       - WIKI_DEV_MODE=true
+      - DELIVERY_KID_API_KEY=${DELIVERY_KID_API_KEY:-}
     volumes:
       - ${PICKIPEDIA_DIR:-.}/LocalSettings.php:/var/www/html/LocalSettings.php:ro
       - ${PICKIPEDIA_DIR:-.}/LocalSettings.local.php:/var/www/html/LocalSettings.local.php:ro
