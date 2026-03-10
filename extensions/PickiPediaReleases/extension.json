@@ -55,11 +55,7 @@
 		"ext.pickipediaReleases.styles": {
 			"styles": ["ext.pickipediaReleases.css"]
 		},
-		"ext.pickipediaReleases.upload": {
-			"scripts": ["ext.pickipediaReleases.upload.js"],
-			"dependencies": ["mediawiki.util"]
-		},
-		"ext.pickipediaReleases.upload.styles": {
+"ext.pickipediaReleases.upload.styles": {
 			"styles": ["ext.pickipediaReleases.upload.css"]
 		}
 	},
@@ -71,6 +67,10 @@
 		"DeliveryKidUrl": {
 			"value": "https://delivery-kid.cryptograss.live",
 			"description": "Base URL for the delivery-kid pinning service API"
+		},
+		"DeliveryKidApiKey": {
+			"value": "",
+			"description": "Shared API key for authenticating with delivery-kid pinning service"
 		}
 	},
 	"manifest_version": 2
