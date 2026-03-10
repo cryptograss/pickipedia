@@ -48,6 +48,9 @@
 	"MessagesDirs": {
 		"PickiPediaReleases": ["i18n"]
 	},
+	"ExtensionMessagesFiles": {
+		"PickiPediaReleasesAlias": "PickiPediaReleases.alias.php"
+	},
 	"ResourceModules": {
 		"ext.pickipediaReleases.styles": {
 			"styles": ["ext.pickipediaReleases.css"]
