@@ -19,6 +19,23 @@
 	var currentDraftId = null;
 	var draftFiles = []; // analyzed files from draft response
 
+	// -- URL draft persistence --
+
+	function getDraftIdFromUrl() {
+		var params = new URLSearchParams( window.location.search );
+		return params.get( 'draft' );
+	}
+
+	function setDraftIdInUrl( draftId ) {
+		var url = new URL( window.location.href );
+		if ( draftId ) {
+			url.searchParams.set( 'draft', draftId );
+		} else {
+			url.searchParams.delete( 'draft' );
+		}
+		history.replaceState( null, '', url.toString() );
+	}
+
 	// -- Helpers --
 
 	function el( id ) {
@@ -189,6 +206,7 @@
 			var draft = JSON.parse( xhr.responseText );
 			currentDraftId = draft.draft_id;
 			draftFiles = draft.files;
+			setDraftIdInUrl( currentDraftId );
 
 			setStatus( 'ua-upload-status',
 				'Draft created. ' + draftFiles.length + ' track(s) analyzed.', 'success' );
@@ -357,6 +375,7 @@
 			} ).then( function () {
 				currentDraftId = null;
 				draftFiles = [];
+				setDraftIdInUrl( null );
 				showStep( 'ua-step-upload' );
 				setStatus( 'ua-upload-status', 'Draft deleted.', '' );
 			} );
@@ -455,6 +474,7 @@
 			renderResult( data );
 			currentDraftId = null;
 			draftFiles = [];
+			setDraftIdInUrl( null );
 		} else if ( event === 'error' ) {
 			setStatus( 'ua-progress-status',
 				'Error: ' + ( data.message || 'Unknown error' ), 'error' );
@@ -507,6 +527,50 @@
 		} );
 	}
 
+	// -- Resume draft --
+
+	function resumeDraft( draftId ) {
+		setStatus( 'ua-upload-status', 'Resuming draft ' + draftId.slice( 0, 8 ) + '...', '' );
+
+		fetch( API_URL + '/draft-album/' + draftId, {
+			headers: AUTH_HEADERS
+		} ).then( function ( resp ) {
+			if ( resp.status === 410 ) {
+				setStatus( 'ua-upload-status', 'That draft has expired. Upload again.', 'error' );
+				setDraftIdInUrl( null );
+				return;
+			}
+			if ( resp.status === 404 ) {
+				setStatus( 'ua-upload-status', 'Draft not found. It may have been deleted or finalized.', 'error' );
+				setDraftIdInUrl( null );
+				return;
+			}
+			if ( !resp.ok ) {
+				return resp.json().then( function ( err ) {
+					var msg = ( err.detail && typeof err.detail === 'string' ) ? err.detail : JSON.stringify( err );
+					setStatus( 'ua-upload-status', 'Could not resume draft: ' + msg, 'error' );
+					setDraftIdInUrl( null );
+				} );
+			}
+			return resp.json();
+		} ).then( function ( draft ) {
+			if ( !draft ) {
+				return;
+			}
+			currentDraftId = draft.draft_id;
+			draftFiles = draft.files;
+
+			setStatus( 'ua-upload-status',
+				'Draft resumed. ' + draftFiles.length + ' track(s).', 'success' );
+
+			renderReview( draft );
+			showStep( 'ua-step-review' );
+		} ).catch( function ( err ) {
+			setStatus( 'ua-upload-status', 'Network error resuming draft: ' + err.message, 'error' );
+			setDraftIdInUrl( null );
+		} );
+	}
+
 	// -- Init --
 
 	function init() {
@@ -518,6 +582,12 @@
 
 		initUploadStep();
 		initReviewStep();
+
+		// Check for draft ID in URL (resume after page reload or shared link)
+		var urlDraftId = getDraftIdFromUrl();
+		if ( urlDraftId ) {
+			resumeDraft( urlDraftId );
+		}
 	}
 
 	mw.loader.using( 'mediawiki.util' ).then( init );
