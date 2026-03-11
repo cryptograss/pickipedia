@@ -105,7 +105,7 @@
 		// Album fields
 		var titleEl = el( 'rd-album-title' );
 		var artistEl = el( 'rd-artist' );
-		var yearEl = el( 'rd-year' );
+		var versionEl = el( 'rd-version' );
 		var descEl = el( 'rd-description' );
 
 		if ( !data.album ) {
@@ -117,8 +117,8 @@
 		if ( artistEl ) {
 			data.album.artist = artistEl.value;
 		}
-		if ( yearEl ) {
-			data.album.year = yearEl.value;
+		if ( versionEl ) {
+			data.album.version = versionEl.value;
 		}
 		if ( descEl ) {
 			data.album.description = descEl.value;
@@ -166,8 +166,10 @@
 		}
 
 		saveBtn.addEventListener( 'click', function () {
+			var originalText = saveBtn.textContent;
 			saveBtn.disabled = true;
-			setStatus( 'Saving draft...', '' );
+			saveBtn.textContent = 'Saving...';
+			saveBtn.classList.add( 'rd-saving' );
 
 			var data = collectFormData();
 
@@ -182,11 +184,24 @@
 				summary: 'Update release draft metadata',
 				minor: true
 			} ).then( function () {
-				setStatus( 'Draft saved.', 'success' );
-				saveBtn.disabled = false;
+				saveBtn.textContent = 'Saved!';
+				saveBtn.classList.remove( 'rd-saving' );
+				saveBtn.classList.add( 'rd-saved' );
+				setTimeout( function () {
+					saveBtn.textContent = originalText;
+					saveBtn.classList.remove( 'rd-saved' );
+					saveBtn.disabled = false;
+				}, 2000 );
 			} ).fail( function ( code, result ) {
+				saveBtn.textContent = 'Save Failed';
+				saveBtn.classList.remove( 'rd-saving' );
+				saveBtn.classList.add( 'rd-save-failed' );
 				setStatus( 'Save failed: ' + ( result.error ? result.error.info : code ), 'error' );
-				saveBtn.disabled = false;
+				setTimeout( function () {
+					saveBtn.textContent = originalText;
+					saveBtn.classList.remove( 'rd-save-failed' );
+					saveBtn.disabled = false;
+				}, 3000 );
 			} );
 		} );
 	}
@@ -210,7 +225,7 @@
 		var album = data.album || {};
 		lines.push( '    title: ' + quote( album.title || '' ) );
 		lines.push( '    artist: ' + quote( album.artist || '' ) );
-		lines.push( '    year: ' + quote( album.year || '' ) );
+		lines.push( '    version: ' + quote( album.version || '' ) );
 		lines.push( '    description: ' + quote( album.description || '' ) );
 
 		// Tracks
@@ -325,7 +340,6 @@
 			var body = JSON.stringify( {
 				album_title: album.title,
 				artist: album.artist,
-				year: album.year || null,
 				description: album.description || null,
 				tracks: tracks
 			} );
@@ -486,7 +500,8 @@
 					if ( resp.result ) {
 						var blockNum = parseInt( resp.result, 16 );
 						bhInput.value = blockNum;
-						updateBlockDate( blockNum );
+						// We just fetched the current block, so the date is now
+						setBlockDateToNow();
 					}
 				} )
 				.catch( function () {
@@ -549,6 +564,19 @@
 			return MERGE_BLOCK + Math.floor( ( ts - MERGE_TS ) / POST_MERGE_BLOCK_TIME );
 		}
 		return Math.floor( ( ts - ETH_GENESIS_TS ) / PRE_MERGE_AVG );
+	}
+
+	function setBlockDateToNow() {
+		var dateLabel = el( 'rd-blockheight-date' );
+		if ( !dateLabel ) {
+			return;
+		}
+		var date = new Date();
+		dateLabel.textContent = '≈ ' + date.toLocaleDateString( 'en-US', {
+			year: 'numeric',
+			month: 'long',
+			day: 'numeric'
+		} );
 	}
 
 	function updateBlockDate( blockNumber ) {

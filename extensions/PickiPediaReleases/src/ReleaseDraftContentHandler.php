@@ -16,15 +16,15 @@
 namespace MediaWiki\Extension\PickiPediaReleases;
 
 use Content;
-use MediaWiki\Content\ContentHandler;
 use MediaWiki\Content\Renderer\ContentParseParams;
+use MediaWiki\Content\TextContentHandler;
 use MediaWiki\Content\ValidationParams;
 use MediaWiki\Html\Html;
 use MediaWiki\Parser\ParserOutput;
 use StatusValue;
 use Symfony\Component\Yaml\Yaml;
 
-class ReleaseDraftContentHandler extends ContentHandler {
+class ReleaseDraftContentHandler extends TextContentHandler {
 
 	public function __construct( $modelId = 'release-draft-yaml' ) {
 		parent::__construct( $modelId, [ CONTENT_FORMAT_TEXT ] );
@@ -50,7 +50,7 @@ class ReleaseDraftContentHandler extends ContentHandler {
 			'album' => [
 				'title' => '',
 				'artist' => '',
-				'year' => '',
+				'version' => '',
 				'description' => '',
 			],
 			'tracks' => [],
@@ -220,9 +220,9 @@ class ReleaseDraftContentHandler extends ContentHandler {
 		$html .= $this->renderField( 'rd-artist', 'Artist',
 			$album['artist'] ?? '', 'text', $disabled );
 
-		// Year
-		$html .= $this->renderField( 'rd-year', 'Year',
-			$album['year'] ?? '', 'text', $disabled );
+		// Version
+		$html .= $this->renderField( 'rd-version', 'Version',
+			$album['version'] ?? '', 'text', $disabled );
 
 		// Description
 		$html .= Html::openElement( 'div', [ 'class' => 'uc-field' ] );

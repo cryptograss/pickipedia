@@ -232,7 +232,7 @@
 		lines.push( 'album:' );
 		lines.push( '    title: ""' );
 		lines.push( '    artist: ""' );
-		lines.push( '    year: ""' );
+		lines.push( '    version: ""' );
 		lines.push( '    description: ""' );
 		lines.push( 'tracks:' );
 
