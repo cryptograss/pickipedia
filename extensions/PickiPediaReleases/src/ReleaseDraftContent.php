@@ -17,15 +17,12 @@
 namespace MediaWiki\Extension\PickiPediaReleases;
 
 use Content;
-use MediaWiki\Content\AbstractContent;
+use MediaWiki\Content\TextContent;
 use StatusValue;
 use Symfony\Component\Yaml\Yaml;
 use Symfony\Component\Yaml\Exception\ParseException;
 
-class ReleaseDraftContent extends AbstractContent {
-
-	/** @var string Raw YAML text */
-	private string $yamlText;
+class ReleaseDraftContent extends TextContent {
 
 	/** @var array|null Parsed data, cached */
 	private ?array $parsedData = null;
@@ -34,12 +31,7 @@ class ReleaseDraftContent extends AbstractContent {
 	private ?ParseException $parseError = null;
 
 	public function __construct( string $text ) {
-		parent::__construct( 'release-draft-yaml' );
-		$this->yamlText = $text;
-	}
-
-	public function getText(): string {
-		return $this->yamlText;
+		parent::__construct( $text, 'release-draft-yaml' );
 	}
 
 	public function getData(): array {
@@ -58,7 +50,7 @@ class ReleaseDraftContent extends AbstractContent {
 
 	private function parseYaml(): void {
 		try {
-			$data = Yaml::parse( $this->yamlText );
+			$data = Yaml::parse( $this->getText() );
 			$this->parsedData = is_array( $data ) ? $data : [];
 			$this->parseError = null;
 		} catch ( ParseException $e ) {
@@ -154,10 +146,6 @@ class ReleaseDraftContent extends AbstractContent {
 		return implode( "\n", $parts );
 	}
 
-	public function getWikitextForTransclusion(): string {
-		return $this->yamlText;
-	}
-
 	public function getTextForSummary( $maxLength = 250 ) {
 		$album = $this->getAlbumData();
 		$summary = '';
@@ -166,26 +154,10 @@ class ReleaseDraftContent extends AbstractContent {
 		} elseif ( !empty( $album['title'] ) ) {
 			$summary = $album['title'];
 		}
-		return $summary ? mb_substr( $summary, 0, $maxLength ) : mb_substr( $this->yamlText, 0, $maxLength );
-	}
-
-	public function getNativeData(): string {
-		return $this->yamlText;
-	}
-
-	public function getSize(): int {
-		return strlen( $this->yamlText );
-	}
-
-	public function copy(): Content {
-		return new ReleaseDraftContent( $this->yamlText );
+		return $summary ? mb_substr( $summary, 0, $maxLength ) : mb_substr( $this->getText(), 0, $maxLength );
 	}
 
 	public function isCountable( $hasLinks = null ): bool {
 		return true;
-	}
-
-	public function serialize( $format = null ): string {
-		return $this->yamlText;
 	}
 }

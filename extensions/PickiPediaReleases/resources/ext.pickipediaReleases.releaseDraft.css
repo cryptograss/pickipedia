@@ -147,6 +147,28 @@
 	flex-wrap: wrap;
 }
 
+/* Save button states */
+#rd-save-btn {
+	transition: background-color 0.3s, border-color 0.3s;
+}
+
+#rd-save-btn.rd-saving {
+	opacity: 0.7;
+	cursor: wait;
+}
+
+#rd-save-btn.rd-saved {
+	background-color: #14866d;
+	border-color: #14866d;
+	color: #fff;
+}
+
+#rd-save-btn.rd-save-failed {
+	background-color: #d33;
+	border-color: #d33;
+	color: #fff;
+}
+
 /* Album form */
 .rd-album-form {
 	margin-bottom: 1em;

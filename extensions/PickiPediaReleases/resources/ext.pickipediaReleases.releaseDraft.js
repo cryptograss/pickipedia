@@ -166,8 +166,10 @@
 		}
 
 		saveBtn.addEventListener( 'click', function () {
+			var originalText = saveBtn.textContent;
 			saveBtn.disabled = true;
-			setStatus( 'Saving draft...', '' );
+			saveBtn.textContent = 'Saving...';
+			saveBtn.classList.add( 'rd-saving' );
 
 			var data = collectFormData();
 
@@ -182,11 +184,24 @@
 				summary: 'Update release draft metadata',
 				minor: true
 			} ).then( function () {
-				setStatus( 'Draft saved.', 'success' );
-				saveBtn.disabled = false;
+				saveBtn.textContent = 'Saved!';
+				saveBtn.classList.remove( 'rd-saving' );
+				saveBtn.classList.add( 'rd-saved' );
+				setTimeout( function () {
+					saveBtn.textContent = originalText;
+					saveBtn.classList.remove( 'rd-saved' );
+					saveBtn.disabled = false;
+				}, 2000 );
 			} ).fail( function ( code, result ) {
+				saveBtn.textContent = 'Save Failed';
+				saveBtn.classList.remove( 'rd-saving' );
+				saveBtn.classList.add( 'rd-save-failed' );
 				setStatus( 'Save failed: ' + ( result.error ? result.error.info : code ), 'error' );
-				saveBtn.disabled = false;
+				setTimeout( function () {
+					saveBtn.textContent = originalText;
+					saveBtn.classList.remove( 'rd-save-failed' );
+					saveBtn.disabled = false;
+				}, 3000 );
 			} );
 		} );
 	}
