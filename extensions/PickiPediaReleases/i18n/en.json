@@ -19,5 +19,7 @@
 	"uploadcontent": "Upload Content",
 	"special-uploadcontent-header": "",
 	"uploadalbum": "Upload Album",
-	"special-uploadalbum-header": ""
+	"special-uploadalbum-header": "",
+	"action-upload-to-delivery-kid": "upload content to the delivery-kid pinning service",
+	"right-upload-to-delivery-kid": "Upload content directly to the delivery-kid IPFS pinning service"
 }
