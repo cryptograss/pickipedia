@@ -30,7 +30,8 @@
 	},
 	"SpecialPages": {
 		"Releases": "MediaWiki\\Extension\\PickiPediaReleases\\SpecialReleases",
-		"UploadContent": "MediaWiki\\Extension\\PickiPediaReleases\\SpecialUploadContent"
+		"UploadContent": "MediaWiki\\Extension\\PickiPediaReleases\\SpecialUploadContent",
+		"UploadAlbum": "MediaWiki\\Extension\\PickiPediaReleases\\SpecialUploadAlbum"
 	},
 	"APIModules": {
 		"releaselist": {
@@ -55,13 +56,29 @@
 		"ext.pickipediaReleases.styles": {
 			"styles": ["ext.pickipediaReleases.css"]
 		},
-"ext.pickipediaReleases.upload.styles": {
+		"ext.pickipediaReleases.upload.styles": {
 			"styles": ["ext.pickipediaReleases.upload.css"]
+		},
+		"ext.pickipediaReleases.upload": {
+			"scripts": ["ext.pickipediaReleases.upload.js"],
+			"dependencies": ["mediawiki.util"]
+		},
+		"ext.pickipediaReleases.uploadAlbum": {
+			"scripts": ["ext.pickipediaReleases.uploadAlbum.js"],
+			"dependencies": ["mediawiki.util"]
 		}
 	},
 	"ResourceFileModulePaths": {
 		"localBasePath": "resources",
 		"remoteExtPath": "PickiPediaReleases/resources"
+	},
+	"AvailableRights": [
+		"upload-to-delivery-kid"
+	],
+	"GroupPermissions": {
+		"sysop": {
+			"upload-to-delivery-kid": true
+		}
 	},
 	"config": {
 		"DeliveryKidUrl": {

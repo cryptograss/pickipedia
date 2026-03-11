@@ -1,8 +1,10 @@
 /**
- * Upload Content — direct upload to delivery-kid from browser.
+ * Upload Album — direct upload to delivery-kid from browser.
  *
- * Wiki generates an HMAC token. JS uploads directly to delivery-kid.
- * No bytes pass through PHP.
+ * Three-step flow using /draft-album:
+ * 1. Upload audio + cover → delivery-kid analyzes tracks
+ * 2. Review: reorder tracks, edit titles, set album metadata
+ * 3. Finalize → transcode FLAC/WAV→OGG, embed tags, pin to IPFS
  */
 ( function () {
 	'use strict';
@@ -15,6 +17,7 @@
 	};
 
 	var currentDraftId = null;
+	var draftFiles = []; // analyzed files from draft response
 
 	// -- Helpers --
 
@@ -58,10 +61,10 @@
 	// -- Step 1: File Upload --
 
 	function initUploadStep() {
-		var dropzone = el( 'uc-dropzone' );
-		var fileInput = el( 'uc-file-input' );
-		var fileList = el( 'uc-file-list' );
-		var uploadBtn = el( 'uc-upload-btn' );
+		var dropzone = el( 'ua-dropzone' );
+		var fileInput = el( 'ua-file-input' );
+		var fileList = el( 'ua-file-list' );
+		var uploadBtn = el( 'ua-upload-btn' );
 		var selectedFiles = [];
 
 		dropzone.addEventListener( 'click', function () {
@@ -126,13 +129,13 @@
 	}
 
 	function doUpload( files ) {
-		var uploadBtn = el( 'uc-upload-btn' );
-		var progressBar = el( 'uc-upload-progress' );
+		var uploadBtn = el( 'ua-upload-btn' );
+		var progressBar = el( 'ua-upload-progress' );
 		var progressFill = progressBar.querySelector( '.uc-progress-fill' );
 
 		uploadBtn.disabled = true;
 		progressBar.style.display = '';
-		setStatus( 'uc-upload-status', 'Uploading ' + files.length + ' file(s)...', '' );
+		setStatus( 'ua-upload-status', 'Uploading ' + files.length + ' file(s)...', '' );
 
 		var formData = new FormData();
 		files.forEach( function ( file ) {
@@ -140,7 +143,7 @@
 		} );
 
 		var xhr = new XMLHttpRequest();
-		xhr.open( 'POST', API_URL + '/draft-content' );
+		xhr.open( 'POST', API_URL + '/draft-album' );
 
 		// Set auth headers
 		Object.keys( AUTH_HEADERS ).forEach( function ( key ) {
@@ -151,7 +154,7 @@
 			if ( e.lengthComputable ) {
 				var pct = Math.round( ( e.loaded / e.total ) * 100 );
 				progressFill.style.width = pct + '%';
-				setStatus( 'uc-upload-status',
+				setStatus( 'ua-upload-status',
 					'Uploading... ' + formatSize( e.loaded ) + ' / ' + formatSize( e.total ) +
 					' (' + pct + '%)', '' );
 			}
@@ -167,7 +170,7 @@
 				} catch ( e ) {
 					err = { detail: xhr.statusText };
 				}
-				setStatus( 'uc-upload-status',
+				setStatus( 'ua-upload-status',
 					'Upload failed: ' + ( err.detail || xhr.statusText ), 'error' );
 				uploadBtn.disabled = false;
 				return;
@@ -175,85 +178,177 @@
 
 			var draft = JSON.parse( xhr.responseText );
 			currentDraftId = draft.draft_id;
+			draftFiles = draft.files;
 
-			setStatus( 'uc-upload-status',
-				'Draft created: ' + currentDraftId.slice( 0, 8 ) + '...', 'success' );
+			setStatus( 'ua-upload-status',
+				'Draft created. ' + draftFiles.length + ' track(s) analyzed.', 'success' );
 
 			renderReview( draft );
-			showStep( 'uc-step-review' );
+			showStep( 'ua-step-review' );
 		} );
 
 		xhr.addEventListener( 'error', function () {
 			progressBar.style.display = 'none';
-			setStatus( 'uc-upload-status', 'Network error during upload.', 'error' );
+			setStatus( 'ua-upload-status', 'Network error during upload.', 'error' );
 			uploadBtn.disabled = false;
 		} );
 
 		xhr.send( formData );
 	}
 
-	// -- Step 2: Review & Metadata --
+	// -- Step 2: Review & Track Ordering --
 
 	function renderReview( draft ) {
-		var info = el( 'uc-draft-info' );
-		var html = '<table class="wikitable">';
-		html += '<tr><th>File</th><th>Type</th><th>Format</th><th>Duration</th><th>Size</th></tr>';
+		// Show analysis summary
+		var info = el( 'ua-draft-info' );
+		var totalDuration = 0;
+		var totalSize = 0;
+		var formats = {};
 
-		var hasVideo = false;
 		draft.files.forEach( function ( f ) {
-			html += '<tr>';
-			html += '<td>' + mw.html.escape( f.original_filename ) + '</td>';
-			html += '<td>' + mw.html.escape( f.media_type ) + '</td>';
-			html += '<td>' + mw.html.escape( f.format ) + '</td>';
-			html += '<td>' + formatDuration( f.duration_seconds ) + '</td>';
-			html += '<td>' + formatSize( f.size_bytes ) + '</td>';
-			html += '</tr>';
-
-			if ( f.width && f.height ) {
-				html += '<tr><td></td><td colspan="4">' + f.width + 'x' + f.height;
-				if ( f.video_codec ) {
-					html += ' &middot; ' + mw.html.escape( f.video_codec );
-				}
-				if ( f.audio_codec ) {
-					html += ' &middot; ' + mw.html.escape( f.audio_codec );
-				}
-				html += '</td></tr>';
+			if ( f.duration_seconds ) {
+				totalDuration += f.duration_seconds;
 			}
+			if ( f.size_bytes ) {
+				totalSize += f.size_bytes;
+			}
+			formats[ f.format ] = ( formats[ f.format ] || 0 ) + 1;
+		} );
 
-			if ( f.media_type === 'video' ) {
-				hasVideo = true;
+		var formatSummary = Object.keys( formats ).map( function ( fmt ) {
+			return formats[ fmt ] + ' ' + fmt;
+		} ).join( ', ' );
+
+		info.innerHTML =
+			'<p>' + draft.files.length + ' tracks &middot; ' +
+			formatDuration( totalDuration ) + ' total &middot; ' +
+			formatSize( totalSize ) + ' &middot; ' + formatSummary + '</p>' +
+			'<p class="uc-draft-expires">Draft expires: ' +
+			new Date( draft.expires_at ).toLocaleString() + '</p>';
+
+		// Render track list
+		renderTrackList( draft.files );
+	}
+
+	function renderTrackList( files ) {
+		var container = el( 'ua-track-list' );
+		container.innerHTML = '';
+
+		files.forEach( function ( file, idx ) {
+			var row = document.createElement( 'div' );
+			row.className = 'ua-track-row';
+			row.draggable = true;
+			row.dataset.idx = idx;
+
+			var title = file.detected_title || file.original_filename.replace( /\.[^.]+$/, '' );
+
+			row.innerHTML =
+				'<span class="ua-track-handle" title="Drag to reorder">&#9776;</span>' +
+				'<span class="ua-track-num">' + ( idx + 1 ) + '</span>' +
+				'<input type="text" class="ua-track-title cdx-text-input__input" ' +
+					'value="' + mw.html.escape( title ) + '" ' +
+					'data-filename="' + mw.html.escape( file.original_filename ) + '">' +
+				'<span class="ua-track-meta">' +
+					mw.html.escape( file.format ) + ' &middot; ' +
+					formatDuration( file.duration_seconds ) + ' &middot; ' +
+					formatSize( file.size_bytes ) +
+				'</span>';
+
+			container.appendChild( row );
+		} );
+
+		initDragReorder( container );
+	}
+
+	function initDragReorder( container ) {
+		var dragSrc = null;
+
+		container.addEventListener( 'dragstart', function ( e ) {
+			var row = e.target.closest( '.ua-track-row' );
+			if ( !row ) {
+				return;
+			}
+			dragSrc = row;
+			row.classList.add( 'ua-track-dragging' );
+			e.dataTransfer.effectAllowed = 'move';
+		} );
+
+		container.addEventListener( 'dragover', function ( e ) {
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'move';
+			var row = e.target.closest( '.ua-track-row' );
+			if ( row && row !== dragSrc ) {
+				var rect = row.getBoundingClientRect();
+				var midY = rect.top + rect.height / 2;
+				if ( e.clientY < midY ) {
+					container.insertBefore( dragSrc, row );
+				} else {
+					container.insertBefore( dragSrc, row.nextSibling );
+				}
 			}
 		} );
 
-		html += '</table>';
-		html += '<p class="uc-draft-expires">Draft expires: ' +
-			new Date( draft.expires_at ).toLocaleString() + '</p>';
-		info.innerHTML = html;
+		container.addEventListener( 'dragend', function () {
+			if ( dragSrc ) {
+				dragSrc.classList.remove( 'ua-track-dragging' );
+				dragSrc = null;
+			}
+			renumberTracks( container );
+		} );
+	}
 
-		// Pre-fill title
-		if ( draft.files.length === 1 && draft.files[ 0 ].detected_title ) {
-			el( 'uc-title' ).value = draft.files[ 0 ].detected_title;
-		}
+	function renumberTracks( container ) {
+		var rows = container.querySelectorAll( '.ua-track-row' );
+		rows.forEach( function ( row, idx ) {
+			row.dataset.idx = idx;
+			row.querySelector( '.ua-track-num' ).textContent = idx + 1;
+		} );
+	}
 
-		el( 'uc-hls-field' ).style.display = hasVideo ? '' : 'none';
+	function getTrackOrder() {
+		var rows = el( 'ua-track-list' ).querySelectorAll( '.ua-track-row' );
+		var tracks = [];
+		rows.forEach( function ( row ) {
+			var input = row.querySelector( '.ua-track-title' );
+			tracks.push( {
+				filename: input.dataset.filename,
+				title: input.value
+			} );
+		} );
+		return tracks;
 	}
 
 	function initReviewStep() {
-		el( 'uc-finalize-btn' ).addEventListener( 'click', function () {
+		el( 'ua-finalize-btn' ).addEventListener( 'click', function () {
+			var albumTitle = el( 'ua-album-title' ).value.trim();
+			var artist = el( 'ua-artist' ).value.trim();
+
+			if ( !albumTitle ) {
+				setStatus( 'ua-upload-status', 'Album title is required.', 'error' );
+				el( 'ua-album-title' ).focus();
+				return;
+			}
+			if ( !artist ) {
+				setStatus( 'ua-upload-status', 'Artist is required.', 'error' );
+				el( 'ua-artist' ).focus();
+				return;
+			}
+
 			startFinalization();
 		} );
 
-		el( 'uc-delete-draft-btn' ).addEventListener( 'click', function () {
+		el( 'ua-delete-draft-btn' ).addEventListener( 'click', function () {
 			if ( !currentDraftId || !confirm( 'Delete this draft? This cannot be undone.' ) ) {
 				return;
 			}
-			fetch( API_URL + '/draft-content/' + currentDraftId, {
+			fetch( API_URL + '/draft-album/' + currentDraftId, {
 				method: 'DELETE',
 				headers: AUTH_HEADERS
 			} ).then( function () {
 				currentDraftId = null;
-				showStep( 'uc-step-upload' );
-				setStatus( 'uc-upload-status', 'Draft deleted.', '' );
+				draftFiles = [];
+				showStep( 'ua-step-upload' );
+				setStatus( 'ua-upload-status', 'Draft deleted.', '' );
 			} );
 		} );
 	}
@@ -265,24 +360,23 @@
 			return;
 		}
 
-		showStep( 'uc-step-progress' );
+		showStep( 'ua-step-progress' );
 		setProgress( 0 );
-		setStatus( 'uc-progress-status', 'Starting finalization...', '' );
+		setStatus( 'ua-progress-status', 'Starting album finalization...', '' );
 
 		var headers = Object.assign( {}, AUTH_HEADERS, {
 			'Content-Type': 'application/json'
 		} );
 
 		var body = JSON.stringify( {
-			title: el( 'uc-title' ).value || null,
-			description: el( 'uc-description' ).value || null,
-			file_type: el( 'uc-file-type' ).value || null,
-			subsequent_to: el( 'uc-subsequent-to' ).value || null,
-			transcode_hls: el( 'uc-transcode-hls' ).checked,
-			metadata: {}
+			album_title: el( 'ua-album-title' ).value.trim(),
+			artist: el( 'ua-artist' ).value.trim(),
+			year: el( 'ua-year' ).value.trim() || null,
+			description: el( 'ua-description' ).value.trim() || null,
+			tracks: getTrackOrder()
 		} );
 
-		fetch( API_URL + '/draft-content/' + currentDraftId + '/finalize', {
+		fetch( API_URL + '/draft-album/' + currentDraftId + '/finalize', {
 			method: 'POST',
 			headers: headers,
 			body: body
@@ -294,7 +388,7 @@
 			}
 			return readSSEStream( resp );
 		} ).catch( function ( err ) {
-			setStatus( 'uc-progress-status', 'Error: ' + err.message, 'error' );
+			setStatus( 'ua-progress-status', 'Error: ' + err.message, 'error' );
 		} );
 	}
 
@@ -338,35 +432,40 @@
 	function handleSSEEvent( event, data ) {
 		if ( event === 'progress' ) {
 			setProgress( data.progress || 0 );
-			setStatus( 'uc-progress-status', data.message || '', '' );
+			var msg = data.message || '';
+			if ( data.track ) {
+				msg += ' (' + data.track + ')';
+			}
+			setStatus( 'ua-progress-status', msg, '' );
+		} else if ( event === 'warning' ) {
+			setStatus( 'ua-progress-status', 'Warning: ' + data.message, 'warning' );
 		} else if ( event === 'complete' ) {
 			setProgress( 100 );
-			setStatus( 'uc-progress-status', 'Pinning complete!', 'success' );
+			setStatus( 'ua-progress-status', 'Album pinned!', 'success' );
 			renderResult( data );
 			currentDraftId = null;
+			draftFiles = [];
 		} else if ( event === 'error' ) {
-			setStatus( 'uc-progress-status',
+			setStatus( 'ua-progress-status',
 				'Error: ' + ( data.message || 'Unknown error' ), 'error' );
 		}
 	}
 
 	function setProgress( pct ) {
-		var fill = document.querySelector( '#uc-progress-bar .uc-progress-fill' );
+		var fill = document.querySelector( '#ua-progress-bar .uc-progress-fill' );
 		if ( fill ) {
 			fill.style.width = pct + '%';
 		}
 	}
 
 	function renderResult( data ) {
-		var resultEl = el( 'uc-result' );
+		var resultEl = el( 'ua-result' );
 		var releaseUrl = mw.util.getUrl( 'Release:' + data.cid );
 
 		var html = '<div class="uc-result-card">';
-		html += '<h4>Content Pinned Successfully</h4>';
+		html += '<h4>' + mw.html.escape( data.album_title || 'Album' ) +
+			' &mdash; ' + mw.html.escape( data.artist || '' ) + '</h4>';
 		html += '<table class="wikitable">';
-		if ( data.title ) {
-			html += '<tr><th>Title</th><td>' + mw.html.escape( data.title ) + '</td></tr>';
-		}
 		html += '<tr><th>CID</th><td class="release-cid-cell">' +
 			mw.html.escape( data.cid ) + '</td></tr>';
 		if ( data.gateway_url ) {
@@ -374,21 +473,27 @@
 				'" target="_blank">' + mw.html.escape( data.gateway_url ) + '</a></td></tr>';
 		}
 		html += '<tr><th>Pinata</th><td>' + ( data.pinata ? 'Yes' : 'No' ) + '</td></tr>';
-		if ( data.subsequent_to ) {
-			html += '<tr><th>Supersedes</th><td>' +
-				mw.html.escape( data.subsequent_to ) + '</td></tr>';
-		}
 		html += '</table>';
+
+		// Track listing
+		if ( data.tracks && data.tracks.length ) {
+			html += '<h5>Tracks</h5><ol>';
+			data.tracks.forEach( function ( t ) {
+				html += '<li>' + mw.html.escape( t.title || t.filename ) + '</li>';
+			} );
+			html += '</ol>';
+		}
+
 		html += '<p><a href="' + mw.html.escape( releaseUrl ) +
-			'" class="cdx-button cdx-button--action-progressive">View Release Page</a></p>';
-		html += '<button id="uc-start-over" class="cdx-button">Upload More Content</button>';
+			'" class="cdx-button cdx-button--action-progressive">Create Release Page</a></p>';
+		html += '<button id="ua-start-over" class="cdx-button">Upload Another Album</button>';
 		html += '</div>';
 
 		resultEl.innerHTML = html;
 
-		el( 'uc-start-over' ).addEventListener( 'click', function () {
+		el( 'ua-start-over' ).addEventListener( 'click', function () {
 			resultEl.innerHTML = '';
-			showStep( 'uc-step-upload' );
+			showStep( 'ua-step-upload' );
 		} );
 	}
 
@@ -396,7 +501,7 @@
 
 	function init() {
 		if ( !API_URL ) {
-			el( 'uc-step-upload' ).innerHTML =
+			el( 'ua-step-upload' ).innerHTML =
 				'<p class="uc-status uc-status-error">Delivery Kid URL not configured.</p>';
 			return;
 		}
