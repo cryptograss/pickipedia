@@ -474,11 +474,60 @@
 			text: yaml,
 			summary: 'Finalized: pinned to IPFS as ' + ( resultData.cid || 'unknown' )
 		} ).then( function () {
-			setStatus( 'Saved! Reloading...', 'success' );
-			window.location.reload();
+			setStatus( 'Draft saved. Creating Release page...', 'success' );
+			return createReleasePage( data, resultData );
+		} ).then( function () {
+			setStatus( 'Done! Redirecting to Release page...', 'success' );
+			window.location.href = mw.util.getUrl( 'Release:' + resultData.cid );
 		} ).fail( function ( code, result ) {
-			setStatus( 'Pinned to IPFS but failed to save page: ' +
+			setStatus( 'Pinned to IPFS but failed to save: ' +
 				( result.error ? result.error.info : code ) + '. CID: ' + resultData.cid, 'error' );
+		} );
+	}
+
+	function createReleasePage( draftData, resultData ) {
+		var cid = resultData.cid;
+		if ( !cid ) {
+			return $.Deferred().resolve().promise();
+		}
+
+		var album = draftData.album || {};
+		var lines = [];
+
+		// Build release-yaml content
+		var title = album.artist && album.title
+			? album.artist + ' - ' + album.title
+			: album.title || '';
+		if ( album.version ) {
+			title += ' (' + album.version + ')';
+		}
+		lines.push( 'title: ' + quote( title ) );
+
+		if ( album.description ) {
+			lines.push( 'description: ' + quote( album.description ) );
+		}
+
+		if ( draftData.blockheight ) {
+			lines.push( 'blockheight: ' + draftData.blockheight );
+		}
+
+		lines.push( 'pinned_on:' );
+		lines.push( '  - delivery-kid' );
+
+		var releaseYaml = lines.join( '\n' ) + '\n';
+
+		var api = new mw.Api();
+		return api.postWithEditToken( {
+			action: 'edit',
+			title: 'Release:' + cid,
+			text: releaseYaml,
+			summary: 'Release created from draft: ' + ( album.title || cid ),
+			createonly: true
+		} ).fail( function ( code ) {
+			// If page already exists, that's fine
+			if ( code === 'articleexists' ) {
+				return $.Deferred().resolve().promise();
+			}
 		} );
 	}
 
