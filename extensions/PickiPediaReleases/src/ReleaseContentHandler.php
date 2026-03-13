@@ -214,7 +214,12 @@ YAML;
 			$html .= Html::openElement( 'tr' );
 			$html .= Html::element( 'th', [], 'BitTorrent' );
 			$html .= Html::rawElement( 'td', [],
-				$this->renderTorrentLink( $data['bittorrent_infohash'], $data['title'] ?? $cid )
+				$this->renderTorrentLink(
+					$data['bittorrent_infohash'],
+					$data['title'] ?? $cid,
+					$data['bittorrent_trackers'] ?? [],
+					$cid
+				)
 			);
 			$html .= Html::closeElement( 'tr' );
 		}
@@ -371,12 +376,21 @@ YAML;
 	 *
 	 * @param string $infohash
 	 * @param string $name
+	 * @param array $trackers
+	 * @param string|null $cid IPFS CID for webseed URL
 	 * @return string
 	 */
-	private function renderTorrentLink( string $infohash, string $name ): string {
+	private function renderTorrentLink( string $infohash, string $name, array $trackers = [], ?string $cid = null ): string {
 		$magnetUri = "magnet:?xt=urn:btih:{$infohash}";
 		if ( $name ) {
 			$magnetUri .= "&dn=" . urlencode( $name );
+		}
+		foreach ( $trackers as $tracker ) {
+			$magnetUri .= "&tr=" . urlencode( $tracker );
+		}
+		if ( $cid ) {
+			$normalizedCid = str_starts_with( $cid, 'Bafy' ) ? strtolower( $cid ) : $cid;
+			$magnetUri .= "&ws=" . urlencode( "https://ipfs.delivery-kid.cryptograss.live/ipfs/{$normalizedCid}/" );
 		}
 
 		return Html::rawElement( 'span', [ 'class' => 'release-torrent-link' ],
