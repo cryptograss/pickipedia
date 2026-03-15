@@ -218,7 +218,7 @@ YAML;
 					$data['bittorrent_infohash'],
 					$data['title'] ?? $cid,
 					$data['bittorrent_trackers'] ?? [],
-					$cid
+					$data['bittorrent_webseeds'] ?? []
 				)
 			);
 			$html .= Html::closeElement( 'tr' );
@@ -380,7 +380,7 @@ YAML;
 	 * @param string|null $cid IPFS CID for webseed URL
 	 * @return string
 	 */
-	private function renderTorrentLink( string $infohash, string $name, array $trackers = [], ?string $cid = null ): string {
+	private function renderTorrentLink( string $infohash, string $name, array $trackers = [], array $webseeds = [] ): string {
 		$magnetUri = "magnet:?xt=urn:btih:{$infohash}";
 		if ( $name ) {
 			$magnetUri .= "&dn=" . urlencode( $name );
@@ -388,9 +388,8 @@ YAML;
 		foreach ( $trackers as $tracker ) {
 			$magnetUri .= "&tr=" . urlencode( $tracker );
 		}
-		if ( $cid ) {
-			$normalizedCid = str_starts_with( $cid, 'Bafy' ) ? strtolower( $cid ) : $cid;
-			$magnetUri .= "&ws=" . urlencode( "https://delivery-kid.cryptograss.live/webseed/{$normalizedCid}/" );
+		foreach ( $webseeds as $webseed ) {
+			$magnetUri .= "&ws=" . urlencode( $webseed );
 		}
 
 		return Html::rawElement( 'span', [ 'class' => 'release-torrent-link' ],
