@@ -390,7 +390,7 @@ YAML;
 		}
 		if ( $cid ) {
 			$normalizedCid = str_starts_with( $cid, 'Bafy' ) ? strtolower( $cid ) : $cid;
-			$magnetUri .= "&ws=" . urlencode( "https://ipfs.delivery-kid.cryptograss.live/ipfs/{$normalizedCid}/" );
+			$magnetUri .= "&ws=" . urlencode( "https://delivery-kid.cryptograss.live/webseed/{$normalizedCid}/" );
 		}
 
 		return Html::rawElement( 'span', [ 'class' => 'release-torrent-link' ],
