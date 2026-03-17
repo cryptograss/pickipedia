@@ -101,9 +101,13 @@
 
 	function collectFormData() {
 		var data = JSON.parse( JSON.stringify( draftData ) );
-		var type = data.type || 'album';
+		// Draft type is set by the creating Special page's JS:
+		//   Special:UploadAlbum  → type: album    (ext.pickipediaReleases.uploadAlbum.js)
+		//   Special:UploadContent → type: content  (ext.pickipediaReleases.upload.js)
+		//   Blue Railroad bot    → type: blue-railroad
+		var draftType = data.type || 'album';
 
-		if ( type === 'album' ) {
+		if ( draftType === 'album' ) {
 			// Album fields
 			var titleEl = el( 'rd-album-title' );
 			var artistEl = el( 'rd-artist' );
@@ -153,22 +157,22 @@
 			if ( !data.content ) {
 				data.content = {};
 			}
-			var ctEl = el( 'rd-content-title' );
-			var cdEl = el( 'rd-content-description' );
-			var cfEl = el( 'rd-content-file-type' );
-			var csEl = el( 'rd-content-subsequent-to' );
+			var contentTitleEl = el( 'rd-content-title' );
+			var contentDescriptionEl = el( 'rd-content-description' );
+			var contentFileTypeEl = el( 'rd-content-file-type' );
+			var contentSubsequentToEl = el( 'rd-content-subsequent-to' );
 
-			if ( ctEl ) {
-				data.content.title = ctEl.value;
+			if ( contentTitleEl ) {
+				data.content.title = contentTitleEl.value;
 			}
-			if ( cdEl ) {
-				data.content.description = cdEl.value;
+			if ( contentDescriptionEl ) {
+				data.content.description = contentDescriptionEl.value;
 			}
-			if ( cfEl ) {
-				data.content.file_type = cfEl.value;
+			if ( contentFileTypeEl ) {
+				data.content.file_type = contentFileTypeEl.value;
 			}
-			if ( csEl ) {
-				data.content.subsequent_to = csEl.value;
+			if ( contentSubsequentToEl ) {
+				data.content.subsequent_to = contentSubsequentToEl.value;
 			}
 		}
 
@@ -234,11 +238,12 @@
 		// Build YAML manually for clean output (no library dependency)
 		// This is a prototype for the future Release API (issue #60)
 		var lines = [];
-		var type = data.type || 'album';
+		// See collectFormData() for where draftType originates
+		var draftType = data.type || 'album';
 
 		// Envelope — common to all draft types
 		lines.push( 'draft_id: ' + quote( data.draft_id || '' ) );
-		lines.push( 'type: ' + quote( type ) );
+		lines.push( 'type: ' + quote( draftType ) );
 		lines.push( 'source: ' + quote( data.source || '' ) );
 		lines.push( 'commit: ' + quote( data.commit || '' ) );
 		lines.push( 'uploader: ' + quote( data.uploader || '' ) );
@@ -250,7 +255,7 @@
 		}
 
 		// Type-specific payload
-		if ( type === 'album' ) {
+		if ( draftType === 'album' ) {
 			lines.push( 'album:' );
 			var album = data.album || {};
 			lines.push( '    title: ' + quote( album.title || '' ) );
@@ -350,7 +355,8 @@
 		finalizeBtn.addEventListener( 'click', function () {
 			var data = collectFormData();
 			var draftId = data.draft_id;
-			var type = data.type || 'album';
+			// See collectFormData() for where draftType originates
+			var draftType = data.type || 'album';
 
 			if ( !draftId ) {
 				showFinalizeError( 'No draft ID — cannot finalize.' );
@@ -375,7 +381,7 @@
 
 			var endpoint, body;
 
-			if ( type === 'album' ) {
+			if ( draftType === 'album' ) {
 				var album = data.album || {};
 				if ( !album.title ) {
 					showFinalizeError( 'Album title is required to finalize.' );
