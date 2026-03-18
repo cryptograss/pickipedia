@@ -83,20 +83,24 @@ class SpecialDeliverVideo extends SpecialPage {
 		$html .= '</div>';
 		$html .= '<div id="dv-file-list" class="uc-file-list"></div>';
 
-		// Metadata fields (pre-upload)
-		$html .= '<h3>Video Metadata</h3>';
+		// Required: Title
+		$html .= '<h3>Title <span class="uc-required">(required)</span></h3>';
 		$html .= '<div class="uc-metadata-form">';
-
-		// Title
 		$html .= '<div class="uc-field">';
-		$html .= Html::element( 'label', [ 'for' => 'dv-title' ], 'Title' );
 		$html .= Html::element( 'input', [
 			'type' => 'text',
 			'id' => 'dv-title',
 			'class' => 'cdx-text-input__input',
 			'placeholder' => 'e.g. Flatpicking at Station Inn',
+			'required' => true,
 		] );
 		$html .= '</div>';
+		$html .= '</div>';
+
+		// Optional metadata
+		$html .= '<h3>Optional Details</h3>';
+		$html .= '<p class="uc-hint">All of these can also be added or changed later on the draft page.</p>';
+		$html .= '<div class="uc-metadata-form">';
 
 		// Venue
 		$html .= '<div class="uc-field">';
@@ -120,6 +124,25 @@ class SpecialDeliverVideo extends SpecialPage {
 		] );
 		$html .= '</div>';
 
+		// Content blockheight — when the video was recorded
+		$html .= '<div class="uc-field">';
+		$html .= Html::element( 'label', [ 'for' => 'dv-content-blockheight' ], 'When was this recorded? (Ethereum block height)' );
+		$html .= '<div class="rd-blockheight-row">';
+		$html .= Html::element( 'input', [
+			'type' => 'number',
+			'id' => 'dv-content-blockheight',
+			'class' => 'cdx-text-input__input rd-blockheight-input',
+			'placeholder' => 'e.g. 24631327',
+		] );
+		$html .= Html::element( 'button', [
+			'type' => 'button',
+			'id' => 'dv-blockheight-now',
+			'class' => 'cdx-button',
+		], 'Current Block' );
+		$html .= Html::element( 'span', [ 'id' => 'dv-blockheight-date', 'class' => 'rd-blockheight-date' ], '' );
+		$html .= '</div>';
+		$html .= '</div>';
+
 		// Description
 		$html .= '<div class="uc-field">';
 		$html .= Html::element( 'label', [ 'for' => 'dv-description' ], 'Description' );
@@ -132,6 +155,12 @@ class SpecialDeliverVideo extends SpecialPage {
 		$html .= '</div>';
 
 		$html .= '</div>';
+
+		// Hidden: upload blockheight — captured automatically on page load
+		$html .= Html::element( 'input', [
+			'type' => 'hidden',
+			'id' => 'dv-upload-blockheight',
+		] );
 
 		// Upload button
 		$html .= '<button id="dv-upload-btn" class="cdx-button cdx-button--action-progressive cdx-button--weight-primary" disabled>Upload &amp; Analyze</button>';

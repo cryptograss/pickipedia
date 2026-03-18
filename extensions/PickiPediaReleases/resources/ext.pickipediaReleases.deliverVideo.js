@@ -54,6 +54,97 @@
 		return val;
 	}
 
+	// -- Ethereum block height --
+
+	// Merge-genesis constants for block↔timestamp conversion
+	var MERGE_BLOCK = 15537394;
+	var MERGE_TIMESTAMP = 1663224179;
+	var SLOT_TIME = 12;
+
+	function timestampToBlock( ts ) {
+		return MERGE_BLOCK + Math.floor( ( ts - MERGE_TIMESTAMP ) / SLOT_TIME );
+	}
+
+	function blockToTimestamp( block ) {
+		return MERGE_TIMESTAMP + ( block - MERGE_BLOCK ) * SLOT_TIME;
+	}
+
+	function fetchCurrentBlock() {
+		return fetch( 'https://ethereum-rpc.publicnode.com', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify( {
+				jsonrpc: '2.0',
+				method: 'eth_blockNumber',
+				params: [],
+				id: 1
+			} )
+		} )
+			.then( function ( r ) { return r.json(); } )
+			.then( function ( resp ) {
+				if ( resp.result ) {
+					return parseInt( resp.result, 16 );
+				}
+				// Fallback: estimate from current time
+				return timestampToBlock( Math.floor( Date.now() / 1000 ) );
+			} )
+			.catch( function () {
+				return timestampToBlock( Math.floor( Date.now() / 1000 ) );
+			} );
+	}
+
+	function updateBlockDateLabel( block, labelEl ) {
+		if ( !labelEl || !block ) {
+			return;
+		}
+		var ts = blockToTimestamp( block );
+		var date = new Date( ts * 1000 );
+		labelEl.textContent = '≈ ' + date.toLocaleDateString( undefined, {
+			year: 'numeric', month: 'short', day: 'numeric'
+		} );
+	}
+
+	function initBlockheightControls() {
+		var nowBtn = el( 'dv-blockheight-now' );
+		var bhInput = el( 'dv-content-blockheight' );
+		var dateLabel = el( 'dv-blockheight-date' );
+
+		if ( !nowBtn || !bhInput ) {
+			return;
+		}
+
+		// Show date estimate when user types a block number
+		bhInput.addEventListener( 'input', function () {
+			var val = parseInt( bhInput.value, 10 );
+			if ( val > MERGE_BLOCK ) {
+				updateBlockDateLabel( val, dateLabel );
+			} else {
+				dateLabel.textContent = '';
+			}
+		} );
+
+		// "Current Block" button
+		nowBtn.addEventListener( 'click', function () {
+			nowBtn.disabled = true;
+			nowBtn.textContent = 'Fetching...';
+			fetchCurrentBlock().then( function ( block ) {
+				bhInput.value = block;
+				updateBlockDateLabel( block, dateLabel );
+			} ).finally( function () {
+				nowBtn.disabled = false;
+				nowBtn.textContent = 'Current Block';
+			} );
+		} );
+
+		// Capture upload-time blockheight in hidden field on page load
+		fetchCurrentBlock().then( function ( block ) {
+			var hiddenEl = el( 'dv-upload-blockheight' );
+			if ( hiddenEl ) {
+				hiddenEl.value = block;
+			}
+		} );
+	}
+
 	// -- File Upload --
 
 	function initUploadStep() {
@@ -118,6 +209,12 @@
 
 		uploadBtn.addEventListener( 'click', function () {
 			if ( selectedFiles.length === 0 ) {
+				return;
+			}
+			var titleValue = ( el( 'dv-title' ) || {} ).value || '';
+			if ( !titleValue.trim() ) {
+				setStatus( 'dv-upload-status', 'Title is required.', 'error' );
+				el( 'dv-title' ).focus();
 				return;
 			}
 			doUpload( selectedFiles );
@@ -232,6 +329,8 @@
 		var venue = ( el( 'dv-venue' ) || {} ).value || '';
 		var performersRaw = ( el( 'dv-performers' ) || {} ).value || '';
 		var description = ( el( 'dv-description' ) || {} ).value || '';
+		var contentBlockheight = ( el( 'dv-content-blockheight' ) || {} ).value || '';
+		var uploadBlockheight = ( el( 'dv-upload-blockheight' ) || {} ).value || '';
 
 		var performers = performersRaw.split( ',' ).map( function ( s ) {
 			return s.trim();
@@ -243,9 +342,13 @@
 		lines.push( 'draft_id: ' + draftId );
 		lines.push( 'type: video' );
 		lines.push( 'source: special-deliver-video' );
+		// commit: the maybelle-config build hash that delivery-kid reports
 		lines.push( 'commit: ' + ( draft.commit || 'unknown' ) );
 		lines.push( 'uploader: ' + quoteYamlValue( mw.config.get( 'wgUploadUser' ) || '' ) );
-		lines.push( 'blockheight: null' );
+		// blockheight: when the video content was recorded (user-provided, optional)
+		lines.push( 'blockheight: ' + ( contentBlockheight ? contentBlockheight : 'null' ) );
+		// upload_blockheight: Ethereum block at the moment of upload (auto-captured)
+		lines.push( 'upload_blockheight: ' + ( uploadBlockheight ? uploadBlockheight : 'null' ) );
 		lines.push( 'content:' );
 		lines.push( '    title: ' + quoteYamlValue( title ) );
 		lines.push( '    description: ' + quoteYamlValue( description ) );
@@ -295,6 +398,7 @@
 		}
 
 		initUploadStep();
+		initBlockheightControls();
 	}
 
 	mw.loader.using( [ 'mediawiki.util', 'mediawiki.api' ] ).then( init );

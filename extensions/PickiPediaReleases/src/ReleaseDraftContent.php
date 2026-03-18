@@ -90,6 +90,11 @@ class ReleaseDraftContent extends TextContent {
 		return $bh !== null ? (int)$bh : null;
 	}
 
+	public function getUploadBlockheight(): ?int {
+		$bh = $this->getData()['upload_blockheight'] ?? null;
+		return $bh !== null ? (int)$bh : null;
+	}
+
 	public function getAlbumData(): array {
 		return $this->getData()['album'] ?? [];
 	}

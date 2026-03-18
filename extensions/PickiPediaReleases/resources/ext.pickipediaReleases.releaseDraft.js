@@ -209,10 +209,16 @@
 			}
 		}
 
-		// Blockheight
+		// Blockheight (content time — user-editable)
 		var blockheightEl = el( 'rd-blockheight' );
 		if ( blockheightEl && blockheightEl.value.trim() ) {
 			data.blockheight = parseInt( blockheightEl.value.trim(), 10 ) || null;
+		}
+
+		// Upload blockheight (auto-captured, preserved as-is)
+		var uploadBlockheightEl = el( 'rd-upload-blockheight' );
+		if ( uploadBlockheightEl && uploadBlockheightEl.value ) {
+			data.upload_blockheight = parseInt( uploadBlockheightEl.value, 10 ) || null;
 		}
 
 		return data;
@@ -285,6 +291,10 @@
 			lines.push( 'blockheight: ' + data.blockheight );
 		} else {
 			lines.push( 'blockheight: null' );
+		}
+
+		if ( data.upload_blockheight ) {
+			lines.push( 'upload_blockheight: ' + data.upload_blockheight );
 		}
 
 		// Type-specific payload

@@ -531,6 +531,21 @@ class ReleaseDraftContentHandler extends TextContentHandler {
 		] );
 		$html .= Html::closeElement( 'div' );
 
+		// Upload blockheight — auto-captured at upload time, read-only
+		$uploadBlockheight = $data['upload_blockheight'] ?? null;
+		if ( $uploadBlockheight ) {
+			$html .= Html::openElement( 'div', [ 'class' => 'uc-field' ] );
+			$html .= Html::element( 'label', [], 'Upload block height' );
+			$html .= Html::element( 'span', [ 'class' => 'rd-upload-blockheight' ],
+				(string)$uploadBlockheight );
+			$html .= Html::element( 'input', [
+				'type' => 'hidden',
+				'id' => 'rd-upload-blockheight',
+				'value' => $uploadBlockheight,
+			] );
+			$html .= Html::closeElement( 'div' );
+		}
+
 		$html .= Html::closeElement( 'div' );
 		$html .= Html::closeElement( 'div' );
 
