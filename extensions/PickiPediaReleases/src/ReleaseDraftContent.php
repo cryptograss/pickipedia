@@ -118,6 +118,14 @@ class ReleaseDraftContent extends TextContent {
 		return $this->getContentData()['title'] ?? null;
 	}
 
+	public function getVenue(): ?string {
+		return $this->getContentData()['venue'] ?? null;
+	}
+
+	public function getPerformers(): array {
+		return $this->getContentData()['performers'] ?? [];
+	}
+
 	// -- AbstractContent methods --
 
 	public function validate(): StatusValue {
@@ -173,6 +181,12 @@ class ReleaseDraftContent extends TextContent {
 			}
 			if ( !empty( $content['description'] ) ) {
 				$parts[] = $content['description'];
+			}
+			if ( !empty( $content['venue'] ) ) {
+				$parts[] = $content['venue'];
+			}
+			foreach ( $content['performers'] ?? [] as $performer ) {
+				$parts[] = $performer;
 			}
 		}
 

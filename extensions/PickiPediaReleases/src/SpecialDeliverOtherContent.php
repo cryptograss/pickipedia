@@ -1,12 +1,12 @@
 <?php
 /**
- * Special page for uploading content directly to delivery-kid.
+ * Special page for delivering other content via delivery-kid.
  *
  * Wiki login is the auth layer. PHP generates a short-lived HMAC token.
  * JavaScript uploads files directly to delivery-kid — no bytes pass through PHP.
  *
  * Flow:
- * 1. User logs in to wiki (must have 'upload-to-delivery-kid' right)
+ * 1. User logs in to wiki
  * 2. PHP generates HMAC upload token from shared API key
  * 3. JS uploads directly to delivery-kid with the token
  * 4. JS creates a ReleaseDraft wiki page and redirects there
@@ -21,10 +21,10 @@ namespace MediaWiki\Extension\PickiPediaReleases;
 use MediaWiki\Html\Html;
 use MediaWiki\SpecialPage\SpecialPage;
 
-class SpecialUploadContent extends SpecialPage {
+class SpecialDeliverOtherContent extends SpecialPage {
 
 	public function __construct() {
-		parent::__construct( 'UploadContent', 'upload-to-delivery-kid' );
+		parent::__construct( 'DeliverOtherContent' );
 	}
 
 	/**
@@ -32,12 +32,12 @@ class SpecialUploadContent extends SpecialPage {
 	 */
 	public function execute( $par ): void {
 		$this->setHeaders();
-		$this->checkPermissions();
+		$this->requireNamedUser();
 		$out = $this->getOutput();
 		$user = $this->getUser();
 
 		$out->addModuleStyles( [ 'ext.pickipediaReleases.upload.styles' ] );
-		$out->addModules( [ 'ext.pickipediaReleases.upload' ] );
+		$out->addModules( [ 'ext.pickipediaReleases.deliverOtherContent' ] );
 
 		// Generate HMAC upload token
 		$apiKey = $this->getConfig()->get( 'DeliveryKidApiKey' );
@@ -55,7 +55,7 @@ class SpecialUploadContent extends SpecialPage {
 		] );
 
 		// Editable intro text
-		$this->addWikitextMessage( 'special-uploadcontent-header' );
+		$this->addWikitextMessage( 'special-deliverothercontent-header' );
 
 		$out->addHTML( $this->renderPageStructure() );
 	}

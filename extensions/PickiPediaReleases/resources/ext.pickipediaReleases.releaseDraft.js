@@ -102,9 +102,10 @@
 	function collectFormData() {
 		var data = JSON.parse( JSON.stringify( draftData ) );
 		// Draft type is set by the creating Special page's JS:
-		//   Special:UploadAlbum  → type: record   (ext.pickipediaReleases.uploadAlbum.js)
-		//   Special:UploadContent → type: other    (ext.pickipediaReleases.upload.js)
-		//   Blue Railroad bot    → type: blue-railroad
+		//   Special:DeliverRecord       → type: record
+		//   Special:DeliverOtherContent → type: other
+		//   Special:DeliverVideo        → type: video
+		//   Blue Railroad bot           → type: blue-railroad
 		var draftType = data.type || 'record';
 
 		if ( draftType === 'record' || draftType === 'album' ) {
@@ -152,8 +153,38 @@
 				} );
 			} );
 			data.tracks = tracks;
+		} else if ( draftType === 'video' ) {
+			// Video fields
+			if ( !data.content ) {
+				data.content = {};
+			}
+			var videoTitleEl = el( 'rd-content-title' );
+			var videoDescriptionEl = el( 'rd-content-description' );
+			var videoFileTypeEl = el( 'rd-content-file-type' );
+			var videoVenueEl = el( 'rd-video-venue' );
+			var videoPerformersEl = el( 'rd-video-performers' );
+
+			if ( videoTitleEl ) {
+				data.content.title = videoTitleEl.value;
+			}
+			if ( videoDescriptionEl ) {
+				data.content.description = videoDescriptionEl.value;
+			}
+			if ( videoFileTypeEl ) {
+				data.content.file_type = videoFileTypeEl.value;
+			}
+			if ( videoVenueEl ) {
+				data.content.venue = videoVenueEl.value;
+			}
+			if ( videoPerformersEl ) {
+				data.content.performers = videoPerformersEl.value.split( ',' ).map( function ( s ) {
+					return s.trim();
+				} ).filter( function ( s ) {
+					return s.length > 0;
+				} );
+			}
 		} else {
-			// Content fields
+			// Content fields (other, blue-railroad, etc.)
 			if ( !data.content ) {
 				data.content = {};
 			}
@@ -286,8 +317,44 @@
 					lines.push( '        metadata: ""' );
 				}
 			} );
+		} else if ( draftType === 'video' ) {
+			// Video type
+			lines.push( 'content:' );
+			var vidContent = data.content || {};
+			lines.push( '    title: ' + quote( vidContent.title || '' ) );
+			lines.push( '    description: ' + quote( vidContent.description || '' ) );
+			lines.push( '    file_type: ' + quote( vidContent.file_type || '' ) );
+			lines.push( '    venue: ' + quote( vidContent.venue || '' ) );
+			lines.push( '    performers:' );
+			( vidContent.performers || [] ).forEach( function ( p ) {
+				lines.push( '        - ' + quote( p ) );
+			} );
+
+			if ( data.files && data.files.length > 0 ) {
+				lines.push( 'files:' );
+				data.files.forEach( function ( f ) {
+					lines.push( '    -' );
+					lines.push( '        original_filename: ' + quote( f.original_filename || '' ) );
+					lines.push( '        media_type: ' + quote( f.media_type || '' ) );
+					if ( f.format ) {
+						lines.push( '        format: ' + quote( f.format ) );
+					}
+					if ( f.duration_seconds ) {
+						lines.push( '        duration_seconds: ' + f.duration_seconds );
+					}
+					if ( f.width ) {
+						lines.push( '        width: ' + f.width );
+					}
+					if ( f.height ) {
+						lines.push( '        height: ' + f.height );
+					}
+					if ( f.size_bytes ) {
+						lines.push( '        size_bytes: ' + f.size_bytes );
+					}
+				} );
+			}
 		} else {
-			// Content (and future types)
+			// Content (other, blue-railroad, etc.)
 			lines.push( 'content:' );
 			var content = data.content || {};
 			lines.push( '    title: ' + quote( content.title || '' ) );
@@ -352,6 +419,11 @@
 			return;
 		}
 
+		// Hide finalize button if user lacks finalize-release permission
+		if ( !mw.config.get( 'wgCanFinalize' ) ) {
+			finalizeBtn.style.display = 'none';
+		}
+
 		finalizeBtn.addEventListener( 'click', function () {
 			var data = collectFormData();
 			var draftId = data.draft_id;
@@ -369,8 +441,15 @@
 				return;
 			}
 
+			// Use finalize token for finalization (requires finalize-release permission)
+			var finalizeToken = mw.config.get( 'wgFinalizeToken' );
+			if ( !finalizeToken ) {
+				showFinalizeError( 'You do not have permission to finalize releases.' );
+				return;
+			}
+
 			var authHeaders = {
-				'X-Upload-Token': mw.config.get( 'wgUploadToken' ),
+				'X-Upload-Token': finalizeToken,
 				'X-Upload-User': mw.config.get( 'wgUploadUser' ),
 				'X-Upload-Timestamp': String( mw.config.get( 'wgUploadTimestamp' ) )
 			};
