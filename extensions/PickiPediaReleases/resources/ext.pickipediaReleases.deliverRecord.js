@@ -231,6 +231,10 @@
 		lines.push( 'commit: ' + commit );
 		lines.push( 'uploader: ' + quoteYamlValue( mw.config.get( 'wgUploadUser' ) || '' ) );
 		lines.push( 'blockheight: null' );
+		var uploadBh = mw.config.get( 'wgUploadBlockheight' );
+		if ( uploadBh ) {
+			lines.push( 'upload_blockheight: ' + uploadBh );
+		}
 		lines.push( 'album:' );
 		lines.push( '    title: ""' );
 		lines.push( '    artist: ""' );

@@ -46,12 +46,20 @@ class SpecialDeliverOtherContent extends SpecialPage {
 		$timestamp = (int)( microtime( true ) * 1000 );
 		$token = hash_hmac( 'sha256', "upload:{$username}:{$timestamp}", $apiKey );
 
+		// Estimate current Ethereum block from wall-clock time
+		// (post-merge: 12s slots from the merge block)
+		$mergeBlock = 15537394;
+		$mergeTimestamp = 1663224179;
+		$slotTime = 12;
+		$uploadBlockheight = $mergeBlock + intdiv( time() - $mergeTimestamp, $slotTime );
+
 		// Pass config to JS — token is short-lived, not a persistent secret
 		$out->addJsConfigVars( [
 			'wgDeliveryKidUrl' => $apiUrl,
 			'wgUploadToken' => $token,
 			'wgUploadUser' => $username,
 			'wgUploadTimestamp' => $timestamp,
+			'wgUploadBlockheight' => $uploadBlockheight,
 		] );
 
 		// Editable intro text

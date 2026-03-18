@@ -69,30 +69,6 @@
 		return MERGE_TIMESTAMP + ( block - MERGE_BLOCK ) * SLOT_TIME;
 	}
 
-	function fetchCurrentBlock() {
-		return fetch( 'https://ethereum-rpc.publicnode.com', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify( {
-				jsonrpc: '2.0',
-				method: 'eth_blockNumber',
-				params: [],
-				id: 1
-			} )
-		} )
-			.then( function ( r ) { return r.json(); } )
-			.then( function ( resp ) {
-				if ( resp.result ) {
-					return parseInt( resp.result, 16 );
-				}
-				// Fallback: estimate from current time
-				return timestampToBlock( Math.floor( Date.now() / 1000 ) );
-			} )
-			.catch( function () {
-				return timestampToBlock( Math.floor( Date.now() / 1000 ) );
-			} );
-	}
-
 	function updateBlockDateLabel( block, labelEl ) {
 		if ( !labelEl || !block ) {
 			return;
@@ -123,26 +99,15 @@
 			}
 		} );
 
-		// "Current Block" button
+		// "Current Block" button — estimate from wall-clock time
 		nowBtn.addEventListener( 'click', function () {
-			nowBtn.disabled = true;
-			nowBtn.textContent = 'Fetching...';
-			fetchCurrentBlock().then( function ( block ) {
-				bhInput.value = block;
-				updateBlockDateLabel( block, dateLabel );
-			} ).finally( function () {
-				nowBtn.disabled = false;
-				nowBtn.textContent = 'Current Block';
-			} );
+			var block = timestampToBlock( Math.floor( Date.now() / 1000 ) );
+			bhInput.value = block;
+			updateBlockDateLabel( block, dateLabel );
 		} );
 
-		// Capture upload-time blockheight in hidden field on page load
-		fetchCurrentBlock().then( function ( block ) {
-			var hiddenEl = el( 'dv-upload-blockheight' );
-			if ( hiddenEl ) {
-				hiddenEl.value = block;
-			}
-		} );
+		// Upload blockheight is server-computed (wgUploadBlockheight) —
+		// read directly in buildVideoYaml(), no hidden field needed.
 	}
 
 	// -- File Upload --
@@ -330,7 +295,7 @@
 		var performersRaw = ( el( 'dv-performers' ) || {} ).value || '';
 		var description = ( el( 'dv-description' ) || {} ).value || '';
 		var contentBlockheight = ( el( 'dv-content-blockheight' ) || {} ).value || '';
-		var uploadBlockheight = ( el( 'dv-upload-blockheight' ) || {} ).value || '';
+		var uploadBlockheight = mw.config.get( 'wgUploadBlockheight' ) || '';
 
 		var performers = performersRaw.split( ',' ).map( function ( s ) {
 			return s.trim();
