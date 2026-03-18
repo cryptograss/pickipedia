@@ -39,7 +39,12 @@
 		return size.toFixed( 1 ) + ' ' + units[ i ];
 	}
 
-	function quote( val ) {
+	/**
+	 * Escape a string for safe inclusion in hand-built YAML.
+	 * Wraps in double quotes if the value contains YAML-special characters.
+	 * No YAML library is available in ResourceLoader, so we do this manually.
+	 */
+	function quoteYamlValue( val ) {
 		if ( val === '' || val === null || val === undefined ) {
 			return '""';
 		}
@@ -228,7 +233,7 @@
 		lines.push( 'type: other' );
 		lines.push( 'source: special-deliver-other-content' );
 		lines.push( 'commit: ' + ( draft.commit || 'unknown' ) );
-		lines.push( 'uploader: ' + quote( mw.config.get( 'wgUploadUser' ) || '' ) );
+		lines.push( 'uploader: ' + quoteYamlValue( mw.config.get( 'wgUploadUser' ) || '' ) );
 		lines.push( 'blockheight: null' );
 		lines.push( 'content:' );
 		lines.push( '    title: ""' );
@@ -239,9 +244,9 @@
 
 		( draft.files || [] ).forEach( function ( f ) {
 			lines.push( '    -' );
-			lines.push( '        original_filename: ' + quote( f.original_filename ) );
-			lines.push( '        media_type: ' + quote( f.media_type || '' ) );
-			lines.push( '        format: ' + quote( f.format || '' ) );
+			lines.push( '        original_filename: ' + quoteYamlValue( f.original_filename ) );
+			lines.push( '        media_type: ' + quoteYamlValue( f.media_type || '' ) );
+			lines.push( '        format: ' + quoteYamlValue( f.format || '' ) );
 			if ( f.duration_seconds ) {
 				lines.push( '        duration_seconds: ' + f.duration_seconds );
 			}
@@ -252,10 +257,10 @@
 				lines.push( '        height: ' + f.height );
 			}
 			if ( f.video_codec ) {
-				lines.push( '        video_codec: ' + quote( f.video_codec ) );
+				lines.push( '        video_codec: ' + quoteYamlValue( f.video_codec ) );
 			}
 			if ( f.audio_codec ) {
-				lines.push( '        audio_codec: ' + quote( f.audio_codec ) );
+				lines.push( '        audio_codec: ' + quoteYamlValue( f.audio_codec ) );
 			}
 			if ( f.size_bytes ) {
 				lines.push( '        size_bytes: ' + f.size_bytes );

@@ -458,7 +458,9 @@ class ReleaseDraftContentHandler extends TextContentHandler {
 
 		$html .= Html::closeElement( 'div' );
 
-		// File info table (same as generic)
+		// File info table — media_type values ("audio", "video", "image", "other")
+		// are set by delivery-kid's analyze.detect_media_type() during upload,
+		// then written into ReleaseDraft YAML by the Deliver page's JS.
 		if ( !empty( $files ) ) {
 			$html .= Html::element( 'h3', [], 'Files' );
 			$html .= Html::openElement( 'table', [ 'class' => 'wikitable' ] );

@@ -229,7 +229,7 @@
 		lines.push( 'type: record' );
 		lines.push( 'source: special-deliver-record' );
 		lines.push( 'commit: ' + commit );
-		lines.push( 'uploader: ' + quote( mw.config.get( 'wgUploadUser' ) || '' ) );
+		lines.push( 'uploader: ' + quoteYamlValue( mw.config.get( 'wgUploadUser' ) || '' ) );
 		lines.push( 'blockheight: null' );
 		lines.push( 'album:' );
 		lines.push( '    title: ""' );
@@ -240,10 +240,10 @@
 
 		tracks.forEach( function ( track ) {
 			lines.push( '    -' );
-			lines.push( '        filename: ' + quote( track.filename ) );
-			lines.push( '        title: ' + quote( track.title ) );
+			lines.push( '        filename: ' + quoteYamlValue( track.filename ) );
+			lines.push( '        title: ' + quoteYamlValue( track.title ) );
 			if ( track.format ) {
-				lines.push( '        format: ' + quote( track.format ) );
+				lines.push( '        format: ' + quoteYamlValue( track.format ) );
 			}
 			if ( track.duration ) {
 				lines.push( '        duration: ' + track.duration );
@@ -257,7 +257,12 @@
 		return lines.join( '\n' ) + '\n';
 	}
 
-	function quote( val ) {
+	/**
+	 * Escape a string for safe inclusion in hand-built YAML.
+	 * Wraps in double quotes if the value contains YAML-special characters.
+	 * No YAML library is available in ResourceLoader, so we do this manually.
+	 */
+	function quoteYamlValue( val ) {
 		if ( val === '' || val === null || val === undefined ) {
 			return '""';
 		}
