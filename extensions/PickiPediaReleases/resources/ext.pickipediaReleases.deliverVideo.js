@@ -73,11 +73,35 @@
 		if ( !labelEl || !block ) {
 			return;
 		}
+		// Local estimate immediately
 		var ts = blockToTimestamp( block );
 		var date = new Date( ts * 1000 );
 		labelEl.textContent = '≈ ' + date.toLocaleDateString( undefined, {
 			year: 'numeric', month: 'short', day: 'numeric'
 		} );
+		// Fetch exact timestamp via public RPC
+		var hexBlock = '0x' + block.toString( 16 );
+		fetch( 'https://ethereum-rpc.publicnode.com', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify( {
+				jsonrpc: '2.0',
+				method: 'eth_getBlockByNumber',
+				params: [ hexBlock, false ],
+				id: 1
+			} )
+		} )
+			.then( function ( r ) { return r.json(); } )
+			.then( function ( resp ) {
+				if ( resp.result && resp.result.timestamp ) {
+					var exactTs = parseInt( resp.result.timestamp, 16 );
+					var exactDate = new Date( exactTs * 1000 );
+					labelEl.textContent = exactDate.toLocaleDateString( undefined, {
+						year: 'numeric', month: 'short', day: 'numeric'
+					} );
+				}
+			} )
+			.catch( function () {} );
 	}
 
 	function initBlockheightControls() {
