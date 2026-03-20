@@ -986,6 +986,8 @@
 		if ( !dateLabel ) {
 			return;
 		}
+
+		// Show local estimate immediately
 		var estimatedTs = blockToTimestamp( blockNumber );
 		var date = new Date( estimatedTs * 1000 );
 		dateLabel.textContent = '≈ ' + date.toLocaleDateString( 'en-US', {
@@ -993,6 +995,34 @@
 			month: 'long',
 			day: 'numeric'
 		} );
+
+		// Fetch actual block timestamp via public Ethereum RPC
+		var hexBlock = '0x' + blockNumber.toString( 16 );
+		fetch( 'https://ethereum-rpc.publicnode.com', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify( {
+				jsonrpc: '2.0',
+				method: 'eth_getBlockByNumber',
+				params: [ hexBlock, false ],
+				id: 1
+			} )
+		} )
+			.then( function ( r ) { return r.json(); } )
+			.then( function ( resp ) {
+				if ( resp.result && resp.result.timestamp ) {
+					var ts = parseInt( resp.result.timestamp, 16 );
+					var exactDate = new Date( ts * 1000 );
+					dateLabel.textContent = exactDate.toLocaleDateString( 'en-US', {
+						year: 'numeric',
+						month: 'long',
+						day: 'numeric'
+					} );
+				}
+			} )
+			.catch( function () {
+				// Local estimate already shown
+			} );
 	}
 
 	// -- Video preview & trim --
