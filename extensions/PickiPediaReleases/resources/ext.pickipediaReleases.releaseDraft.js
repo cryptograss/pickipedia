@@ -591,14 +591,21 @@
 				}
 
 				endpoint = '/draft-content/' + draftId + '/finalize';
-				body = JSON.stringify( {
+				var finalizeBody = {
 					title: content.title || null,
 					description: content.description || null,
 					file_type: content.file_type || null,
 					subsequent_to: content.subsequent_to || null,
 					transcoding_strategy: 'auto',
 					metadata: {}
-				} );
+				};
+				if ( content.trim_start_seconds != null ) {
+					finalizeBody.trim_start_seconds = content.trim_start_seconds;
+				}
+				if ( content.trim_end_seconds != null ) {
+					finalizeBody.trim_end_seconds = content.trim_end_seconds;
+				}
+				body = JSON.stringify( finalizeBody );
 			}
 
 			finalizeBtn.disabled = true;
