@@ -389,17 +389,22 @@ class ReleaseDraftContentHandler extends TextContentHandler {
 
 			$html .= Html::closeElement( 'table' );
 
-			// Video transcoding info
+			// Video preview, trim controls
+			$draftId = $data['draft_id'] ?? '';
 			$hasVideo = false;
 			foreach ( $files as $f ) {
 				if ( ( $f['media_type'] ?? '' ) === 'video' ) {
 					$hasVideo = true;
+					if ( $draftId ) {
+						$html .= $this->renderVideoPreviewAndTrim( $f, $draftId, $data, $status );
+					}
 					break;
 				}
 			}
+
 			if ( $hasVideo ) {
-				$html .= Html::rawElement( 'p', [ 'class' => 'uc-hls-info' ],
-					'Video will be transcoded to AV1 HLS (royalty-free) automatically on finalization.' );
+				$html .= Html::rawElement( 'p', [ 'class' => 'uc-hls-info', 'id' => 'rd-hls-info' ],
+					'Video will be transcoded to AV1 HLS (royalty-free).' );
 			}
 		}
 
@@ -492,92 +497,12 @@ class ReleaseDraftContentHandler extends TextContentHandler {
 
 			$html .= Html::closeElement( 'table' );
 
-			// Embed video player for preview
-			// If preview HLS is ready, JS will use the IPFS CID.
-			// If still processing, JS will show a status message and poll.
-			// Fallback: stream original from staging (large files).
+			// Video preview, trim controls
 			$draftId = $data['draft_id'] ?? '';
 			foreach ( $files as $f ) {
 				if ( ( $f['media_type'] ?? '' ) === 'video' && $draftId ) {
-					$html .= Html::openElement( 'div', [
-						'class' => 'rd-video-preview',
-						'id' => 'rd-video-preview',
-					] );
-
-					// Preview status message (shown/hidden by JS)
-					$html .= Html::element( 'div', [
-						'id' => 'rd-preview-status',
-						'class' => 'rd-preview-status',
-					], '' );
-
-					$html .= Html::element( 'video', [
-						'id' => 'rd-video-player',
-						'class' => 'rd-video-player',
-						'controls' => true,
-						'preload' => 'metadata',
-						'data-draft-id' => $draftId,
-						'data-filename' => $f['original_filename'] ?? '',
-					] );
-
-					$html .= Html::closeElement( 'div' );
-
-					// Trim controls — set start/end from current playback position
-					$trimStart = $data['content']['trim_start_seconds'] ?? '';
-					$trimEnd = $data['content']['trim_end_seconds'] ?? '';
-					$disabled = ( $status !== 'draft' ) ? [ 'disabled' => true ] : [];
-
-					$html .= Html::openElement( 'div', [
-						'class' => 'rd-trim-controls',
-						'id' => 'rd-trim-controls',
-					] );
-					$html .= Html::element( 'h4', [], 'Trim' );
-
-					$html .= Html::openElement( 'div', [ 'class' => 'rd-trim-row' ] );
-
-					$html .= Html::openElement( 'div', [ 'class' => 'rd-trim-field' ] );
-					$html .= Html::element( 'label', [ 'for' => 'rd-trim-start' ], 'Start' );
-					$html .= Html::element( 'input', array_merge( [
-						'type' => 'text',
-						'id' => 'rd-trim-start',
-						'class' => 'rd-trim-input',
-						'value' => $trimStart,
-						'placeholder' => '0:00',
-						'size' => 8,
-					], $disabled ) );
-					$html .= Html::element( 'button', array_merge( [
-						'type' => 'button',
-						'id' => 'rd-trim-set-start',
-						'class' => 'rd-trim-set-btn',
-					], $disabled ), 'Set start' );
-					$html .= Html::closeElement( 'div' );
-
-					$html .= Html::openElement( 'div', [ 'class' => 'rd-trim-field' ] );
-					$html .= Html::element( 'label', [ 'for' => 'rd-trim-end' ], 'End' );
-					$html .= Html::element( 'input', array_merge( [
-						'type' => 'text',
-						'id' => 'rd-trim-end',
-						'class' => 'rd-trim-input',
-						'value' => $trimEnd,
-						'placeholder' => '0:00',
-						'size' => 8,
-					], $disabled ) );
-					$html .= Html::element( 'button', array_merge( [
-						'type' => 'button',
-						'id' => 'rd-trim-set-end',
-						'class' => 'rd-trim-set-btn',
-					], $disabled ), 'Set end' );
-					$html .= Html::closeElement( 'div' );
-
-					$html .= Html::closeElement( 'div' ); // .rd-trim-row
-
-					$html .= Html::element( 'div', [
-						'class' => 'rd-trim-preview',
-						'id' => 'rd-trim-preview',
-					] );
-
-					$html .= Html::closeElement( 'div' ); // .rd-trim-controls
-
-					break; // Only embed first video
+					$html .= $this->renderVideoPreviewAndTrim( $f, $draftId, $data, $status );
+					break;
 				}
 			}
 
@@ -586,6 +511,94 @@ class ReleaseDraftContentHandler extends TextContentHandler {
 		}
 
 		$html .= Html::closeElement( 'div' );
+		return $html;
+	}
+
+	/**
+	 * Render video preview player, preview status, and trim controls.
+	 * Shared by renderGenericForm and renderVideoForm.
+	 */
+	private function renderVideoPreviewAndTrim(
+		array $file, string $draftId, array $data, string $status
+	): string {
+		$html = Html::openElement( 'div', [
+			'class' => 'rd-video-preview',
+			'id' => 'rd-video-preview',
+		] );
+
+		// Preview status message (shown/hidden by JS)
+		$html .= Html::element( 'div', [
+			'id' => 'rd-preview-status',
+			'class' => 'rd-preview-status',
+		], '' );
+
+		$html .= Html::element( 'video', [
+			'id' => 'rd-video-player',
+			'class' => 'rd-video-player',
+			'controls' => true,
+			'preload' => 'metadata',
+			'data-draft-id' => $draftId,
+			'data-filename' => $file['original_filename'] ?? '',
+		] );
+
+		$html .= Html::closeElement( 'div' );
+
+		// Trim controls
+		$trimStart = $data['content']['trim_start_seconds'] ?? '';
+		$trimEnd = $data['content']['trim_end_seconds'] ?? '';
+		$trimDisabled = ( $status !== 'draft' ) ? [ 'disabled' => true ] : [];
+
+		$html .= Html::openElement( 'div', [
+			'class' => 'rd-trim-controls',
+			'id' => 'rd-trim-controls',
+		] );
+		$html .= Html::element( 'h4', [], 'Trim' );
+
+		$html .= Html::openElement( 'div', [ 'class' => 'rd-trim-row' ] );
+
+		$html .= Html::openElement( 'div', [ 'class' => 'rd-trim-field' ] );
+		$html .= Html::element( 'label', [ 'for' => 'rd-trim-start' ], 'Start' );
+		$html .= Html::element( 'input', array_merge( [
+			'type' => 'text',
+			'id' => 'rd-trim-start',
+			'class' => 'rd-trim-input',
+			'value' => $trimStart,
+			'placeholder' => '0:00',
+			'size' => 8,
+		], $trimDisabled ) );
+		$html .= Html::element( 'button', array_merge( [
+			'type' => 'button',
+			'id' => 'rd-trim-set-start',
+			'class' => 'rd-trim-set-btn',
+		], $trimDisabled ), 'Set start' );
+		$html .= Html::closeElement( 'div' );
+
+		$html .= Html::openElement( 'div', [ 'class' => 'rd-trim-field' ] );
+		$html .= Html::element( 'label', [ 'for' => 'rd-trim-end' ], 'End' );
+		$html .= Html::element( 'input', array_merge( [
+			'type' => 'text',
+			'id' => 'rd-trim-end',
+			'class' => 'rd-trim-input',
+			'value' => $trimEnd,
+			'placeholder' => '0:00',
+			'size' => 8,
+		], $trimDisabled ) );
+		$html .= Html::element( 'button', array_merge( [
+			'type' => 'button',
+			'id' => 'rd-trim-set-end',
+			'class' => 'rd-trim-set-btn',
+		], $trimDisabled ), 'Set end' );
+		$html .= Html::closeElement( 'div' );
+
+		$html .= Html::closeElement( 'div' ); // rd-trim-row
+
+		$html .= Html::element( 'div', [
+			'id' => 'rd-trim-preview',
+			'class' => 'rd-trim-preview',
+		], '' );
+
+		$html .= Html::closeElement( 'div' ); // rd-trim-controls
+
 		return $html;
 	}
 

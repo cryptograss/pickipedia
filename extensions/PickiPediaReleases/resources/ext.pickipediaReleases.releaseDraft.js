@@ -185,19 +185,6 @@
 					return s.length > 0;
 				} );
 			}
-			// Trim points
-			var trimStartEl = el( 'rd-trim-start' );
-			var trimEndEl = el( 'rd-trim-end' );
-			if ( trimStartEl && trimStartEl.value.trim() ) {
-				data.content.trim_start_seconds = parseTime( trimStartEl.value );
-			} else {
-				delete data.content.trim_start_seconds;
-			}
-			if ( trimEndEl && trimEndEl.value.trim() ) {
-				data.content.trim_end_seconds = parseTime( trimEndEl.value );
-			} else {
-				delete data.content.trim_end_seconds;
-			}
 		} else {
 			// Content fields (other, blue-railroad, etc.)
 			if ( !data.content ) {
@@ -219,6 +206,22 @@
 			}
 			if ( contentSubsequentToEl ) {
 				data.content.subsequent_to = contentSubsequentToEl.value;
+			}
+		}
+
+		// Trim points (shared across video and content forms)
+		if ( data.content ) {
+			var trimStartEl = el( 'rd-trim-start' );
+			var trimEndEl = el( 'rd-trim-end' );
+			if ( trimStartEl && trimStartEl.value.trim() ) {
+				data.content.trim_start_seconds = parseTime( trimStartEl.value );
+			} else {
+				delete data.content.trim_start_seconds;
+			}
+			if ( trimEndEl && trimEndEl.value.trim() ) {
+				data.content.trim_end_seconds = parseTime( trimEndEl.value );
+			} else {
+				delete data.content.trim_end_seconds;
 			}
 		}
 
