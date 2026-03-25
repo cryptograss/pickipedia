@@ -209,6 +209,20 @@
 			}
 		}
 
+		// Trim points (shared across video and content forms)
+		var trimStartEl = el( 'rd-trim-start' );
+		var trimEndEl = el( 'rd-trim-end' );
+		if ( trimStartEl && trimStartEl.value.trim() ) {
+			data.content.trim_start_seconds = parseFloat( trimStartEl.value );
+		} else {
+			delete data.content.trim_start_seconds;
+		}
+		if ( trimEndEl && trimEndEl.value.trim() ) {
+			data.content.trim_end_seconds = parseFloat( trimEndEl.value );
+		} else {
+			delete data.content.trim_end_seconds;
+		}
+
 		// Blockheight (content time — user-editable)
 		var blockheightEl = el( 'rd-blockheight' );
 		if ( blockheightEl && blockheightEl.value.trim() ) {
@@ -569,14 +583,25 @@
 				}
 
 				endpoint = '/draft-content/' + draftId + '/finalize';
-				body = JSON.stringify( {
+				var finalizeBody = {
 					title: content.title || null,
 					description: content.description || null,
 					file_type: content.file_type || null,
 					subsequent_to: content.subsequent_to || null,
 					transcoding_strategy: 'auto',
 					metadata: {}
-				} );
+				};
+				if ( content.trim_start_seconds != null ) {
+					finalizeBody.trim_start_seconds = content.trim_start_seconds;
+				}
+				if ( content.trim_end_seconds != null ) {
+					finalizeBody.trim_end_seconds = content.trim_end_seconds;
+				}
+				var preserveCheckbox = el( 'rd-preserve-original' );
+				if ( preserveCheckbox && preserveCheckbox.checked ) {
+					finalizeBody.preserve_original = true;
+				}
+				body = JSON.stringify( finalizeBody );
 			}
 
 			finalizeBtn.disabled = true;
@@ -966,26 +991,165 @@
 		var token = mw.config.get( 'wgUploadToken' );
 		var user = mw.config.get( 'wgUploadUser' );
 		var timestamp = mw.config.get( 'wgUploadTimestamp' );
+		var gatewayUrl = mw.config.get( 'wgIpfsGatewayUrl' ) || 'https://ipfs.delivery-kid.cryptograss.live';
 		var draftId = video.getAttribute( 'data-draft-id' );
 		var filename = video.getAttribute( 'data-filename' );
+		var previewStatus = el( 'rd-preview-status' );
+		var hlsInfo = el( 'rd-hls-info' );
 
-		if ( !deliveryKidUrl || !token || !draftId || !filename ) {
-			// Not logged in or missing config — hide the player
-			var container = el( 'rd-video-preview' );
-			if ( container ) {
-				container.style.display = 'none';
-			}
+		if ( !deliveryKidUrl || !draftId ) {
 			return;
 		}
 
-		var src = deliveryKidUrl + '/staging/drafts/' +
-			encodeURIComponent( draftId ) + '/' +
-			encodeURIComponent( filename ) +
-			'?token=' + encodeURIComponent( token ) +
-			'&user=' + encodeURIComponent( user ) +
-			'&timestamp=' + encodeURIComponent( timestamp );
+		function setVideoSrc( src ) {
+			video.src = src;
+			video.style.display = '';
+			if ( previewStatus ) {
+				previewStatus.style.display = 'none';
+			}
+		}
 
-		video.src = src;
+		function showPreviewStatus( msg ) {
+			if ( previewStatus ) {
+				previewStatus.textContent = msg;
+				previewStatus.style.display = '';
+			}
+			video.style.display = 'none';
+		}
+
+		function loadFromStaging() {
+			if ( !token || !filename ) {
+				return false;
+			}
+			var src = deliveryKidUrl + '/staging/drafts/' +
+				encodeURIComponent( draftId ) + '/' +
+				encodeURIComponent( filename ) +
+				'?token=' + encodeURIComponent( token ) +
+				'&user=' + encodeURIComponent( user ) +
+				'&timestamp=' + encodeURIComponent( timestamp );
+			setVideoSrc( src );
+			return true;
+		}
+
+		function pollForPreview() {
+			showPreviewStatus( 'Preview is being transcoded...' );
+			if ( hlsInfo ) {
+				hlsInfo.textContent = 'AV1 HLS transcoding in progress. Preview will appear when ready.';
+			}
+
+			var headers = {};
+			if ( token ) {
+				headers[ 'X-Upload-Token' ] = token;
+				headers[ 'X-Upload-User' ] = user;
+				headers[ 'X-Upload-Timestamp' ] = String( timestamp );
+			}
+
+			var pollInterval = setInterval( function () {
+				fetch( deliveryKidUrl + '/draft-content/' + draftId, {
+					headers: headers
+				} ).then( function ( resp ) {
+					if ( !resp.ok ) {
+						return null;
+					}
+					return resp.json();
+				} ).then( function ( data ) {
+					if ( !data ) {
+						return;
+					}
+					if ( data.preview_status === 'ready' && data.preview_mp4_cid ) {
+						clearInterval( pollInterval );
+						setVideoSrc( gatewayUrl + '/ipfs/' + data.preview_mp4_cid );
+						if ( hlsInfo ) {
+							hlsInfo.textContent = 'AV1 HLS transcode complete. Ready to finalize.';
+						}
+					} else if ( data.preview_status === 'failed' ) {
+						clearInterval( pollInterval );
+						if ( !loadFromStaging() ) {
+							showPreviewStatus( 'Preview transcoding failed.' );
+						}
+						if ( hlsInfo ) {
+							hlsInfo.textContent = 'Preview transcoding failed. Video will be transcoded on finalization.';
+						}
+					}
+				} ).catch( function () {
+					// Silently retry on network errors
+				} );
+			}, 10000 );
+		}
+
+		// Check delivery-kid for preview status
+		if ( token ) {
+			showPreviewStatus( 'Checking preview...' );
+			var headers = {};
+			headers[ 'X-Upload-Token' ] = token;
+			headers[ 'X-Upload-User' ] = user;
+			headers[ 'X-Upload-Timestamp' ] = String( timestamp );
+
+			fetch( deliveryKidUrl + '/draft-content/' + draftId, {
+				headers: headers
+			} ).then( function ( resp ) {
+				return resp.ok ? resp.json() : null;
+			} ).then( function ( data ) {
+				if ( data && data.preview_status === 'ready' && data.preview_mp4_cid ) {
+					setVideoSrc( gatewayUrl + '/ipfs/' + data.preview_mp4_cid );
+					if ( hlsInfo ) {
+						hlsInfo.textContent = 'AV1 HLS transcode complete. Ready to finalize.';
+					}
+				} else if ( data && ( data.preview_status === 'pending' || data.preview_status === 'processing' ) ) {
+					pollForPreview();
+				} else {
+					loadFromStaging();
+				}
+			} ).catch( function () {
+				loadFromStaging();
+			} );
+		} else {
+			showPreviewStatus( 'Log in to preview video.' );
+		}
+
+		// "Set start" / "Set end" buttons grab current playback position
+		var setStartBtn = el( 'rd-trim-set-start' );
+		var setEndBtn = el( 'rd-trim-set-end' );
+		var trimStartInput = el( 'rd-trim-start' );
+		var trimEndInput = el( 'rd-trim-end' );
+		var trimPreview = el( 'rd-trim-preview' );
+
+		function updateTrimPreview() {
+			if ( !trimPreview ) {
+				return;
+			}
+			var s = parseFloat( trimStartInput ? trimStartInput.value : '' );
+			var e = parseFloat( trimEndInput ? trimEndInput.value : '' );
+			if ( !isNaN( s ) && !isNaN( e ) && e > s ) {
+				trimPreview.textContent = 'Trimmed duration: ' + ( e - s ).toFixed( 1 ) + 's';
+			} else if ( !isNaN( s ) && s > 0 ) {
+				trimPreview.textContent = 'Starting from ' + s.toFixed( 1 ) + 's';
+			} else {
+				trimPreview.textContent = '';
+			}
+		}
+
+		if ( setStartBtn && trimStartInput ) {
+			setStartBtn.addEventListener( 'click', function () {
+				trimStartInput.value = video.currentTime.toFixed( 1 );
+				updateTrimPreview();
+			} );
+		}
+		if ( setEndBtn && trimEndInput ) {
+			setEndBtn.addEventListener( 'click', function () {
+				trimEndInput.value = video.currentTime.toFixed( 1 );
+				updateTrimPreview();
+			} );
+		}
+		if ( trimStartInput ) {
+			trimStartInput.addEventListener( 'input', updateTrimPreview );
+		}
+		if ( trimEndInput ) {
+			trimEndInput.addEventListener( 'input', updateTrimPreview );
+		}
+
+		// Show initial trim preview if values are pre-filled
+		updateTrimPreview();
 	}
 
 	// -- Init --
