@@ -260,7 +260,8 @@
 
 .rd-video-player {
 	width: 100%;
-	max-width: 800px;
+	max-width: 560px;
+	max-height: 315px;
 	background: #000;
 	border-radius: 4px;
 }
