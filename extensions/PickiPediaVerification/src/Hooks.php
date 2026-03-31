@@ -50,6 +50,12 @@ class Hooks implements EditFilterMergedContentHook {
 		$config = MediaWikiServices::getInstance()->getMainConfig();
 		$title = $context->getTitle();
 
+		// Never apply to infrastructure namespaces
+		$exemptNamespaces = [ NS_MEDIAWIKI, NS_TEMPLATE, NS_CATEGORY, 828 /* Module */ ];
+		if ( in_array( $title->getNamespace(), $exemptNamespaces, true ) ) {
+			return true;
+		}
+
 		// Only apply to configured namespaces
 		$allowedNamespaces = $config->get( 'PickiPediaVerificationNamespaces' );
 		if ( !in_array( $title->getNamespace(), $allowedNamespaces ) ) {
