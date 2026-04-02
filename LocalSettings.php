@@ -218,7 +218,10 @@ $wgUploadNavigationUrl = '/wiki/Special:MediaUploader';
 $wgMSU_checkAutoCat = true;
 $wgMSU_imgParams = '400px';
 $wgMSU_uploadsize = '1024mb';
-$wgMaxUploadSize = 1024 * 1024 * 1024;  // 1GB in bytes
+$wgMaxUploadSize = 1024 * 1024 * 1024;  // 1GB in bytes - bigger things can go to delivery-kid
+
+$wgMediaUploaderConfig['licensing']['enabled'] = false;
+
 
 # TimedMediaHandler - video/audio playback with transcoding
 wfLoadExtension( 'TimedMediaHandler' );
