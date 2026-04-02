@@ -8,7 +8,7 @@ pipeline {
     environment {
         MEDIAWIKI_VERSION = '1.43.6'
         // Bump this to force rebuild of cached MediaWiki + extensions
-        BUILD_CACHE_VERSION = '3'
+        BUILD_CACHE_VERSION = '4'
         SECRETS_DIR = '/var/jenkins_home/secrets'
         BUILD_DIR = "${WORKSPACE}/build"
         MW_DIR = "${BUILD_DIR}/mediawiki"
@@ -151,6 +151,12 @@ pipeline {
                     # LinkSuggest - autocomplete when typing [[ or {{ in editor
                     if [ ! -d "LinkSuggest" ]; then
                         git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-LinkSuggest.git LinkSuggest
+                    fi
+
+                    # MediaUploader - step-by-step multi-file upload wizard
+                    if [ ! -d "MediaUploader" ]; then
+                        git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-MediaUploader.git MediaUploader
+                        cd MediaUploader && composer install --no-dev --no-interaction && cd ..
                     fi
                 '''
             }
