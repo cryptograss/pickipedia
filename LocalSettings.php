@@ -210,7 +210,7 @@ $wgMSU_useDragDrop = true;
 $wgMSU_showAutoCat = true;
 
 # MediaUploader - step-by-step multi-file upload wizard
-# Disabled on production until extension is installed on the VPS
+# On production: requires running pickipedia-vps ansible to install the extension first
 # wfLoadExtension( 'MediaUploader' );
 $wgMSU_checkAutoCat = true;
 $wgMSU_imgParams = '400px';
