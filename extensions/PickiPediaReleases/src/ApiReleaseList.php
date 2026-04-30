@@ -62,13 +62,17 @@ class ApiReleaseList extends ApiBase {
 		// Get the Release namespace ID
 		$nsRelease = defined( 'NS_RELEASE' ) ? NS_RELEASE : 3004;
 
-		// Query all pages in the Release namespace
+		// Query all release-yaml pages in the Release namespace.
+		// Excludes recording-metadata-yaml subpages (Release:Qm.../Metadata),
+		// which live in the same namespace but represent per-recording
+		// editor data, not IPFS-pinned content.
 		$result = $dbr->newSelectQueryBuilder()
 			->select( [ 'page_id', 'page_title' ] )
 			->from( 'page' )
 			->where( [
 				'page_namespace' => $nsRelease,
 				'page_is_redirect' => 0,
+				'page_content_model' => 'release-yaml',
 			] )
 			->orderBy( 'page_title' )
 			->caller( __METHOD__ )
