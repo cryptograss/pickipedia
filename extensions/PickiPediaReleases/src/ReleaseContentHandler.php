@@ -158,6 +158,25 @@ YAML;
 		// Render the release info
 		$html .= $this->renderReleaseInfo( $cid, $data, $pageRef, $isVideo );
 
+		// "Play in Rabbithole" button for track-type releases that have an
+		// OGG encoding available. Opens the rabbithole demo (player +
+		// timeline editor + ensemble visualization) for this track.
+		$isTrack = ( $data['release_type'] ?? '' ) === 'track';
+		$hasOgg = !empty( $data['encodings']['ogg'] );
+		if ( $cid && $isTrack && $hasOgg ) {
+			$html .= Html::rawElement( 'div',
+				[ 'class' => 'release-rabbithole-link',
+				  'style' => 'margin: 1em 0; padding: 0.75em;'
+					. ' background: linear-gradient(135deg, #9db89a 0%, #87a96b 100%);'
+					. ' border-radius: 6px; text-align: center;' ],
+				Html::element( 'a',
+					[ 'href' => '/rabbithole/pickipedia-demo.html?track=' . rawurlencode( $cid ),
+					  'style' => 'color: #2d5016; text-decoration: none;'
+						. ' font-weight: 600; font-size: 1.05em;' ],
+					'🐇 Play in Rabbithole — edit timeline, see musicians' )
+			);
+		}
+
 		// Get and render backlinks
 		if ( $pageRef ) {
 			$html .= $this->renderBacklinks( $pageRef );
