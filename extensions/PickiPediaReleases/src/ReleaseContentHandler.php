@@ -177,6 +177,15 @@ YAML;
 			);
 		}
 
+		// Track list for record-type Releases. tracks: array is populated
+		// by blue-railroad-import's materialize-tracks job. Each row links
+		// to that track's Release page (where users find the per-track
+		// "Play in Rabbithole" button).
+		$tracks = $data['tracks'] ?? null;
+		if ( is_array( $tracks ) && !empty( $tracks ) ) {
+			$html .= $this->renderTrackList( $tracks );
+		}
+
 		// Get and render backlinks
 		if ( $pageRef ) {
 			$html .= $this->renderBacklinks( $pageRef );
@@ -421,6 +430,63 @@ YAML;
 		$html .= Html::closeElement( 'table' );
 		$html .= Html::closeElement( 'div' );
 
+		return $html;
+	}
+
+	/**
+	 * Render the tracks: array on a record-type Release as a clickable
+	 * list. Each entry links to the track's Release page, which carries
+	 * its own "Play in Rabbithole" button + per-track metadata.
+	 *
+	 * @param array $tracks  Each row: { cid, title, track_number }
+	 * @return string
+	 */
+	private function renderTrackList( array $tracks ): string {
+		$html = Html::openElement( 'div', [
+			'class' => 'release-track-list',
+			'style' => 'margin: 1.25em 0;',
+		] );
+		$html .= Html::element( 'h3',
+			[ 'style' => 'margin: 0 0 0.5em; color: #2d5016;' ],
+			'Tracks' );
+		$html .= Html::openElement( 'ol', [
+			'class' => 'release-track-list-items',
+			'style' => 'list-style: decimal inside; padding: 0; margin: 0;'
+				. ' background: #f8faf6; border: 1px solid #d4d8d2;'
+				. ' border-radius: 6px;',
+		] );
+		foreach ( $tracks as $track ) {
+			if ( !is_array( $track ) || empty( $track['cid'] ) ) {
+				continue;
+			}
+			$cid = $track['cid'];
+			$title = $track['title'] ?? $cid;
+			$num = $track['track_number'] ?? null;
+
+			$row = Html::rawElement( 'li',
+				[ 'style' => 'padding: 0.5em 0.75em;'
+					. ' border-bottom: 1px solid #e5e7e1;' ],
+				Html::element( 'a',
+					[ 'href' => '/wiki/Release:' . rawurlencode( $cid ),
+					  'style' => 'color: #2d5016; font-weight: 600;'
+						. ' margin-right: 0.5em;' ],
+					$title )
+				. Html::element( 'span',
+					[ 'style' => 'font-family: ui-monospace, monospace;'
+						. ' font-size: 0.85em; color: #999;' ],
+					$cid )
+				. ' '
+				. Html::element( 'a',
+					[ 'href' => '/rabbithole/pickipedia-demo.html?track=' . rawurlencode( $cid ),
+					  'title' => 'Play in Rabbithole',
+					  'style' => 'float: right; color: #4a7c59;'
+						. ' text-decoration: none; font-weight: 600;' ],
+					'🐇 Play' )
+			);
+			$html .= $row;
+		}
+		$html .= Html::closeElement( 'ol' );
+		$html .= Html::closeElement( 'div' );
 		return $html;
 	}
 
