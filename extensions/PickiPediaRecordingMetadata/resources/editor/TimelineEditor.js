@@ -234,6 +234,24 @@ class TimelineEditor {
             this.data._notifyChange();
             this._notifyTimelineChange();
 
+            // If we're embedded in an iframe, tell the parent so it can
+            // hot-swap its player's timeline (the parent's
+            // WebampChartifacts isn't reachable from here, but window.parent
+            // is). The demo at /rabbithole/pickipedia-demo.html?track=...
+            // listens for this.
+            if (window.parent && window.parent !== window) {
+                try {
+                    window.parent.postMessage({
+                        type: 'rabbithole:metadata-applied',
+                        timeline: this.data.workingData.timeline,
+                        ensemble: this.data.workingData.ensemble,
+                        standardSectionLength: this.data.workingData.standardSectionLength
+                    }, '*');
+                } catch (e) {
+                    // cross-origin or stringification issue — ignore
+                }
+            }
+
             // Show success
             if (errorDiv) {
                 errorDiv.style.color = '#4a7c59';
