@@ -363,3 +363,131 @@
 	overflow-x: auto;
 	font-size: 0.85em;
 }
+
+/* Upload diagnostics panel */
+.rd-diagnostics {
+	margin: 0 0 1.5em;
+}
+
+.rd-diag-banner {
+	padding: 0.75em 1em;
+	margin-bottom: 0.5em;
+	border-radius: 4px;
+	font-size: 0.95em;
+}
+
+.rd-diag-banner-error {
+	background: #fee;
+	border: 1px solid #d33;
+	color: #b32424;
+}
+
+.rd-diag-banner-info {
+	background: #fef6e7;
+	border: 1px solid #ac6600;
+	color: #ac6600;
+}
+
+.rd-diag-details {
+	background: #f8f9fa;
+	border: 1px solid #c8ccd1;
+	border-radius: 4px;
+	padding: 0.5em 0.75em;
+}
+
+.rd-diag-details > summary {
+	cursor: pointer;
+	font-weight: bold;
+	color: #54595d;
+	padding: 0.25em 0;
+}
+
+.rd-diag-details[open] > summary {
+	margin-bottom: 0.5em;
+}
+
+.rd-diag-meta {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	column-gap: 0.75em;
+	row-gap: 0.15em;
+	margin: 0.25em 0 0.75em;
+	font-size: 0.9em;
+}
+
+.rd-diag-meta dt {
+	font-weight: bold;
+	color: #72777d;
+}
+
+.rd-diag-meta dd {
+	margin: 0;
+	font-family: monospace;
+	color: #54595d;
+}
+
+.rd-diag-details h4 {
+	margin: 0.75em 0 0.25em;
+	font-size: 0.9em;
+	color: #54595d;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.rd-diag-log {
+	font-family: monospace;
+	font-size: 0.82em;
+	line-height: 1.5;
+	max-height: 14em;
+	overflow-y: auto;
+	background: #fff;
+	border: 1px solid #eaecf0;
+	border-radius: 3px;
+	padding: 0.4em 0.6em;
+}
+
+.rd-diag-row {
+	padding: 0.15em 0;
+	border-bottom: 1px solid #f3f4f6;
+	color: #54595d;
+}
+
+.rd-diag-row:last-child {
+	border-bottom: none;
+}
+
+.rd-diag-row-error {
+	color: #b32424;
+	background: #fff5f5;
+	margin: 0.15em -0.3em;
+	padding: 0.25em 0.3em;
+	border-radius: 2px;
+	border-bottom: none;
+}
+
+.rd-diag-ts {
+	color: #a2a9b1;
+	margin-right: 0.4em;
+}
+
+.rd-diag-stage {
+	color: #36c;
+	font-weight: bold;
+	margin-right: 0.3em;
+}
+
+.rd-diag-pct {
+	color: #14866d;
+}
+
+.rd-diag-err {
+	margin: 0.25em 0 0;
+	padding: 0.4em 0.6em;
+	background: #fee;
+	border: 1px solid #fcc;
+	border-radius: 2px;
+	font-size: 0.95em;
+	white-space: pre-wrap;
+	word-break: break-word;
+	color: #b32424;
+}
