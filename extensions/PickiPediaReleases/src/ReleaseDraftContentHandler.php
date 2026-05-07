@@ -103,6 +103,15 @@ class ReleaseDraftContentHandler extends TextContentHandler {
 		// Status banner
 		$html .= $this->renderStatusBanner( $status, $data );
 
+		// Diagnostics panel (populated by JS from delivery-kid /draft-content
+		// — shows upload_log / finalize_log / preview_log so users can see
+		// exactly where a transcode or pin failed instead of a one-liner).
+		$html .= Html::rawElement( 'div', [
+			'id' => 'rd-diagnostics',
+			'class' => 'rd-diagnostics',
+			'hidden' => true,
+		], '' );
+
 		// Type-specific form
 		if ( $type === 'record' || $type === 'album' ) {
 			$html .= $this->renderAlbumForm( $data, $status );

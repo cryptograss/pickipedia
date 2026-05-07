@@ -1241,6 +1241,258 @@
 		updateTrimPreview();
 	}
 
+	// -- Diagnostics panel --
+	//
+	// Pulls draft state from delivery-kid (/draft-content/{id}) and renders
+	// the persisted upload_log / finalize_log / preview_log. Justin's
+	// pinning service writes one entry per phase transition, so when an
+	// upload, transcode, or pin fails the cause is on disk in draft.json
+	// and survives reloads. Without this panel the wiki page just shows
+	// "Preview transcoding failed" as a single static line.
+	//
+	// Auto-expanded on any *_failed state, collapsed on success.
+	// Polls every 10s while status/preview_status is in-flight.
+
+	var DIAG_POLL_INTERVAL_MS = 10000;
+	var diagPollTimer = null;
+
+	function initDiagnostics() {
+		var container = el( 'rd-diagnostics' );
+		var apiUrl = mw.config.get( 'wgDeliveryKidUrl' );
+		var token = mw.config.get( 'wgUploadToken' );
+		var draftType = ( draftData.type || 'record' );
+		var draftId = draftData.draft_id;
+
+		if ( !container || !apiUrl || !draftId || !token ) {
+			return;
+		}
+
+		// Album drafts use /draft-album/{id}, which doesn't expose logs.
+		// Skip — the panel only makes sense for content drafts.
+		if ( draftType === 'record' || draftType === 'album' ) {
+			return;
+		}
+
+		var headers = {
+			'X-Upload-Token': token,
+			'X-Upload-User': mw.config.get( 'wgUploadUser' ),
+			'X-Upload-Timestamp': String( mw.config.get( 'wgUploadTimestamp' ) )
+		};
+
+		function fetchAndRender() {
+			fetch( apiUrl + '/draft-content/' + encodeURIComponent( draftId ), {
+				headers: headers
+			} ).then( function ( resp ) {
+				// 404 means delivery-kid has forgotten the draft (e.g. its
+				// staging dir was rebuilt). Fall back to the snapshot the
+				// pinning-service wrote to ReleaseDraft:{id}/diagnostics
+				// at terminal state — that page outlives delivery-kid storage.
+				if ( resp.status === 404 ) {
+					return loadFromWikiSnapshot();
+				}
+				return resp.ok ? resp.json() : null;
+			} ).then( function ( data ) {
+				if ( !data ) {
+					return;
+				}
+				renderDiagnostics( container, data );
+				if ( diagShouldPoll( data ) ) {
+					if ( !diagPollTimer ) {
+						diagPollTimer = setInterval( fetchAndRender, DIAG_POLL_INTERVAL_MS );
+					}
+				} else if ( diagPollTimer ) {
+					clearInterval( diagPollTimer );
+					diagPollTimer = null;
+				}
+			} ).catch( function () {
+				// Silent — diagnostics are best-effort. The video preview
+				// path surfaces hard fetch failures separately.
+			} );
+		}
+
+		fetchAndRender();
+	}
+
+	/**
+	 * Fetch ReleaseDraft:{id}/diagnostics via the MediaWiki API and parse
+	 * its JSON content. Used as the fallback when delivery-kid's live
+	 * /draft-content endpoint returns 404.
+	 *
+	 * Returns a Promise that resolves to the parsed snapshot dict (with
+	 * an _from_snapshot marker for the renderer) or null if the page
+	 * doesn't exist or its content isn't valid JSON.
+	 */
+	function loadFromWikiSnapshot() {
+		var subpage = mw.config.get( 'wgPageName' ) + '/diagnostics';
+		return new mw.Api().get( {
+			action: 'query',
+			prop: 'revisions',
+			rvprop: 'content',
+			rvslots: 'main',
+			titles: subpage,
+			formatversion: 2
+		} ).then( function ( resp ) {
+			var pages = ( resp.query || {} ).pages || [];
+			var page = pages[ 0 ];
+			if ( !page || page.missing ) {
+				return null;
+			}
+			var rev = page.revisions && page.revisions[ 0 ];
+			var content = rev && rev.slots && rev.slots.main && rev.slots.main.content;
+			if ( !content ) {
+				return null;
+			}
+			try {
+				var data = JSON.parse( content );
+				data._from_snapshot = true;
+				return data;
+			} catch ( e ) {
+				return null;
+			}
+		} ).catch( function () {
+			return null;
+		} );
+	}
+
+	function diagShouldPoll( data ) {
+		var status = data.status || '';
+		var previewStatus = data.preview_status || '';
+		return status === 'uploading' || status === 'finalizing' ||
+			previewStatus === 'pending' || previewStatus === 'processing';
+	}
+
+	function renderDiagnostics( container, data ) {
+		var status = data.status || 'unknown';
+		var previewStatus = data.preview_status || 'none';
+		var uploadLog = data.upload_log || [];
+		var finalizeLog = data.finalize_log || [];
+		var previewLog = data.preview_log || [];
+
+		var failed = ( status === 'upload_failed' ) ||
+			( status === 'finalize_failed' ) ||
+			( previewStatus === 'failed' );
+		var inFlight = ( status === 'uploading' ) || ( status === 'finalizing' ) ||
+			( previewStatus === 'pending' ) || ( previewStatus === 'processing' );
+		var hasAnyLog = uploadLog.length > 0 || finalizeLog.length > 0 || previewLog.length > 0;
+
+		if ( !failed && !inFlight && !hasAnyLog ) {
+			container.hidden = true;
+			container.innerHTML = '';
+			return;
+		}
+		container.hidden = false;
+
+		var parts = [];
+
+		// Banner
+		if ( failed ) {
+			var failedStage;
+			var lastError;
+			if ( status === 'upload_failed' ) {
+				failedStage = 'Upload';
+				lastError = diagFindLastError( uploadLog );
+			} else if ( status === 'finalize_failed' ) {
+				failedStage = 'Finalize';
+				lastError = diagFindLastError( finalizeLog );
+			} else {
+				failedStage = 'Preview transcoding';
+				lastError = diagFindLastError( previewLog );
+			}
+			parts.push(
+				'<div class="rd-diag-banner rd-diag-banner-error">' +
+					'<strong>' + mw.html.escape( failedStage ) + ' failed.</strong> ' +
+					mw.html.escape( lastError || 'See log below for details.' ) +
+				'</div>'
+			);
+		} else if ( inFlight ) {
+			var inFlightLabel;
+			if ( status === 'uploading' ) {
+				inFlightLabel = 'Upload in progress…';
+			} else if ( status === 'finalizing' ) {
+				inFlightLabel = 'Finalize in progress…';
+			} else {
+				inFlightLabel = 'Preview transcoding in progress…';
+			}
+			parts.push(
+				'<div class="rd-diag-banner rd-diag-banner-info">' +
+					mw.html.escape( inFlightLabel ) +
+				'</div>'
+			);
+		}
+
+		// Collapsible details — open when failed, closed when clean/in-flight
+		var openAttr = failed ? ' open' : '';
+		var summaryText = data._from_snapshot ?
+			'Upload diagnostics (snapshot)' :
+			'Upload diagnostics';
+		var details = '<details class="rd-diag-details"' + openAttr + '>';
+		details += '<summary>' + mw.html.escape( summaryText ) + '</summary>';
+		details += '<dl class="rd-diag-meta">';
+		details += '<dt>Status</dt><dd>' + mw.html.escape( status ) + '</dd>';
+		if ( previewStatus !== 'none' ) {
+			details += '<dt>Preview</dt><dd>' + mw.html.escape( previewStatus ) + '</dd>';
+		}
+		// When the data came from the wiki snapshot (delivery-kid forgot
+		// the draft), surface that fact + when the snapshot was taken so
+		// users know they're looking at a frozen view.
+		if ( data._from_snapshot ) {
+			details += '<dt>Source</dt><dd>wiki snapshot — delivery-kid no longer has live data</dd>';
+			if ( data.snapshot_at ) {
+				details += '<dt>Snapshot taken</dt><dd>' + mw.html.escape( String( data.snapshot_at ) ) + '</dd>';
+			}
+		}
+		details += '</dl>';
+
+		if ( uploadLog.length ) {
+			details += '<h4>Upload log</h4>' + diagRenderLog( uploadLog );
+		}
+		if ( previewLog.length ) {
+			details += '<h4>Preview transcoding log</h4>' + diagRenderLog( previewLog );
+		}
+		if ( finalizeLog.length ) {
+			details += '<h4>Finalize log</h4>' + diagRenderLog( finalizeLog );
+		}
+		details += '</details>';
+		parts.push( details );
+
+		container.innerHTML = parts.join( '' );
+	}
+
+	function diagRenderLog( entries ) {
+		var rows = entries.map( function ( e ) {
+			var ts = e.ts ? mw.html.escape( String( e.ts ) ) : '';
+			var stage = mw.html.escape( e.phase || e.stage || '' );
+			var msg = mw.html.escape( e.message || '' );
+			var pct = ( e.progress !== null && e.progress !== undefined ) ?
+				' <span class="rd-diag-pct">(' + mw.html.escape( String( e.progress ) ) + '%)</span>' : '';
+			var rowCls = e.error ? 'rd-diag-row rd-diag-row-error' : 'rd-diag-row';
+			var html = '<div class="' + rowCls + '">' +
+				( ts ? '<span class="rd-diag-ts">' + ts + '</span> ' : '' ) +
+				( stage ? '<span class="rd-diag-stage">[' + stage + ']</span> ' : '' ) +
+				'<span class="rd-diag-msg">' + msg + pct + '</span>';
+			if ( e.error ) {
+				html += '<pre class="rd-diag-err">' + mw.html.escape( String( e.error ) ) + '</pre>';
+			}
+			html += '</div>';
+			return html;
+		} );
+		return '<div class="rd-diag-log">' + rows.join( '' ) + '</div>';
+	}
+
+	function diagFindLastError( entries ) {
+		for ( var i = entries.length - 1; i >= 0; i-- ) {
+			if ( entries[ i ].error ) {
+				return String( entries[ i ].error );
+			}
+		}
+		// No structured error field — fall back to the last message line so
+		// the banner is never blank when something went wrong.
+		if ( entries.length ) {
+			return entries[ entries.length - 1 ].message || null;
+		}
+		return null;
+	}
+
 	// -- Init --
 
 	function initCreationTimeFallback() {
@@ -1271,6 +1523,7 @@
 		initBlockheightConverter();
 		initVideoPreview();
 		initCreationTimeFallback();
+		initDiagnostics();
 	}
 
 	mw.loader.using( [ 'mediawiki.util', 'mediawiki.api' ] ).then( init );
