@@ -1283,6 +1283,13 @@
 			fetch( apiUrl + '/draft-content/' + encodeURIComponent( draftId ), {
 				headers: headers
 			} ).then( function ( resp ) {
+				// 404 means delivery-kid has forgotten the draft (e.g. its
+				// staging dir was rebuilt). Fall back to the snapshot the
+				// pinning-service wrote to ReleaseDraft:{id}/diagnostics
+				// at terminal state — that page outlives delivery-kid storage.
+				if ( resp.status === 404 ) {
+					return loadFromWikiSnapshot();
+				}
 				return resp.ok ? resp.json() : null;
 			} ).then( function ( data ) {
 				if ( !data ) {
@@ -1304,6 +1311,47 @@
 		}
 
 		fetchAndRender();
+	}
+
+	/**
+	 * Fetch ReleaseDraft:{id}/diagnostics via the MediaWiki API and parse
+	 * its JSON content. Used as the fallback when delivery-kid's live
+	 * /draft-content endpoint returns 404.
+	 *
+	 * Returns a Promise that resolves to the parsed snapshot dict (with
+	 * an _from_snapshot marker for the renderer) or null if the page
+	 * doesn't exist or its content isn't valid JSON.
+	 */
+	function loadFromWikiSnapshot() {
+		var subpage = mw.config.get( 'wgPageName' ) + '/diagnostics';
+		return new mw.Api().get( {
+			action: 'query',
+			prop: 'revisions',
+			rvprop: 'content',
+			rvslots: 'main',
+			titles: subpage,
+			formatversion: 2
+		} ).then( function ( resp ) {
+			var pages = ( resp.query || {} ).pages || [];
+			var page = pages[ 0 ];
+			if ( !page || page.missing ) {
+				return null;
+			}
+			var rev = page.revisions && page.revisions[ 0 ];
+			var content = rev && rev.slots && rev.slots.main && rev.slots.main.content;
+			if ( !content ) {
+				return null;
+			}
+			try {
+				var data = JSON.parse( content );
+				data._from_snapshot = true;
+				return data;
+			} catch ( e ) {
+				return null;
+			}
+		} ).catch( function () {
+			return null;
+		} );
 	}
 
 	function diagShouldPoll( data ) {
@@ -1374,12 +1422,24 @@
 
 		// Collapsible details — open when failed, closed when clean/in-flight
 		var openAttr = failed ? ' open' : '';
+		var summaryText = data._from_snapshot ?
+			'Upload diagnostics (snapshot)' :
+			'Upload diagnostics';
 		var details = '<details class="rd-diag-details"' + openAttr + '>';
-		details += '<summary>Upload diagnostics</summary>';
+		details += '<summary>' + mw.html.escape( summaryText ) + '</summary>';
 		details += '<dl class="rd-diag-meta">';
 		details += '<dt>Status</dt><dd>' + mw.html.escape( status ) + '</dd>';
 		if ( previewStatus !== 'none' ) {
 			details += '<dt>Preview</dt><dd>' + mw.html.escape( previewStatus ) + '</dd>';
+		}
+		// When the data came from the wiki snapshot (delivery-kid forgot
+		// the draft), surface that fact + when the snapshot was taken so
+		// users know they're looking at a frozen view.
+		if ( data._from_snapshot ) {
+			details += '<dt>Source</dt><dd>wiki snapshot — delivery-kid no longer has live data</dd>';
+			if ( data.snapshot_at ) {
+				details += '<dt>Snapshot taken</dt><dd>' + mw.html.escape( String( data.snapshot_at ) ) + '</dd>';
+			}
 		}
 		details += '</dl>';
 
