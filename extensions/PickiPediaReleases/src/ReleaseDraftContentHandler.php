@@ -109,17 +109,13 @@ class ReleaseDraftContentHandler extends TextContentHandler {
 		// Status banner
 		$html .= $this->renderStatusBanner( $status, $data );
 
-		// Upload-stage and finalize-stage log containers. Empty by default;
-		// JS populates them by polling /draft-content. Keeping them here
-		// (above the type-specific form) means they're visible even when
-		// no video file is yet present (e.g. status: awaiting_upload).
-		$html .= Html::element( 'div', [
-			'id' => 'rd-upload-log',
-			'class' => 'rd-stage-log rd-upload-log',
-		], '' );
-		$html .= Html::element( 'div', [
-			'id' => 'rd-finalize-log',
-			'class' => 'rd-stage-log rd-finalize-log',
+		// Diagnostics panel (populated by JS from delivery-kid /draft-content
+		// — shows upload_log / finalize_log / preview_log so users can see
+		// exactly where a transcode or pin failed instead of a one-liner).
+		$html .= Html::rawElement( 'div', [
+			'id' => 'rd-diagnostics',
+			'class' => 'rd-diagnostics',
+			'hidden' => true,
 		], '' );
 
 		// Type-specific form
