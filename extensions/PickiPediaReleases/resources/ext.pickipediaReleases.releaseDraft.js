@@ -762,13 +762,21 @@
 			appendLog( 'CID: ' + ( data.cid || 'unknown' ) );
 			showFinalizeResult( data );
 		} else if ( event === 'transcoding-submitted' ) {
-			setProgress( 100 );
-			setActiveStage( 'complete' );
-			setStatus( 'Cloud transcoding submitted!', 'success' );
-			appendLog( 'Source CID: ' + ( data.sourceCid || 'unknown' ) );
-			appendLog( 'Job ID: ' + ( data.jobId || 'unknown' ) );
+			// Don't lie: Coconut just *started*, this is not "complete".
+			// The SSE closes here because the actual work — transcode →
+			// webhook → HLS pin → finalize state — happens asynchronously
+			// on delivery-kid over the next 1-3 minutes. Switch the modal
+			// into "waiting for webhook" mode: keep it open, poll
+			// /draft-content for finalize_log updates, narrate stages as
+			// they fire on the server side.
+			setProgress( 60 );
+			setActiveStage( 'transcoding' );
+			setStatus( 'Cloud transcoding in progress (waiting for Coconut)…', '' );
+			appendLog( 'Source: ' + ( data.sourceCid || 'staging' ) );
+			appendLog( 'Coconut job: ' + ( data.coconutJobId || data.jobId || 'unknown' ) );
 			appendLog( data.message || '' );
 			showTranscodingResult( data );
+			startFinalizePolling();
 		} else if ( event === 'error' ) {
 			setStageError();
 			showFinalizeError( 'Error: ' + ( data.message || 'Unknown error' ) );
@@ -823,6 +831,136 @@
 			active.classList.remove( 'rd-stage-active' );
 			active.classList.add( 'rd-stage-error' );
 		}
+	}
+
+	// === Webhook-driven finalize polling ===
+	//
+	// For the slow Coconut path the SSE closes after 'transcoding-submitted',
+	// minutes before the actual work completes server-side. We poll
+	// /draft-content/{draft_id} to watch the finalize_log entries written
+	// by routes/coconut.py _update_draft_finalize as the webhook processes
+	// the job, and update the modal's stage chips + log + status text
+	// accordingly. On terminal state we hand off to showFinalizeResult /
+	// showFinalizeError just as the streaming path would.
+	var finalizePollTimer = null;
+	var finalizePollLastLogLen = 0;
+	var finalizePollMaxMs = 15 * 60 * 1000; // 15 min hard cap; Coconut usually finishes in 1-3
+	var finalizePollStartedAt = 0;
+
+	function finalizeStageFromLogEntry( entry ) {
+		// Map server-side finalize_log entry.stage onto the modal's
+		// stage chips. Server emits webhook/pin/complete from the
+		// webhook handler; finalize_sse_generator emits prepare/transcode/
+		// tag stages earlier in the flow.
+		var s = ( entry && entry.stage ) ? entry.stage.toLowerCase() : '';
+		if ( s === 'prepare' || s === 'preparing' ) { return 'preparing'; }
+		if ( s === 'transcode' || s === 'transcoding' || s === 'webhook' ) {
+			return 'transcoding';
+		}
+		if ( s === 'tag' || s === 'tagging' ) { return 'tagging'; }
+		if ( s === 'pin' || s === 'pinning' ) { return 'pinning'; }
+		if ( s === 'complete' ) { return 'complete'; }
+		return null;
+	}
+
+	function stopFinalizePolling() {
+		if ( finalizePollTimer ) {
+			clearInterval( finalizePollTimer );
+			finalizePollTimer = null;
+		}
+	}
+
+	function startFinalizePolling() {
+		var draftId = ( draftData && draftData.draft_id ) || '';
+		var deliveryKidUrl = mw.config.get( 'wgDeliveryKidUrl' );
+		var uploadToken = mw.config.get( 'wgFinalizeToken' ) ||
+			mw.config.get( 'wgUploadToken' );
+		if ( !draftId || !deliveryKidUrl || !uploadToken ) {
+			appendLog( '(cannot poll finalize state — missing config)' );
+			return;
+		}
+		var headers = {
+			'X-Upload-Token': uploadToken,
+			'X-Upload-User': mw.config.get( 'wgUploadUser' ),
+			'X-Upload-Timestamp': String( mw.config.get( 'wgUploadTimestamp' ) )
+		};
+
+		stopFinalizePolling();
+		// Don't carry log-length state across separate finalize runs.
+		finalizePollLastLogLen = 0;
+		finalizePollStartedAt = Date.now();
+
+		function poll() {
+			if ( Date.now() - finalizePollStartedAt > finalizePollMaxMs ) {
+				stopFinalizePolling();
+				setStatus(
+					'Stopped waiting for Coconut after 15 min — check delivery-kid logs.',
+					'error'
+				);
+				return;
+			}
+
+			fetch( deliveryKidUrl + '/draft-content/' +
+					encodeURIComponent( draftId ),
+				{ headers: headers }
+			).then( function ( resp ) {
+				if ( !resp.ok ) { return null; }
+				return resp.json();
+			} ).then( function ( state ) {
+				if ( !state ) { return; }
+
+				// Replay newly-appended finalize_log entries into the
+				// modal: stage chip + status text + log line each.
+				var log = state.finalize_log || [];
+				for ( var i = finalizePollLastLogLen; i < log.length; i++ ) {
+					var entry = log[ i ];
+					var msg = entry.message || '';
+					var stagePrefix = entry.stage ?
+						'[' + entry.stage + '] ' : '';
+					appendLog( stagePrefix + msg );
+					var modalStage = finalizeStageFromLogEntry( entry );
+					if ( modalStage ) {
+						setActiveStage( modalStage );
+					}
+					if ( msg && !entry.error ) {
+						setStatus( msg, '' );
+					}
+				}
+				finalizePollLastLogLen = log.length;
+
+				// Terminal-state handoff.
+				if ( state.status === 'finalized' && state.final_cid ) {
+					stopFinalizePolling();
+					setProgress( 100 );
+					setActiveStage( 'complete' );
+					var gw = ( state.preview_gateway_url ||
+						deliveryKidUrl.replace( '://delivery-kid', '://ipfs.delivery-kid' ) +
+						'/ipfs/' + state.final_cid );
+					showFinalizeResult( {
+						cid: state.final_cid,
+						gateway_url: gw
+					} );
+				} else if ( state.status === 'finalize_failed' ) {
+					stopFinalizePolling();
+					setStageError();
+					var errMsg = 'Finalize failed';
+					if ( log.length ) {
+						var last = log[ log.length - 1 ];
+						if ( last && last.error ) { errMsg = last.error; }
+						else if ( last && last.message ) { errMsg = last.message; }
+					}
+					showFinalizeError( errMsg );
+				}
+			} ).catch( function () {
+				// Silent retry on next tick — transient blips shouldn't
+				// pollute the modal log.
+			} );
+		}
+
+		// Kick off immediately so the user gets the first stage update
+		// without waiting a full poll interval.
+		poll();
+		finalizePollTimer = setInterval( poll, 3000 );
 	}
 
 	function setProgress( pct ) {
