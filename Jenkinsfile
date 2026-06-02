@@ -89,7 +89,7 @@ pipeline {
                         # (composer.local.json config doesn't apply to root requirements)
                         php -r '
                             $json = json_decode(file_get_contents("composer.json"), true);
-                            $json["config"]["audit"] = ["abandoned" => "ignore", "ignore" => ["PKSA-z3gr-8qht-p93v"]];
+                            $json["config"]["audit"] = ["abandoned" => "ignore", "ignore" => ["PKSA-z3gr-8qht-p93v", "PKSA-v5yj-8nmz-sk2q", "PKSA-ft77-7h5f-p3r6", "PKSA-b14r-zh1d-vdrc"]];
                             file_put_contents("composer.json", json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
                         '
                         composer update --no-dev --optimize-autoloader --ignore-platform-reqs

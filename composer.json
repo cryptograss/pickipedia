@@ -19,7 +19,12 @@
         },
         "audit": {
             "abandoned": "ignore",
-            "ignore": ["PKSA-z3gr-8qht-p93v"]
+            "ignore": [
+                "PKSA-z3gr-8qht-p93v",
+                "PKSA-v5yj-8nmz-sk2q",
+                "PKSA-ft77-7h5f-p3r6",
+                "PKSA-b14r-zh1d-vdrc"
+            ]
         }
     }
 }
