@@ -242,6 +242,13 @@ wfLoadExtension( 'HitCounters' );
 wfLoadExtension( 'RSS' );
 $wgRSSUrlWhitelist = array( "*" );
 
+# Allow inline external images (bare image URLs render as <img>) so
+# Template:LatestPodcastEpisodes can show podcast cover art from the
+# feeds' own CDNs without requiring a per-podcast File: upload. Same
+# trust posture as the permissive RSSUrlWhitelist above — small
+# trusted-user wiki, upside outweighs the tracking-pixel risk.
+$wgAllowExternalImages = true;
+
 # Gadgets - user-customizable JavaScript/CSS tools
 wfLoadExtension( 'Gadgets' );
 
