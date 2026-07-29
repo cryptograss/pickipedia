@@ -85,23 +85,18 @@ pipeline {
                         echo "composer.json changed or vendor missing - running composer update..."
                         rm -f composer.lock
                         rm -rf vendor
-                        # Inject audit-ignore list into MediaWiki's root composer.json
-                        # (composer.local.json's audit config is ignored by composer —
-                        # audit only reads from root). Grouped by originating dep so
-                        # future adds are less mystery-meat. Keep this in sync with the
-                        # audit.ignore list in pickipedia's own composer.json.
+                        # Splat pickipedia's audit config into MediaWiki's root
+                        # composer.json. Composer's audit gate only reads config
+                        # from root, but composer.local.json (where our project
+                        # deps live) is our source of truth for what advisories
+                        # we've accepted. So: read our config out of
+                        # composer.local.json (which was copied in above from
+                        # pickipedia/composer.json) and stamp it onto root's
+                        # config. Single source of truth for the ignore list.
                         php -r '
                             $json = json_decode(file_get_contents("composer.json"), true);
-                            $json["config"]["audit"] = ["abandoned" => "ignore", "ignore" => [
-                                // symfony/yaml + phpunit-era carryovers
-                                "PKSA-z3gr-8qht-p93v", "PKSA-v5yj-8nmz-sk2q",
-                                "PKSA-ft77-7h5f-p3r6", "PKSA-b14r-zh1d-vdrc",
-                                // guzzlehttp/guzzle 7.9.2–7.15.2 (pinned via wikimedia/shellbox ^7.9.2)
-                                "PKSA-fy2t-3c5f-827y", "PKSA-qxvb-2bpp-dnk6",
-                                "PKSA-bbs6-q5q9-f3t4", "PKSA-bcdd-5xc7-gwfb",
-                                "PKSA-pwsk-hy21-4gby", "PKSA-93qv-9n9h-6k6p",
-                                "PKSA-k22t-f949-t9g6",
-                            ]];
+                            $local = json_decode(file_get_contents("composer.local.json"), true);
+                            $json["config"]["audit"] = $local["config"]["audit"] ?? ["abandoned" => "ignore", "ignore" => []];
                             file_put_contents("composer.json", json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
                         '
                         composer update --no-dev --optimize-autoloader --ignore-platform-reqs
