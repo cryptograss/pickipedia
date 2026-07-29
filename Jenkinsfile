@@ -85,11 +85,23 @@ pipeline {
                         echo "composer.json changed or vendor missing - running composer update..."
                         rm -f composer.lock
                         rm -rf vendor
-                        # Add audit ignore for PHPUnit advisory to root composer.json
-                        # (composer.local.json config doesn't apply to root requirements)
+                        # Inject audit-ignore list into MediaWiki's root composer.json
+                        # (composer.local.json's audit config is ignored by composer —
+                        # audit only reads from root). Grouped by originating dep so
+                        # future adds are less mystery-meat. Keep this in sync with the
+                        # audit.ignore list in pickipedia's own composer.json.
                         php -r '
                             $json = json_decode(file_get_contents("composer.json"), true);
-                            $json["config"]["audit"] = ["abandoned" => "ignore", "ignore" => ["PKSA-z3gr-8qht-p93v", "PKSA-v5yj-8nmz-sk2q", "PKSA-ft77-7h5f-p3r6", "PKSA-b14r-zh1d-vdrc"]];
+                            $json["config"]["audit"] = ["abandoned" => "ignore", "ignore" => [
+                                // symfony/yaml + phpunit-era carryovers
+                                "PKSA-z3gr-8qht-p93v", "PKSA-v5yj-8nmz-sk2q",
+                                "PKSA-ft77-7h5f-p3r6", "PKSA-b14r-zh1d-vdrc",
+                                // guzzlehttp/guzzle 7.9.2–7.15.2 (pinned via wikimedia/shellbox ^7.9.2)
+                                "PKSA-fy2t-3c5f-827y", "PKSA-qxvb-2bpp-dnk6",
+                                "PKSA-bbs6-q5q9-f3t4", "PKSA-bcdd-5xc7-gwfb",
+                                "PKSA-pwsk-hy21-4gby", "PKSA-93qv-9n9h-6k6p",
+                                "PKSA-k22t-f949-t9g6",
+                            ]];
                             file_put_contents("composer.json", json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
                         '
                         composer update --no-dev --optimize-autoloader --ignore-platform-reqs
