@@ -3,6 +3,7 @@
 namespace MediaWiki\Extension\PickiPediaVerification;
 
 use MediaWiki\Hook\EditFilterMergedContentHook;
+use MediaWiki\Revision\SlotRecord;
 use MediaWiki\User\UserGroupManager;
 use IContextSource;
 use Content;
@@ -81,6 +82,24 @@ class Hooks implements EditFilterMergedContentHook {
 			return true;
 		}
 
+		// An edit that asserts nothing new has nothing to mark. Removing a
+		// paragraph, reverting a bot's own edit, or reordering existing lines
+		// all leave a page with no markers on it, and refusing those means a
+		// bot can write content it is then forbidden from taking back.
+		//
+		// Deliberately conservative: *any* new line counts as new content,
+		// markup included. It is tempting to exempt markup — it looks like
+		// structure rather than assertion — but wikitext markup carries
+		// claims as readily as prose does. [[Category:Grammy Award winners]],
+		// {{Ensemble|...}} with a lineup, an infobox founding date, a table
+		// row naming a show that never happened: all facts, none of them
+		// prose. Exempting them would let a bot state them with nothing
+		// marked for review, which is the opposite of this extension's job.
+		$previousText = $this->getCurrentText( $title );
+		if ( $previousText !== null && !$this->introducesNewContent( $previousText, $text ) ) {
+			return true;
+		}
+
 		// Reject the edit with helpful message
 		$status->fatal( 'pickipediaverification-bot-needs-proposed' );
 		$status->value = false;
@@ -90,6 +109,66 @@ class Hooks implements EditFilterMergedContentHook {
 		);
 
 		return false;
+	}
+
+	/**
+	 * Current saved wikitext of a page.
+	 *
+	 * @param \Title $title Page being edited.
+	 * @return string|null Wikitext, or null if the page does not exist yet or
+	 *   holds something other than text.
+	 */
+	private function getCurrentText( $title ): ?string {
+		$revision = MediaWikiServices::getInstance()
+			->getRevisionLookup()
+			->getRevisionByTitle( $title );
+		if ( !$revision ) {
+			// Page creation. Everything in it is new, so it needs marking.
+			return null;
+		}
+
+		$content = $revision->getContent( SlotRecord::MAIN );
+		return $content instanceof TextContent ? $content->getText() : null;
+	}
+
+	/**
+	 * Whether an edit puts any line on the page that was not already there.
+	 *
+	 * Line-set comparison rather than a positional diff: moving a paragraph
+	 * introduces no new assertion, so it should not demand a marker. Changing
+	 * a line does count, because the changed line is one nobody has verified.
+	 *
+	 * @param string $oldText Wikitext before the edit.
+	 * @param string $newText Wikitext being saved.
+	 * @return bool True if at least one non-blank line is new.
+	 */
+	private function introducesNewContent( string $oldText, string $newText ): bool {
+		$existing = [];
+		foreach ( explode( "\n", $oldText ) as $line ) {
+			$normalized = $this->normalizeLine( $line );
+			if ( $normalized !== '' ) {
+				$existing[$normalized] = true;
+			}
+		}
+
+		foreach ( explode( "\n", $newText ) as $line ) {
+			$normalized = $this->normalizeLine( $line );
+			if ( $normalized !== '' && !isset( $existing[$normalized] ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Reduce a line to a form that ignores reindentation and rewrapping.
+	 *
+	 * @param string $line Raw line.
+	 * @return string Normalized line; empty string for blank lines.
+	 */
+	private function normalizeLine( string $line ): string {
+		return trim( preg_replace( '/\s+/', ' ', $line ) );
 	}
 
 	/**
