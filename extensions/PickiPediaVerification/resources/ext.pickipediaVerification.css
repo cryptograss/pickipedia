@@ -1,0 +1,89 @@
+/**
+ * Styling for <proposed> — a claim a bot has put forward, awaiting a human.
+ *
+ * Deliberately a stylesheet rather than inline style attributes. Template:Show
+ * and Template:Bot_proposes both hardcode light-mode colours inline
+ * (background: #e0e0e0; color: #666), which is why bot proposals are close to
+ * unreadable in dark mode — cryptograss/pickipedia#12. Inline styles also can't
+ * respond to the reader's theme at all. Anything here can.
+ *
+ * Both night-mode signals are handled: an explicit toggle sets
+ * .skin-theme-clientpref-night on <html>, while "match my OS" sets
+ * .skin-theme-clientpref-os and defers to prefers-color-scheme.
+ */
+
+.pv-proposed {
+	background-color: #fff3cd;
+	border-radius: 2px;
+}
+
+.pv-proposed--block {
+	display: block;
+	border-left: 3px solid #ffc107;
+	padding: 0.5em 0.75em;
+	margin: 0.5em 0;
+}
+
+.pv-proposed--inline {
+	border-bottom: 1px dotted #ffc107;
+	padding: 1px 3px;
+}
+
+.pv-proposed__badge {
+	font-size: 75%;
+	color: #856404;
+	margin-left: 0.25em;
+	white-space: nowrap;
+}
+
+.pv-proposed__byline {
+	display: block;
+	font-size: 0.85em;
+	margin-top: 0.4em;
+	color: #856404;
+}
+
+/* The inline form sits mid-sentence, so a block byline would break the line. */
+.pv-proposed--inline .pv-proposed__byline {
+	display: inline;
+	margin-left: 0.4em;
+}
+
+/* Dark mode: keep the amber signal, drop the luminance. */
+@media screen {
+	html.skin-theme-clientpref-night .pv-proposed {
+		background-color: #3a2f10;
+	}
+
+	html.skin-theme-clientpref-night .pv-proposed--block {
+		border-left-color: #d9a406;
+	}
+
+	html.skin-theme-clientpref-night .pv-proposed--inline {
+		border-bottom-color: #d9a406;
+	}
+
+	html.skin-theme-clientpref-night .pv-proposed__badge,
+	html.skin-theme-clientpref-night .pv-proposed__byline {
+		color: #f0d98a;
+	}
+}
+
+@media screen and ( prefers-color-scheme: dark ) {
+	html.skin-theme-clientpref-os .pv-proposed {
+		background-color: #3a2f10;
+	}
+
+	html.skin-theme-clientpref-os .pv-proposed--block {
+		border-left-color: #d9a406;
+	}
+
+	html.skin-theme-clientpref-os .pv-proposed--inline {
+		border-bottom-color: #d9a406;
+	}
+
+	html.skin-theme-clientpref-os .pv-proposed__badge,
+	html.skin-theme-clientpref-os .pv-proposed__byline {
+		color: #f0d98a;
+	}
+}

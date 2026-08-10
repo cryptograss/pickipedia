@@ -1,9 +1,17 @@
 {
 	"@metadata": {
-		"authors": ["Magent", "Justin Holmes"]
+		"authors": [
+			"Magent",
+			"Justin Holmes"
+		]
 	},
 	"pickipediaverification-desc": "Enforces verification workflow for bot/AI edits on PickiPedia",
-	"pickipediaverification-bot-needs-proposed": "Bot edits must include verification markers. For template-based pages (Show, Venue, etc.), add <code>|status=proposed</code>. For other pages, wrap content with <code>{{Bot_proposes}}</code>.",
+	"pickipediaverification-bot-needs-proposed": "Bot edits must include verification markers. Wrap the new claim in <code>&lt;proposed by=\"YourBot\"&gt;...&lt;/proposed&gt;</code>, or for a template that supports it (Show, Venue, etc.) add <code>|status=proposed</code>. Edits that only remove or rearrange existing content don't need a marker.",
 	"verifybotedits": "Verify Bot Edits",
-	"verifybotedits-summary": "Review and verify edits made by bots"
+	"verifybotedits-summary": "Review and verify edits made by bots",
+	"pickipediaverification-proposed-badge": "unverified",
+	"pickipediaverification-proposed-hover": "Proposed by $1, a bot. Can you verify it?",
+	"pickipediaverification-proposed-hover-anon": "Proposed by a bot. Can you verify it?",
+	"pickipediaverification-proposed-byline": "Proposed by $1",
+	"pickipediaverification-proposed-byline-source": "Proposed by $1 via $2"
 }

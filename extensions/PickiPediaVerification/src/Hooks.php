@@ -192,6 +192,12 @@ class Hooks implements EditFilterMergedContentHook {
 	 * Check if content is properly marked as proposed/unverified.
 	 */
 	private function isProperlyMarked( string $text ): bool {
+		// Check for a <proposed> tag. Preferred over {{Bot_proposes}} for
+		// anything containing pipes — see ParserHooks for why.
+		if ( preg_match( '/<proposed[\s>]/i', $text ) ) {
+			return true;
+		}
+
 		// Check for Bot_proposes template
 		if ( preg_match( '/\{\{Bot_proposes/i', $text ) ) {
 			return true;
