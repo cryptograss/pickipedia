@@ -114,12 +114,16 @@ class SpecialVerifyBotEdits extends SpecialPage {
 						'href' => $title->getLocalURL( 'action=edit' )
 					], 'edit' ) .
 					' | ' .
-					Html::element( 'a', [
-						'href' => $this->getPageTitle()->getLocalURL( [
-							'action' => 'verify',
-							'page' => $page['id'],
-							'token' => $this->getUser()->getEditToken()
-						] )
+					// A submit button, not a link. execute() only calls
+					// handleVerification() on a POST, so the link this
+					// replaces could never do anything but reload the page —
+					// which is exactly what it did. A <button> carrying a
+					// name and value posts the enclosing form and says which
+					// row it came from, and it inherits that form's token.
+					Html::element( 'button', [
+						'type' => 'submit',
+						'name' => 'verify_page',
+						'value' => (string)$page['id']
 					], 'verify' )
 				)
 			);
@@ -169,9 +173,10 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			foreach ( $res as $row ) {
 				$pageIds[] = $row->page_id;
 			}
-		} elseif ( $request->getVal( 'page' ) ) {
-			// Single page verification (from link)
-			$pageIds[] = intval( $request->getVal( 'page' ) );
+		} elseif ( $request->getVal( 'verify_page' ) ) {
+			// One row's verify button. Previously read 'page', set by a GET
+			// link that this handler never saw, so the branch was dead.
+			$pageIds[] = intval( $request->getVal( 'verify_page' ) );
 		} else {
 			// Selected pages
 			$pageIds = array_map( 'intval', $request->getArray( 'pages', [] ) );
@@ -270,10 +275,19 @@ class SpecialVerifyBotEdits extends SpecialPage {
 	private function stripProposedTags( $text ) {
 		$pattern = '/<proposed(?:\s[^>]*)?>(.*?)<\/proposed\s*>/is';
 
+		// Drop one newline either side of the content. A block-form tag sits
+		// on its own line, so removing just the tags leaves the newline that
+		// followed the opening one — which reads as a blank line before the
+		// template and accumulates every time something is verified. Inline
+		// use has no newlines to trim, so it is unaffected.
+		$unwrap = static function ( array $matches ): string {
+			return preg_replace( [ '/\A\n/', '/\n\z/' ], '', $matches[1] );
+		};
+
 		$prevText = '';
 		while ( $prevText !== $text ) {
 			$prevText = $text;
-			$text = preg_replace( $pattern, '$1', $text );
+			$text = preg_replace_callback( $pattern, $unwrap, $text );
 		}
 
 		return $text;
