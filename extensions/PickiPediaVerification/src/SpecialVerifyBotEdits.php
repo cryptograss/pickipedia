@@ -228,11 +228,12 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			return "Could not get text content for " . $title->getPrefixedText();
 		}
 
-		// Strip Bot_proposes wrappers
-		$newText = $this->stripBotProposes( $text );
+		// Strip both marker forms. A page can carry a mix: prose marked with
+		// {{Bot_proposes}} alongside a template marked with <proposed>.
+		$newText = $this->stripProposedTags( $this->stripBotProposes( $text ) );
 
 		if ( $newText === $text ) {
-			return "No Bot_proposes found in " . $title->getPrefixedText();
+			return "No bot proposals found in " . $title->getPrefixedText();
 		}
 
 		// Save the page
@@ -241,7 +242,7 @@ class SpecialVerifyBotEdits extends SpecialPage {
 		$updater->setContent( 'main', $newContent );
 
 		$comment = \MediaWiki\CommentStore\CommentStoreComment::newUnsavedComment(
-			'Verified bot edits (removed Bot_proposes wrappers)'
+			'Verified bot edits (removed proposal markers)'
 		);
 		$updater->saveRevision( $comment, EDIT_MINOR );
 
@@ -250,6 +251,32 @@ class SpecialVerifyBotEdits extends SpecialPage {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Strip <proposed> tags, keeping what they wrapped.
+	 *
+	 * The whole point of the tag is that its content was never escaped, so
+	 * verifying is just removing the tags — no unescaping, no regex walking
+	 * balanced braces. Compare stripBotProposes() below, which has to do both.
+	 *
+	 * Nested tags would be meaningless (a claim proposed twice), but the loop
+	 * costs nothing and stops one from surviving verification if someone
+	 * writes it anyway.
+	 *
+	 * @param string $text
+	 * @return string
+	 */
+	private function stripProposedTags( $text ) {
+		$pattern = '/<proposed(?:\s[^>]*)?>(.*?)<\/proposed\s*>/is';
+
+		$prevText = '';
+		while ( $prevText !== $text ) {
+			$prevText = $text;
+			$text = preg_replace( $pattern, '$1', $text );
+		}
+
+		return $text;
 	}
 
 	/**

@@ -1,7 +1,10 @@
 {
 	"name": "PickiPediaVerification",
 	"version": "0.2.0",
-	"author": ["Magent", "Justin Holmes"],
+	"author": [
+		"Magent",
+		"Justin Holmes"
+	],
 	"url": "https://github.com/cryptograss/pickipedia",
 	"descriptionmsg": "pickipediaverification-desc",
 	"license-name": "GPL-2.0-or-later",
@@ -18,21 +21,31 @@
 	"HookHandlers": {
 		"main": {
 			"class": "MediaWiki\\Extension\\PickiPediaVerification\\Hooks",
-			"services": ["UserGroupManager"]
+			"services": [
+				"UserGroupManager"
+			]
+		},
+		"parser": {
+			"class": "MediaWiki\\Extension\\PickiPediaVerification\\ParserHooks"
 		}
 	},
 	"Hooks": {
-		"EditFilterMergedContent": "main"
+		"EditFilterMergedContent": "main",
+		"ParserFirstCallInit": "parser"
 	},
 	"MessagesDirs": {
-		"PickiPediaVerification": ["i18n"]
+		"PickiPediaVerification": [
+			"i18n"
+		]
 	},
 	"ExtensionMessagesFiles": {
 		"PickiPediaVerificationAlias": "PickiPediaVerification.alias.php"
 	},
 	"config": {
 		"PickiPediaVerificationBotGroups": {
-			"value": ["bot"],
+			"value": [
+				"bot"
+			],
 			"description": "User groups whose edits require verification"
 		},
 		"PickiPediaVerificationExemptGroups": {
@@ -40,7 +53,9 @@
 			"description": "User groups exempt from verification (overrides bot group membership)"
 		},
 		"PickiPediaVerificationNamespaces": {
-			"value": [0],
+			"value": [
+				0
+			],
 			"description": "Namespaces where verification is enforced (0 = main)"
 		},
 		"PickiPediaVerificationTemplate": {
@@ -48,5 +63,16 @@
 			"description": "Template to wrap bot edits with"
 		}
 	},
-	"manifest_version": 2
+	"manifest_version": 2,
+	"ResourceFileModulePaths": {
+		"localBasePath": "resources",
+		"remoteExtPath": "PickiPediaVerification/resources"
+	},
+	"ResourceModules": {
+		"ext.pickipediaVerification.styles": {
+			"styles": [
+				"ext.pickipediaVerification.css"
+			]
+		}
+	}
 }
