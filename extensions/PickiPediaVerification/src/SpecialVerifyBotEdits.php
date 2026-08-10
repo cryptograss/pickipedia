@@ -258,6 +258,18 @@ class SpecialVerifyBotEdits extends SpecialPage {
 	 * Handles: {{Bot_proposes|content|by=Name}}
 	 * Keeps: content
 	 *
+	 * The wrapper is a template call, so any pipe in the content had to be
+	 * escaped to {{!}} on the way in or it would have split the parameter.
+	 * Unescaping on the way out is therefore part of removing the wrapper,
+	 * not an extra: skipping it leaves {{!}} baked into the page permanently.
+	 * That is how roughly 25 pages ended up with things like
+	 * [[File:Ahbck4.jpg{{!}}right{{!}}thumb{{!}}60px{{!}}...]] — verified
+	 * content carrying scars from a wrapper that is no longer there.
+	 *
+	 * Only content that was inside a wrapper gets unescaped. A page may use
+	 * {{!}} on its own account — passing a pipe into some other template — and
+	 * that must survive untouched.
+	 *
 	 * @param string $text
 	 * @return string
 	 */
@@ -265,6 +277,9 @@ class SpecialVerifyBotEdits extends SpecialPage {
 		// Match {{Bot_proposes|content|by=...}}
 		// This is tricky because content can contain nested templates
 		// We'll use a simple approach that handles most cases
+		$unwrap = static function ( array $matches ): string {
+			return str_replace( '{{!}}', '|', $matches[1] );
+		};
 
 		$pattern = '/\{\{Bot_proposes\|([^|]+)\|by=[^}]+\}\}/s';
 
@@ -272,7 +287,7 @@ class SpecialVerifyBotEdits extends SpecialPage {
 		$prevText = '';
 		while ( $prevText !== $text ) {
 			$prevText = $text;
-			$text = preg_replace( $pattern, '$1', $text );
+			$text = preg_replace_callback( $pattern, $unwrap, $text );
 		}
 
 		// Also handle case where content might have pipes (use greedy match to last |by=)
@@ -280,7 +295,7 @@ class SpecialVerifyBotEdits extends SpecialPage {
 		$prevText = '';
 		while ( $prevText !== $text ) {
 			$prevText = $text;
-			$text = preg_replace( $pattern2, '$1', $text );
+			$text = preg_replace_callback( $pattern2, $unwrap, $text );
 		}
 
 		return $text;
