@@ -6,10 +6,6 @@
  * (background: #e0e0e0; color: #666), which is why bot proposals are close to
  * unreadable in dark mode — cryptograss/pickipedia#12. Inline styles also can't
  * respond to the reader's theme at all. Anything here can.
- *
- * Both night-mode signals are handled: an explicit toggle sets
- * .skin-theme-clientpref-night on <html>, while "match my OS" sets
- * .skin-theme-clientpref-os and defers to prefers-color-scheme.
  */
 
 .pv-proposed {
@@ -17,8 +13,15 @@
 	border-radius: 2px;
 }
 
+/*
+ * flow-root, not block. The thing being proposed is usually a template that
+ * floats — an infobox, a thumb — and a plain block container does not grow to
+ * contain a floated child. The marker box collapsed to the height of its badge
+ * while the infobox it was supposed to be marking sat outside it entirely.
+ * flow-root establishes a block formatting context, which contains the float.
+ */
 .pv-proposed--block {
-	display: block;
+	display: flow-root;
 	border-left: 3px solid #ffc107;
 	padding: 0.5em 0.75em;
 	margin: 0.5em 0;
@@ -43,47 +46,52 @@
 	color: #856404;
 }
 
-/* The inline form sits mid-sentence, so a block byline would break the line. */
+/*
+ * Keep the badge out of the float's way and drop the byline below it. Without
+ * this the byline is squeezed into whatever narrow column is left beside a
+ * floated infobox and wraps a word at a time.
+ */
+.pv-proposed--block .pv-proposed__badge {
+	float: left;
+}
+
+.pv-proposed--block .pv-proposed__byline {
+	clear: both;
+	padding-top: 0.2em;
+}
+
+/*
+ * The inline form sits mid-sentence, where "Proposed by Magent" in the middle
+ * of a clause is exactly the reading burden this design is meant to avoid. The
+ * badge and the title tooltip carry it instead.
+ */
 .pv-proposed--inline .pv-proposed__byline {
-	display: inline;
-	margin-left: 0.4em;
+	display: none;
 }
 
-/* Dark mode: keep the amber signal, drop the luminance. */
-@media screen {
-	html.skin-theme-clientpref-night .pv-proposed {
-		background-color: #3a2f10;
-	}
-
-	html.skin-theme-clientpref-night .pv-proposed--block {
-		border-left-color: #d9a406;
-	}
-
-	html.skin-theme-clientpref-night .pv-proposed--inline {
-		border-bottom-color: #d9a406;
-	}
-
-	html.skin-theme-clientpref-night .pv-proposed__badge,
-	html.skin-theme-clientpref-night .pv-proposed__byline {
-		color: #f0d98a;
-	}
+/*
+ * Dark mode follows the wiki's own switch: MediaWiki:Common.js toggles
+ * .pickipedia-dark on <body> and remembers the choice.
+ *
+ * Note what is deliberately absent — prefers-color-scheme. That switch is
+ * manual, not OS-driven, so honouring the OS here would put dark amber blocks
+ * on a light page for any reader whose system is dark but who chose the light
+ * wiki. Matching the site's mechanism exactly is the only way to stay in step
+ * with it.
+ */
+body.pickipedia-dark .pv-proposed {
+	background-color: #3a2f10;
 }
 
-@media screen and ( prefers-color-scheme: dark ) {
-	html.skin-theme-clientpref-os .pv-proposed {
-		background-color: #3a2f10;
-	}
+body.pickipedia-dark .pv-proposed--block {
+	border-left-color: #d9a406;
+}
 
-	html.skin-theme-clientpref-os .pv-proposed--block {
-		border-left-color: #d9a406;
-	}
+body.pickipedia-dark .pv-proposed--inline {
+	border-bottom-color: #d9a406;
+}
 
-	html.skin-theme-clientpref-os .pv-proposed--inline {
-		border-bottom-color: #d9a406;
-	}
-
-	html.skin-theme-clientpref-os .pv-proposed__badge,
-	html.skin-theme-clientpref-os .pv-proposed__byline {
-		color: #f0d98a;
-	}
+body.pickipedia-dark .pv-proposed__badge,
+body.pickipedia-dark .pv-proposed__byline {
+	color: #f0d98a;
 }
