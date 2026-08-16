@@ -66,7 +66,39 @@ $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
 $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
 
 ## URLs
-$wgServer = getenv('WIKI_URL') ?: "https://pickipedia.xyz";
+# The wiki's identity, fixed no matter which hostname a reader arrived by.
+# Semantic MediaWiki keys its store off this host and <link rel="canonical">
+# points at it, so it must not vary per request.
+$wgCanonicalServer = getenv('WIKI_URL') ?: "https://pickipedia.xyz";
+$wgServer = $wgCanonicalServer;
+
+# Hostnames the wiki will also answer to.
+#
+# Some networks run content filters that read the hostname out of the TLS
+# ClientHello and reset the connection on sight of pickipedia.xyz, while
+# leaving other names on the same server alone. An alias is a door for readers
+# stuck behind one of those.
+#
+# $wgServer has to follow the hostname actually used, because every link,
+# redirect and login form MediaWiki emits is built from it. Left pinned to the
+# canonical name, an alias would serve exactly one page and then bounce the
+# reader straight back to the name their network is blocking.
+#
+# Matched against a whitelist rather than trusted from the request: $wgServer
+# built out of an unvalidated Host header is a cache-poisoning vector.
+$pickipediaAltHosts = array_filter( array_map(
+	'trim',
+	explode( ',', getenv('WIKI_ALT_HOSTS') ?: "pickipedia.cryptograss.live" )
+) );
+if ( in_array( $_SERVER['HTTP_HOST'] ?? '', $pickipediaAltHosts, true ) ) {
+	$wgServer = "https://" . $_SERVER['HTTP_HOST'];
+}
+
+# Name one URL as the real one. The same article is reachable as /wiki/X, as
+# /index.php?title=X, and now under every alias above; without this the
+# ranking signal splits across all of them.
+$wgEnableCanonicalServerLink = true;
+
 $wgScriptPath = "";
 $wgArticlePath = "/wiki/$1";
 $wgUsePathInfo = true;
@@ -147,7 +179,10 @@ $wgGrantPermissionGroups['release-edit'] = 'other';
 
 # Semantic MediaWiki (installed via Composer)
 wfLoadExtension( 'SemanticMediaWiki' );
-enableSemantics( parse_url($wgServer, PHP_URL_HOST) );
+# Canonical, not $wgServer: this is the wiki's identity in SMW's store, and it
+# has to stay put when a reader arrives on an alias hostname. Same value as
+# before for anyone using the canonical name — which is everyone today.
+enableSemantics( parse_url($wgCanonicalServer, PHP_URL_HOST) );
 
 # Enable SMW semantic links for Cryptograss namespace
 $smwgNamespacesWithSemanticLinks[NS_CRYPTOGRASS] = true;

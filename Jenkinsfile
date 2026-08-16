@@ -69,6 +69,7 @@ pipeline {
                     cp LocalSettings.php "${MW_DIR}/"
                     cp LocalSettings.local.php "${MW_DIR}/"
                     cp .htaccess "${MW_DIR}/"
+                    cp robots.txt "${MW_DIR}/"
 
                     # Copy composer.json as composer.local.json for MediaWiki
                     cp composer.json "${MW_DIR}/composer.local.json"
