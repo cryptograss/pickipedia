@@ -125,6 +125,25 @@ namespace {
 	check( 'but prose under a new heading is NOT',
 		gate( '', "== Appearances ==\nHe played the Ryman in 1998." ) !== null );
 
+	echo "\nNavigation links the middleware leaves bare:\n";
+
+	// The bot middleware does not mark a list item that is only a link, on the
+	// grounds that it asserts nothing. This gate has to agree, or a bot cannot
+	// write a See also section: the middleware declines to mark it and the gate
+	// then refuses the edit, naming a line nobody can fix. Found the hard way
+	// trying to create Bluegrass Podcast Firehose.
+	check( 'a bare See also link is allowed through',
+		gate( '', "== See also ==\n* [[PickiPedia:About]]" ) === null,
+		var_export( gate( '', "== See also ==\n* [[PickiPedia:About]]" ), true ) );
+	check( 'so is one in a numbered or indented list',
+		gate( '', "# [[Special:Releases]]\n: [[Main Page]]" ) === null );
+
+	// But the moment it says something about the link, it is a claim again.
+	check( 'a link WITH descriptive text still needs a marker',
+		gate( '', "* [[Special:Releases]] — recordings hosted by cryptograss" ) !== null );
+	check( 'and prose that merely contains a link does too',
+		gate( '', "He recorded it with [[Del McCoury]] in 1998." ) !== null );
+
 	echo "\nPage creation:\n";
 
 	check( 'creating a page of unmarked prose is rejected',
