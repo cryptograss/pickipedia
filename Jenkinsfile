@@ -255,6 +255,32 @@ pipeline {
             }
         }
 
+        stage('Copy Tools') {
+            steps {
+                sh '''#!/bin/bash
+                    set -e
+
+                    # The podcast firehose regenerates on a timer on the VPS, so
+                    # the script has to live there — Jenkins builds are irregular
+                    # and a feed that only refreshes on deploy would go stale for
+                    # weeks at a time.
+                    #
+                    # These land inside the web root because that is what gets
+                    # rsynced to the VPS, so .htaccess denies /tools/ to the web.
+                    # Nothing here is secret (it is all public on GitHub), but a
+                    # wiki should not serve its own build scripts as plain text.
+                    mkdir -p "${MW_DIR}/tools"
+                    rsync -a --checksum \
+                        --include='podcast-*' \
+                        --exclude='*' \
+                        "${WORKSPACE}/tools/" "${MW_DIR}/tools/"
+
+                    echo "Tools copied:"
+                    ls -1 "${MW_DIR}/tools/"
+                '''
+            }
+        }
+
         stage('Generate Build Info') {
             steps {
                 sh '''#!/bin/bash
