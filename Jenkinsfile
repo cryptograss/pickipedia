@@ -30,6 +30,21 @@ pipeline {
             }
         }
 
+        stage('Check Verification Gate') {
+            steps {
+                sh '''#!/bin/bash
+                    set -e
+
+                    # The gate decides what a bot is allowed to write to the
+                    # wiki. It is cheap to check and expensive to get wrong —
+                    # pickipedia#91 sat open long enough for the firehose to be
+                    # planned on top of it — so it runs before anything is
+                    # built, and a failure here stops the deploy.
+                    php extensions/PickiPediaVerification/tests/check-gate.php
+                '''
+            }
+        }
+
         stage('Download MediaWiki') {
             steps {
                 sh '''#!/bin/bash
