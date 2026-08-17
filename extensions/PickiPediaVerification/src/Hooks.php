@@ -203,14 +203,29 @@ class Hooks implements EditFilterMergedContentHook {
 	 */
 	private function cannotCarryMarker( string $line ): bool {
 		$trimmed = trim( $line );
-		return $trimmed === '' ||
+		if ( $trimmed === '' ||
 			str_starts_with( $trimmed, '==' ) ||
 			str_starts_with( $trimmed, '[[Category:' ) ||
 			str_starts_with( $trimmed, '{|' ) ||
 			str_starts_with( $trimmed, '|}' ) ||
 			str_starts_with( $trimmed, '|' ) ||
 			str_starts_with( $trimmed, '!' ) ||
-			$trimmed === '}}';
+			$trimmed === '}}'
+		) {
+			return true;
+		}
+
+		// A list item that is nothing but a link — a See also entry, a
+		// navigation list — asserts only that two pages are related, and the
+		// bot middleware deliberately leaves those bare for that reason.
+		//
+		// The gate has to agree with it. When the two halves of this disagree
+		// the result is not a stricter wiki, it is a bot that cannot write a
+		// See also section at all: the middleware declines to mark the line,
+		// the gate then refuses the whole edit, and the rejection names a line
+		// nobody can fix. Add descriptive text after the link and it stops
+		// being navigation, becomes a claim, gets marked, and is judged.
+		return (bool)preg_match( '/^[*#:;]+\s*\[\[[^\]]+\]\]\s*$/', $trimmed );
 	}
 
 	/**
