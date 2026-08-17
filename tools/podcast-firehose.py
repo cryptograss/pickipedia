@@ -17,16 +17,28 @@ from pathlib import Path
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
-FEEDS_CONFIG = Path(__file__).parent / "podcast-feeds.json"
+import podcast_config
+
 USER_AGENT = "PickiPedia Bluegrass Podcast Firehose/1.0"
 FETCH_TIMEOUT = 30
 MAX_EPISODES_PER_FEED = 50
 MAX_TOTAL_EPISODES = 200
 
 
-def load_feeds():
-    with open(FEEDS_CONFIG) as f:
-        return json.load(f)
+def load_feeds(prefer_wiki=True):
+    """
+    Which podcasts to aggregate.
+
+    Comes from the wiki, where the people who actually listen to these shows can
+    add one without a GitHub account. Falls back to the checked-in JSON when the
+    wiki is unreachable — this runs on a timer and publishes a feed people
+    subscribe to, so it must not stop publishing because the wiki is down.
+
+    @param prefer_wiki: Set false to force the checked-in copy.
+    @return: List of feed dicts with at least name and url.
+    """
+    feeds, _patterns = podcast_config.load(prefer_wiki=prefer_wiki)
+    return feeds
 
 
 def fetch_feed(url, display_name=None):
