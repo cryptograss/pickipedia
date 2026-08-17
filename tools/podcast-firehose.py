@@ -29,8 +29,13 @@ def load_feeds():
         return json.load(f)
 
 
-def fetch_feed(url):
-    """Fetch and parse an RSS feed, returning (channel_info, items)."""
+def fetch_feed(url, display_name=None):
+    """
+    Fetch and parse an RSS feed, returning (channel_info, items).
+
+    display_name is our curated name for the show, from podcast-feeds.json. It
+    overrides the feed's own title — see channel_info below for why.
+    """
     req = Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urlopen(req, timeout=FETCH_TIMEOUT) as resp:
@@ -51,8 +56,15 @@ def fetch_feed(url):
 
     title_el = channel.find("title")
     link_el = channel.find("link")
+
+    # Our name for the show wins over whatever the feed calls itself. Upstream
+    # titles are not maintained for display: one of these feeds announces
+    # itself as "The Appalachian Sunday Morning With Host Danny Hensley
+    # 9-24-2023", a stale episode title, and every one of its episodes would
+    # carry that as its label. podcast-feeds.json is where we decide what a
+    # show is called.
     channel_info = {
-        "title": title_el.text if title_el is not None else "Unknown",
+        "title": display_name or (title_el.text if title_el is not None else "Unknown"),
         "link": link_el.text if link_el is not None else "",
     }
 
@@ -74,6 +86,55 @@ def raw_pubdate(item):
     return datetime(1970, 1, 1)
 
 
+def select_episodes(all_items, max_total):
+    """
+    Choose which episodes make the cut, giving every show a turn before giving
+    any show a second one.
+
+    Sorting everything by date and taking the top N silences the quiet feeds
+    outright. A podcast that publishes monthly never outranks one that
+    publishes several times a week, so it disappears from a firehose whose
+    entire purpose is to show the scene — measured on the live feeds, five of
+    thirteen shows had zero episodes in the output. Toy Heart and County Sales
+    Radio Hour are not less worth hearing for being less frequent.
+
+    So: round-robin through the shows, newest first within each, until the
+    budget runs out. Every show that published anything gets at least one slot,
+    and the leftover capacity still flows to whoever posts most. The result is
+    sorted by date at the end, so the feed still reads chronologically.
+
+    @param all_items: (channel_info, item, pubdate) tuples across every feed.
+    @param max_total: How many episodes the combined feed may carry.
+    @return: The selected tuples, newest first.
+    """
+    by_show = {}
+    for entry in all_items:
+        channel_info = entry[0]
+        key = channel_info.get("link") or channel_info.get("title")
+        by_show.setdefault(key, []).append(entry)
+
+    for entries in by_show.values():
+        entries.sort(key=lambda x: x[2], reverse=True)
+
+    selected = []
+    round_index = 0
+    while len(selected) < max_total:
+        took_any = False
+        for entries in by_show.values():
+            if round_index < len(entries):
+                selected.append(entries[round_index])
+                took_any = True
+                if len(selected) >= max_total:
+                    break
+        if not took_any:
+            # Every show is exhausted; the feeds simply hold less than the cap.
+            break
+        round_index += 1
+
+    selected.sort(key=lambda x: x[2], reverse=True)
+    return selected
+
+
 def build_combined_feed(feeds_config, all_items):
     """Build a combined RSS feed XML string."""
     now = format_datetime(datetime.now().astimezone())
@@ -93,9 +154,7 @@ def build_combined_feed(feeds_config, all_items):
     ET.SubElement(channel, "lastBuildDate").text = now
     ET.SubElement(channel, "generator").text = "PickiPedia Bluegrass Podcast Firehose"
 
-    # Sort by pubdate descending, take top N
-    all_items.sort(key=lambda x: x[2], reverse=True)
-    for channel_info, item, pubdate in all_items[:MAX_TOTAL_EPISODES]:
+    for channel_info, item, pubdate in select_episodes(all_items, MAX_TOTAL_EPISODES):
         new_item = ET.SubElement(channel, "item")
 
         # Copy standard elements
@@ -137,7 +196,7 @@ def main():
     for feed in feeds:
         name = feed.get("name", feed["url"])
         print(f"  Fetching: {name}...", file=sys.stderr)
-        channel_info, items = fetch_feed(feed["url"])
+        channel_info, items = fetch_feed(feed["url"], feed.get("name"))
         if items:
             print(f"    Got {len(items)} episodes", file=sys.stderr)
             all_items.extend(items)

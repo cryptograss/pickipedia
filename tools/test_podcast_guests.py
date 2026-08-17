@@ -367,6 +367,20 @@ class TestWhatsTheReason:
         )
         assert guests == ["Sicard Hollow"]
 
+    def test_abbreviated_current_format(self):
+        """
+        The show switched to an abbreviated title at some point, and every
+        episode since stopped matching — 21 of them by the time anyone looked.
+        A feed changing its own format is not an edge case, it is Tuesday.
+        """
+        guests, _ = extract("WTRFT S2E44 - Mason Via", self.pats)
+        assert guests == ["Mason Via"]
+
+    def test_abbreviated_format_without_the_prefix(self):
+        """Some carry the season/episode marker and drop 'WTRFT' entirely."""
+        guests, _ = extract("S2E45 - North Fork Crossing - Portland Rose", self.pats)
+        assert guests == ["North Fork Crossing"]
+
     def test_missing_apostrophe(self):
         """Some titles drop the apostrophe — 'Whats' instead of 'What's'."""
         guests, _ = extract(
@@ -463,6 +477,33 @@ class TestGrassTalkRadio:
             self.pats,
         )
         assert guests == ["Buddy Ashmore"]
+
+    def test_monologues_are_skipped_not_unmatched(self):
+        """
+        Most of this show is Bradley talking, not interviewing. Those episodes
+        genuinely have no guest — but with no skip pattern they landed in the
+        unmatched pile, 184 of them, drowning the titles that actually needed a
+        pattern written. "No guest" and "could not parse" are different facts
+        and want different reports.
+        """
+        for title in (
+            "GTR-204 Update",
+            "GTR-200 Merry Christmas",
+            "GTR-196 Mushrooms and Metronomes",
+        ):
+            guests, skipped = extract(title, self.pats)
+            assert skipped, f"{title!r} should be skipped"
+            assert guests == []
+
+    def test_the_skip_does_not_swallow_real_interviews(self):
+        """
+        The skip is a catch-all and sits last for that reason. If it ever moves
+        above the interview patterns it would silently discard every guest this
+        show has.
+        """
+        guests, skipped = extract( "GTR-180 - Tony Williamson Interview", self.pats )
+        assert not skipped
+        assert guests == ["Tony Williamson"]
 
     def test_no_false_positive_on_topic(self):
         """Title Case topic titles must NOT be extracted as guest names.

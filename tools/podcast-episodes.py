@@ -8,6 +8,7 @@ Modes:
   --preview N   Show full wikitext for N sample pages
   --create      Actually create pages on the wiki via MCP
   --json        Output structured JSON for all episodes with guests
+  --unmatched   List titles no pattern matched — the pattern-writing worklist
 """
 
 import json
@@ -154,6 +155,10 @@ def main():
                         help="Output structured JSON")
     parser.add_argument("--podcast", type=str,
                         help="Only process this podcast")
+    parser.add_argument("--unmatched", action="store_true",
+                        help="List episode titles that matched no pattern, grouped "
+                             "by podcast. This is the worklist for improving "
+                             "podcast-guest-patterns.json")
     args = parser.parse_args()
 
     feeds, patterns = load_config()
@@ -162,6 +167,7 @@ def main():
     total_guests = 0
     total_skipped = 0
     total_unmatched = 0
+    unmatched_titles = []
 
     for feed in feeds:
         name = feed["name"]
@@ -182,6 +188,7 @@ def main():
                 continue
             if not guests:
                 total_unmatched += 1
+                unmatched_titles.append((name, ep["title"]))
                 continue
 
             total_guests += 1
@@ -201,6 +208,21 @@ def main():
     print(f"\nResults: {total_guests} episodes with guests, "
           f"{total_skipped} skipped, {total_unmatched} unmatched",
           file=sys.stderr)
+
+    # The unmatched pile is where pattern work comes from. A count alone says
+    # something is being missed without saying what, which is the least useful
+    # possible amount of information — some of these are monologues that ought
+    # to be skipped, and some are interviews whose title format nobody has
+    # written a pattern for yet, and the only way to tell is to read them.
+    if args.unmatched:
+        by_podcast = {}
+        for podcast_name, episode_title in unmatched_titles:
+            by_podcast.setdefault(podcast_name, []).append(episode_title)
+        for podcast_name in sorted(by_podcast):
+            titles = by_podcast[podcast_name]
+            print(f"\n{podcast_name} ({len(titles)} unmatched)")
+            for episode_title in titles:
+                print(f"  {episode_title}")
 
     if args.json:
         # Strip wikitext from JSON output to keep it clean
