@@ -20,6 +20,12 @@ RewriteEngine On
 # Maps /wiki/Page_Name to index.php?title=Page_Name
 RewriteBase /
 
+# Build and maintenance scripts. They are deployed into this tree because this
+# tree is what reaches the VPS, and the podcast firehose runs from a cron
+# there. Apache would otherwise serve them as plain text — harmless, since it
+# is all public on GitHub, but a wiki has no business serving its own scripts.
+RewriteRule ^tools/ - [F,L]
+
 # Short URL for wiki pages
 RewriteRule ^wiki/(.*)$ index.php?title=$1 [QSA,L]
 
