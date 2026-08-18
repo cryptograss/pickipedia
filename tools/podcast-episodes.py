@@ -20,10 +20,17 @@ from pathlib import Path
 from urllib.request import urlopen, Request
 from xml.etree.ElementTree import fromstring
 
+import podcast_budget
 import podcast_config
+import podcast_net
 
 TOOLS_DIR = Path(__file__).parent
 USER_AGENT = "PickiPedia Bluegrass Podcast Firehose/1.0"
+
+# Wall-clock allowance for applying one show's patterns to its episodes. Real
+# extraction across all thirteen takes well under a second; anything near this
+# is a runaway pattern, not slow work.
+PATTERN_BUDGET_SECONDS = 20
 FETCH_TIMEOUT = 30
 
 
@@ -45,10 +52,11 @@ def load_config(prefer_wiki=True):
 
 def fetch_episodes(feed_url):
     """Fetch RSS feed and return list of (title, link, pubdate, description) tuples."""
-    req = Request(feed_url, headers={"User-Agent": USER_AGENT})
     try:
-        with urlopen(req, timeout=FETCH_TIMEOUT) as resp:
-            raw = resp.read()
+        raw = podcast_net.fetch_bytes(feed_url, USER_AGENT, timeout=FETCH_TIMEOUT)
+    except podcast_net.UnsafeFeedURL as e:
+        print(f"  REFUSED {feed_url}: {e}", file=sys.stderr)
+        return []
     except Exception as e:
         print(f"  WARN: {e}", file=sys.stderr)
         return []
@@ -191,29 +199,41 @@ def main():
         print(f"Fetching: {name}...", file=sys.stderr)
         episodes = fetch_episodes(feed["url"])
 
-        for ep in episodes:
-            guests, skipped = extract_guest(ep["title"], pats)
-            if skipped:
-                total_skipped += 1
-                continue
-            if not guests:
-                total_unmatched += 1
-                unmatched_titles.append((name, ep["title"]))
-                continue
+        # Patterns come off a wiki page anyone may edit, and Python's re has no
+        # timeout. A nested quantifier — the kind of thing somebody writes by
+        # accident reaching for a name — takes longer than the age of the
+        # universe on an ordinary title. The budget keeps that to one show.
+        try:
+            with podcast_budget.budget(PATTERN_BUDGET_SECONDS, name):
+                for ep in episodes:
+                    guests, skipped = extract_guest(ep["title"], pats)
+                    if skipped:
+                        total_skipped += 1
+                        continue
+                    if not guests:
+                        total_unmatched += 1
+                        unmatched_titles.append((name, ep["title"]))
+                        continue
 
-            total_guests += 1
-            page_title = make_page_title(name, ep["title"])
-            wikitext = make_wikitext(name, ep, guests)
+                    total_guests += 1
+                    page_title = make_page_title(name, ep["title"])
+                    wikitext = make_wikitext(name, ep, guests)
 
-            all_episodes.append({
-                "page_title": page_title,
-                "podcast": name,
-                "episode_title": ep["title"],
-                "guests": guests,
-                "date": ep["pubdate"].isoformat() if ep["pubdate"] else None,
-                "link": ep["link"],
-                "wikitext": wikitext,
-            })
+                    all_episodes.append({
+                        "page_title": page_title,
+                        "podcast": name,
+                        "episode_title": ep["title"],
+                        "guests": guests,
+                        "date": ep["pubdate"].isoformat() if ep["pubdate"] else None,
+                        "link": ep["link"],
+                        "wikitext": wikitext,
+                    })
+        except podcast_budget.Overran as e:
+            # Whatever this show produced before the timer is kept; the rest of
+            # the feed carries on. Say it loudly, because a stalled pattern is
+            # invisible otherwise and somebody has to go fix the page.
+            print(f"  STALLED {e}. Check the guest patterns on [[{name}]] for a "
+                  f"nested quantifier such as ([A-Za-z ]+)+", file=sys.stderr)
 
     print(f"\nResults: {total_guests} episodes with guests, "
           f"{total_skipped} skipped, {total_unmatched} unmatched",
