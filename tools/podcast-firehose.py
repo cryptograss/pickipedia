@@ -18,6 +18,7 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 import podcast_config
+import podcast_net
 
 USER_AGENT = "PickiPedia Bluegrass Podcast Firehose/1.0"
 FETCH_TIMEOUT = 30
@@ -48,10 +49,13 @@ def fetch_feed(url, display_name=None):
     display_name is our curated name for the show, from podcast-feeds.json. It
     overrides the feed's own title — see channel_info below for why.
     """
-    req = Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urlopen(req, timeout=FETCH_TIMEOUT) as resp:
-            raw = resp.read()
+        raw = podcast_net.fetch_bytes(url, USER_AGENT, timeout=FETCH_TIMEOUT)
+    except podcast_net.UnsafeFeedURL as e:
+        # Somebody put a URL on a wiki page that points at our own network, or
+        # at something too large to parse. Skip the show, keep the feed.
+        print(f"  REFUSED {url}: {e}", file=sys.stderr)
+        return None, []
     except (URLError, TimeoutError) as e:
         print(f"  WARN: Failed to fetch {url}: {e}", file=sys.stderr)
         return None, []
