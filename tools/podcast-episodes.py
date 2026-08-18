@@ -20,17 +20,27 @@ from pathlib import Path
 from urllib.request import urlopen, Request
 from xml.etree.ElementTree import fromstring
 
+import podcast_config
+
 TOOLS_DIR = Path(__file__).parent
-FEEDS_CONFIG = TOOLS_DIR / "podcast-feeds.json"
-PATTERNS_CONFIG = TOOLS_DIR / "podcast-guest-patterns.json"
 USER_AGENT = "PickiPedia Bluegrass Podcast Firehose/1.0"
 FETCH_TIMEOUT = 30
 
 
-def load_config():
-    feeds = json.load(open(FEEDS_CONFIG))
-    patterns = json.load(open(PATTERNS_CONFIG))["patterns"]
-    return feeds, patterns
+def load_config(prefer_wiki=True):
+    """
+    Which podcasts to read, and how to pull guest names out of their titles.
+
+    Both come from the wiki — each podcast's own page carries its feed URL in
+    the {{Podcast}} infobox and its patterns in a guest-patterns block — so a
+    picker who spots a mis-parsed title can fix it where they already are,
+    rather than opening a pull request.
+
+    @param prefer_wiki: Set false to force the checked-in copy, which is what
+        you want when testing a pattern before publishing it.
+    @return: (feeds, patterns)
+    """
+    return podcast_config.load(prefer_wiki=prefer_wiki)
 
 
 def fetch_episodes(feed_url):
