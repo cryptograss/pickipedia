@@ -270,13 +270,46 @@ pipeline {
                     # Nothing here is secret (it is all public on GitHub), but a
                     # wiki should not serve its own build scripts as plain text.
                     mkdir -p "${MW_DIR}/tools"
+
+                    # Both spellings. The scripts are hyphenated because they
+                    # are run as commands; the modules they import are
+                    # underscored because Python cannot import a hyphen. An
+                    # earlier 'podcast-*' matched only the first kind, so
+                    # podcast-firehose.py arrived on the VPS without
+                    # podcast_config.py or podcast_net.py and died on
+                    # ImportError every six hours, into a log nobody was
+                    # reading. Tests stay behind; they are not run here.
                     rsync -a --checksum \
                         --include='podcast-*' \
+                        --include='podcast_*' \
                         --exclude='*' \
                         "${WORKSPACE}/tools/" "${MW_DIR}/tools/"
 
                     echo "Tools copied:"
                     ls -1 "${MW_DIR}/tools/"
+
+                    # The firehose imports its own modules, so a missing one is
+                    # a broken feed rather than a broken build — which is
+                    # exactly how the last gap went unnoticed. Fail here
+                    # instead, where somebody is watching.
+                    for required in podcast-firehose.py podcast_config.py podcast_net.py; do
+                        if [ ! -f "${MW_DIR}/tools/${required}" ]; then
+                            echo "ERROR: ${required} did not reach the deploy tree"
+                            exit 1
+                        fi
+                    done
+
+                    # Everything podcast-firehose.py imports must be present, or
+                    # it will only say so at 4am on the VPS.
+                    missing=0
+                    for module in $(grep -oP '^import \Kpodcast_\w+' \
+                            "${WORKSPACE}/tools/podcast-firehose.py"); do
+                        if [ ! -f "${MW_DIR}/tools/${module}.py" ]; then
+                            echo "ERROR: podcast-firehose.py imports ${module}, which was not copied"
+                            missing=1
+                        fi
+                    done
+                    [ "$missing" -eq 0 ] || exit 1
                 '''
             }
         }
