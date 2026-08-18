@@ -305,7 +305,15 @@ pipeline {
                     # the first place.
                     missing=0
                     for script in "${MW_DIR}"/tools/podcast-*.py; do
-                        for module in $(grep -oP '^import \Kpodcast_\w+' "$script"); do
+                        # No backslash escapes in here. This is a Groovy string
+                        # before it is ever a shell script, and Groovy rejects
+                        # any escape it does not recognise: a PCRE lookbehind
+                        # reset or a shorthand character class is enough to stop
+                        # the whole Jenkinsfile parsing, which fails the build
+                        # before a line of it runs. Matching the literal prefix
+                        # and taking the second field with awk says the same
+                        # thing and survives the trip.
+                        for module in $(grep '^import podcast_' "$script" | awk '{print $2}'); do
                             if [ ! -f "${MW_DIR}/tools/${module}.py" ]; then
                                 echo "ERROR: $(basename "$script") imports ${module}, which was not copied"
                                 missing=1
