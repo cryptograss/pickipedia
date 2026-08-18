@@ -299,15 +299,18 @@ pipeline {
                         fi
                     done
 
-                    # Everything podcast-firehose.py imports must be present, or
-                    # it will only say so at 4am on the VPS.
+                    # Everything the deployed scripts import must be present, or
+                    # they will only say so at 4am on the VPS. Read the imports
+                    # rather than keeping a list here: a list is what drifted in
+                    # the first place.
                     missing=0
-                    for module in $(grep -oP '^import \Kpodcast_\w+' \
-                            "${WORKSPACE}/tools/podcast-firehose.py"); do
-                        if [ ! -f "${MW_DIR}/tools/${module}.py" ]; then
-                            echo "ERROR: podcast-firehose.py imports ${module}, which was not copied"
-                            missing=1
-                        fi
+                    for script in "${MW_DIR}"/tools/podcast-*.py; do
+                        for module in $(grep -oP '^import \Kpodcast_\w+' "$script"); do
+                            if [ ! -f "${MW_DIR}/tools/${module}.py" ]; then
+                                echo "ERROR: $(basename "$script") imports ${module}, which was not copied"
+                                missing=1
+                            fi
+                        done
                     done
                     [ "$missing" -eq 0 ] || exit 1
                 '''
