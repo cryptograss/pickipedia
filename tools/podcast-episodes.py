@@ -209,6 +209,8 @@ def main():
     parser = argparse.ArgumentParser(description="Generate podcast episode wiki pages")
     parser.add_argument("--dry-run", action="store_true", default=True,
                         help="Show what pages would be created (default)")
+    parser.add_argument("--with-wikitext", action="store_true",
+                        help="include the generated wikitext in --json output")
     parser.add_argument("--preview", type=int, metavar="N",
                         help="Show full wikitext for N sample pages")
     parser.add_argument("--json", action="store_true",
@@ -299,10 +301,15 @@ def main():
                 print(f"  {episode_title}")
 
     if args.json:
-        # Strip wikitext from JSON output to keep it clean
+        # The generated wikitext is bulky and nobody reading this by eye wants
+        # it, so it is dropped unless asked for. podcast-episodes-to-wiki.py
+        # asks for it — that is the whole input it needs.
         output = []
         for ep in all_episodes:
-            out = {k: v for k, v in ep.items() if k != "wikitext"}
+            if args.with_wikitext:
+                out = dict(ep)
+            else:
+                out = {k: v for k, v in ep.items() if k != "wikitext"}
             output.append(out)
         json.dump(output, sys.stdout, indent=2, default=str)
         print()
