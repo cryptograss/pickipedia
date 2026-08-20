@@ -19,6 +19,8 @@ import re
 import pytest
 from pathlib import Path
 
+from podcast_names import split_names
+
 # ---------------------------------------------------------------------------
 # Fixtures: load the actual pattern config once per session
 # ---------------------------------------------------------------------------
@@ -41,9 +43,11 @@ def all_patterns():
 def extract(title: str, patterns: list) -> tuple[list[str], bool]:
     """Run the extraction logic against a single title.
 
-    Returns (guests, was_skipped).  This mirrors the logic in
-    podcast-episodes.py's extract_guest() but is self-contained
-    so the tests don't import from a script with a __main__ guard.
+    Returns (guests, was_skipped). The pattern-matching is mirrored from
+    podcast-episodes.py's extract_guest(), because that lives in a script with
+    a __main__ guard and cannot be imported. The name splitting is *not*
+    mirrored — it is imported from podcast_names, so these tests exercise the
+    code that actually ships rather than a copy that can quietly drift from it.
     """
     for p in patterns:
         m = re.match(p["pattern"], title)
@@ -53,18 +57,9 @@ def extract(title: str, patterns: list) -> tuple[list[str], bool]:
             groups = m.groupdict()
             guests = []
             if "guest" in groups and groups["guest"]:
-                guest = groups["guest"].strip()
-                # Split on & / and for multi-guest episodes,
-                # but only if each part looks like a name (2+ words)
-                parts = re.split(r'\s*(?:&|and)\s*', guest)
-                if len(parts) > 1 and all(
-                    len(p.strip().split()) >= 2 for p in parts
-                ):
-                    guests.extend(p.strip() for p in parts)
-                else:
-                    guests.append(guest)
+                guests.extend(split_names(groups["guest"]))
             if "feat" in groups and groups["feat"]:
-                guests.append(groups["feat"].strip())
+                guests.extend(split_names(groups["feat"]))
             return guests, False
     return [], False
 
@@ -700,3 +695,79 @@ class TestPageTitleGeneration:
         t = self._make_title("Test", long_title)
         # The part after "Test/" should be <= 120 chars
         assert len(t.split("/", 1)[1]) <= 120
+
+
+# ===================================================================
+# NAME SPLITTING
+#
+# A pattern captures whatever sat where a name was expected, and that is
+# often several names at once. Splitting them is what turns one dead page
+# title into several links to people who matter.
+#
+# The rule is deliberately conservative: split only when every part looks
+# like a name on its own. A bad split invents entities, which is worse than
+# leaving a compound name whole for somebody to rename later.
+# ===================================================================
+
+class TestNameSplitting:
+    """podcast_names.split_names — the shared splitter."""
+
+    @pytest.mark.parametrize("raw,expected", [
+        # Commas are the case that was missing, and the most common one.
+        ("Sam Bush, Jerry Douglas, David Grisman",
+         ["Sam Bush", "Jerry Douglas", "David Grisman"]),
+        ("Tony Trischka, Kristin Scott Benson",
+         ["Tony Trischka", "Kristin Scott Benson"]),
+        # Mixed separators in one title.
+        ("Sierra Hull, Alison Krauss and Wyatt Rice",
+         ["Sierra Hull", "Alison Krauss", "Wyatt Rice"]),
+        ("Russ Barenberg & Michael Daves",
+         ["Russ Barenberg", "Michael Daves"]),
+        # Trailing vagueness is dropped, and must not cost us the split.
+        ("Sierra Hull, Alison Krauss, Wyatt Rice and more",
+         ["Sierra Hull", "Alison Krauss", "Wyatt Rice"]),
+    ])
+    def test_splits_multiple_names(self, raw, expected):
+        assert split_names(raw) == expected
+
+    @pytest.mark.parametrize("raw", [
+        # Shared surname — "Natalie" alone is not a name we could link.
+        "Natalie and Brittany Haas",
+        # What the duo call themselves.
+        "Carter and Cleveland",
+        # Bands and organisations are single entities.
+        "The Ashokan Center",
+        "The Last Revel",
+    ])
+    def test_leaves_compound_names_whole(self, raw):
+        assert split_names(raw) == [raw]
+
+    @pytest.mark.parametrize("raw", ["", "   ", None, "and more", "etc."])
+    def test_yields_nothing_useful(self, raw):
+        assert split_names(raw) == []
+
+    def test_single_name_is_unchanged(self):
+        assert split_names("  Bronwyn Keith-Hynes  ") == ["Bronwyn Keith-Hynes"]
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("feat. Cory Walker", ["Cory Walker"]),
+        ("ft Molly Tuttle", ["Molly Tuttle"]),
+        ("featuring Sierra Hull", ["Sierra Hull"]),
+        # The introducer can sit after a separator, not only at the front.
+        ("East Nash Grass, feat. Cory Walker",
+         ["East Nash Grass", "Cory Walker"]),
+    ])
+    def test_drops_the_word_that_introduced_the_name(self, raw, expected):
+        assert split_names(raw) == expected
+
+    @pytest.mark.parametrize("raw", [
+        # "Hand" and "Mandolinist" contain "and". Splitting on a bare "and"
+        # used to cut them in half and yield "Left H" and "Master M".
+        "Left Hand Boot Camp",
+        "Master Mandolinist David Benedict",
+        # "Ashmore" ends in "more", which the trailing-vagueness strip must
+        # not touch.
+        "Buddy Ashmore",
+    ])
+    def test_does_not_cut_inside_a_word(self, raw):
+        assert split_names(raw) == [raw]

@@ -22,6 +22,7 @@ from xml.etree.ElementTree import fromstring
 
 import podcast_budget
 import podcast_config
+import podcast_names
 import podcast_net
 
 TOOLS_DIR = Path(__file__).parent
@@ -48,6 +49,35 @@ def load_config(prefer_wiki=True):
     @return: (feeds, patterns)
     """
     return podcast_config.load(prefer_wiki=prefer_wiki)
+
+
+ITUNES = "{http://www.itunes.com/dtds/podcast-1.0.dtd}"
+
+
+def to_seconds(raw):
+    """
+    Normalise an iTunes duration to whole seconds.
+
+    Feeds publish this two ways — "2670" and "01:34:33" — and both appear
+    among our thirteen. Storing seconds means a query can sort or filter by
+    length without caring which the publisher chose.
+
+    @return: int seconds, or None if the feed gave us nothing usable.
+    """
+    if not raw or not raw.strip():
+        return None
+    raw = raw.strip()
+    try:
+        if ":" in raw:
+            parts = [int(part) for part in raw.split(":")]
+            while len(parts) < 3:
+                parts.insert(0, 0)
+            seconds = parts[0] * 3600 + parts[1] * 60 + parts[2]
+        else:
+            seconds = int(float(raw))
+    except ValueError:
+        return None
+    return seconds if seconds > 0 else None
 
 
 def fetch_episodes(feed_url):
@@ -78,6 +108,14 @@ def fetch_episodes(feed_url):
         link = link_el.text.strip() if link_el is not None and link_el.text else ""
         desc = desc_el.text.strip() if desc_el is not None and desc_el.text else ""
 
+        # The audio itself, and how long it runs. Both are wanted on the page,
+        # and collecting them now is far cheaper than a second pass over
+        # several hundred already-created episodes.
+        enclosure = item.find("enclosure")
+        audio = enclosure.get("url", "") if enclosure is not None else ""
+        dur_el = item.find(ITUNES + "duration")
+        duration = to_seconds(dur_el.text if dur_el is not None else None)
+
         pubdate = None
         if pd_el is not None and pd_el.text:
             try:
@@ -91,6 +129,8 @@ def fetch_episodes(feed_url):
                 "link": link,
                 "pubdate": pubdate,
                 "description": desc,
+                "audio": audio,
+                "duration": duration,
             })
 
     return episodes
@@ -107,16 +147,9 @@ def extract_guest(title, patterns_for_podcast):
             groups = m.groupdict()
             guests = []
             if "guest" in groups and groups["guest"]:
-                guest = groups["guest"].strip()
-                # Split on " & " or " and " for multi-guest episodes
-                parts = re.split(r'\s*(?:&|and)\s*', guest)
-                # Only split if parts look like individual names (2+ words each)
-                if len(parts) > 1 and all(len(p.strip().split()) >= 2 for p in parts):
-                    guests.extend(p.strip() for p in parts)
-                else:
-                    guests.append(guest)
+                guests.extend(podcast_names.split_names(groups["guest"]))
             if "feat" in groups and groups["feat"]:
-                guests.append(groups["feat"].strip())
+                guests.extend(podcast_names.split_names(groups["feat"]))
             return guests, False
     return [], False
 
@@ -145,9 +178,18 @@ def make_wikitext(podcast_name, episode, guests):
     if episode["link"]:
         params.append(f"|url={episode['link']}")
 
-    for i, guest in enumerate(guests):
-        key = "guest" if i == 0 else f"guest{i+1}"
-        params.append(f"|{key}={guest}")
+    if episode.get("audio"):
+        params.append(f"|audio={episode['audio']}")
+    if episode.get("duration"):
+        params.append(f"|duration={episode['duration']}")
+
+    # "topic", not "guest". A title gives up proper nouns without saying
+    # whether the named party turned up or was merely discussed — Tony Rice
+    # still headlines episodes — and asserting a guest appearance that did not
+    # happen puts a false claim on somebody's page. See Property:Has topic.
+    for i, topic in enumerate(guests):
+        key = "topic" if i == 0 else f"topic{i+1}"
+        params.append(f"|{key}={topic}")
 
     # Clean description (strip HTML tags/entities, truncate)
     desc = re.sub(r'<[^>]+>', '', episode.get("description", ""))
@@ -226,6 +268,8 @@ def main():
                         "guests": guests,
                         "date": ep["pubdate"].isoformat() if ep["pubdate"] else None,
                         "link": ep["link"],
+                        "audio": ep.get("audio", ""),
+                        "duration": ep.get("duration"),
                         "wikitext": wikitext,
                     })
         except podcast_budget.Overran as e:
