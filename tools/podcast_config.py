@@ -27,6 +27,7 @@ open while editing at midnight.
 """
 
 import json
+import pathlib
 import re
 import sys
 from pathlib import Path
@@ -217,25 +218,69 @@ def load_from_repo():
     return feeds, patterns
 
 
-def load(prefer_wiki=True, log=None):
-    """
-    Configuration for the podcast tools.
+# What load_with_source() reports about where the configuration came from.
+SOURCE_WIKI = "wiki"
+SOURCE_SNAPSHOT = "snapshot"
+SOURCE_REPO_FORCED = "repo (asked for)"
+SOURCE_REPO_FALLBACK = "repo (wiki unreachable)"
 
-    @param prefer_wiki: Read the wiki first. Set false to force the repo copy,
-        which is what the tests do and what you want when debugging a pattern
-        without publishing it.
-    @param log: Called with a string for anything noteworthy. Defaults to
-        stderr, because silence about a dropped podcast is worse than noise.
-    @return: (feeds, patterns)
+
+def save_snapshot(path, feeds, patterns, source):
+    """
+    Write the resolved configuration somewhere it can be read back offline.
+
+    Take one of these while the wiki is reachable and you can run the tools
+    later from a campground with no signal, deliberately, instead of silently
+    dropping to a checked-in copy that may be months behind what the wiki says.
+
+    @param path: File to write.
+    @param source: Where this configuration came from, recorded so a snapshot
+        of a fallback cannot masquerade as a snapshot of the wiki.
+    """
+    pathlib.Path(path).write_text(json.dumps({
+        "source": source,
+        "feeds": feeds,
+        "patterns": patterns,
+    }, indent=2))
+
+
+def load_from_snapshot(path):
+    """@return: (feeds, patterns, original_source) from a saved snapshot."""
+    data = json.loads(pathlib.Path(path).read_text())
+    return data["feeds"], data["patterns"], data.get("source", "unknown")
+
+
+def load_with_source(prefer_wiki=True, log=None, snapshot=None):
+    """
+    Configuration, and an honest statement of where it came from.
+
+    The plain load() hides this, which is right for the firehose — that runs on
+    a timer and must keep publishing whatever happens, so falling back to the
+    checked-in copy is the correct behaviour and a log line is enough.
+
+    It is the wrong behaviour for anything that writes to the wiki. An import
+    built from stale patterns is not obviously broken; it is quietly wrong
+    across every page it touches. So callers that write are expected to ask for
+    the source and refuse SOURCE_REPO_FALLBACK.
+
+    @param snapshot: Read this file instead of the wiki. For working offline on
+        purpose, having taken a snapshot while connected.
+    @return: (feeds, patterns, source)
     """
     if log is None:
         def log(message):
             print(f"[config] {message}", file=sys.stderr)
 
+    if snapshot:
+        feeds, patterns, original = load_from_snapshot(snapshot)
+        log(f"{len(feeds)} podcasts from snapshot {snapshot} "
+            f"(taken from: {original})")
+        return feeds, patterns, SOURCE_SNAPSHOT
+
     repo_feeds, repo_patterns = load_from_repo()
 
     if not prefer_wiki:
-        return repo_feeds, repo_patterns
+        return repo_feeds, repo_patterns, SOURCE_REPO_FORCED
 
     try:
         wiki_feeds, wiki_patterns = load_from_wiki(
@@ -243,7 +288,7 @@ def load(prefer_wiki=True, log=None):
         )
     except Exception as e:
         log(f"wiki unreachable ({e}); using the checked-in config alone")
-        return repo_feeds, repo_patterns
+        return repo_feeds, repo_patterns, SOURCE_REPO_FALLBACK
 
     # The wiki wins where it speaks, and the repo covers what has not been
     # migrated yet. Replacing outright would be cleaner semantically and much
@@ -265,6 +310,19 @@ def load(prefer_wiki=True, log=None):
     if inherited:
         log("not yet migrated: " + ", ".join(sorted(f["name"] for f in inherited)))
 
+    return feeds, patterns, SOURCE_WIKI
+
+
+def load(prefer_wiki=True, log=None, snapshot=None):
+    """
+    Configuration for the podcast tools, without the provenance.
+
+    Kept because most callers only read. Anything that writes to the wiki
+    should use load_with_source() and refuse a fallback.
+
+    @return: (feeds, patterns)
+    """
+    feeds, patterns, _source = load_with_source(prefer_wiki, log, snapshot)
     return feeds, patterns
 
 

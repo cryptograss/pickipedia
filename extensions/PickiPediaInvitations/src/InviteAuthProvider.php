@@ -51,13 +51,23 @@ class InviteAuthProvider extends AbstractPreAuthenticationProvider {
 			return StatusValue::newGood();
 		}
 
-		// Sysops can create accounts without invites
-		// (e.g., creating accounts on behalf of users via Special:CreateAccount)
-		$userGroupManager = MediaWikiServices::getInstance()->getUserGroupManager();
-		$creatorGroups = $userGroupManager->getUserGroups( $creator );
-		if ( in_array( 'sysop', $creatorGroups ) || in_array( 'bureaucrat', $creatorGroups ) ) {
-			return StatusValue::newGood();
-		}
+		// There is deliberately no exemption for administrators.
+		//
+		// One used to sit here, and it never worked: getAuthenticationRequests()
+		// adds the invite field for everybody and getFieldInfo() marks it
+		// required, so HTMLForm refused the submission before this method was
+		// ever reached. An admin creating an account through the web form has
+		// always had to hold a code, whatever this said.
+		//
+		// Asked to choose between fixing the exemption and dropping it, we
+		// dropped it. Every account on PickiPedia should trace back to an
+		// invite issued by a person, with no privileged path around that — the
+		// wiki's trust model rests on knowing where accounts came from, and an
+		// admin minting themselves a code costs a minute and leaves a record.
+		// That applies to bot accounts too, where the invite is arguably worth
+		// more: it says which human stood behind the machine.
+		//
+		// See https://github.com/cryptograss/pickipedia/issues/100
 
 		// Get the invite code from the request
 		$req = AuthenticationRequest::getRequestByClass( $reqs, InviteAuthRequest::class );

@@ -211,6 +211,10 @@ def main():
                         help="Show what pages would be created (default)")
     parser.add_argument("--with-wikitext", action="store_true",
                         help="include the generated wikitext in --json output")
+    parser.add_argument("--config-snapshot", metavar="FILE",
+                        help="read the config from a snapshot instead of the wiki")
+    parser.add_argument("--save-config-snapshot", metavar="FILE",
+                        help="save the resolved config for later offline use")
     parser.add_argument("--preview", type=int, metavar="N",
                         help="Show full wikitext for N sample pages")
     parser.add_argument("--json", action="store_true",
@@ -223,7 +227,13 @@ def main():
                              "podcast-guest-patterns.json")
     args = parser.parse_args()
 
-    feeds, patterns = load_config()
+    feeds, patterns, config_source = podcast_config.load_with_source(
+        prefer_wiki=True, snapshot=args.config_snapshot)
+    if args.save_config_snapshot:
+        podcast_config.save_snapshot(args.save_config_snapshot,
+                                     feeds, patterns, config_source)
+        print(f"config snapshot written to {args.save_config_snapshot}",
+              file=sys.stderr)
 
     all_episodes = []
     total_guests = 0
@@ -311,7 +321,14 @@ def main():
             else:
                 out = {k: v for k, v in ep.items() if k != "wikitext"}
             output.append(out)
-        json.dump(output, sys.stdout, indent=2, default=str)
+        # A bare list once, now an object, so that where the configuration
+        # came from travels with the episodes it produced. The importer refuses
+        # to write from a fallback config, and it can only know to refuse if
+        # this says so. Readers of the old shape still work — see the importer.
+        json.dump({
+            "config_source": config_source,
+            "episodes": output,
+        }, sys.stdout, indent=2, default=str)
         print()
     elif args.preview:
         for ep in all_episodes[:args.preview]:

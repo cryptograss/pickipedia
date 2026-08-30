@@ -40,6 +40,7 @@ import time
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
 
+import podcast_config                                      # noqa: E402
 import podcast_wiki                                        # noqa: E402
 
 # The wiki is a small VPS running its own database and there is no hurry.
@@ -64,9 +65,43 @@ def main():
     ap.add_argument("--limit", type=int, help="stop after this many episodes")
     ap.add_argument("--api", default=podcast_wiki.DEFAULT_API,
                     help="MediaWiki api.php to write to")
+    ap.add_argument("--allow-stale-config", action="store_true",
+                    help="import anyway when the extractor fell back to the "
+                         "checked-in config; say so out loud")
     args = ap.parse_args()
 
-    episodes = json.load(sys.stdin)
+    payload = json.load(sys.stdin)
+
+    # The extractor used to emit a bare list and now emits an object carrying
+    # the configuration's provenance. Accept both, so an episodes.json produced
+    # before this change still imports.
+    if isinstance(payload, dict):
+        episodes = payload["episodes"]
+        config_source = payload.get("config_source", "unrecorded")
+    else:
+        episodes = payload
+        config_source = "unrecorded"
+
+    # A fallback config is right for the firehose and wrong here. The feed must
+    # keep publishing when the wiki is unreachable; an import must not run on a
+    # checked-in copy that may be months behind the patterns people have since
+    # fixed. It would not fail — it would write several hundred pages that are
+    # quietly wrong, with nothing but a log line to say why.
+    if config_source == podcast_config.SOURCE_REPO_FALLBACK:
+        if not args.allow_stale_config:
+            raise SystemExit(
+                "refusing to import: the extractor could not reach the wiki and "
+                "fell back to the checked-in config.\n"
+                "  Re-run podcast-episodes.py with a connection, or take a "
+                "snapshot while you have one:\n"
+                "    podcast-episodes.py --save-config-snapshot cfg.json ...\n"
+                "    podcast-episodes.py --config-snapshot cfg.json ...\n"
+                "  Or pass --allow-stale-config if you are sure."
+            )
+        print("WARNING: importing from a fallback config, as asked",
+              file=sys.stderr)
+    print(f"config source: {config_source}", file=sys.stderr)
+
     if args.show:
         wanted = set(args.show)
         episodes = [e for e in episodes if e["podcast"] in wanted]

@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 """
-Rank the people and bands the podcasts talk about that PickiPedia has no page
-for, and write it out as wikitext.
+Rank the subjects the podcasts talk about that PickiPedia has no page for.
 
-Reads the JSON that podcast-episodes.py emits, so the two compose:
+    python3 podcast-most-wanted.py > mostwanted.wiki
 
-    python3 podcast-episodes.py --json | python3 podcast-most-wanted.py
+Reads the wiki rather than the feeds. Every episode page carries Has topic and
+Has podcast, and Semantic MediaWiki reports whether a page-valued property
+points at something that exists — so one query answers the whole question, and
+the answer reflects what the wiki actually says today, including corrections
+somebody made by hand since the last import.
 
-Why this exists when MediaWiki has Special:WantedPages: once the episode pages
-are created, every unresolved topic is a redlink and that special page ranks
-them for free, across the whole wiki, forever. What it cannot tell you is which
-shows were talking about somebody, or which episodes to listen to before
-writing about them. That is the part worth generating.
-
-The ranking is a claim about the scene, not about notability. It counts how
-often somebody comes up in eight years of bluegrass podcasts — which is a
-measure of what the music actually talks about, and will move as the shows keep
-publishing.
+[[Special:WantedPages]] already ranks redlinks across the whole wiki and keeps
+doing it for free. What it cannot say is *which shows were talking about
+somebody*, or which episodes to listen to before writing about them. That
+attribution is the reason this exists, and it is what makes the list a reading
+list rather than a to-do list.
 """
 
 import json
@@ -26,100 +24,87 @@ import urllib.request
 from collections import defaultdict
 
 API = "https://pickipedia.xyz/api.php"
-BATCH = 50
-TIMEOUT = 30
+PAGE_SIZE = 500
+TIMEOUT = 60
 
-# Values the title parser yields that are not entities worth a page.
-NOT_AN_ENTITY = {"and more", "more", "etc", "etc.", "others"}
+# Values the title parser yields that are not subjects worth a page.
+NOT_A_SUBJECT = {"and more", "more", "others", "etc", "etc."}
 
 
-def existing_pages(titles):
-    """
-    Which of these titles already have a page.
-
-    @param titles: iterable of candidate page titles.
-    @return: set of the titles that exist.
-    """
-    found = set()
-    titles = [t for t in titles
-              if t and len(t) < 250 and not any(c in t for c in "#<>[]|{}")]
-
-    for i in range(0, len(titles), BATCH):
-        batch = titles[i:i + BATCH]
-        query = urllib.parse.urlencode({
-            "action": "query",
-            "titles": "|".join(batch),
+def ask(query):
+    """Run one SMW #ask, following offsets until the results run out."""
+    results, offset = {}, 0
+    while True:
+        params = urllib.parse.urlencode({
+            "action": "ask",
+            "query": f"{query}|limit={PAGE_SIZE}|offset={offset}",
             "format": "json",
-            "formatversion": "2",
         })
-        try:
-            with urllib.request.urlopen(f"{API}?{query}", timeout=TIMEOUT) as r:
-                data = json.load(r)
-        except Exception as e:                                  # noqa: BLE001
-            print(f"  WARN: lookup failed for a batch: {e}", file=sys.stderr)
-            continue
-
-        by_title = {p["title"]: p for p in data.get("query", {}).get("pages", [])}
-        for page in by_title.values():
-            if not page.get("missing", False):
-                found.add(page["title"])
-        # MediaWiki normalises "foo bar" to "Foo bar"; map the answer back to
-        # what we asked about, or every name we sent would look missing.
-        for norm in data.get("query", {}).get("normalized", []):
-            if norm["to"] in found:
-                found.add(norm["from"])
-
-    return found
+        with urllib.request.urlopen(f"{API}?{params}", timeout=TIMEOUT) as r:
+            data = json.load(r)
+        if "error" in data:
+            raise SystemExit(f"ask failed: {str(data['error'])[:300]}")
+        batch = data.get("query", {}).get("results", {}) or {}
+        results.update(batch)
+        if len(batch) < PAGE_SIZE:
+            return results
+        offset += PAGE_SIZE
 
 
-def collect(episodes):
+def collect():
     """
-    @return: dict of name -> {"episodes": [...], "shows": set}
+    @return: dict of subject -> {shows, episodes, exists}
     """
-    wanted = defaultdict(lambda: {"episodes": [], "shows": set()})
-    for episode in episodes:
-        for name in episode.get("guests", []):
-            name = (name or "").strip()
-            if not name or name.lower() in NOT_AN_ENTITY:
+    raw = ask("[[Category:Podcast episodes]]|?Has topic|?Has podcast")
+    print(f"{len(raw)} episode pages", file=sys.stderr)
+
+    subjects = defaultdict(
+        lambda: {"shows": set(), "episodes": [], "exists": False})
+
+    for episode_title, page in raw.items():
+        printouts = page.get("printouts", {})
+        shows = [s.get("fulltext", "") for s in printouts.get("Has podcast", [])]
+        for topic in printouts.get("Has topic", []):
+            name = topic.get("fulltext", "").strip()
+            if not name or name.lower() in NOT_A_SUBJECT:
                 continue
-            entry = wanted[name]
-            entry["episodes"].append(episode)
-            entry["shows"].add(episode["podcast"])
-    return wanted
+            entry = subjects[name]
+            # SMW reports '' for a page-valued property pointing at nothing.
+            entry["exists"] = bool(topic.get("exists"))
+            entry["shows"].update(s for s in shows if s)
+            entry["episodes"].append(episode_title)
+
+    return subjects
 
 
-def render(wanted, missing):
-    """Wikitext for the ranked list."""
-    ranked = sorted(
-        missing,
-        key=lambda n: (-len(wanted[n]["episodes"]), n.lower()),
-    )
-    repeated = [n for n in ranked if len(wanted[n]["episodes"]) > 1]
-    once = [n for n in ranked if len(wanted[n]["episodes"]) == 1]
+def render(subjects):
+    missing = {n: e for n, e in subjects.items() if not e["exists"]}
+    ranked = sorted(missing,
+                    key=lambda n: (-len(missing[n]["episodes"]), n.lower()))
+    repeated = [n for n in ranked if len(missing[n]["episodes"]) > 1]
+    once = [n for n in ranked if len(missing[n]["episodes"]) == 1]
 
+    total_shows = len({s for e in subjects.values() for s in e["shows"]})
     out = []
     out.append(
         "The people and bands the bluegrass podcasts talk about most, that "
         "PickiPedia has no page for yet.\n")
     out.append(
-        "This is not a notability ranking. It counts how often somebody comes "
-        "up across {shows} shows and {eps} episodes with an identified "
-        "subject — a measure of what the music actually talks about rather "
-        "than of what cleared an encyclopedia's bar. It will move as the shows "
-        "keep publishing.\n".format(
-            shows=len({e["podcast"] for n in wanted for e in wanted[n]["episodes"]}),
-            eps=len({e["page_title"] for n in wanted for e in wanted[n]["episodes"]}),
-        ))
+        f"Not a notability ranking. It counts how often somebody comes up "
+        f"across {total_shows} shows and {len(subjects)} distinct subjects — a "
+        f"measure of what the music actually talks about rather than of what "
+        f"cleared an encyclopedia's bar. It moves as the shows keep "
+        f"publishing.\n")
     out.append(
-        "Writing one of these is the single most useful thing you can do here. "
-        "Every episode listed beside a name is a primary source you can cite "
-        "and a recording you can listen to first.\n")
+        "Every episode beside a name is a primary source you can cite and a "
+        "recording you can listen to first. That is the point of the list: it "
+        "is a reading list, not a chore list.\n")
 
     out.append("== Talked about more than once ==\n")
     out.append('{| class="wikitable sortable"')
-    out.append("! Episodes !! Who !! Shows")
+    out.append("! Episodes !! Who or what !! Heard on")
     for name in repeated:
-        entry = wanted[name]
+        entry = missing[name]
         shows = ", ".join(f"[[{s}]]" for s in sorted(entry["shows"]))
         out.append("|-")
         out.append(f"| {len(entry['episodes'])} || [[{name}]] || {shows}")
@@ -127,47 +112,41 @@ def render(wanted, missing):
 
     out.append("== Mentioned once, not yet reviewed ==\n")
     out.append(
-        "Deliberately not linked. A name that turns up in two separate "
-        "episodes is almost always a real person or band; a name that turns up "
-        "once is about as likely to be a fragment of an episode title — "
-        "\"Basic Passing Chords\", \"Part Two\", \"Australia\" — or the same "
-        "person carrying a description, as in \"Banjo Legend Tony Trischka\". "
+        "Deliberately not linked. A name in two separate episodes is almost "
+        "always a real person or band; a name in one is about as likely to be "
+        "a fragment of an episode title, or the same person carrying a "
+        "description — \"Banjo Legend Tony Trischka\" is [[Tony Trischka]]. "
         "Linking them all would put several hundred junk redlinks on the wiki "
-        "and drown [[Special:WantedPages]], which is the thing that makes "
-        "redlinks useful in the first place.\n")
+        "and drown [[Special:WantedPages]], which is what makes redlinks "
+        "useful in the first place.\n")
     out.append(
-        "So they are listed as plain text, to be read and promoted by hand. If "
-        "you recognise somebody here, they belong in the table above — and the "
-        "parser probably needs a pattern so the next run finds them too.\n")
+        "If you recognise somebody here, they belong in the table above — and "
+        "the parser probably wants a pattern on that show's page so the next "
+        "run finds them too.\n")
     out.append(" &middot; ".join(once) + "\n")
 
     out.append("== How this is built ==\n")
     out.append(
         "Generated by <code>tools/podcast-most-wanted.py</code> in "
         "[https://github.com/cryptograss/pickipedia cryptograss/pickipedia], "
-        "from the subjects parsed out of episode titles. It is a snapshot — "
-        "re-run it to refresh.\n")
+        "from a single <code>#ask</code> over <code>Has topic</code> and "
+        "<code>Has podcast</code>. It reads this wiki, not the feeds, so a "
+        "correction made here is reflected the next time it runs.\n")
     out.append(
-        "Once the episode pages exist, [[Special:WantedPages]] keeps its own "
-        "version of this ranking automatically, across the whole wiki. What it "
-        "will not tell you is which shows were talking about somebody, which "
-        "is why this page also exists.\n")
+        "[[Special:WantedPages]] keeps its own ranking automatically and across "
+        "everything, not just podcasts. What it will not tell you is which "
+        "shows were talking about somebody, which is why this page also "
+        "exists.\n")
     out.append("[[Category:PickiPedia documentation]]")
     return "\n".join(out)
 
 
 def main():
-    episodes = json.load(sys.stdin)
-    wanted = collect(episodes)
-    print(f"{len(wanted)} distinct subjects; checking which have pages...",
+    subjects = collect()
+    missing = sum(1 for e in subjects.values() if not e["exists"])
+    print(f"{len(subjects)} distinct subjects, {missing} without a page",
           file=sys.stderr)
-
-    have = existing_pages(sorted(wanted))
-    missing = [n for n in wanted if n not in have]
-    print(f"  {len(have)} already have a page, {len(missing)} do not",
-          file=sys.stderr)
-
-    print(render(wanted, missing))
+    print(render(subjects))
     return 0
 
 
