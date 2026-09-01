@@ -1,7 +1,7 @@
 {
-    "_comment": "Cache bust 2026-03-03 - vendor rebuild",
+    "_comment": "Cache bust 2026-09-01 - SMW 6 -> 7.2",
     "require": {
-        "mediawiki/semantic-media-wiki": "^6.0",
+        "mediawiki/semantic-media-wiki": "^7.2",
         "mediawiki/page-forms": "^6.0",
         "sentry/sentry": "^3.0",
         "php-http/curl-client": "^2.0",

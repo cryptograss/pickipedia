@@ -183,6 +183,14 @@ wfLoadExtension( 'SemanticMediaWiki' );
 # has to stay put when a reader arrives on an alias hostname. Same value as
 # before for anyone using the canonical name — which is everyone today.
 enableSemantics( parse_url($wgCanonicalServer, PHP_URL_HOST) );
+# SMW 7 ignores enableSemantics()'s domain argument, so the export identity is
+# pinned here explicitly. A bare domain (not a full URI) is interpreted by SMW
+# as it always interpreted the enableSemantics() argument, so exported RDF URIs
+# stay byte-identical across the 6 -> 7 upgrade. The enableSemantics() call
+# above stays because SMW 6 refuses to boot without it, and build and deploy
+# are separate operations — this file must work on whichever vendor tree is
+# currently serving.
+$smwgNamespace = parse_url($wgCanonicalServer, PHP_URL_HOST);
 
 # Enable SMW semantic links for Cryptograss namespace
 $smwgNamespacesWithSemanticLinks[NS_CRYPTOGRASS] = true;

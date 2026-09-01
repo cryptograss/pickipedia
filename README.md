@@ -46,6 +46,40 @@ container, `maintenance/update.php`) come from Ansible in `cryptograss/maybelle-
 under `pickipedia-vps/ansible`, run with `maybelle/scripts/deploy-pickipedia-remote.py`.
 That is a different operation again from either of the above.
 
+### Upgrading MediaWiki and SMW
+
+The December 2025 upgrade attempt is the cautionary tale here: MW went to 1.45,
+SMW 6.0.1 broke on it, the code was downgraded — and the database quietly kept
+1.45's `categorylinks` schema, which silently discarded all but one category per
+page for nine months (issue #105). Upgrades here are two coupled version series
+(MediaWiki and Semantic MediaWiki) plus a database that remembers everything an
+updater ever did to it. So:
+
+**The standing plan (as of Sept 2026):**
+
+1. **SMW first, on the current MW.** SMW 7.2 supports MW 1.43–1.46, so the SMW
+   jump happens while MediaWiki stays on the 1.43 LTS. One variable at a time.
+2. **Then LTS to LTS.** Skip 1.45 (EOL Dec 2026) and 1.46; move 1.43 → 1.47
+   when 1.47 lands (~Nov 2026, supported to 2029), after SMW 7.x has had months
+   of hardening against it.
+
+**Rules that exist because of #105:**
+
+- Never point a newer-MediaWiki preview at the production database. Its
+  `update.php` will migrate production's schema in place, and the damage is
+  silent. Preview runs against a restore from `backup-pickipedia.sh`.
+- The rsync deploy does **not** run `update.php` — only Ansible provisioning
+  does. Any upgrade that changes schema (this SMW bump does: `smw_hash` is
+  converted in place) is not finished until `update.php` has run on the VPS:
+
+  ```bash
+  docker exec pickipedia-wiki php /var/www/html/maintenance/update.php --quick
+  ```
+
+- An upgrade is verified by inspecting the end state (`SHOW CREATE TABLE`,
+  Special:Version, a multi-category page keeping all its categories), not by
+  the absence of errors. Silence is what #105 sounded like.
+
 ### Adding New Extensions
 
 When adding a new extension to the Jenkinsfile, bump `BUILD_CACHE_VERSION` in the environment block to force a fresh build. The cache key includes both the MediaWiki version and this cache version, so incrementing it will invalidate the cached MediaWiki directory and run all git clones fresh.
