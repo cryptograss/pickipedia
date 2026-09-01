@@ -6,9 +6,14 @@ pipeline {
     }
 
     environment {
+        // 1.43 is the current LTS, supported to Dec 2027. The next move is a
+        // deliberate one: skip 1.45 (EOL Dec 2026) and 1.46, and go LTS-to-LTS
+        // to 1.47 when it lands (~Nov 2026). Before bumping this, read
+        // "Upgrading" in README.md — the categorylinks incident (issue #105)
+        // is what happens when an upgrade is attempted casually.
         MEDIAWIKI_VERSION = '1.43.6'
         // Bump this to force rebuild of cached MediaWiki + extensions
-        BUILD_CACHE_VERSION = '4'
+        BUILD_CACHE_VERSION = '5'  // 5: SMW 6 -> 7.2, force clean vendor
         SECRETS_DIR = '/var/jenkins_home/secrets'
         BUILD_DIR = "${WORKSPACE}/build"
         MW_DIR = "${BUILD_DIR}/mediawiki"

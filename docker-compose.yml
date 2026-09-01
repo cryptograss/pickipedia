@@ -1,5 +1,5 @@
 # PickiPedia Preview Environment
-# Run on hunter to test MediaWiki upgrades before deploying to NFS
+# Run on hunter to test MediaWiki upgrades before deploying to the PickiPedia VPS
 #
 # Usage:
 #   docker-compose up -d

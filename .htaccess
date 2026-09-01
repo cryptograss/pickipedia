@@ -1,5 +1,5 @@
-# PHP values moved to /home/conf/php.ini on NFS (php_value not supported)
-# upload_max_filesize, post_max_size, memory_limit, max_execution_time, max_input_time
+# PHP limits (upload_max_filesize, post_max_size, memory_limit) are baked into the
+# wiki container image, not set here. See the docker-wiki role in cryptograss/maybelle-config.
 
 # Block aggressive bots eating bandwidth (Apache 2.4 syntax)
 SetEnvIfNoCase User-Agent "meta-externalagent" bad_bot
