@@ -158,3 +158,66 @@ def test_forcing_the_repo_does_not_touch_the_network(monkeypatch):
 
     feeds, _ = pc.load(prefer_wiki=False, log=lambda m: None)
     assert [f["name"] for f in feeds] == ["A"]
+
+
+# ---------------------------------------------------------------------------
+# Named patterns
+#
+# Names change nothing about matching. They exist so a list of patterns can be
+# reviewed — podcast-parsers.py reports the hit count per name, which is how a
+# format the show really uses is told apart from a one-off bolted on to rescue
+# a single straggler. A forty-one-pattern list is what happens without that.
+# ---------------------------------------------------------------------------
+
+def block(body):
+    return '<pre class="guest-patterns">\n' + body + '\n</pre>'
+
+
+def test_a_name_line_names_the_pattern_under_it():
+    entries = pc.parse_patterns(block(
+        "name: Guest then subject\n"
+        "^(?P<guest>[A-Z][a-z]+ [A-Z][a-z]+) on .+$"
+    ))
+    assert entries[0]["name"] == "Guest then subject"
+    assert entries[0]["pattern"].startswith("^(?P<guest>")
+
+
+def test_a_skip_can_be_named_too():
+    entries = pc.parse_patterns(block(
+        "name: Jam tracks\n"
+        "skip:^.+ bpm"
+    ))
+    assert entries[0]["name"] == "Jam tracks"
+    assert entries[0]["skip"] is True
+
+
+def test_a_name_applies_only_to_the_next_pattern():
+    entries = pc.parse_patterns(block(
+        "name: Only the first\n"
+        "^first (?P<guest>.+)$\n"
+        "^second (?P<guest>.+)$"
+    ))
+    assert entries[0]["name"] == "Only the first"
+    assert "name" not in entries[1]
+
+
+def test_patterns_without_names_still_work():
+    entries = pc.parse_patterns(block("^(?P<guest>.+) interview$"))
+    assert len(entries) == 1
+    assert "name" not in entries[0]
+
+
+def test_an_empty_name_is_not_recorded():
+    entries = pc.parse_patterns(block(
+        "name:\n"
+        "^(?P<guest>.+)$"
+    ))
+    assert "name" not in entries[0]
+
+
+def test_a_comment_is_not_a_name():
+    entries = pc.parse_patterns(block(
+        "# this is prose, not a name\n"
+        "^(?P<guest>.+)$"
+    ))
+    assert "name" not in entries[0]

@@ -122,8 +122,15 @@ def parse_patterns(source, on_error=None):
     Line format, chosen so a picker who is not a programmer can still read it:
 
         # comments start with a hash
+        name: Guest named first, then the subject
         ^Show \\d+ - (?P<guest>.+)$
         skip: ^Show \\d+ (?:Update|Recap)$
+
+    A "name:" line names the pattern under it. Names are optional and change
+    nothing about matching, but they are what makes a list of patterns
+    reviewable: podcast-parsers.py reports how many episodes each named format
+    caught, which is how you tell a title format the show actually uses from a
+    one-off somebody bolted on to catch a single straggler.
 
     A pattern that does not compile is dropped and reported, never raised. One
     bad line should cost that line, not the whole run — and certainly not the
@@ -138,9 +145,14 @@ def parse_patterns(source, on_error=None):
         return []
 
     entries = []
+    pending_name = None
     for line in match.group(1).split("\n"):
         line = line.strip()
         if not line or line.startswith("#"):
+            continue
+
+        if line.lower().startswith("name:"):
+            pending_name = line[len("name:"):].strip() or None
             continue
 
         skip = False
@@ -160,6 +172,9 @@ def parse_patterns(source, on_error=None):
         entry = {"pattern": line}
         if skip:
             entry["skip"] = True
+        if pending_name:
+            entry["name"] = pending_name
+        pending_name = None
         entries.append(entry)
 
     return entries
