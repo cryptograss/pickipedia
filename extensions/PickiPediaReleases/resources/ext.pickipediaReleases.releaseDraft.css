@@ -519,3 +519,16 @@
 	word-break: break-word;
 	color: #b32424;
 }
+
+/* The single log row that live encode updates rewrite in place. Marked so it
+ * reads as "currently happening" rather than as one more finished step —
+ * during a long encode it is the only thing on the page that moves. */
+.rd-log-live {
+	color: #14866d;
+	font-variant-numeric: tabular-nums;
+}
+
+.rd-log-live::before {
+	content: '▸ ';
+	color: #36c;
+}
