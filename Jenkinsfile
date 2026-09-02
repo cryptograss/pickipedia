@@ -114,10 +114,19 @@ pipeline {
                         # composer.local.json (which was copied in above from
                         # pickipedia/composer.json) and stamp it onto root's
                         # config. Single source of truth for the ignore list.
+                        # Also drop MediaWiki core's require-dev. We build with
+                        # --no-dev, but composer still *resolves* dev packages,
+                        # and core pins mediawiki-codesniffer to an exact
+                        # version whose own dependency (phpcsstandards/phpcsutils,
+                        # a floating ^) has since moved past it — an unsolvable
+                        # conflict inside tools we never install. Deleting
+                        # require-dev from the build tree is the standard cure;
+                        # the repo's own composer.json is untouched.
                         php -r '
                             $json = json_decode(file_get_contents("composer.json"), true);
                             $local = json_decode(file_get_contents("composer.local.json"), true);
                             $json["config"]["audit"] = $local["config"]["audit"] ?? ["abandoned" => "ignore", "ignore" => []];
+                            unset($json["require-dev"]);
                             file_put_contents("composer.json", json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
                         '
                         composer update --no-dev --optimize-autoloader --ignore-platform-reqs
