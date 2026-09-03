@@ -17,3 +17,8 @@ images/
 *.swp
 .idea/
 .vscode/
+
+# Python bytecode. These were tracked for a while, which is how tools/ ended up
+# carrying a .pyc for a module that had been deleted.
+__pycache__/
+*.pyc
