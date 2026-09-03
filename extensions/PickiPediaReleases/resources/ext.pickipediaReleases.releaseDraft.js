@@ -751,7 +751,7 @@
 				logMsg += ' — ' + data.track;
 			}
 			setStatus( logMsg, '' );
-			appendLog( logMsg );
+			appendLog( logMsg, data.live === true );
 		} else if ( event === 'warning' ) {
 			setStatus( 'Warning: ' + data.message, '' );
 			appendLog( '⚠ ' + data.message );
@@ -970,11 +970,37 @@
 		}
 	}
 
-	function appendLog( msg ) {
+	// The line currently being rewritten in place by live progress updates,
+	// or null when the last thing logged was an ordinary event.
+	var liveLogLine = null;
+
+	// appendLog( msg )         -> add a line, as before
+	// appendLog( msg, true )   -> rewrite the live line in place
+	//
+	// Encoding emits an update every couple of seconds. For an hour-long
+	// video that is well over a thousand rows if each one is appended, which
+	// buries everything that actually happened. Live updates therefore
+	// overwrite a single row; the next non-live event releases it, so the
+	// final progress figure stays in the log as a record.
+	function appendLog( msg, live ) {
 		var log = el( 'rd-progress-log' );
 		if ( !log ) {
 			return;
 		}
+		if ( live ) {
+			if ( liveLogLine && liveLogLine.parentNode === log ) {
+				liveLogLine.textContent = msg;
+				log.scrollTop = log.scrollHeight;
+				return;
+			}
+			liveLogLine = document.createElement( 'div' );
+			liveLogLine.className = 'rd-log-live';
+			liveLogLine.textContent = msg;
+			log.appendChild( liveLogLine );
+			log.scrollTop = log.scrollHeight;
+			return;
+		}
+		liveLogLine = null;
 		var line = document.createElement( 'div' );
 		line.textContent = msg;
 		log.appendChild( line );
