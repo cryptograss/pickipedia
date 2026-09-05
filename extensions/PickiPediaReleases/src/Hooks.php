@@ -95,4 +95,35 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook {
 			'MediaWiki\\Extension\\PickiPediaReleases\\DeliveryKidUploadInput'
 		);
 	}
+
+	/**
+	 * Sub-pages of a ReleaseDraft are not themselves release drafts.
+	 *
+	 * The ReleaseDraft namespace defaults every page to release-draft-yaml,
+	 * whose validator requires draft_id and type. That is right for
+	 * ReleaseDraft:<uuid>, and wrong for ReleaseDraft:<uuid>/diagnostics,
+	 * which holds a log trail with no business carrying a type field.
+	 *
+	 * The effect was that delivery-kid's diagnostics snapshots were rejected
+	 * on save, every time, since the feature shipped:
+	 *
+	 *   snapshot failed for ReleaseDraft:51f6b3a0-.../diagnostics:
+	 *   ('releasedraft-missing-type', 'Release draft is missing a type field.')
+	 *
+	 * Nothing noticed, because the caller discarded the result — so the wiki
+	 * copy of every draft's logs, the one that survives a delivery-kid
+	 * rebuild, has never existed. Sub-pages get the JSON model instead, which
+	 * is what the snapshot actually writes.
+	 *
+	 * @param \Title $title
+	 * @param string &$model
+	 * @return bool
+	 */
+	public function onContentHandlerDefaultModelFor( $title, &$model ) {
+		if ( $title->getNamespace() === 3006 && str_contains( $title->getText(), '/' ) ) {
+			$model = CONTENT_MODEL_JSON;
+			return false;
+		}
+		return true;
+	}
 }
