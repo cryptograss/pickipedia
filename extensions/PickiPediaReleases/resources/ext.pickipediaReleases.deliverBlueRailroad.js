@@ -58,16 +58,21 @@
 
 	// -- Ethereum block height --
 
-	var MERGE_BLOCK = 15537394;
-	var MERGE_TIMESTAMP = 1663224179;
-	var SLOT_TIME = 12;
+	// Anchored on a real verified block rather than the Merge, and using the
+	// measured average rather than the 12s slot time. Slots get missed, so the
+	// realised average is 12.044s; extrapolating from 2022 at exactly 12s had
+	// drifted about 75,000 blocks — some ten days — into the future.
+	// Kept in step with BlockHeight.php; change both together.
+	var ANCHOR_BLOCK = 25000000;
+	var ANCHOR_TIMESTAMP = 1777637363; // 2026-05-01T12:09:23Z
+	var SECONDS_PER_BLOCK = 12.044;
 
 	function timestampToBlock( ts ) {
-		return MERGE_BLOCK + Math.floor( ( ts - MERGE_TIMESTAMP ) / SLOT_TIME );
+		return ANCHOR_BLOCK + Math.round( ( ts - ANCHOR_TIMESTAMP ) / SECONDS_PER_BLOCK );
 	}
 
 	function blockToTimestamp( block ) {
-		return MERGE_TIMESTAMP + ( block - MERGE_BLOCK ) * SLOT_TIME;
+		return ANCHOR_TIMESTAMP + ( block - ANCHOR_BLOCK ) * SECONDS_PER_BLOCK;
 	}
 
 	function updateBlockDateLabel( block, labelEl ) {

@@ -18,11 +18,6 @@ use MediaWiki\SpecialPage\SpecialPage;
 
 class SpecialDeliveryKidAudit extends SpecialPage {
 
-	/** Ethereum merge constants — match Special:Deliver* and audit producer. */
-	private const MERGE_BLOCK = 15537394;
-	private const MERGE_TIMESTAMP = 1663224179;
-	private const SLOT_TIME = 12;
-
 	private const CACHE_TTL = 60;
 
 	public function __construct() {
@@ -165,8 +160,10 @@ class SpecialDeliveryKidAudit extends SpecialPage {
 	}
 
 	private static function currentBlockheight(): int {
-		return self::MERGE_BLOCK
-			+ intdiv( time() - self::MERGE_TIMESTAMP, self::SLOT_TIME );
+		// Was extrapolating from the Merge at exactly 12s per block, which had
+		// drifted ~75,000 blocks into the future — so this page reported ages
+		// and block numbers that did not correspond to the chain.
+		return BlockHeight::current();
 	}
 
 	private static function formatAge( int $seconds ): string {

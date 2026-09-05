@@ -49,12 +49,11 @@ class SpecialDeliverVideo extends SpecialPage {
 		$timestamp = (int)( microtime( true ) * 1000 );
 		$token = hash_hmac( 'sha256', "upload:{$username}:{$timestamp}", $apiKey );
 
-		// Estimate current Ethereum block from wall-clock time
-		// (post-merge: 12s slots from the merge block)
-		$mergeBlock = 15537394;
-		$mergeTimestamp = 1663224179;
-		$slotTime = 12;
-		$uploadBlockheight = $mergeBlock + intdiv( time() - $mergeTimestamp, $slotTime );
+		// Ask the chain for the current block, falling back to an estimate
+		// anchored on a recent verified block. The previous inline version
+		// extrapolated from the Merge at exactly 12s per block and had drifted
+		// about 75,000 blocks — ten days — into the future. See BlockHeight.
+		$uploadBlockheight = BlockHeight::current();
 
 		// Pass config to JS — token is short-lived, not a persistent secret
 		$out->addJsConfigVars( [

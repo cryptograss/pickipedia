@@ -124,6 +124,10 @@
 		}
 	},
 	"config": {
+		"PickiPediaEthRpcUrl": {
+			"value": "https://ethereum-rpc.publicnode.com",
+			"description": "JSON-RPC endpoint used to read the current Ethereum block height. Empty string skips the network call and relies on BlockHeight's offline estimate."
+		},
 		"DeliveryKidUrl": {
 			"value": "https://delivery-kid.cryptograss.live",
 			"description": "Base URL for the delivery-kid pinning service API"
