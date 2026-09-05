@@ -128,6 +128,12 @@ class BlockHeight {
 				__METHOD__
 			);
 			$request->setHeader( 'Content-Type', 'application/json' );
+			// publicnode answers 403 to some default user agents. MediaWiki
+			// sets its own, but this endpoint is demonstrably picky — a
+			// generic Python agent is rejected outright — so be explicit
+			// rather than discover later that the call has silently been
+			// falling back to the estimate the whole time.
+			$request->setHeader( 'User-Agent', 'PickiPedia/1.0 (+https://pickipedia.xyz)' );
 
 			if ( !$request->execute()->isOK() ) {
 				return null;
