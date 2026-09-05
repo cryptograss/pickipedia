@@ -16,9 +16,18 @@
 	// Blockheight estimation using a known reference point (more accurate than genesis)
 	// The Merge (block 15537394) happened at 2022-09-15T06:42:42Z
 	// Post-merge block time is exactly 12 seconds
+	// Post-merge dates are anchored on a real verified block rather than the
+	// Merge itself, using the measured 12.044s average rather than the 12s
+	// slot time. The old form drifted ~75,000 blocks — ten days — into the
+	// future. Kept in step with BlockHeight.php; change both together.
+	var ANCHOR_BLOCK = 25000000;
+	var ANCHOR_TS = 1777637363; // 2026-05-01T12:09:23Z, verified against a node
+	var SECONDS_PER_BLOCK = 12.044;
 	var MERGE_BLOCK = 15537394;
-	var MERGE_TS = 1663220562; // 2022-09-15T06:42:42Z
-	var POST_MERGE_BLOCK_TIME = 12; // exactly 12 seconds post-merge
+	// Was 1663220562 here and 1663224179 in PHP — two answers to the same
+	// question, some 3,600s apart. Aligned on the PHP value; used only as the
+	// pre/post-merge threshold now.
+	var MERGE_TS = 1663224179; // 2022-09-15T06:42:59Z
 	// Pre-merge: genesis to merge, ~13.3s average
 	var ETH_GENESIS_TS = 1438269973;
 	var PRE_MERGE_AVG = 13.3;
@@ -1175,7 +1184,7 @@
 	function blockToTimestamp( blockNumber ) {
 		if ( blockNumber >= MERGE_BLOCK ) {
 			// Post-merge: exactly 12s per block from the merge point
-			return MERGE_TS + ( ( blockNumber - MERGE_BLOCK ) * POST_MERGE_BLOCK_TIME );
+			return ANCHOR_TS + ( ( blockNumber - ANCHOR_BLOCK ) * SECONDS_PER_BLOCK );
 		}
 		// Pre-merge: estimate from genesis with ~13.3s average
 		return ETH_GENESIS_TS + ( blockNumber * PRE_MERGE_AVG );
@@ -1183,7 +1192,7 @@
 
 	function timestampToBlock( ts ) {
 		if ( ts >= MERGE_TS ) {
-			return MERGE_BLOCK + Math.floor( ( ts - MERGE_TS ) / POST_MERGE_BLOCK_TIME );
+			return ANCHOR_BLOCK + Math.round( ( ts - ANCHOR_TS ) / SECONDS_PER_BLOCK );
 		}
 		return Math.floor( ( ts - ETH_GENESIS_TS ) / PRE_MERGE_AVG );
 	}
