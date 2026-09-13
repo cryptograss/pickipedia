@@ -9,7 +9,7 @@ pages signed with an editorial name and filed for human review.
 
 import pytest
 
-from podcast_wiki import LoginRequired, Wiki, WrongIdentity
+from podcast_wiki import LoginRequired, Wiki, WikiError, WrongIdentity
 
 
 class FakeWiki(Wiki):
@@ -72,3 +72,45 @@ class TestCredentials:
         monkeypatch.setenv("PICKIPEDIA_BOT_USER", "Podcast Imports@episodes")
         monkeypatch.setenv("PICKIPEDIA_BOT_PASSWORD", "secret")
         assert Wiki().user == "Podcast Imports@episodes"
+
+
+class TestStaleToken:
+    """
+    A CSRF token is tied to its session and does not last forever.
+
+    The survey pass reads several hundred pages before the first write, so the
+    token taken at login is minutes old by the time it is used. The first run
+    at scale failed all seven hundred and three edits with badtoken and wrote
+    nothing, which is the good version of that failure — but it should not
+    happen at all.
+    """
+
+    def test_a_stale_token_is_refreshed_and_the_edit_retried(self):
+        wiki = Wiki(user="x", password="y")
+        wiki._csrf = "stale"
+        calls = []
+
+        def fake_call_with_backoff(params, post=None):
+            calls.append(post["token"])
+            if post["token"] == "stale":
+                return {"error": {"code": "badtoken", "info": "Invalid CSRF token."}}
+            return {"edit": {"result": "Success"}}
+
+        wiki._call_with_backoff = fake_call_with_backoff
+        wiki.get_text = lambda title: "old text"
+        wiki._refresh_csrf = lambda: setattr(wiki, "_csrf", "fresh") or "fresh"
+
+        assert wiki.save("Some page", "new text", "summary") == "updated"
+        assert calls == ["stale", "fresh"], "should retry once with a new token"
+
+    def test_a_second_badtoken_is_reported_rather_than_looping(self):
+        wiki = Wiki(user="x", password="y")
+        wiki._csrf = "stale"
+        wiki._call_with_backoff = lambda params, post=None: {
+            "error": {"code": "badtoken", "info": "Invalid CSRF token."}}
+        wiki.get_text = lambda title: "old text"
+        wiki._refresh_csrf = lambda: None
+
+        with pytest.raises(WikiError) as caught:
+            wiki.save("Some page", "new text", "summary")
+        assert "badtoken" in str(caught.value)

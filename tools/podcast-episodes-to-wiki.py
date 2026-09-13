@@ -196,6 +196,12 @@ def main():
         )
 
     if writing:
+        # The survey above took several minutes and several hundred requests.
+        # The token taken at login is old by now, and one taken here is not —
+        # the retry in podcast_wiki covers the rest, but not needing it is
+        # better than needing it seven hundred times.
+        wiki._refresh_csrf()
+
         for index, (title, wanted_text, outcome, _show) in enumerate(changes, 1):
             try:
                 summary = SUMMARY_CREATE if outcome == "created" else SUMMARY_UPDATE

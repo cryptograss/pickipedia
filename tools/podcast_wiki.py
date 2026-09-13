@@ -122,9 +122,23 @@ class Wiki:
             raise LoginRequired(
                 f"login rejected for {self.user!r}: {status.get('result')}")
 
-        csrf = self._call({"action": "query", "meta": "tokens", "type": "csrf"})
-        self._csrf = csrf["query"]["tokens"]["csrftoken"]
+        self._refresh_csrf()
         return self
+
+    def _refresh_csrf(self):
+        """
+        Take a fresh edit token.
+
+        A CSRF token is tied to the session that issued it, and does not stay
+        valid indefinitely. Fetching one at login and using it an hour later —
+        which is what a long survey pass before the first write amounts to —
+        earns a badtoken on every edit. So this is called again whenever the
+        wiki says the token is stale.
+        """
+        result = self._call({"action": "query", "meta": "tokens",
+                             "type": "csrf"})
+        self._csrf = result["query"]["tokens"]["csrftoken"]
+        return self._csrf
 
     def whoami(self):
         """@return: (username, groups) as the wiki sees this session."""
@@ -181,13 +195,27 @@ class Wiki:
         if current is not None and current.strip() == text.strip():
             return "unchanged"
 
-        result = self._call_with_backoff({"action": "edit"}, post={
-            "title": title,
-            "text": text,
-            "summary": summary,
-            "token": self._csrf,
-            "bot": "1",
-        })
+        def edit():
+            return self._call_with_backoff({"action": "edit"}, post={
+                "title": title,
+                "text": text,
+                "summary": summary,
+                "token": self._csrf,
+                "bot": "1",
+            })
+
+        result = edit()
+
+        # A stale token is not a failure of this edit, it is a fact about the
+        # session, and every edit after it would fail the same way. Take a new
+        # one and try again rather than reporting several hundred identical
+        # errors — which is exactly what happened the first time this ran at
+        # scale, because the token was fetched at login and first used several
+        # minutes later, after surveying seven hundred pages.
+        if result.get("error", {}).get("code") == "badtoken":
+            self._refresh_csrf()
+            result = edit()
+
         if "error" in result:
             raise WikiError(f"{title}: {result['error'].get('code')} "
                             f"{result['error'].get('info', '')[:160]}")
