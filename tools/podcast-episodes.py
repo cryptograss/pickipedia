@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.request import urlopen, Request
 from xml.etree.ElementTree import fromstring
 
+import podcast_art
 import podcast_budget
 import podcast_config
 import podcast_names
@@ -97,6 +98,8 @@ def fetch_episodes(feed_url):
         print(f"  WARN: parse error: {e}", file=sys.stderr)
         return []
 
+    show_image = podcast_art.channel_image(root.find("channel"))
+
     episodes = []
     for item in root.findall(".//item"):
         title_el = item.find("title")
@@ -131,6 +134,7 @@ def fetch_episodes(feed_url):
                 "description": desc,
                 "audio": audio,
                 "duration": duration,
+                "image": podcast_art.episode_image(item, show_image),
             })
 
     return episodes
@@ -196,6 +200,8 @@ def make_wikitext(podcast_name, episode, guests):
         params.append(f"|audio={episode['audio']}")
     if episode.get("duration"):
         params.append(f"|duration={episode['duration']}")
+    if episode.get("image"):
+        params.append(f"|image={episode['image']}")
 
     # "topic", not "guest". A title gives up proper nouns without saying
     # whether the named party turned up or was merely discussed — Tony Rice
@@ -301,6 +307,7 @@ def main():
                         "link": ep["link"],
                         "audio": ep.get("audio", ""),
                         "duration": ep.get("duration"),
+                        "image": ep.get("image"),
                         "wikitext": wikitext,
                     })
         except podcast_budget.Overran as e:
