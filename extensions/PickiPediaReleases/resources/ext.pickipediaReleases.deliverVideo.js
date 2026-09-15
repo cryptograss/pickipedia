@@ -211,27 +211,65 @@
 				} );
 			} );
 
-			uploadBtn.disabled = selectedFiles.length === 0;
+			refreshUploadButton();
+		}
+
+		function currentUrl() {
+			var urlInput = el( 'dv-url' );
+			return urlInput ? urlInput.value.trim() : '';
+		}
+
+		// One source or the other, never both — a file and a URL in the same
+		// draft leaves it ambiguous which one the Release is actually of.
+		var conflictShown = false;
+		function refreshUploadButton() {
+			var hasFiles = selectedFiles.length > 0;
+			var hasUrl = currentUrl() !== '';
+			var conflict = hasFiles && hasUrl;
+
+			uploadBtn.disabled = ( !hasFiles && !hasUrl ) || conflict;
+
+			if ( conflict ) {
+				setStatus( 'dv-upload-status',
+					'Choose one: a file or a URL, not both.', 'error' );
+				conflictShown = true;
+			} else if ( conflictShown ) {
+				setStatus( 'dv-upload-status', '', '' );
+				conflictShown = false;
+			}
+		}
+
+		var urlField = el( 'dv-url' );
+		if ( urlField ) {
+			urlField.addEventListener( 'input', refreshUploadButton );
 		}
 
 		uploadBtn.addEventListener( 'click', function () {
-			if ( selectedFiles.length === 0 ) {
+			var url = currentUrl();
+			if ( selectedFiles.length === 0 && !url ) {
 				return;
 			}
+			// A URL fetch can fall back to the title the source already carries,
+			// so only the file path insists on one being typed up front.
 			var titleValue = ( el( 'dv-title' ) || {} ).value || '';
-			if ( !titleValue.trim() ) {
+			if ( !titleValue.trim() && !url ) {
 				setStatus( 'dv-upload-status', 'Title is required.', 'error' );
 				el( 'dv-title' ).focus();
 				return;
 			}
-			doUpload( selectedFiles );
+
+			if ( url ) {
+				doFetchFromUrl( url );
+			} else {
+				doUpload( selectedFiles );
+			}
 		} );
 	}
 
-	// Parse a delivery-kid HTTPException response into a readable string.
-	function parseDkError( xhr ) {
+	// Parse a delivery-kid HTTPException body into a readable string.
+	function parseDkErrorText( text, statusLabel ) {
 		try {
-			var err = JSON.parse( xhr.responseText );
+			var err = JSON.parse( text );
 			var detail = err.detail;
 			if ( typeof detail === 'string' ) {
 				return detail;
@@ -244,8 +282,12 @@
 			}
 			return JSON.stringify( err );
 		} catch ( e ) {
-			return xhr.status + ' ' + xhr.statusText + ': ' + ( xhr.responseText || '' ).slice( 0, 200 );
+			return statusLabel + ': ' + ( text || '' ).slice( 0, 200 );
 		}
+	}
+
+	function parseDkError( xhr ) {
+		return parseDkErrorText( xhr.responseText, xhr.status + ' ' + xhr.statusText );
 	}
 
 	// Build a stub draft object so createReleaseDraftPage can write a YAML
@@ -396,6 +438,221 @@
 		};
 
 		xhr.send( formData );
+	}
+
+	// -- Fetch from URL --
+	//
+	// Mirror of doUpload() for the case where delivery-kid pulls the bytes
+	// instead of the browser pushing them. /init and the stub page are
+	// identical; only the middle step differs, and after it the two flows
+	// converge on the same createReleaseDraftPage() call.
+
+	var POLL_INTERVAL_MS = 2000;
+	// Just past delivery-kid's own url_fetch_timeout_seconds, so the server
+	// gives up and writes upload_failed before the browser stops looking.
+	var POLL_CEILING_MS = 65 * 60 * 1000;
+
+	function doFetchFromUrl( url ) {
+		var uploadBtn = el( 'dv-upload-btn' );
+		uploadBtn.disabled = true;
+		setStatus( 'dv-upload-status', 'Initialising draft...', '' );
+
+		if ( REDRAFT_ID ) {
+			beginUrlFetch( url, REDRAFT_ID, null );
+			return;
+		}
+
+		fetch( API_URL + '/draft-content/init', {
+			method: 'POST',
+			headers: AUTH_HEADERS
+		} ).then( function ( resp ) {
+			if ( !resp.ok ) {
+				return resp.text().then( function ( txt ) {
+					throw new Error( 'init failed (' + resp.status + '): ' + txt.slice( 0, 200 ) );
+				} );
+			}
+			return resp.json();
+		} ).then( function ( draft ) {
+			setStatus( 'dv-upload-status', 'Creating ReleaseDraft page...', '' );
+			return createReleaseDraftPage( stubDraft( draft.draft_id, draft.commit ),
+				/* andRedirect */ false ).then( function () {
+				return draft;
+			} );
+		} ).then( function ( draft ) {
+			beginUrlFetch( url, draft.draft_id, draft.commit );
+		} ).catch( function ( err ) {
+			setStatus( 'dv-upload-status',
+				'Could not start fetch: ' + ( err && err.message ? err.message : String( err ) ),
+				'error' );
+			uploadBtn.disabled = false;
+		} );
+	}
+
+	// POST the URL and hand off to polling. delivery-kid answers 202 as soon
+	// as it accepts the job — a rejected URL (bad scheme, internal address)
+	// comes back synchronously here, before the draft changes state.
+	function beginUrlFetch( url, draftId, knownCommit ) {
+		var headers = {
+			'Content-Type': 'application/json',
+			'X-Draft-Id': draftId
+		};
+		Object.keys( AUTH_HEADERS ).forEach( function ( key ) {
+			headers[ key ] = AUTH_HEADERS[ key ];
+		} );
+
+		setStatus( 'dv-upload-status', 'Asking delivery-kid to fetch the video...', '' );
+
+		fetch( API_URL + '/draft-content/from-url', {
+			method: 'POST',
+			headers: headers,
+			body: JSON.stringify( { url: url } )
+		} ).then( function ( resp ) {
+			if ( !resp.ok ) {
+				return resp.text().then( function ( txt ) {
+					throw new Error( parseDkErrorText( txt, String( resp.status ) ) );
+				} );
+			}
+			return resp.json();
+		} ).then( function () {
+			el( 'dv-upload-progress' ).style.display = '';
+			pollDraftUntilDone( draftId, knownCommit );
+		} ).catch( function ( err ) {
+			setStatus( 'dv-upload-status',
+				'Fetch rejected: ' + ( err && err.message ? err.message : String( err ) ),
+				'error' );
+			el( 'dv-upload-btn' ).disabled = false;
+		} );
+	}
+
+	// The fetch runs detached from any request we hold open, so the draft's
+	// own status is the only progress signal there is.
+	function pollDraftUntilDone( draftId, knownCommit ) {
+		var startedAt = Date.now();
+		var progressBar = el( 'dv-upload-progress' );
+		var progressFill = progressBar.querySelector( '.uc-progress-fill' );
+
+		function stopWithError( message ) {
+			progressBar.style.display = 'none';
+			var pageHref = mw.util.getUrl( 'ReleaseDraft:' + draftId );
+			setStatus( 'dv-upload-status',
+				message + ' — see the draft page for the full log: ' + pageHref, 'error' );
+			el( 'dv-upload-btn' ).disabled = false;
+		}
+
+		function tick() {
+			if ( Date.now() - startedAt > POLL_CEILING_MS ) {
+				stopWithError( 'Gave up waiting for the fetch' );
+				return;
+			}
+
+			fetch( API_URL + '/draft-content/' + encodeURIComponent( draftId ), {
+				headers: AUTH_HEADERS
+			} ).then( function ( resp ) {
+				if ( !resp.ok ) {
+					return resp.text().then( function ( txt ) {
+						throw new Error( parseDkErrorText( txt, String( resp.status ) ) );
+					} );
+				}
+				return resp.json();
+			} ).then( function ( draft ) {
+				renderFetchLog( draft.upload_log );
+
+				var pct = latestFetchPercent( draft.upload_log );
+				if ( pct !== null ) {
+					progressFill.style.width = pct + '%';
+				}
+
+				if ( draft.status === 'uploaded' ) {
+					progressBar.style.display = 'none';
+					if ( knownCommit && !draft.commit ) {
+						draft.commit = knownCommit;
+					}
+					applySourceMetadata( draft.metadata );
+					setStatus( 'dv-upload-status',
+						'Fetch complete. ' + ( draft.files || [] ).length +
+						' file(s) analysed. Updating draft page...', 'success' );
+					createReleaseDraftPage( draft, /* andRedirect */ true );
+					return;
+				}
+
+				if ( draft.status === 'upload_failed' ) {
+					stopWithError( lastErrorMessage( draft.upload_log ) || 'Fetch failed' );
+					return;
+				}
+
+				setStatus( 'dv-upload-status',
+					pct !== null ? 'Fetching... ' + pct.toFixed( 1 ) + '%' : 'Fetching...', '' );
+				window.setTimeout( tick, POLL_INTERVAL_MS );
+			} ).catch( function ( err ) {
+				// A network blip shouldn't abandon a forty-minute fetch. Keep
+				// polling and let POLL_CEILING_MS decide when to give up.
+				setStatus( 'dv-upload-status',
+					'Fetching... (lost contact: ' +
+					( err && err.message ? err.message : String( err ) ) + ')', '' );
+				window.setTimeout( tick, POLL_INTERVAL_MS );
+			} );
+		}
+
+		tick();
+	}
+
+	// Tail of yt-dlp's own output, straight from the draft's upload_log.
+	function renderFetchLog( entries ) {
+		var logEl = el( 'dv-upload-log' );
+		if ( !logEl || !entries || !entries.length ) {
+			return;
+		}
+		logEl.textContent = entries.slice( -6 ).map( function ( e ) {
+			return e.message || '';
+		} ).join( '\n' );
+		logEl.classList.add( 'dv-fetch-log-visible' );
+		logEl.scrollTop = logEl.scrollHeight;
+	}
+
+	// yt-dlp progress lines carry their own percentage; the server logs one
+	// per decile, which is enough to move a bar.
+	function latestFetchPercent( entries ) {
+		if ( !entries ) {
+			return null;
+		}
+		for ( var i = entries.length - 1; i >= 0; i-- ) {
+			if ( entries[ i ].phase !== 'fetching' ) {
+				continue;
+			}
+			var m = /([\d.]+)%/.exec( entries[ i ].message || '' );
+			if ( m ) {
+				return parseFloat( m[ 1 ] );
+			}
+		}
+		return null;
+	}
+
+	function lastErrorMessage( entries ) {
+		if ( !entries ) {
+			return null;
+		}
+		for ( var i = entries.length - 1; i >= 0; i-- ) {
+			if ( entries[ i ].error ) {
+				return entries[ i ].error;
+			}
+		}
+		return null;
+	}
+
+	// delivery-kid reports what the source said about itself under source_*.
+	// Only fills fields left blank — whatever the user typed always wins.
+	function applySourceMetadata( metadata ) {
+		if ( !metadata ) {
+			return;
+		}
+		var titleEl = el( 'dv-title' );
+		if ( titleEl && !titleEl.value.trim() && metadata.source_title ) {
+			titleEl.value = metadata.source_title;
+		}
+		var descEl = el( 'dv-description' );
+		if ( descEl && !descEl.value.trim() && metadata.source_description ) {
+			descEl.value = metadata.source_description;
+		}
 	}
 
 	// -- Create / update ReleaseDraft wiki page --
