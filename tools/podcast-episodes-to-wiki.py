@@ -35,6 +35,7 @@ Credentials come from the environment; see podcast_wiki.
 
 import argparse
 import json
+import os
 import sys
 import time
 from collections import Counter
@@ -42,6 +43,7 @@ from collections import Counter
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
 
 import podcast_config                                      # noqa: E402
+import podcast_topics                                      # noqa: E402
 import podcast_wiki                                        # noqa: E402
 
 # The wiki is a small VPS running its own database and there is no hurry.
@@ -67,6 +69,31 @@ SUMMARY_CREATE = "Import podcast episode from feed"
 SUMMARY_UPDATE = "Refresh podcast episode from feed"
 
 
+def base_account(name):
+    """
+    The account name a revision is signed with, given a login name.
+
+    Bot passwords log in as "HearThatWhistleBlow@import", but every edit they
+    make is signed "HearThatWhistleBlow". Comparing the two forms directly is
+    how the importer would conclude it had never edited anything.
+
+    @param name: a login name, a plain account name, or "".
+    @return: the account name without the bot-password suffix.
+    """
+    return (name or "").split("@")[0].strip()
+
+
+def is_ours(last_editor, bot_name):
+    """
+    @return: True if the revision now on the page is one the importer made.
+        An unknown editor counts as somebody else, which errs towards leaving
+        a person's work alone.
+    """
+    if not bot_name or not last_editor:
+        return False
+    return base_account(last_editor) == bot_name
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Import podcast episode pages into PickiPedia")
@@ -84,6 +111,10 @@ def main():
                     metavar="N",
                     help=f"refuse to write if more than N pages would change "
                          f"(default {DEFAULT_MAX_CHANGES}; 0 disables)")
+    ap.add_argument("--bot-user", metavar="NAME",
+                    help="the importer's own account, so a dry run can tell "
+                         "its edits from a person's (default: "
+                         "$PICKIPEDIA_BOT_USER)")
     ap.add_argument("--allow-stale-config", action="store_true",
                     help="import anyway when the extractor fell back to the "
                          "checked-in config; say so out loud")
@@ -136,6 +167,12 @@ def main():
     writing = bool(args.write)
     wiki = podcast_wiki.Wiki(api_url=args.api)
 
+    # Who "we" are, for deciding whether a page has been edited since. A dry
+    # run logs in to nothing, so it takes the name from the environment or the
+    # flag — otherwise it would report every page as human-edited and say the
+    # opposite of what the real run will do.
+    bot_name = base_account(args.bot_user or os.environ.get("PICKIPEDIA_BOT_USER", ""))
+
     if writing:
         wiki.login()
         account = wiki.require_group(EXEMPT_GROUP, because=(
@@ -143,8 +180,14 @@ def main():
             "reviewing identity files machine output for human verification, "
             "which drowns the claims that actually wanted reviewing."))
         print(f"writing as {account}", file=sys.stderr)
+        bot_name = base_account(account)
     else:
         print("dry run: reading only, no credentials needed", file=sys.stderr)
+
+    if not bot_name:
+        print("WARNING: no bot account name known, so every page with topics "
+              "set by anyone will look human-edited. Pass --bot-user or set "
+              "PICKIPEDIA_BOT_USER.", file=sys.stderr)
 
     print(f"{len(episodes)} episodes", file=sys.stderr)
 
@@ -156,11 +199,20 @@ def main():
     # nobody chose, with some pages on the new patterns and some on the old.
     # Reading is cheap; being half-applied is not.
     plan = []
+    kept_topics = []
     for index, episode in enumerate(episodes, 1):
         title = episode["page_title"]
         wanted_text = episode["wikitext"]
         try:
-            current = wiki.get_text(title)
+            current, last_editor = wiki.get_text_and_last_editor(title)
+            if current is not None and not is_ours(last_editor, bot_name):
+                # Somebody has been here since we last were. Their topics
+                # stand; see podcast_topics for why this is the one field the
+                # importer yields on.
+                wanted_text, kept = podcast_topics.keep_human_topics(
+                    wanted_text, current)
+                if kept:
+                    kept_topics.append((title, last_editor))
             if current is None:
                 outcome = "created"
             elif current.strip() != wanted_text.strip():
@@ -174,6 +226,17 @@ def main():
             failures.append((title, str(exc)[:160]))
         if index % 100 == 0:
             print(f"  surveyed {index}/{len(episodes)}", file=sys.stderr)
+
+    # Say which pages the run deferred on, and to whom. A count alone would
+    # make this feel like something going wrong, when it is the feature
+    # working: the wiki correcting the parser.
+    if kept_topics:
+        print(f"\nkept the topics a person set on {len(kept_topics)} page(s):",
+              file=sys.stderr)
+        for title, editor in kept_topics[:25]:
+            print(f"  {title[:60]:60} last edited by {editor}", file=sys.stderr)
+        if len(kept_topics) > 25:
+            print(f"  … and {len(kept_topics) - 25} more", file=sys.stderr)
 
     changes = [row for row in plan if row[2] != "unchanged"]
     print(f"\n{len(changes)} pages would change "

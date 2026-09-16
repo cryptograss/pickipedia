@@ -173,14 +173,30 @@ class Wiki:
 
     def get_text(self, title):
         """@return: page wikitext, or None if the page does not exist."""
+        text, _ = self.get_text_and_last_editor(title)
+        return text
+
+    def get_text_and_last_editor(self, title):
+        """
+        The page, and who wrote the revision now on it.
+
+        Both in one request: an importer that reads several hundred pages a
+        night and then asks separately who touched them doubles its traffic to
+        learn something the same revision already knows.
+
+        @return: (wikitext, username), or (None, None) if the page is missing.
+            The username is None when the wiki withholds it, which it does for
+            a revision whose author has been suppressed.
+        """
         result = self._call({
             "action": "query", "prop": "revisions", "titles": title,
-            "rvprop": "content", "rvslots": "main",
+            "rvprop": "content|user", "rvslots": "main",
         })
         pages = result.get("query", {}).get("pages", [])
         if not pages or pages[0].get("missing"):
-            return None
-        return pages[0]["revisions"][0]["slots"]["main"]["content"]
+            return None, None
+        revision = pages[0]["revisions"][0]
+        return revision["slots"]["main"]["content"], revision.get("user")
 
     def save(self, title, text, summary):
         """
