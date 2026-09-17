@@ -10,7 +10,7 @@ next night.
 import importlib.util
 from pathlib import Path
 
-from podcast_topics import keep_human_topics, renumber, topic_lines
+from podcast_topics import keep_human_topics, renumber, topic_lines, who_set_topics
 
 TOOLS = Path(__file__).parent
 
@@ -146,3 +146,86 @@ class TestWhoEditedLast:
 
     def test_unknown_bot_name_never_claims_an_edit(self):
         assert not to_wiki.is_ours("JMyles", "")
+
+
+class FakeWiki:
+    """A page's revision history, and the importer's writes appended to it."""
+
+    def __init__(self, revisions):
+        # oldest first here, so a test reads like the page's history
+        self.revisions = list(revisions)
+        self.history_reads = 0
+
+    def get_text_and_last_editor(self, title):
+        if not self.revisions:
+            return None, None
+        return self.revisions[-1]["text"], self.revisions[-1]["user"]
+
+    def history(self, title, limit=50):
+        self.history_reads += 1
+        return list(reversed(self.revisions))[:limit]
+
+    def write(self, user, text):
+        self.revisions.append({"user": user, "text": text})
+
+
+BOT = "HearThatWhistleBlow"
+
+
+def run_import(wiki, wanted):
+    """One night: decide, and write if the page would change."""
+    current, text, kept_for = to_wiki.decide_text(wiki, "Ep", wanted, BOT)
+    if current is None or current.strip() != text.strip():
+        wiki.write(BOT, text)
+    return kept_for
+
+
+class TestWhoSetTopics:
+    def test_the_person_behind_the_bots_merge(self):
+        history = [  # newest first
+            {"user": BOT, "text": page("Farayi Malek", extra="|image=a.png")},
+            {"user": "JMyles", "text": page("Farayi Malek")},
+            {"user": BOT, "text": page("Farayi")},
+        ]
+        assert who_set_topics(history) == "JMyles"
+
+    def test_the_bot_when_it_set_them(self):
+        history = [
+            {"user": BOT, "text": page("Farayi", extra="|image=a.png")},
+            {"user": BOT, "text": page("Farayi")},
+        ]
+        assert who_set_topics(history) == BOT
+
+    def test_no_history(self):
+        assert who_set_topics([]) is None
+
+
+class TestNightAfterNight:
+    """pickipedia 2026-09-17: a kept correction was reverted the next night."""
+
+    def test_a_correction_survives_every_night_not_just_the_first(self):
+        wiki = FakeWiki([
+            {"user": BOT, "text": page("Farayi")},
+            {"user": "JMyles", "text": page("Farayi Malek")},
+        ])
+        artwork = page("Farayi", extra="|image=a.png")
+
+        assert run_import(wiki, artwork) == "JMyles"      # night 1: kept, art added
+        assert wiki.revisions[-1]["user"] == BOT
+        assert run_import(wiki, artwork) == "JMyles"      # night 2: the bug
+        run_import(wiki, artwork)                          # night 3, for good measure
+
+        final = wiki.revisions[-1]["text"]
+        assert "|topic=Farayi Malek" in final
+        assert "|image=a.png" in final
+        assert len(wiki.revisions) == 3, "nights 2 and 3 should change nothing"
+
+    def test_a_pattern_change_still_applies_to_bot_set_pages(self):
+        wiki = FakeWiki([{"user": BOT, "text": page("Farayi")}])
+        run_import(wiki, page("Farayi Malek"))
+        assert "|topic=Farayi Malek" in wiki.revisions[-1]["text"]
+
+    def test_history_is_not_read_when_topics_agree(self):
+        wiki = FakeWiki([{"user": BOT, "text": page("Del McCoury")}])
+        run_import(wiki, page("Del McCoury", extra="|image=a.png"))
+        assert wiki.history_reads == 0

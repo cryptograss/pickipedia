@@ -198,6 +198,25 @@ class Wiki:
         revision = pages[0]["revisions"][0]
         return revision["slots"]["main"]["content"], revision.get("user")
 
+    def history(self, title, limit=50):
+        """
+        A page's recent revisions, newest first.
+
+        @param limit: how far back to read. The importer only walks back until
+            the topics change, which for a real page is a revision or two.
+        @return: list of {"user": str|None, "text": str}; empty if missing.
+        """
+        result = self._call({
+            "action": "query", "prop": "revisions", "titles": title,
+            "rvprop": "content|user", "rvslots": "main", "rvlimit": limit,
+        })
+        pages = result.get("query", {}).get("pages", [])
+        if not pages or pages[0].get("missing"):
+            return []
+        return [{"user": rev.get("user"),
+                 "text": rev.get("slots", {}).get("main", {}).get("content", "")}
+                for rev in pages[0].get("revisions", [])]
+
     def save(self, title, text, summary):
         """
         Create or overwrite a page.

@@ -94,6 +94,41 @@ def is_ours(last_editor, bot_name):
     return base_account(last_editor) == bot_name
 
 
+def decide_text(wiki, title, wanted, bot_name):
+    """
+    What to write to one page, given what the feed says and what is there.
+
+    The feed owns everything except the topics. The topics belong to whoever
+    last *set* them — which is not the same as whoever last edited the page,
+    because keeping a person's topics still means writing the page, and that
+    write is signed by the bot. See podcast_topics.who_set_topics.
+
+    History is read only when it can matter: when the page's topics differ from
+    the feed's. On a normal night that is the pages people have corrected, and
+    any show whose pattern was just changed.
+
+    @return: (current, text, kept_for) — the page as it stands (None if
+        missing), the text to compare and write, and the username whose topics
+        were kept (None when the feed's topics are used).
+    """
+    current, last_editor = wiki.get_text_and_last_editor(title)
+    if current is None or podcast_topics.same_topics(current, wanted):
+        return current, wanted, None
+
+    if is_ours(last_editor, bot_name):
+        setter = podcast_topics.who_set_topics(wiki.history(title))
+    else:
+        setter = last_editor
+
+    if is_ours(setter, bot_name):
+        # The bot set these topics itself, so a different answer from the feed
+        # means the pattern changed. Take the new one.
+        return current, wanted, None
+
+    merged, _ = podcast_topics.keep_human_topics(wanted, current)
+    return current, merged, setter or "an unknown editor"
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Import podcast episode pages into PickiPedia")
@@ -204,15 +239,10 @@ def main():
         title = episode["page_title"]
         wanted_text = episode["wikitext"]
         try:
-            current, last_editor = wiki.get_text_and_last_editor(title)
-            if current is not None and not is_ours(last_editor, bot_name):
-                # Somebody has been here since we last were. Their topics
-                # stand; see podcast_topics for why this is the one field the
-                # importer yields on.
-                wanted_text, kept = podcast_topics.keep_human_topics(
-                    wanted_text, current)
-                if kept:
-                    kept_topics.append((title, last_editor))
+            current, wanted_text, setter = decide_text(
+                wiki, title, wanted_text, bot_name)
+            if setter:
+                kept_topics.append((title, setter))
             if current is None:
                 outcome = "created"
             elif current.strip() != wanted_text.strip():
@@ -234,7 +264,7 @@ def main():
         print(f"\nkept the topics a person set on {len(kept_topics)} page(s):",
               file=sys.stderr)
         for title, editor in kept_topics[:25]:
-            print(f"  {title[:60]:60} last edited by {editor}", file=sys.stderr)
+            print(f"  {title[:60]:60} topics set by {editor}", file=sys.stderr)
         if len(kept_topics) > 25:
             print(f"  … and {len(kept_topics) - 25} more", file=sys.stderr)
 

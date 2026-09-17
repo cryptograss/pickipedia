@@ -60,6 +60,40 @@ def renumber(lines):
     return out
 
 
+def same_topics(text_a, text_b):
+    """@return: True if two versions of a page name the same topics."""
+    return renumber(topic_lines(text_a)) == renumber(topic_lines(text_b))
+
+
+def who_set_topics(revisions):
+    """
+    The author of the revision that put the page's current topics there.
+
+    Not the author of the latest revision. When the importer keeps a person's
+    topics it still writes the page — new artwork, a corrected date — and that
+    write makes the bot the latest editor. Asking "who edited last?" the next
+    night answers "the bot", and the bot then regenerates the page and undoes
+    the very correction it kept the night before. That flip-flop is how Farayi
+    Malek went back to "Farayi" on 2026-09-17.
+
+    So walk back from the newest revision while the topics stay the same; the
+    oldest revision in that run is where they were set.
+
+    @param revisions: newest first, as returned by Wiki.history().
+    @return: a username, or None if there is no history or the author is
+        hidden. If the topics never change within the revisions given, the
+        oldest one's author is the best available answer.
+    """
+    if not revisions:
+        return None
+    setter = revisions[0].get("user")
+    for rev in revisions[1:]:
+        if not same_topics(rev.get("text"), revisions[0].get("text")):
+            break
+        setter = rev.get("user")
+    return setter
+
+
 def keep_human_topics(wanted, current):
     """
     The text to write when a person has edited this page since the bot did.
