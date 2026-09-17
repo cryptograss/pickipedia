@@ -89,6 +89,20 @@ class ParserHooks implements ParserFirstCallInitHook {
 		$attributes = [
 			'class' => $classes,
 			'title' => self::hoverText( $by ),
+			// The wikitext this marker wraps, so the verify gadget can find the
+			// block it has to rewrite.
+			//
+			// Without it the gadget has only the rendered text to go on, and
+			// searches the page source for that — which works for a sentence,
+			// where source and output are nearly the same, and cannot work for
+			// a template call, where the output appears nowhere in the source.
+			// Every claim that was a template answered "could not find the
+			// claim in page source", about a page nobody had touched
+			// (pickipedia#122).
+			//
+			// Trimmed, because that is the form the gadget puts back when it
+			// unwraps the marker.
+			'data-pv-claim' => trim( $input ),
 		];
 		if ( $by !== '' ) {
 			$attributes['data-proposed-by'] = $by;

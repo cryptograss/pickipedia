@@ -46,6 +46,12 @@ pipeline {
                     # planned on top of it — so it runs before anything is
                     # built, and a failure here stops the deploy.
                     php extensions/PickiPediaVerification/tests/check-gate.php
+
+                    # The other half of the same workflow: the <proposed> tag
+                    # has to hand the verify gadget the wikitext it wrapped, or
+                    # no claim written as a template can be verified at all
+                    # (pickipedia#122).
+                    php extensions/PickiPediaVerification/tests/check-proposed-tag.php
                 '''
             }
         }
