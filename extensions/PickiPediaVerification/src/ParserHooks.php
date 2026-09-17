@@ -2,6 +2,7 @@
 
 namespace MediaWiki\Extension\PickiPediaVerification;
 
+use MediaWiki\Hook\BeforePageDisplayHook;
 use MediaWiki\Hook\ParserFirstCallInitHook;
 use Parser;
 use PPFrame;
@@ -32,7 +33,7 @@ use PPFrame;
  * it better than a generic wrapper can, so prefer that where it exists; this is
  * for everything else, including markup that cannot carry a parameter at all.
  */
-class ParserHooks implements ParserFirstCallInitHook {
+class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 
 	/** Review queue that {{Bot_proposes}} also feeds. */
 	private const TRACKING_CATEGORY = 'Pages with unverified bot claims';
@@ -53,6 +54,27 @@ class ParserHooks implements ParserFirstCallInitHook {
 	 */
 	public function onParserFirstCallInit( $parser ) {
 		$parser->setHook( 'proposed', [ self::class, 'render' ] );
+	}
+
+	/**
+	 * Load the Verify button.
+	 *
+	 * For readers who could actually verify something, and on views of a page
+	 * rather than its history or its source. The script itself finds the
+	 * markers; it does nothing on a page that holds none.
+	 *
+	 * @param \OutputPage $out
+	 * @param \Skin $skin
+	 * @return void
+	 */
+	public function onBeforePageDisplay( $out, $skin ): void {
+		if ( !$out->getUser()->isRegistered() ) {
+			return;
+		}
+		if ( $out->getRequest()->getVal( 'action', 'view' ) !== 'view' ) {
+			return;
+		}
+		$out->addModules( [ 'ext.pickipediaVerification.verify' ] );
 	}
 
 	/**

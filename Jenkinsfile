@@ -52,6 +52,16 @@ pipeline {
                     # no claim written as a template can be verified at all
                     # (pickipedia#122).
                     php extensions/PickiPediaVerification/tests/check-proposed-tag.php
+
+                    # And the button that reads them. Skipped rather than
+                    # failed where the agent has no node: a missing runtime is
+                    # not a broken build, and saying so beats a green tick that
+                    # means nothing.
+                    if command -v node >/dev/null 2>&1; then
+                        node extensions/PickiPediaVerification/tests/check-verify-js.mjs
+                    else
+                        echo "node not installed; skipping check-verify-js.mjs"
+                    fi
                 '''
             }
         }

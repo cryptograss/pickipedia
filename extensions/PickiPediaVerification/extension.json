@@ -31,7 +31,8 @@
 	},
 	"Hooks": {
 		"EditFilterMergedContent": "main",
-		"ParserFirstCallInit": "parser"
+		"ParserFirstCallInit": "parser",
+		"BeforePageDisplay": "parser"
 	},
 	"MessagesDirs": {
 		"PickiPediaVerification": [
@@ -72,6 +73,15 @@
 		"ext.pickipediaVerification.styles": {
 			"styles": [
 				"ext.pickipediaVerification.css"
+			]
+		},
+		"ext.pickipediaVerification.verify": {
+			"packageFiles": [
+				"ext.pickipediaVerification.verify.js"
+			],
+			"dependencies": [
+				"mediawiki.api",
+				"jquery"
 			]
 		}
 	}

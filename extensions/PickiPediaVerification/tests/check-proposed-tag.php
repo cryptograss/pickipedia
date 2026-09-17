@@ -21,6 +21,9 @@
 namespace MediaWiki\Hook {
 	interface ParserFirstCallInitHook {
 	}
+
+	interface BeforePageDisplayHook {
+	}
 }
 
 namespace {
