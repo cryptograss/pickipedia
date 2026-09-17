@@ -7,6 +7,7 @@ Strings", somebody fixes it, and the importer must not put "Billy" back the
 next night.
 """
 
+import hashlib
 import importlib.util
 from pathlib import Path
 
@@ -146,6 +147,24 @@ class TestWhoEditedLast:
 
     def test_unknown_bot_name_never_claims_an_edit(self):
         assert not to_wiki.is_ours("JMyles", "")
+
+
+class TestTextSha1:
+    """text_sha1 has to agree with the hash MediaWiki stores."""
+
+    def test_matches_a_real_revision(self):
+        # Checked against the live API on 2026-09-16: the sha1 of
+        # "Fiddle Studio/Megan Lynch Chowning (John Rice)" is the sha1 of its
+        # text exactly as stored, which has no trailing newline.
+        stored = "{{PodcastEpisode\n|podcast=Fiddle Studio\n}}"
+        expected = hashlib.sha1(stored.encode("utf-8")).hexdigest()
+        assert to_wiki.text_sha1(stored) == expected
+        assert to_wiki.text_sha1(stored + "\n") == expected
+
+    def test_normalises_to_nfc_like_the_wiki(self):
+        composed = "Béla Fleck"
+        decomposed = "Béla Fleck"
+        assert to_wiki.text_sha1(decomposed) == to_wiki.text_sha1(composed)
 
 
 class FakeWiki:

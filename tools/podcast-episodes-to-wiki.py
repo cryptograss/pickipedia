@@ -34,10 +34,12 @@ Credentials come from the environment; see podcast_wiki.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 import time
+import unicodedata
 from collections import Counter
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
@@ -92,6 +94,21 @@ def is_ours(last_editor, bot_name):
     if not bot_name or not last_editor:
         return False
     return base_account(last_editor) == bot_name
+
+
+def text_sha1(text):
+    """
+    The hash MediaWiki would record for a page holding this text.
+
+    MediaWiki stores a revision's sha1 over its text as saved, and saving
+    trims trailing whitespace and normalises to Unicode NFC. Do the same here,
+    or a page that has not changed looks changed — which is not dangerous, it
+    only sends that page down the slow path to be read in full.
+
+    @return: lowercase hex sha1, the form the API returns with formatversion=2.
+    """
+    saved = unicodedata.normalize("NFC", text).rstrip()
+    return hashlib.sha1(saved.encode("utf-8")).hexdigest()
 
 
 def decide_text(wiki, title, wanted, bot_name):
@@ -235,27 +252,53 @@ def main():
     # Reading is cheap; being half-applied is not.
     plan = []
     kept_topics = []
-    for index, episode in enumerate(episodes, 1):
+
+    # First pass: one small batched request per fifty pages, asking only for
+    # each page's content hash and last editor. Most nights nearly every page
+    # matches the text we would write, and those need nothing more.
+    started = time.time()
+    try:
+        hashes = wiki.survey(e["page_title"] for e in episodes)
+    except Exception as exc:                                # noqa: BLE001
+        # Not fatal: every page falls through to being read on its own, which
+        # is slow but is exactly what the importer did before batching.
+        print(f"WARNING: batched survey failed ({str(exc)[:120]}); "
+              f"reading pages one at a time", file=sys.stderr)
+        hashes = {}
+    print(f"  surveyed {len(hashes)}/{len(episodes)} pages by hash in "
+          f"{time.time() - started:.1f}s", file=sys.stderr)
+
+    read_in_full = 0
+    for episode in episodes:
         title = episode["page_title"]
         wanted_text = episode["wikitext"]
+        known = hashes.get(title)
         try:
-            current, wanted_text, setter = decide_text(
-                wiki, title, wanted_text, bot_name)
-            if setter:
-                kept_topics.append((title, setter))
-            if current is None:
+            if known and known["missing"]:
                 outcome = "created"
-            elif current.strip() != wanted_text.strip():
-                outcome = "updated"
-            else:
+            elif known and known["sha1"] == text_sha1(wanted_text):
                 outcome = "unchanged"
+            else:
+                # Differs, or the survey said nothing: read it, and let the
+                # topic rules decide what to write.
+                read_in_full += 1
+                current, wanted_text, setter = decide_text(
+                    wiki, title, wanted_text, bot_name)
+                if setter:
+                    kept_topics.append((title, setter))
+                if current is None:
+                    outcome = "created"
+                elif current.strip() != wanted_text.strip():
+                    outcome = "updated"
+                else:
+                    outcome = "unchanged"
             plan.append((title, wanted_text, outcome, episode["podcast"]))
             tally[outcome] += 1
         except Exception as exc:                            # noqa: BLE001
             tally["failed"] += 1
             failures.append((title, str(exc)[:160]))
-        if index % 100 == 0:
-            print(f"  surveyed {index}/{len(episodes)}", file=sys.stderr)
+
+    print(f"  read {read_in_full} page(s) in full", file=sys.stderr)
 
     # Say which pages the run deferred on, and to whom. A count alone would
     # make this feel like something going wrong, when it is the feature

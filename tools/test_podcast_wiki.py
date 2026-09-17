@@ -114,3 +114,51 @@ class TestStaleToken:
         with pytest.raises(WikiError) as caught:
             wiki.save("Some page", "new text", "summary")
         assert "badtoken" in str(caught.value)
+
+
+class TestBatchedSurvey:
+    """survey — many pages per request, hashes instead of text."""
+
+    def fake(self, responses):
+        wiki = Wiki(user="x", password="y")
+        requests = []
+
+        def fake_call_with_backoff(params, post=None):
+            requests.append(params["titles"].split("|"))
+            return responses.pop(0)
+
+        wiki._call_with_backoff = fake_call_with_backoff
+        return wiki, requests
+
+    def test_batches_fifty_at_a_time(self):
+        titles = [f"Show/Ep {n}" for n in range(120)]
+        wiki, requests = self.fake([{"query": {"pages": []}} for _ in range(3)])
+        wiki.survey(titles)
+        assert [len(r) for r in requests] == [50, 50, 20]
+
+    def test_hash_user_and_missing(self):
+        wiki, _ = self.fake([{"query": {"pages": [
+            {"title": "Show/Ep 1",
+             "revisions": [{"sha1": "abc", "user": "HearThatWhistleBlow"}]},
+            {"title": "Show/Ep 2", "missing": True},
+        ]}}])
+        found = wiki.survey(["Show/Ep 1", "Show/Ep 2"])
+        assert found["Show/Ep 1"] == {
+            "sha1": "abc", "user": "HearThatWhistleBlow", "missing": False}
+        assert found["Show/Ep 2"]["missing"] is True
+
+    def test_answers_under_our_spelling_of_the_title(self):
+        # The wiki replies to "Show/Ep  1" as "Show/Ep 1". Keyed by its
+        # spelling, our lookup would miss and the page would quietly go back
+        # to being read one request at a time.
+        wiki, _ = self.fake([{"query": {
+            "normalized": [{"from": "Show/Ep  1", "to": "Show/Ep 1"}],
+            "pages": [{"title": "Show/Ep 1",
+                       "revisions": [{"sha1": "abc", "user": "X"}]}],
+        }}])
+        assert "Show/Ep  1" in wiki.survey(["Show/Ep  1"])
+
+    def test_a_title_the_wiki_ignored_is_left_out(self):
+        # Absent is not the same as missing: "missing" would recreate the page.
+        wiki, _ = self.fake([{"query": {"pages": []}}])
+        assert wiki.survey(["Show/Ep 1"]) == {}

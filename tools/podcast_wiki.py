@@ -198,6 +198,56 @@ class Wiki:
         revision = pages[0]["revisions"][0]
         return revision["slots"]["main"]["content"], revision.get("user")
 
+    def survey(self, titles, batch=50):
+        """
+        Ask, for many pages at once, what is on them and who put it there.
+
+        The answer is a content hash rather than the content: MediaWiki stores
+        a sha1 of each revision's text, so a page can be compared against text
+        we already hold without anybody sending the page. Several hundred
+        pages become a handful of small requests, which is what lets a nightly
+        run stay quick over an ordinary internet connection — the old
+        page-at-a-time survey spent its whole life waiting for round trips.
+
+        Fetch the text only for pages this says have changed.
+
+        @param titles: page titles.
+        @param batch: titles per request. 50 is the API's limit for an
+            ordinary account; a bot may use 500, but the saving from here on
+            is small and the smaller request is kinder to a shared wiki.
+        @return: {title: {"sha1": str|None, "user": str|None, "missing": bool}},
+            keyed by the titles as given. A title the wiki said nothing about
+            is left out, and should be read the slow way.
+        """
+        found = {}
+        titles = list(titles)
+        for start in range(0, len(titles), batch):
+            chunk = titles[start:start + batch]
+            result = self._call_with_backoff({
+                "action": "query", "prop": "revisions",
+                "titles": "|".join(chunk), "rvprop": "sha1|user",
+            })
+            query = result.get("query", {})
+
+            # MediaWiki answers under its own spelling of a title — underscores
+            # become spaces, the first letter is capitalised, runs of spaces
+            # collapse. Map its spelling back to ours, or every page looks
+            # missing and the run recreates the whole wiki.
+            ours = {item["to"]: item["from"] for item in query.get("normalized", [])}
+
+            for page in query.get("pages", []):
+                title = ours.get(page["title"], page["title"])
+                if page.get("missing"):
+                    found[title] = {"sha1": None, "user": None, "missing": True}
+                    continue
+                revision = (page.get("revisions") or [{}])[0]
+                found[title] = {
+                    "sha1": revision.get("sha1"),
+                    "user": revision.get("user"),
+                    "missing": False,
+                }
+        return found
+
     def history(self, title, limit=50):
         """
         A page's recent revisions, newest first.
