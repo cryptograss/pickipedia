@@ -61,9 +61,32 @@ define( "NS_BLUERAILROAD_TALK", 3003 );
 $wgExtraNamespaces[NS_BLUERAILROAD] = "BlueRailroad";
 $wgExtraNamespaces[NS_BLUERAILROAD_TALK] = "BlueRailroad_talk";
 
+# Song namespace: one page per composition — the song or tune itself, as
+# distinct from any record it appears on.
+#
+# Separate from main because the collision is not hypothetical. "Vowel Sounds"
+# and "Nanny State Fiddler" are each both a record and the song it takes its
+# name from, and that was true of the first three records this wiki described.
+# Self-titled tracks are a habit here, not an edge case, and one namespace
+# means arguing forever about which of the two earns the plain name.
+define( "NS_SONG", 3008 );
+define( "NS_SONG_TALK", 3009 );
+$wgExtraNamespaces[NS_SONG] = "Song";
+$wgExtraNamespaces[NS_SONG_TALK] = "Song_talk";
+
+# A fiddler should not have to call Drowsy Maggie a song. Tune: reaches the
+# same namespace; MediaWiki normalises the displayed prefix to Song:, which is
+# a real cost of picking a canonical name and the reason this is an alias
+# rather than a second namespace.
+$wgNamespaceAliases['Tune'] = NS_SONG;
+$wgNamespaceAliases['Tune_talk'] = NS_SONG_TALK;
+
 # Make Cryptograss namespace searchable by default
 $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
 $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
+# A reader searching for a tune expects to find the tune, and a namespace is
+# not searched unless it is asked for.
+$wgNamespacesToBeSearchedDefault[NS_SONG] = true;
 
 ## URLs
 # The wiki's identity, fixed no matter which hostname a reader arrived by.
@@ -195,6 +218,11 @@ $smwgNamespace = parse_url($wgCanonicalServer, PHP_URL_HOST);
 # Enable SMW semantic links for Cryptograss namespace
 $smwgNamespacesWithSemanticLinks[NS_CRYPTOGRASS] = true;
 
+# Song pages carry the data every other page reads: who wrote it, what it is
+# indexed as, which records it was cut on. Without this they would be prose
+# nobody can query.
+$smwgNamespacesWithSemanticLinks[NS_SONG] = true;
+
 # Enable semantic links for Release namespace (after PickiPediaReleases is loaded)
 # Note: NS_RELEASE (3004) and NS_RELEASEDRAFT (3006) are defined by PickiPediaReleases
 $smwgNamespacesWithSemanticLinks[3004] = true;
@@ -237,6 +265,7 @@ $wgVisualEditorAvailableNamespaces = [
     NS_CATEGORY => true,
     NS_CRYPTOGRASS => true,
     NS_BLUERAILROAD => true,
+    NS_SONG => true,
 ];
 
 # CodeMirror - syntax highlighting in the editor
