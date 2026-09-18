@@ -1,63 +1,91 @@
 """
-Turn arthel's studio ensembles into wikitext for a record page.
+Turn arthel's studio ensembles into wikitext for a composition's page.
 
-Who played what on which track is recorded in arthel, in
-`src/data/songs_and_tunes/*.yaml`, because that is what the Rabbithole player
-reads to follow a picker from one track to the next. The same data answers a
-question the wiki could not: which records is this musician on?
+The composition is the page — see PickiPedia:Compositions. A recording of it
+is a {{Studio version}} call naming the record it was cut for and everyone who
+played on it, and the record's own page builds its track listing by asking
+which compositions name it. Neither page keeps a copy of the other's data, so
+a lineup is corrected in one place.
 
-It arrives here as JSON from arthel's exporter, and leaves as a block of
-{{Studio track}} calls for the record's page. Each call records the personnel
-of one track as semantic data, so a musician's page can ask for every track
-that names them without anybody maintaining a list.
+The data arrives as JSON from arthel's exporter, grouped by record, because
+that is the shape the site wants. Here it is turned inside out.
 
 The block is delimited by comment markers. The importer replaces what is
-between them and touches nothing else on the page, which is the whole
-arrangement: inside the markers is transcribed from arthel and will be
-overwritten; everything else on the page belongs to whoever is editing it.
+between them and touches nothing else on the page: inside the markers is
+transcribed and will be overwritten, everything else belongs to whoever is
+editing the page.
 """
 
-BEGIN = "<!-- studio sessions: from arthel; this block is rewritten by HearThatWhistleBlow -->"
-END = "<!-- end studio sessions -->"
+BEGIN = "<!-- studio recordings: from session data; this block is rewritten by HearThatWhistleBlow -->"
+END = "<!-- end studio recordings -->"
 
-HEADING = "== Sessions =="
+HEADING = "== Studio recordings =="
+
+# Compositions live in their own namespace, because a record and the song it
+# takes its name from collide otherwise — "Vowel Sounds" is both.
+NAMESPACE = "Song:"
 
 
-def track_call(track):
+def page_title(song_title):
+    """@return: the wiki page for a composition."""
+    return NAMESPACE + song_title
+
+
+def by_song(records):
     """
-    One {{Studio track}} call.
+    Invert the exporter's records-with-tracks into compositions-with-recordings.
+
+    @param records: the exporter's "records" list.
+    @return: {song title: [recording, ...]}, each recording naming its record.
+    """
+    songs = {}
+    for record in records:
+        for track in record.get("tracks", []):
+            songs.setdefault(track["title"], []).append({
+                "record": record["name"],
+                "number": track.get("number"),
+                "recorded": track.get("recorded"),
+                "studio": track.get("studio"),
+                "engineer": track.get("engineer"),
+                "personnel": track.get("personnel", []),
+            })
+    for versions in songs.values():
+        versions.sort(key=lambda v: v["record"])
+    return songs
+
+
+def version_call(version):
+    """
+    One {{Studio version}} call.
 
     Personnel are named parameters — the musician's name is the parameter and
-    their instruments the value — because a track has no fixed number of
+    their instruments the value — because a session has no fixed number of
     players and naming them positionally would make the wikitext unreadable
     for anybody who opens it.
-
-    @param track: one track from the exporter.
-    @return: wikitext.
     """
-    parts = ["{{Studio track", f"|track={track['title']}"]
-    if track.get("number"):
-        parts.append(f"|number={track['number']}")
-    for field in ("studio", "recorded", "engineer"):
-        if track.get(field):
-            parts.append(f"|{field}={track[field]}")
-    for player in track.get("personnel", []):
+    parts = ["{{Studio version", f"|record={version['record']}"]
+    if version.get("number"):
+        parts.append(f"|number={version['number']}")
+    for field in ("recorded", "studio", "engineer"):
+        if version.get(field):
+            parts.append(f"|{field}={version[field]}")
+    for player in version.get("personnel", []):
         instruments = ", ".join(player.get("instruments") or [])
         parts.append(f"|{player['name']}={instruments}")
     parts.append("}}")
     return "\n".join(parts)
 
 
-def session_block(record):
+def song_block(versions):
     """
-    The whole managed region for one record, markers included.
+    The whole managed region for one composition, markers included.
 
-    @param record: one record from the exporter.
+    @param versions: that composition's recordings.
     @return: wikitext.
     """
     lines = [BEGIN, HEADING, ""]
-    for track in record.get("tracks", []):
-        lines.append(track_call(track))
+    for version in versions:
+        lines.append(version_call(version))
     lines.append(END)
     return "\n".join(lines)
 
@@ -68,7 +96,7 @@ def splice(current, block):
 
     @param current: the page as it stands, or None for a page that does not
         exist yet.
-    @param block: what session_block() produced.
+    @param block: what song_block() produced.
     @return: the page to save.
     """
     if current is None:
@@ -76,8 +104,6 @@ def splice(current, block):
 
     start = current.find(BEGIN)
     if start == -1:
-        # No block yet. It goes at the end, before the categories, which are
-        # conventionally last and look wrong anywhere else.
         body, tail = split_trailing_categories(current)
         joined = body.rstrip() + "\n\n" + block
         return (joined + "\n\n" + tail).rstrip() if tail else joined
