@@ -68,6 +68,30 @@ class TestCredentials:
         with pytest.raises(LoginRequired):
             Wiki(user="x", password="y").save("Some page", "text", "summary")
 
+    def test_the_refusal_says_which_one_is_missing(self, monkeypatch):
+        # "Set both of these" is no help to somebody who has just set both and
+        # mistyped one of them.
+        monkeypatch.setenv("PICKIPEDIA_BOT_USER", "Podcast Imports@episodes")
+        monkeypatch.delenv("PICKIPEDIA_BOT_PASSWORD", raising=False)
+        with pytest.raises(LoginRequired) as caught:
+            Wiki().login()
+        assert "PICKIPEDIA_BOT_PASSWORD" in str(caught.value)
+        assert "PICKIPEDIA_BOT_USER" not in str(caught.value).split("vault")[0]
+
+    def test_an_empty_value_counts_as_missing(self, monkeypatch):
+        monkeypatch.setenv("PICKIPEDIA_BOT_USER", "")
+        monkeypatch.setenv("PICKIPEDIA_BOT_PASSWORD", "secret")
+        with pytest.raises(LoginRequired) as caught:
+            Wiki().login()
+        assert "PICKIPEDIA_BOT_USER" in str(caught.value)
+
+    def test_the_refusal_points_at_the_vault_helper(self, monkeypatch):
+        monkeypatch.delenv("PICKIPEDIA_BOT_USER", raising=False)
+        monkeypatch.delenv("PICKIPEDIA_BOT_PASSWORD", raising=False)
+        with pytest.raises(LoginRequired) as caught:
+            Wiki().login()
+        assert "podcast-bot-env.sh" in str(caught.value)
+
     def test_credentials_are_read_from_the_environment(self, monkeypatch):
         monkeypatch.setenv("PICKIPEDIA_BOT_USER", "Podcast Imports@episodes")
         monkeypatch.setenv("PICKIPEDIA_BOT_PASSWORD", "secret")

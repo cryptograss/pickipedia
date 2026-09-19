@@ -103,8 +103,18 @@ class Wiki:
         @raise LoginRequired: if credentials are absent or rejected.
         """
         if not self.user or not self._password:
+            # Say which one is missing. "Set both of these" is unhelpful when
+            # you have just set both of them and one is empty, or spelled
+            # slightly differently, or lost to a subshell.
+            missing = [name for name, value in (
+                ("PICKIPEDIA_BOT_USER", self.user),
+                ("PICKIPEDIA_BOT_PASSWORD", self._password),
+            ) if not value]
             raise LoginRequired(
-                "set PICKIPEDIA_BOT_USER and PICKIPEDIA_BOT_PASSWORD")
+                f"no credentials: {' and '.join(missing)} "
+                f"{'is' if len(missing) == 1 else 'are'} unset or empty. "
+                f"Set them, or read them from the vault with: "
+                f'eval "$(maybelle-config/maybelle/scripts/podcast-bot-env.sh)"')
 
         tokens = self._call({"action": "query", "meta": "tokens",
                              "type": "login"})
