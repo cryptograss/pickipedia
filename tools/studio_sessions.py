@@ -1,14 +1,20 @@
 """
 Turn arthel's studio ensembles into wikitext for a composition's page.
 
-The composition is the page — see PickiPedia:Compositions. A recording of it
-is a {{Studio version}} call naming the record it was cut for and everyone who
-played on it, and the record's own page builds its track listing by asking
-which compositions name it. Neither page keeps a copy of the other's data, so
-a lineup is corrected in one place.
+The composition is the page — see PickiPedia:Compositions. One cut of it is a
+{{Studio cut}} call naming the session, everyone who played, and the record it
+appears on if there is one. The record's own page builds its track listing by
+asking which compositions name it. Neither page keeps a copy of the other's
+data, so a lineup is corrected in one place.
 
 The data arrives as JSON from arthel's exporter, grouped by record, because
 that is the shape the site wants. Here it is turned inside out.
+
+A cut wants a block height and a studio to identify it; the session data has
+neither reliably, so imported cuts fall back to being identified by the record
+they were made for. That is enough until the same performance turns up on a
+second record, and filling in a block height by hand is what fixes it — see
+Template:Studio cut.
 
 The block is delimited by comment markers. The importer replaces what is
 between them and touches nothing else on the page: inside the markers is
@@ -56,17 +62,20 @@ def by_song(records):
 
 def version_call(version):
     """
-    One {{Studio version}} call.
+    One {{Studio cut}} call.
 
     Personnel are named parameters — the musician's name is the parameter and
     their instruments the value — because a session has no fixed number of
     players and naming them positionally would make the wikitext unreadable
     for anybody who opens it.
     """
-    parts = ["{{Studio version", f"|record={version['record']}"]
+    parts = ["{{Studio cut"]
+    if version.get("studio"):
+        parts.append(f"|studio={version['studio']}")
+    parts.append(f"|record={version['record']}")
     if version.get("number"):
         parts.append(f"|number={version['number']}")
-    for field in ("recorded", "studio", "engineer"):
+    for field in ("recorded", "engineer"):
         if version.get(field):
             parts.append(f"|{field}={version[field]}")
     for player in version.get("personnel", []):

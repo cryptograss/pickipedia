@@ -69,8 +69,14 @@ class TestBySong:
 
 
 class TestVersionCall:
+    def test_it_is_a_cut(self):
+        assert version_call(VERSION).startswith("{{Studio cut")
+
     def test_names_the_record(self):
         assert "|record=4masks" in version_call(VERSION)
+
+    def test_the_studio_is_given_since_it_helps_identify_the_cut(self):
+        assert "|studio=Tunesmith Studios, Nashville TN" in version_call(VERSION)
 
     def test_a_player_is_a_named_parameter(self):
         assert "|Harry Clark=mandolin" in version_call(VERSION)
