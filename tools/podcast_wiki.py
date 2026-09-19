@@ -176,6 +176,32 @@ class Wiki:
         text, _ = self.get_text_and_last_editor(title)
         return text
 
+    def resolve(self, title):
+        """
+        Follow a redirect to the page it points at.
+
+        Identity on this wiki is the page, and a page can be renamed: a
+        composition first written as "Song:Barlows Jig" becomes "Song:Barlows"
+        when somebody checks the record sleeve, leaving a redirect behind.
+        An importer that ignores redirects would then write its data to the
+        redirect, blanking it, and the two copies would drift apart.
+
+        Following one is how the wiki gets to own its own names — which is the
+        point of not keeping a foreign key from wherever the data came from.
+
+        @param title: the page asked for.
+        @return: the title it resolves to, or the original when nothing
+            redirects and when the wiki cannot say.
+        """
+        result = self._call({
+            "action": "query", "titles": title, "redirects": "1",
+        })
+        query = result.get("query", {})
+        for hop in query.get("redirects", []):
+            if hop.get("from") == title and hop.get("to"):
+                return hop["to"]
+        return title
+
     def get_text_and_last_editor(self, title):
         """
         The page, and who wrote the revision now on it.
