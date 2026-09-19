@@ -1,5 +1,5 @@
 """
-Turn arthel's studio ensembles into wikitext for a composition's page.
+Turn session data into wikitext for a composition's page.
 
 The composition is the page — see PickiPedia:Compositions. One cut of it is a
 {{Studio cut}} call naming the session, everyone who played, and the record it
@@ -22,6 +22,9 @@ transcribed and will be overwritten, everything else belongs to whoever is
 editing the page.
 """
 
+from dataclasses import dataclass, field
+from typing import List, Optional
+
 BEGIN = "<!-- studio recordings: from session data; this block is rewritten by HearThatWhistleBlow -->"
 END = "<!-- end studio recordings -->"
 
@@ -32,71 +35,107 @@ HEADING = "== Studio recordings =="
 NAMESPACE = "Song:"
 
 
-def page_title(song_title):
-    """@return: the wiki page for a composition."""
-    return NAMESPACE + song_title
+@dataclass
+class Player:
+    """One musician on one cut, and what they played on it."""
+
+    name: str
+    instruments: List[str] = field(default_factory=list)
+
+    @classmethod
+    def from_json(cls, raw):
+        return cls(name=raw["name"], instruments=list(raw.get("instruments") or []))
+
+    def as_parameter(self):
+        """The wikitext parameter naming this player: "|Harry Clark=mandolin"."""
+        return f"|{self.name}={', '.join(self.instruments)}"
 
 
-def by_song(records):
+@dataclass
+class Cut:
     """
-    Invert the exporter's records-with-tracks into compositions-with-recordings.
+    One recording of a composition: one lineup, one session.
+
+    `record` is optional because plenty is cut in a studio that never lands on
+    an album — and when it is absent the cut is still a cut, with everything
+    else about it intact.
+    """
+
+    record: Optional[str] = None
+    number: Optional[int] = None
+    recorded: Optional[str] = None
+    studio: Optional[str] = None
+    engineer: Optional[str] = None
+    players: List[Player] = field(default_factory=list)
+
+    @classmethod
+    def from_track(cls, record_name, track):
+        return cls(
+            record=record_name,
+            number=track.get("number"),
+            recorded=track.get("recorded"),
+            studio=track.get("studio"),
+            engineer=track.get("engineer"),
+            players=[Player.from_json(p) for p in track.get("personnel", [])],
+        )
+
+    def as_wikitext(self):
+        """
+        One {{Studio cut}} call.
+
+        Players are named parameters — the musician's name is the parameter and
+        their instruments the value — because a session has no fixed number of
+        players, and naming them positionally would make the wikitext
+        unreadable for anybody who opens it.
+        """
+        lines = ["{{Studio cut"]
+        # The studio goes first because it is half of what identifies the cut.
+        for name, value in (("studio", self.studio), ("record", self.record),
+                            ("number", self.number), ("recorded", self.recorded),
+                            ("engineer", self.engineer)):
+            if value:
+                lines.append(f"|{name}={value}")
+        lines.extend(player.as_parameter() for player in self.players)
+        lines.append("}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class Composition:
+    """A composition and every cut of it the session data knows about."""
+
+    title: str
+    cuts: List[Cut] = field(default_factory=list)
+
+    @property
+    def page(self):
+        return NAMESPACE + self.title
+
+    def block(self):
+        """The whole managed region for this composition, markers included."""
+        lines = [BEGIN, HEADING, ""]
+        lines.extend(cut.as_wikitext() for cut in self.cuts)
+        lines.append(END)
+        return "\n".join(lines)
+
+
+def compositions(records):
+    """
+    Invert the exporter's records-with-tracks into compositions-with-cuts.
 
     @param records: the exporter's "records" list.
-    @return: {song title: [recording, ...]}, each recording naming its record.
+    @return: [Composition], in title order.
     """
-    songs = {}
+    found = {}
     for record in records:
         for track in record.get("tracks", []):
-            songs.setdefault(track["title"], []).append({
-                "record": record["name"],
-                "number": track.get("number"),
-                "recorded": track.get("recorded"),
-                "studio": track.get("studio"),
-                "engineer": track.get("engineer"),
-                "personnel": track.get("personnel", []),
-            })
-    for versions in songs.values():
-        versions.sort(key=lambda v: v["record"])
-    return songs
+            composition = found.setdefault(
+                track["title"], Composition(title=track["title"]))
+            composition.cuts.append(Cut.from_track(record["name"], track))
 
-
-def version_call(version):
-    """
-    One {{Studio cut}} call.
-
-    Personnel are named parameters — the musician's name is the parameter and
-    their instruments the value — because a session has no fixed number of
-    players and naming them positionally would make the wikitext unreadable
-    for anybody who opens it.
-    """
-    parts = ["{{Studio cut"]
-    if version.get("studio"):
-        parts.append(f"|studio={version['studio']}")
-    parts.append(f"|record={version['record']}")
-    if version.get("number"):
-        parts.append(f"|number={version['number']}")
-    for field in ("recorded", "engineer"):
-        if version.get(field):
-            parts.append(f"|{field}={version[field]}")
-    for player in version.get("personnel", []):
-        instruments = ", ".join(player.get("instruments") or [])
-        parts.append(f"|{player['name']}={instruments}")
-    parts.append("}}")
-    return "\n".join(parts)
-
-
-def song_block(versions):
-    """
-    The whole managed region for one composition, markers included.
-
-    @param versions: that composition's recordings.
-    @return: wikitext.
-    """
-    lines = [BEGIN, HEADING, ""]
-    for version in versions:
-        lines.append(version_call(version))
-    lines.append(END)
-    return "\n".join(lines)
+    for composition in found.values():
+        composition.cuts.sort(key=lambda cut: cut.record or "")
+    return [found[title] for title in sorted(found)]
 
 
 def splice(current, block):
@@ -105,7 +144,7 @@ def splice(current, block):
 
     @param current: the page as it stands, or None for a page that does not
         exist yet.
-    @param block: what song_block() produced.
+    @param block: what Composition.block() produced.
     @return: the page to save.
     """
     if current is None:
@@ -113,9 +152,9 @@ def splice(current, block):
 
     start = current.find(BEGIN)
     if start == -1:
-        body, tail = split_trailing_categories(current)
+        body, categories = split_trailing_categories(current)
         joined = body.rstrip() + "\n\n" + block
-        return (joined + "\n\n" + tail).rstrip() if tail else joined
+        return (joined + "\n\n" + categories).rstrip() if categories else joined
 
     end = current.find(END, start)
     if end == -1:

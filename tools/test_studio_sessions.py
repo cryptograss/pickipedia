@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Tests for writing studio recordings onto composition pages."""
+"""Tests for writing studio cuts onto composition pages."""
 
 import importlib.util
+import io
+import json
 from pathlib import Path
 
 import pytest
 
-from studio_sessions import (BEGIN, END, by_song, page_title, song_block,
-                             splice, version_call)
+from studio_sessions import BEGIN, END, Composition, Cut, Player, compositions, splice
 
 TOOLS = Path(__file__).parent
 
@@ -23,21 +24,16 @@ def load_script(name):
 
 to_wiki = load_script("studio-sessions-to-wiki")
 
-VERSION = {
-    "record": "4masks",
-    "number": 1,
-    "recorded": "3 April, 2024",
-    "studio": "Tunesmith Studios, Nashville TN",
-    "engineer": "Jake Stargel",
-    "personnel": [
-        {"name": "Justin Holmes", "instruments": ["guitar", "vocals"]},
-        {"name": "Harry Clark", "instruments": ["mandolin"]},
-    ],
-}
+PLAYERS = [
+    {"name": "Justin Holmes", "instruments": ["guitar", "vocals"]},
+    {"name": "Harry Clark", "instruments": ["mandolin"]},
+]
 
 EXPORT = {"records": [
     {"name": "4masks", "tracks": [
-        {"title": "Silver 44", "number": 1, "personnel": VERSION["personnel"]},
+        {"title": "Silver 44", "number": 1, "personnel": PLAYERS,
+         "studio": "Tunesmith Studios, Nashville TN",
+         "recorded": "3 April, 2024", "engineer": "Jake Stargel"},
         {"title": "Barlows", "personnel": [
             {"name": "David Grier", "instruments": ["guitar"]}]},
     ]},
@@ -48,80 +44,87 @@ EXPORT = {"records": [
 ]}
 
 
-class TestBySong:
+def silver():
+    return [c for c in compositions(EXPORT["records"]) if c.title == "Silver 44"][0]
+
+
+class TestCompositions:
     def test_one_entry_per_composition(self):
-        songs = by_song(EXPORT["records"])
-        assert sorted(songs) == ["Barlows", "Silver 44"]
+        assert [c.title for c in compositions(EXPORT["records"])] == [
+            "Barlows", "Silver 44"]
 
-    def test_a_tune_cut_twice_keeps_both(self):
-        # The point of the composition being the page: one Barlows, two
-        # recordings of it, rather than two pages sharing a name.
-        assert [v["record"] for v in by_song(EXPORT["records"])["Barlows"]] == [
-            "4masks", "Vowel Sounds"]
+    def test_a_tune_cut_twice_keeps_both_cuts(self):
+        # The point of the composition being the page: one Barlows, two cuts of
+        # it, rather than two pages that happen to share a name.
+        barlows = compositions(EXPORT["records"])[0]
+        assert [cut.record for cut in barlows.cuts] == ["4masks", "Vowel Sounds"]
 
-    def test_each_recording_names_its_record(self):
-        silver = by_song(EXPORT["records"])["Silver 44"][0]
-        assert silver["record"] == "4masks"
-        assert silver["number"] == 1
+    def test_each_cut_knows_its_session(self):
+        cut = silver().cuts[0]
+        assert (cut.record, cut.number, cut.engineer) == ("4masks", 1, "Jake Stargel")
 
     def test_compositions_live_in_their_own_namespace(self):
-        assert page_title("Barlows") == "Song:Barlows"
+        assert silver().page == "Song:Silver 44"
 
 
-class TestVersionCall:
+class TestCutWikitext:
     def test_it_is_a_cut(self):
-        assert version_call(VERSION).startswith("{{Studio cut")
+        assert silver().cuts[0].as_wikitext().startswith("{{Studio cut")
 
     def test_names_the_record(self):
-        assert "|record=4masks" in version_call(VERSION)
+        assert "|record=4masks" in silver().cuts[0].as_wikitext()
 
     def test_the_studio_is_given_since_it_helps_identify_the_cut(self):
-        assert "|studio=Tunesmith Studios, Nashville TN" in version_call(VERSION)
+        assert "|studio=Tunesmith Studios, Nashville TN" in silver().cuts[0].as_wikitext()
 
     def test_a_player_is_a_named_parameter(self):
-        assert "|Harry Clark=mandolin" in version_call(VERSION)
+        assert "|Harry Clark=mandolin" in silver().cuts[0].as_wikitext()
 
     def test_several_instruments_are_listed(self):
-        assert "|Justin Holmes=guitar, vocals" in version_call(VERSION)
-
-    def test_session_details_travel_too(self):
-        assert "|engineer=Jake Stargel" in version_call(VERSION)
+        assert "|Justin Holmes=guitar, vocals" in silver().cuts[0].as_wikitext()
 
     def test_absent_fields_are_left_out(self):
-        call = version_call({"record": "4masks", "personnel": []})
-        assert "|number=" not in call
-        assert call.endswith("}}")
+        text = Cut(record="4masks").as_wikitext()
+        assert "|number=" not in text and "|engineer=" not in text
+        assert text.endswith("}}")
+
+    def test_a_cut_with_no_record_is_still_a_cut(self):
+        # Plenty is cut in a studio that never lands on an album.
+        text = Cut(studio="a kitchen",
+                   players=[Player("David Grier", ["guitar"])]).as_wikitext()
+        assert "|record=" not in text
+        assert "|David Grier=guitar" in text
 
 
 class TestSplice:
     def test_a_page_that_does_not_exist_yet(self):
-        assert splice(None, song_block([VERSION])).startswith(BEGIN)
+        assert splice(None, silver().block()).startswith(BEGIN)
 
     def test_the_block_lands_before_the_categories(self):
         page = "{{Song|composer=Justin Myles Holmes}}\n\nProse.\n\n[[Category:Compositions]]"
-        out = splice(page, song_block([VERSION]))
+        out = splice(page, silver().block())
         assert out.index(BEGIN) < out.index("[[Category:Compositions]]")
         assert out.endswith("[[Category:Compositions]]")
 
     def test_prose_is_untouched(self):
         page = "{{Song}}\n\nA tune Barlow probably never played.\n"
-        assert "Barlow probably never played" in splice(page, song_block([VERSION]))
+        assert "Barlow probably never played" in splice(page, silver().block())
 
     def test_a_second_run_replaces_the_block_rather_than_repeating_it(self):
-        page = splice("{{Song}}\n\nProse.", song_block([VERSION]))
-        again = splice(page, song_block([VERSION]))
-        assert again.count(BEGIN) == 1
-        assert again.count("Prose.") == 1
+        once = splice("{{Song}}\n\nProse.", silver().block())
+        twice = splice(once, silver().block())
+        assert twice.count(BEGIN) == 1
+        assert twice.count("Prose.") == 1
 
     def test_a_half_deleted_block_is_refused(self):
-        page = splice("{{Song}}", song_block([VERSION])).replace(END, "")
+        page = splice("{{Song}}", silver().block()).replace(END, "")
         with pytest.raises(ValueError) as caught:
-            splice(page, song_block([VERSION]))
+            splice(page, silver().block())
         assert "closing" in str(caught.value)
 
     def test_the_block_is_idempotent(self):
-        once = splice("{{Song}}\n\n[[Category:Compositions]]", song_block([VERSION]))
-        assert splice(once, song_block([VERSION])) == once
+        once = splice("{{Song}}\n\n[[Category:Compositions]]", silver().block())
+        assert splice(once, silver().block()) == once
 
 
 class FakeWiki:
@@ -130,22 +133,30 @@ class FakeWiki:
     def __init__(self, pages=None, redirects=None):
         self.pages = pages or {}
         self.redirects = redirects or {}
-        self.resolved = []
 
     def resolve(self, title):
-        self.resolved.append(title)
         return self.redirects.get(title, title)
 
     def get_text(self, title):
         return self.pages.get(title)
 
 
+class TestReadCompositions:
+    def test_reads_the_exporter_output(self):
+        found = to_wiki.read_compositions(io.StringIO(json.dumps(EXPORT)))
+        assert [c.title for c in found] == ["Barlows", "Silver 44"]
+
+    def test_narrows_to_the_titles_asked_for(self):
+        found = to_wiki.read_compositions(
+            io.StringIO(json.dumps(EXPORT)), only=["Barlows"])
+        assert [c.title for c in found] == ["Barlows"]
+
+
 class TestPlan:
     def test_missing_pages_are_created(self):
-        wiki = FakeWiki()
-        plan, skipped = to_wiki.plan_for(wiki, by_song(EXPORT["records"]))
+        planned, skipped = to_wiki.plan_for(FakeWiki(), compositions(EXPORT["records"]))
         assert skipped == []
-        assert sorted((row[0], row[2]) for row in plan) == [
+        assert sorted((entry.page, entry.outcome) for entry in planned) == [
             ("Song:Barlows", "created"), ("Song:Silver 44", "created")]
 
     def test_a_renamed_composition_keeps_its_data(self):
@@ -154,23 +165,50 @@ class TestPlan:
         wiki = FakeWiki(
             pages={"Song:Barlows": "{{Song}}\n\nA jig.\n"},
             redirects={"Song:Barlows Jig": "Song:Barlows"})
-        export = {"records": [{"name": "4masks", "tracks": [
-            {"title": "Barlows Jig", "personnel": VERSION["personnel"]}]}]}
-        plan, _ = to_wiki.plan_for(wiki, by_song(export["records"]))
-        title, text, outcome, asked = plan[0]
-        assert (title, asked, outcome) == ("Song:Barlows", "Song:Barlows Jig", "updated")
-        assert "A jig." in text
+        export = [{"name": "4masks", "tracks": [
+            {"title": "Barlows Jig", "personnel": PLAYERS}]}]
+        entry = to_wiki.plan_for(wiki, compositions(export))[0][0]
+        assert (entry.page, entry.asked_for, entry.outcome) == (
+            "Song:Barlows", "Song:Barlows Jig", "updated")
+        assert entry.redirected
+        assert "A jig." in entry.text
 
     def test_an_unchanged_page_is_left_alone(self):
-        songs = by_song(EXPORT["records"])
-        wiki = FakeWiki(pages={"Song:Silver 44": song_block(songs["Silver 44"])})
-        plan, _ = to_wiki.plan_for(wiki, {"Silver 44": songs["Silver 44"]})
-        assert plan[0][2] == "unchanged"
+        composition = silver()
+        wiki = FakeWiki(pages={"Song:Silver 44": composition.block()})
+        assert to_wiki.plan_for(wiki, [composition])[0][0].outcome == "unchanged"
 
     def test_a_page_with_a_broken_block_is_skipped_not_mangled(self):
-        songs = by_song(EXPORT["records"])
-        broken = song_block(songs["Silver 44"]).replace(END, "") + "\n\nProse below."
+        composition = silver()
+        broken = composition.block().replace(END, "") + "\n\nProse below."
         wiki = FakeWiki(pages={"Song:Silver 44": broken})
-        plan, skipped = to_wiki.plan_for(wiki, {"Silver 44": songs["Silver 44"]})
-        assert plan == []
-        assert "closing" in skipped[0][1]
+        planned, skipped = to_wiki.plan_for(wiki, [composition])
+        assert planned == []
+        assert "closing" in skipped[0].why
+
+
+class TestWrite:
+    class Recorder(FakeWiki):
+        def __init__(self, fail=()):
+            super().__init__()
+            self.saved = []
+            self.fail = set(fail)
+
+        def save(self, title, text, summary):
+            if title in self.fail:
+                raise RuntimeError("the wiki said no")
+            self.saved.append(title)
+
+    def test_writes_each_planned_page(self, monkeypatch):
+        monkeypatch.setattr(to_wiki.time, "sleep", lambda _: None)
+        wiki = self.Recorder()
+        planned, _ = to_wiki.plan_for(FakeWiki(), compositions(EXPORT["records"]))
+        assert to_wiki.write_pages(wiki, planned) == 0
+        assert sorted(wiki.saved) == ["Song:Barlows", "Song:Silver 44"]
+
+    def test_one_failure_does_not_stop_the_rest(self, monkeypatch):
+        monkeypatch.setattr(to_wiki.time, "sleep", lambda _: None)
+        wiki = self.Recorder(fail={"Song:Barlows"})
+        planned, _ = to_wiki.plan_for(FakeWiki(), compositions(EXPORT["records"]))
+        assert to_wiki.write_pages(wiki, planned) == 1
+        assert wiki.saved == ["Song:Silver 44"]
