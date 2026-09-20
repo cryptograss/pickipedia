@@ -1,0 +1,44 @@
+{
+	"name": "PickiPediaContent",
+	"version": "0.1.0",
+	"author": [
+		"Magent",
+		"Justin Holmes"
+	],
+	"url": "https://github.com/cryptograss/pickipedia",
+	"descriptionmsg": "pickipediacontent-desc",
+	"license-name": "GPL-2.0-or-later",
+	"type": "other",
+	"requires": {
+		"MediaWiki": ">= 1.43.0"
+	},
+	"AutoloadNamespaces": {
+		"MediaWiki\\Extension\\PickiPediaContent\\": "src/"
+	},
+	"HookHandlers": {
+		"main": {
+			"class": "MediaWiki\\Extension\\PickiPediaContent\\Hooks"
+		}
+	},
+	"Hooks": {
+		"BeforePageDisplay": "main",
+		"ScribuntoExternalLibraryPaths": "main"
+	},
+	"MessagesDirs": {
+		"PickiPediaContent": [
+			"i18n"
+		]
+	},
+	"ResourceModules": {
+		"ext.pickipediaContent.styles": {
+			"styles": [
+				"ext.pickipediaContent.css"
+			]
+		}
+	},
+	"ResourceFileModulePaths": {
+		"localBasePath": "resources",
+		"remoteExtPath": "PickiPediaContent/resources"
+	},
+	"manifest_version": 2
+}

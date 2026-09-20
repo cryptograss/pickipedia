@@ -333,6 +333,13 @@ wfLoadExtension( 'PickiPediaVerification' );
 $wgGroupPermissions['exempt-from-verification']['read'] = true;
 $wgPickiPediaVerificationExemptGroups = ['exempt-from-verification'];
 
+# PickiPediaContent - article styling, and the Lua behind the Module: pages
+# Must load after Scribunto, whose library paths it adds to. A Module: page
+# that requires 'pickipedia.<name>' is answered from this extension's lua/
+# directory, so the logic is reviewed in a pull request rather than edited
+# straight onto a live wiki — and no bot needs write access to do it.
+wfLoadExtension( 'PickiPediaContent' );
+
 # RambutanMode - adds "Rambutan" as a middle name/alias to person and band articles
 # Users can toggle via sidebar; auto-disables at midnight Florida time
 wfLoadExtension( 'RambutanMode' );

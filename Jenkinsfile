@@ -62,6 +62,33 @@ pipeline {
                     else
                         echo "node not installed; skipping check-verify-js.mjs"
                     fi
+
+                    # The article modules. These used to live only on the wiki,
+                    # where nothing reviewed them and nothing could revert
+                    # them; they are here now so that this can run. The class
+                    # check is the seam between the Lua and the stylesheet —
+                    # rename one and the page still renders, just unstyled,
+                    # which no wiki would ever tell us about.
+                    cd extensions/PickiPediaContent
+                    php tests/check-classes.php
+
+                    # Lua, if the agent has one. Scribunto ships an interpreter
+                    # but MediaWiki is not downloaded yet at this stage, so a
+                    # system lua is the only one on offer. Skipped rather than
+                    # failed, like the node check above.
+                    LUA=""
+                    for candidate in lua5.1 lua51 lua; do
+                        if command -v "$candidate" >/dev/null 2>&1; then
+                            LUA="$candidate"
+                            break
+                        fi
+                    done
+                    if [ -n "$LUA" ]; then
+                        "$LUA" tests/check-instruments.lua
+                    else
+                        echo "no lua interpreter; skipping check-instruments.lua"
+                    fi
+                    cd "${WORKSPACE}"
                 '''
             }
         }

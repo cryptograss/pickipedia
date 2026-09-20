@@ -1,0 +1,9 @@
+{
+	"@metadata": {
+		"authors": [
+			"Magent",
+			"Justin Holmes"
+		]
+	},
+	"pickipediacontent-desc": "Article styling and Lua modules for PickiPedia, kept in the repository rather than on wiki pages"
+}

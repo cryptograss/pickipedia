@@ -1,0 +1,51 @@
+/*
+ * Article styling for PickiPedia.
+ *
+ * These classes replace inline style="..." attributes built by string
+ * concatenation inside Lua modules. That was never a choice — it was what
+ * happens when the only stylesheet is an interface page nothing in the
+ * repository can reach. Here they can be reviewed, reverted, and read.
+ *
+ * Only classes that something actually emits belong in this file. A stylesheet
+ * full of rules for markup that no longer exists is worse than no stylesheet,
+ * because the next person cannot tell which half is live.
+ */
+
+/* --- instrument icons ------------------------------------------------- *
+ *
+ * An instrument is written down as it was played — "5-string banjo", not
+ * "banjo" — and shown that way. The icon stands for the family it belongs to.
+ * See Module:Instruments, and lua/pickipedia/instruments.lua behind it.
+ */
+
+.pp-instrument {
+	display: inline-block;
+}
+
+/*
+ * Tucked back over the name it follows. The box is narrower than the icon on
+ * purpose: the icon overhangs the last letter instead of sitting a full
+ * character-width away, which is what makes a list of names read as names
+ * rather than as name-icon pairs.
+ */
+.pp-instrument--tuck {
+	position: relative;
+	top: -4px;
+	left: -2px;
+	width: 9px;
+}
+
+/* Fretted things are drawn at a playing angle; bowed things stand upright. */
+.pp-instrument--angled {
+	transform: rotate( -30deg );
+}
+
+/*
+ * The box's width and height are set inline by the module, not here: they
+ * mirror the size of the thumbnail it asks MediaWiki to generate, and a
+ * stylesheet guessing at that is a stylesheet that can disagree with the
+ * image it is sizing.
+ */
+.pp-instrument__box {
+	display: inline-block;
+}
