@@ -61,6 +61,17 @@ foreach ( $emitted as $name ) {
 	}
 }
 
+// No doubled underscores, however tempting BEM is. MediaWiki breaks "__" up
+// in its output so it cannot be read as a behaviour switch like __NOTOC__,
+// and the class arrives as pp-instrument&#95;_box. Browsers decode that and
+// the rule still matches, which is exactly the problem: it works until
+// something in the chain stops decoding, and nothing here would notice.
+foreach ( $emitted as $name ) {
+	if ( str_contains( $name, '__' ) ) {
+		$failures[] = "  doubled underscore, which MediaWiki mangles: .$name";
+	}
+}
+
 // And the other way. A rule for markup nothing produces any more is worse
 // than no rule, because the next person cannot tell which half is live.
 sort( $defined );

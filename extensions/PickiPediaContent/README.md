@@ -76,6 +76,24 @@ php tests/check-classes.php        # Lua and CSS agree on class names
 lua  tests/check-instruments.lua   # instrument name -> icon family
 ```
 
+One more needs docker, and is a local tool rather than a CI step:
+
+```
+tests/check-in-wiki.sh [host-path-to-extensions]
+```
+
+It stands up a throwaway MediaWiki on SQLite, points a `Module:` page at this
+directory through `require()`, and parses it — proving the *wiring*, which the
+other two take on faith. Pass the host path when running from inside a
+container, where this directory has a different path on the docker host. It
+skips rather than fails without docker or the image.
+
+It earned itself on the first run: `pp-instrument__box` came back as
+`pp-instrument&#95;_box`, because MediaWiki breaks `__` up so it cannot be read
+as a behaviour switch like `__NOTOC__`. Browsers decode it and the rule still
+matches, so nothing looked wrong. Class names here use single hyphens, and
+`check-classes.php` now refuses a doubled underscore.
+
 `check-classes.php` guards the seam the split creates: a class name now lives
 in two files, and renaming it in one fails *silently* — the page still
 renders, just unstyled. It fails in both directions, so a rule for markup

@@ -153,7 +153,7 @@ function p._badge( name, size, tuck )
 	local label = normalise( name )
 	return '<span class="' .. table.concat( classes, " " )
 		.. '" title="' .. label .. '">'
-		.. '<span class="pp-instrument__box" style="width:' .. size
+		.. '<span class="pp-instrument-box" style="width:' .. size
 		.. "px;height:" .. size .. 'px;">'
 		.. "[[File:Instrument-icon-" .. family .. ".png|x" .. size .. "px|"
 		.. label .. "|link=]]"

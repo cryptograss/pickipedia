@@ -41,11 +41,17 @@
 }
 
 /*
+ * Named with a single hyphen, not a BEM double underscore: MediaWiki breaks
+ * up "__" in its output so it cannot be read as a behaviour switch, and the
+ * class arrives as pp-instrument&#95;_box. A browser decodes that back, so it
+ * would have matched — but a class name that only works because of entity
+ * decoding is a bad thing to build on.
+ *
  * The box's width and height are set inline by the module, not here: they
  * mirror the size of the thumbnail it asks MediaWiki to generate, and a
  * stylesheet guessing at that is a stylesheet that can disagree with the
  * image it is sizing.
  */
-.pp-instrument__box {
+.pp-instrument-box {
 	display: inline-block;
 }
