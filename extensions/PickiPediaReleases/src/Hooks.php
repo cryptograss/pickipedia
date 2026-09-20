@@ -40,6 +40,16 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook {
 		$title = $out->getTitle();
 		$isReleaseDraft = $title && $title->getNamespace() === NS_RELEASEDRAFT;
 
+		// The video player, on every page.
+		//
+		// Loaded unconditionally because that is what it already does: it lived
+		// in MediaWiki:Common.js, which runs everywhere. Players turn up on
+		// Release pages, on jam and article pages that embed them, and inside
+		// {{Src|video|...}} citations, so there is no one namespace to gate on.
+		// The script does nothing at all unless the page contains a
+		// .hls-video-player element.
+		$out->addModules( 'ext.pickipediaReleases.videoPlayer' );
+
 		// Also inject tokens on Special:FormEdit pages and any page using
 		// the deliveryKidInput module (PageForms forms).
 		$modules = $out->getModules();

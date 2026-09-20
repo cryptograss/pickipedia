@@ -100,6 +100,11 @@
 			"styles": ["ext.pickipediaReleases.upload.css"],
 			"dependencies": ["mediawiki.util"]
 		},
+		"ext.pickipediaReleases.videoPlayer": {
+			"scripts": [
+				"ext.pickipediaReleases.videoPlayer.js"
+			]
+		},
 		"ext.pickipediaReleases.releaseDraft": {
 			"scripts": ["ext.pickipediaReleases.releaseDraft.js"],
 			"styles": ["ext.pickipediaReleases.releaseDraft.css"],
