@@ -149,29 +149,13 @@ pipeline {
                         echo "composer.json changed or vendor missing - running composer update..."
                         rm -f composer.lock
                         rm -rf vendor
-                        # Splat pickipedia's audit config into MediaWiki's root
-                        # composer.json. Composer's audit gate only reads config
-                        # from root, but composer.local.json (where our project
-                        # deps live) is our source of truth for what advisories
-                        # we've accepted. So: read our config out of
-                        # composer.local.json (which was copied in above from
-                        # pickipedia/composer.json) and stamp it onto root's
-                        # config. Single source of truth for the ignore list.
-                        # Also drop MediaWiki core's require-dev. We build with
-                        # --no-dev, but composer still *resolves* dev packages,
-                        # and core pins mediawiki-codesniffer to an exact
-                        # version whose own dependency (phpcsstandards/phpcsutils,
-                        # a floating ^) has since moved past it — an unsolvable
-                        # conflict inside tools we never install. Deleting
-                        # require-dev from the build tree is the standard cure;
-                        # the repo's own composer.json is untouched.
-                        php -r '
-                            $json = json_decode(file_get_contents("composer.json"), true);
-                            $local = json_decode(file_get_contents("composer.local.json"), true);
-                            $json["config"]["audit"] = $local["config"]["audit"] ?? ["abandoned" => "ignore", "ignore" => []];
-                            unset($json["require-dev"]);
-                            file_put_contents("composer.json", json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-                        '
+                        # Same preparation the Dockerfile does, from the
+                        # same script. These two build paths drifted once
+                        # already: the fix lived here, the Dockerfile kept a
+                        # bare "composer update", and so the local preview
+                        # image could not be rebuilt for eight months while
+                        # Jenkins went on working. One script, called twice.
+                        php "${WORKSPACE}/docker/prepare-composer.php" composer.json composer.local.json
                         composer update --no-dev --optimize-autoloader --ignore-platform-reqs
                         echo "$COMPOSER_HASH" > .composer-hash
                     else

@@ -42,8 +42,29 @@ RUN MW_MAJOR=$(echo ${MEDIAWIKI_VERSION} | cut -d. -f1,2) \
 COPY composer.json /var/www/html/composer.local.json
 
 # Install extensions via composer
+#
+# The two adjustments before the update mirror the Jenkinsfile, and without
+# them this image cannot be built at all:
+#
+#   - Composer's audit gate refuses to load packages with known advisories,
+#     and it reads that config only from the ROOT composer.json. Ours lives in
+#     composer.local.json, so it gets stamped onto root. One source of truth
+#     for what advisories we have accepted: the repo's composer.json.
+#   - MediaWiki core's require-dev is dropped. We build with --no-dev, but
+#     composer still *resolves* dev packages, and core pins
+#     mediawiki-codesniffer to an exact version whose own floating dependency
+#     has moved past it — an unsolvable conflict inside tools we never
+#     install. Deleting require-dev from the build tree is the standard cure;
+#     the repo's own composer.json is untouched.
+#
+# Keep this in step with the "Install Composer Dependencies" stage of the
+# Jenkinsfile. When they drifted apart, the Jenkins build kept working and
+# this one stopped, so nobody rebuilt the image for eight months and every
+# local preview quietly rotted.
 WORKDIR /var/www/html
-RUN composer update --no-dev --optimize-autoloader
+COPY docker/prepare-composer.php /usr/local/bin/prepare-composer.php
+RUN php /usr/local/bin/prepare-composer.php composer.json composer.local.json \
+    && composer update --no-dev --optimize-autoloader --ignore-platform-reqs
 
 # Install extensions not available via Composer (must match Jenkinsfile)
 RUN git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-YouTube.git extensions/YouTube \
