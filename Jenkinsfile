@@ -191,6 +191,7 @@ pipeline {
                     # TimedMediaHandler - video/audio playback with FFmpeg transcoding
                     if [ ! -d "TimedMediaHandler" ]; then
                         git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-TimedMediaHandler.git TimedMediaHandler
+                        php "${WORKSPACE}/docker/prepare-composer.php" TimedMediaHandler/composer.json
                         cd TimedMediaHandler && composer install --no-dev && cd ..
                     fi
 
@@ -227,6 +228,7 @@ pipeline {
                     # MediaUploader - step-by-step multi-file upload wizard
                     if [ ! -d "MediaUploader" ]; then
                         git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-MediaUploader.git MediaUploader
+                        php "${WORKSPACE}/docker/prepare-composer.php" MediaUploader/composer.json
                         cd MediaUploader && composer install --no-dev --no-interaction && cd ..
                     fi
                 '''

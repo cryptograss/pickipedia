@@ -29,11 +29,17 @@
  * image did not, and nobody noticed for eight months because the image that
  * already existed went on working.
  *
- *   php prepare-composer.php [root composer.json] [our composer.local.json]
+ * The second argument is optional. Bundled extensions that ship their own
+ * composer.json and no lockfile — MediaUploader is one — need only the
+ * require-dev half: their dev tooling pulls mediawiki-codesniffer, which pulls
+ * a php_codesniffer under advisory, and `composer install` becomes an
+ * unsolvable `composer update` over tools that are never installed.
+ *
+ *   php prepare-composer.php [composer.json] [composer.local.json]
  */
 
 $rootPath = $argv[1] ?? 'composer.json';
-$localPath = $argv[2] ?? 'composer.local.json';
+$localPath = $argv[2] ?? null;
 
 function readJson( string $path ): array {
 	$raw = @file_get_contents( $path );
@@ -51,7 +57,7 @@ function readJson( string $path ): array {
 }
 
 $root = readJson( $rootPath );
-$local = readJson( $localPath );
+$local = $localPath !== null ? readJson( $localPath ) : [];
 
 $audit = $local['config']['audit'] ?? [ 'abandoned' => 'ignore', 'ignore' => [] ];
 $root['config']['audit'] = $audit;
@@ -76,5 +82,5 @@ if ( file_put_contents( $temporary, $encoded . "\n" ) === false
 printf(
 	"prepare-composer: %d advisories ignored%s\n",
 	count( $audit['ignore'] ?? [] ),
-	$hadDev ? ", core require-dev dropped" : ""
+	$hadDev ? ", require-dev dropped" : ""
 );

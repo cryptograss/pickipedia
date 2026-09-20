@@ -66,14 +66,25 @@ COPY docker/prepare-composer.php /usr/local/bin/prepare-composer.php
 RUN php /usr/local/bin/prepare-composer.php composer.json composer.local.json \
     && composer update --no-dev --optimize-autoloader --ignore-platform-reqs
 
-# Install extensions not available via Composer (must match Jenkinsfile)
+# Install extensions not available via Composer.
+#
+# Kept in step with the Jenkinsfile by docker/check-extensions.php, which
+# fails the build if one of these lists gains an extension the other lacks.
+#
+# The ones with their own composer install get prepare-composer.php run over
+# them first: they ship no lockfile, so `composer install` resolves like an
+# update, and their require-dev pulls mediawiki-codesniffer, whose own
+# php_codesniffer is under advisory. Dropping dev dependencies we never
+# install makes it solvable.
 RUN git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-YouTube.git extensions/YouTube \
     && git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-MsUpload.git extensions/MsUpload \
     && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-TimedMediaHandler.git extensions/TimedMediaHandler \
+    && php /usr/local/bin/prepare-composer.php extensions/TimedMediaHandler/composer.json \
     && cd extensions/TimedMediaHandler && composer install --no-dev && cd ../.. \
     && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-RSS.git extensions/RSS \
     && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-LinkSuggest.git extensions/LinkSuggest \
     && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-MediaUploader.git extensions/MediaUploader \
+    && php /usr/local/bin/prepare-composer.php extensions/MediaUploader/composer.json \
     && cd extensions/MediaUploader && composer install --no-dev --no-interaction && cd ../..
 
 # Copy custom extensions and create symlinks in extensions/
