@@ -91,9 +91,12 @@ pipeline {
                         fi
                     done
                     if [ -n "$LUA" ]; then
-                        "$LUA" tests/check-instruments.lua
+                        for check in tests/check-*.lua; do
+                            echo "--- $check"
+                            "$LUA" "$check"
+                        done
                     else
-                        echo "no lua interpreter; skipping check-instruments.lua"
+                        echo "no lua interpreter; skipping the module checks"
                     fi
                     cd "${WORKSPACE}"
                 '''

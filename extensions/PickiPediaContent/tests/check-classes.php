@@ -14,7 +14,14 @@
 
 $root = dirname( __DIR__ );
 
-/** Class names this extension's Lua emits, from class="..." attributes. */
+/**
+ * Class names this extension's Lua emits.
+ *
+ * Only ours. A module also emits class="error", which is MediaWiki's own and
+ * styled by MediaWiki; claiming it here would either fail this check forever
+ * or push us into redefining a core class, and both are worse than the prefix
+ * rule. Everything this extension styles is named pp-something.
+ */
 function emittedClasses( string $dir ): array {
 	$found = [];
 	foreach ( glob( "$dir/*.lua" ) ?: [] as $file ) {
@@ -24,7 +31,7 @@ function emittedClasses( string $dir ): array {
 		if ( preg_match_all( '/class="([^"\'\\\\]*)/', $source, $matches ) ) {
 			foreach ( $matches[1] as $literal ) {
 				foreach ( preg_split( '/\s+/', trim( $literal ) ) as $name ) {
-					if ( $name !== '' ) {
+					if ( str_starts_with( $name, 'pp-' ) ) {
 						$found[ $name ] = true;
 					}
 				}
@@ -45,7 +52,7 @@ function definedClasses( string $file ): array {
 	$css = file_get_contents( $file );
 	// Ignore comments, so prose mentioning a class is not a definition.
 	$css = preg_replace( '#/\*.*?\*/#s', '', $css );
-	preg_match_all( '/\.([a-zA-Z0-9_-]+)/', $css, $matches );
+	preg_match_all( '/\.(pp-[a-zA-Z0-9_-]+)/', $css, $matches );
 	return array_values( array_unique( $matches[1] ) );
 }
 
