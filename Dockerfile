@@ -72,7 +72,9 @@ RUN git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-YouTub
     && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-TimedMediaHandler.git extensions/TimedMediaHandler \
     && cd extensions/TimedMediaHandler && composer install --no-dev && cd ../.. \
     && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-RSS.git extensions/RSS \
-    && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-LinkSuggest.git extensions/LinkSuggest
+    && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-LinkSuggest.git extensions/LinkSuggest \
+    && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-MediaUploader.git extensions/MediaUploader \
+    && cd extensions/MediaUploader && composer install --no-dev --no-interaction && cd ../..
 
 # Copy custom extensions and create symlinks in extensions/
 COPY extensions/ /var/www/html/custom-extensions/

@@ -63,6 +63,13 @@ pipeline {
                         echo "node not installed; skipping check-verify-js.mjs"
                     fi
 
+                    # Both builds install the same wiki from separate,
+                    # hand-kept lists. When they drifted, the deploy went on
+                    # working and every local preview died at startup on a
+                    # missing MediaUploader -- for eight months, because the
+                    # image could not be rebuilt to find out.
+                    php docker/check-extensions.php "${WORKSPACE}"
+
                     # The article modules. These used to live only on the wiki,
                     # where nothing reviewed them and nothing could revert
                     # them; they are here now so that this can run. The class
