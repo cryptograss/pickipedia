@@ -93,7 +93,27 @@ class SpecialDeliverVideo extends SpecialPage {
 		$html .= '</div>';
 		$html .= '<div id="dv-file-list" class="uc-file-list"></div>';
 
-		// Title — required
+		// -- or fetch it server-side from a URL --
+		//
+		// delivery-kid runs yt-dlp against the URL and lands the result in the
+		// same draft the dropzone would have produced. Nothing downstream can
+		// tell the two apart.
+		$html .= '<div class="dv-or"><span>or</span></div>';
+
+		$html .= '<div class="uc-field">';
+		$html .= Html::element( 'label', [ 'for' => 'dv-url' ], 'Fetch from a URL' );
+		$html .= Html::element( 'input', [
+			'type' => 'url',
+			'id' => 'dv-url',
+			'class' => 'cdx-text-input__input',
+			'placeholder' => 'https://www.instagram.com/p/...',
+		] );
+		$html .= '<p class="uc-hint">Instagram, Vimeo, a direct media link &mdash; anything yt-dlp handles. '
+			. 'The video never touches your device.</p>';
+		$html .= '</div>';
+
+		// Title — required for a file upload; optional for a URL fetch, where
+		// we fall back to the title the source already carries.
 		$html .= '<div class="uc-field">';
 		$html .= Html::element( 'label', [ 'for' => 'dv-title' ], 'Title (required)' );
 		$html .= Html::element( 'input', [
@@ -109,6 +129,7 @@ class SpecialDeliverVideo extends SpecialPage {
 		$html .= '<button id="dv-cancel-btn" class="cdx-button cdx-button--action-destructive" style="display:none">Cancel upload</button>';
 		$html .= '<div id="dv-upload-progress" class="uc-progress-bar" style="display:none"><div class="uc-progress-fill"></div></div>';
 		$html .= '<div id="dv-upload-status" class="uc-status"></div>';
+		$html .= '<div id="dv-upload-log" class="dv-fetch-log"></div>';
 		$html .= '<p class="uc-hint">Video will be transcoded to AV1 HLS on finalization.</p>';
 
 		$html .= '</div>';
