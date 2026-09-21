@@ -69,27 +69,23 @@ function p.row( frame )
 		-- page: a lineup is a standing thing, not one day's cut. Held in a
 		-- nowrap span so a name never ends a line with its icon stranded at
 		-- the start of the next one.
-		table.insert( links, '<span style="white-space:nowrap;">'
+		table.insert( links, '<span class="pp-nowrap">'
 			.. frame:expandTemplate{ title = "m", args = { name } }
 			.. "</span>" )
 	end
 
 	local head = ""
 	if label ~= "" then
-		head = '<div style="flex:0 0 auto; align-self:center; font-size:.72em;'
-			.. ' letter-spacing:.08em; text-transform:uppercase; color:#3d6b3d;'
-			.. ' border:1px solid #9bb89b; border-radius:3px; padding:.05em .45em;'
-			.. ' white-space:nowrap;">'
+		-- The same green chip a licence gets, because it is the same thing:
+		-- a short label qualifying the row it sits on.
+		head = '<div class="pp-chip pp-lineup-label">'
 			.. ( tonumber( label ) and ( "Ensemble " .. label ) or label )
 			.. "</div>"
 	end
 
-	return '<div style="display:flex; flex-wrap:wrap; gap:.2em .7em;'
-		.. ' align-items:center; padding:.45em .2em;'
-		.. ' border-bottom:1px solid #d4dacd;">'
+	return '<div class="pp-row pp-lineup">'
 		.. head
-		.. '<div style="flex:1 1 14em; font-size:.95em; line-height:1.9;'
-		.. ' color:#3d4a3e;">'
+		.. '<div class="pp-lineup-members">'
 		.. table.concat( links, " &middot; " )
 		.. "</div></div>"
 end

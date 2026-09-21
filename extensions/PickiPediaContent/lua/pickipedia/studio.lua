@@ -179,15 +179,15 @@ function p.cut( frame )
 	local heading
 	if record ~= "" then
 		heading = "[[" .. record .. "]]"
-			.. ( number ~= "" and ( ' <span style="font-weight:400; color:#6b7566;">track '
+			.. ( number ~= "" and ( ' <span class="pp-qualifier">track '
 				.. number .. "</span>" ) or "" )
 	else
 		-- A cut with nowhere to appear is not a lesser thing; say what it is.
-		heading = '<span style="color:#5a6858;">studio cut</span>'
+		heading = '<span class="pp-unreleased">studio cut</span>'
 	end
 
-	local out = { '<div style="padding:.5em .2em; border-bottom:1px solid #d4dacd;">' }
-	table.insert( out, '<div style="font-weight:600;">' .. heading .. "</div>" )
+	local out = { '<div class="pp-row pp-row--cut">' }
+	table.insert( out, '<div class="pp-row-head">' .. heading .. "</div>" )
 	-- A lineup reads down, not across. On a composition's page the personnel
 	-- are the substance — who was in the room, on what — and a run-on line of
 	-- names separated by dots makes them a caption. One player per row, with
@@ -196,20 +196,18 @@ function p.cut( frame )
 		local rows = {}
 		for _, player in ipairs( shown ) do
 			table.insert( rows,
-				'<tr><td style="padding:.1em 1.2em .1em 0; white-space:nowrap;'
-				.. ' vertical-align:baseline;">' .. player.who .. "</td>"
-				.. '<td style="padding:.1em 0; color:#3d4a3e;'
-				.. ' vertical-align:baseline;">' .. player.instruments
-				.. "</td></tr>" )
+				'<div class="pp-players-who">' .. player.who .. "</div>"
+				.. '<div class="pp-players-what">' .. player.instruments
+				.. "</div>" )
 		end
-		-- One line: a newline inside raw table markup gives the parser an
-		-- opening to close the table early and leave the rest as text.
-		table.insert( out, '<table style="margin:.3em 0 .4em 0;'
-			.. ' border-collapse:collapse; font-size:.95em; line-height:1.8;">'
-			.. table.concat( rows, "" ) .. "</table>" )
+		-- A two-column grid, not a table. It lines up the same way and is not
+		-- made of markup the parser can close early: a newline inside a raw
+		-- <table> ends it and spills the rest onto the page as text.
+		table.insert( out, '<div class="pp-players">'
+			.. table.concat( rows, "" ) .. "</div>" )
 	end
 	if #session > 0 then
-		table.insert( out, '<div style="font-size:.8em; color:#6b7566;">'
+		table.insert( out, '<div class="pp-row-note">'
 			.. table.concat( session, " &middot; " ) .. "</div>" )
 	end
 	table.insert( out, "</div>" )
@@ -231,7 +229,7 @@ function p.appearance( frame )
 	end
 	subobject( frame, parts )
 
-	return '<div style="padding:.3em .2em; font-size:.9em; color:#3d4a3e;">also on [['
+	return '<div class="pp-also">also on [['
 		.. record .. "]]"
 		.. ( number ~= "" and ( ", track " .. number ) or "" ) .. "</div>"
 end
@@ -417,10 +415,10 @@ local function appearances( frame, wanted, heading )
 		table.sort( loose, function( a, b ) return a.song < b.song end )
 		for _, cut in ipairs( loose ) do
 			table.insert( blocks,
-				'<div style="padding:.45em .2em; border-bottom:1px solid #d4dacd;">'
-				.. '<div style="font-weight:600;">[[' .. cut.song .. "|"
+				'<div class="pp-row">'
+				.. '<div class="pp-row-head">[[' .. cut.song .. "|"
 				.. bare( cut.song ) .. "]]</div>"
-				.. '<div style="font-size:.9em; color:#3d4a3e;">'
+				.. '<div class="pp-row-detail">'
 				.. ( #cut.instruments > 0
 					and ( table.concat( cut.instruments, ", " ) .. " &middot; " ) or "" )
 				.. cut.id .. "</div></div>" )
@@ -444,20 +442,18 @@ local function appearances( frame, wanted, heading )
 
 				local artist = property( frame, record, "Has record artist" )
 				local line = {
-					'<div style="padding:.45em .2em; border-bottom:1px solid #d4dacd;">',
-					'<div style="font-weight:600;">[[' .. record .. "]]",
+					'<div class="pp-row">',
+					'<div class="pp-row-head">[[' .. record .. "]]",
 				}
 				if artist ~= "" then
-					table.insert( line, ' <span style="font-weight:400; color:#5a6858;">by [['
+					table.insert( line, ' <span class="pp-by">by [['
 						.. artist .. "]]</span>" )
 				end
 				if isFree and licence ~= "" then
-					table.insert( line, ' <span style="font-size:.72em; letter-spacing:.08em;'
-						.. ' text-transform:uppercase; color:#3d6b3d; border:1px solid #9bb89b;'
-						.. ' border-radius:3px; padding:0 .35em;">' .. licence .. "</span>" )
+					table.insert( line, ' <span class="pp-chip">' .. licence .. "</span>" )
 				end
 				table.insert( line, "</div>" )
-				table.insert( line, '<div style="font-size:.9em; color:#3d4a3e;">'
+				table.insert( line, '<div class="pp-row-detail">'
 					.. ( #entry.instruments > 0
 						and ( table.concat( entry.instruments, ", " ) .. " &middot; " ) or "" )
 					.. table.concat( titles, ", " ) .. "</div>" )
@@ -570,18 +566,18 @@ function p.tracks( frame )
 		for _, player in ipairs( shown ) do
 			-- Nowrap, so a name never ends a line with its icon stranded at
 			-- the start of the next one.
-			table.insert( links, '<span style="white-space:nowrap;">'
+			table.insert( links, '<span class="pp-nowrap">'
 				.. frame:expandTemplate{
 					title = "m", args = { player.name, player.instrument } }
 				.. "</span>" )
 		end
 
-		local line = { '<div style="padding:.45em .2em; border-bottom:1px solid #d4dacd;">' }
-		table.insert( line, '<div style="font-weight:600;">'
+		local line = { '<div class="pp-row">' }
+		table.insert( line, '<div class="pp-row-head">'
 			.. ( entry.number and ( entry.number .. ". " ) or "" )
 			.. "[[" .. song .. "|" .. bare( song ) .. "]]</div>" )
 		if #links > 0 then
-			table.insert( line, '<div style="font-size:.9em; line-height:1.9; color:#3d4a3e;">'
+			table.insert( line, '<div class="pp-row-detail pp-row-detail--roomy">'
 				.. table.concat( links, " &middot; " ) .. "</div>" )
 		end
 		table.insert( line, "</div>" )

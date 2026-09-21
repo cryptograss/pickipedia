@@ -83,9 +83,11 @@ check( "named parameters work too",
 
 print( "\nIt lays out:" )
 check( "as a row that wraps on a narrow screen",
-	row:find( "flex%-wrap:wrap" ) ~= nil, row )
+	row:find( 'class="pp%-row pp%-lineup"' ) ~= nil, row )
 check( "but never between a name and its icon",
-	select( 2, row:gsub( '<span style="white%-space:nowrap;">', "" ) ) == 3, row )
+	select( 2, row:gsub( '<span class="pp%-nowrap">', "" ) ) == 3, row )
+check( "and it carries no styling of its own",
+	row:find( "style=" ) == nil, row )
 
 print( failures == 0 and "\nAll checks passed.\n" or ( "\n" .. failures .. " FAILED\n" ) )
 os.exit( failures == 0 and 0 or 1 )
