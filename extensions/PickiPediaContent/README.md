@@ -63,6 +63,12 @@ The other order leaves `require()` failing on a path that does not exist yet.
 | markup | wikitext templates on the wiki | editors can change it; VisualEditor sees it |
 | styling | `resources/*.css` here | reviewed, and it lets the Lua emit classes |
 
+No module states any presentation of its own — `check-studio.lua` and
+`check-ensemble.lua` both assert the output contains no `style=`. The one
+exception is the instrument icon's box, whose width and height mirror the
+thumbnail size the module asked MediaWiki to generate; a stylesheet guessing
+at that is a stylesheet that can disagree with the image.
+
 The third row is what makes the first tolerable. Lua was building
 `style="..."` strings by concatenation only because classes had nowhere to
 live.
@@ -74,7 +80,12 @@ Run from this directory; neither needs a wiki.
 ```
 php tests/check-classes.php        # Lua and CSS agree on class names
 lua  tests/check-instruments.lua   # instrument name -> icon family
+lua  tests/check-ensemble.lua      # a named lineup
+lua  tests/check-studio.lua        # cuts, appearances, and the pages reading them
 ```
+
+The Jenkinsfile runs every `tests/check-*.lua`, so a module arriving later is
+tested without anyone remembering to add it.
 
 One more needs docker, and is a local tool rather than a CI step:
 

@@ -55,3 +55,142 @@
 .pp-instrument-box {
 	display: inline-block;
 }
+
+/* --- rows ------------------------------------------------------------- *
+ *
+ * A cut on a composition's page, a track on a record's, a record on a
+ * musician's, a lineup: all the same shape — a heading line and a detail line,
+ * separated from the next by a rule. They were three copies of the same
+ * declarations in Lua before they were one class here.
+ */
+
+.pp-row {
+	padding: .45em .2em;
+	border-bottom: 1px solid #d4dacd;
+}
+
+/* A cut is the substance of its page rather than one entry in a list. */
+.pp-row--cut {
+	padding: .5em .2em;
+}
+
+.pp-row-head {
+	font-weight: 600;
+}
+
+.pp-row-detail {
+	font-size: .9em;
+	color: #3d4a3e;
+}
+
+/* Where the detail line carries instrument icons, it needs the height. */
+.pp-row-detail--roomy {
+	line-height: 1.9;
+}
+
+/* Where, when, who engineered it. True, and not why you came. */
+.pp-row-note {
+	font-size: .8em;
+	color: #6b7566;
+}
+
+/* --- inside a heading ------------------------------------------------- */
+
+/* "track 1" — the position, not the name. */
+.pp-qualifier {
+	font-weight: 400;
+	color: #6b7566;
+}
+
+/* "by Justin Myles Holmes" */
+.pp-by {
+	font-weight: 400;
+	color: #5a6858;
+}
+
+/*
+ * A cut that never reached a record. Quieter than a record's name, because it
+ * is not one — but present, because the session happened.
+ */
+.pp-unreleased {
+	color: #5a6858;
+}
+
+/*
+ * A short label qualifying the row it sits on: a licence, an ensemble number.
+ * One chip, since they were the same declarations written twice.
+ */
+.pp-chip {
+	font-size: .72em;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+	color: #3d6b3d;
+	border: 1px solid #9bb89b;
+	border-radius: 3px;
+	padding: 0 .4em;
+	white-space: nowrap;
+}
+
+/* --- who played ------------------------------------------------------- *
+ *
+ * On a composition's page the personnel are the substance — who was in the
+ * room, on what — so they read down rather than across: one player per row,
+ * instruments aligned in their own column.
+ *
+ * A grid rather than a table. It aligns the same way, and it is not made of
+ * markup the parser can close early: a newline inside a raw <table> ends the
+ * table and spills the rest of the page out as text.
+ */
+.pp-players {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: .1em 1.2em;
+	margin: .3em 0 .4em 0;
+	font-size: .95em;
+	line-height: 1.8;
+}
+
+.pp-players-who {
+	white-space: nowrap;
+}
+
+.pp-players-what {
+	color: #3d4a3e;
+}
+
+/* The same cut, turning up on another record. */
+.pp-also {
+	padding: .3em .2em;
+	font-size: .9em;
+	color: #3d4a3e;
+}
+
+/* --- a named lineup --------------------------------------------------- */
+
+.pp-lineup {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .2em .7em;
+	align-items: center;
+}
+
+.pp-lineup-label {
+	flex: 0 0 auto;
+	align-self: center;
+	padding: .05em .45em;
+}
+
+.pp-lineup-members {
+	flex: 1 1 14em;
+	font-size: .95em;
+	line-height: 1.9;
+	color: #3d4a3e;
+}
+
+/*
+ * A name and its icon are one thing and must not be split across a line
+ * break, which otherwise strands the icon at the start of the next line.
+ */
+.pp-nowrap {
+	white-space: nowrap;
+}

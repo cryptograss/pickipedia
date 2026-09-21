@@ -111,11 +111,17 @@ check( "the record is named", out:find( "%[%[4masks%]%]" ) ~= nil, out )
 check( "the track number is shown", out:find( "track 1" ) ~= nil )
 check( "the block height is shown", out:find( "block 24638686" ) ~= nil, out )
 check( "each player has a row of their own",
-	select( 2, out:gsub( "<tr>", "" ) ) == 2, out )
+	select( 2, out:gsub( '<div class="pp%-players%-who">', "" ) ) == 2, out )
 check( "with their instruments in a column beside them",
-	out:find( "Harry Clark.-</td><td[^>]*>mandolin</td>" ) ~= nil, out )
-check( "and the whole table on one line, so the parser cannot close it early",
-	out:match( "<table.->.-</table>" ):find( "\n" ) == nil, out )
+	out:find( 'Harry Clark.-</div><div class="pp%-players%-what">mandolin</div>' ) ~= nil,
+	out )
+-- The old version of this asserted the personnel table held no newline,
+-- because a newline inside raw <table> markup ends the table and spills the
+-- rest of the page out as text. A grid cannot be closed early that way, so
+-- the fragility is gone and there is nothing left to guard. What replaces it
+-- is the property that made the grid possible: no presentation in the Lua.
+check( "and the module states no styling of its own",
+	out:find( "style=" ) == nil, out )
 check( "a subobject per player, plus one for the appearance",
 	#recorded.subobjects == 3, #recorded.subobjects )
 
