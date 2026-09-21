@@ -1412,56 +1412,12 @@
 			return true;
 		}
 
-		function pollForPreview() {
-			showPreviewStatus( '⏳ Preview is being transcoded...' );
-			if ( hlsInfo ) {
-				hlsInfo.textContent = 'AV1 HLS transcoding in progress. Preview will appear when ready.';
-			}
-
-			var headers = {};
-			if ( token ) {
-				headers[ 'X-Upload-Token' ] = token;
-				headers[ 'X-Upload-User' ] = user;
-				headers[ 'X-Upload-Timestamp' ] = String( timestamp );
-			}
-
-			var pollInterval = setInterval( function () {
-				fetch( deliveryKidUrl + '/draft-content/' + draftId, {
-					headers: headers
-				} ).then( function ( resp ) {
-					if ( !resp.ok ) {
-						return null;
-					}
-					return resp.json();
-				} ).then( function ( data ) {
-					if ( !data ) {
-						return;
-					}
-					renderPreviewLog( data.preview_log );
-					if ( data.preview_status === 'ready' && data.preview_mp4_cid ) {
-						clearInterval( pollInterval );
-						setVideoSrc( gatewayUrl + '/ipfs/' + data.preview_mp4_cid );
-						if ( hlsInfo ) {
-							hlsInfo.textContent = 'AV1 HLS transcode complete. Ready to finalize.';
-						}
-					} else if ( data.preview_status === 'failed' ) {
-						clearInterval( pollInterval );
-						// Fall back to staging if available
-						if ( !loadFromStaging() ) {
-							showPreviewStatus( 'Preview transcoding failed.' );
-						}
-						if ( hlsInfo ) {
-							hlsInfo.textContent = 'Preview transcoding failed. Video will be transcoded on finalization.';
-						}
-					}
-				} ).catch( function () {
-					// Silently retry on network errors
-				} );
-			}, 10000 ); // Poll every 10 seconds
-		}
-
-		// Check delivery-kid for preview status
-		// The preview CID lives in delivery-kid's draft state, not the wiki YAML.
+		// Show the uploaded file itself, played straight from staging.
+		// Nothing is transcoded before publishing: the cloud preview that used
+		// to run never actually reached this page (it asked for an "mp4" output
+		// and looked for "mp4_preview"), and it was removed with Coconut in
+		// maybelle-config#129. This fetch is still worth making for the log
+		// lines and for the 403/404 messages.
 		if ( token ) {
 			showPreviewStatus( '⏳ Checking preview...' );
 			var headers = {};
@@ -1497,16 +1453,7 @@
 					return;
 				}
 				renderPreviewLog( data.preview_log );
-				if ( data.preview_status === 'ready' && data.preview_mp4_cid ) {
-					setVideoSrc( gatewayUrl + '/ipfs/' + data.preview_mp4_cid );
-					if ( hlsInfo ) {
-						hlsInfo.textContent = 'AV1 HLS transcode complete. Ready to finalize.';
-					}
-				} else if ( data.preview_status === 'pending' || data.preview_status === 'processing' ) {
-					pollForPreview();
-				} else {
-					loadFromStaging();
-				}
+				loadFromStaging();
 			} ).catch( function () {
 				loadFromStaging();
 			} );
@@ -1554,7 +1501,7 @@
 	// "Preview transcoding failed" as a single static line.
 	//
 	// Auto-expanded on any *_failed state, collapsed on success.
-	// Polls every 10s while status/preview_status is in-flight.
+	// Polls every 10s while the draft is uploading or finalizing.
 
 	var DIAG_POLL_INTERVAL_MS = 10000;
 	var diagPollTimer = null;
@@ -1658,10 +1605,11 @@
 	}
 
 	function diagShouldPoll( data ) {
+		// preview_status used to be a reason to keep polling. Nothing sets it
+		// to 'pending' or 'processing' any more — there is no preview
+		// transcode — so only the draft's own status can be in flight.
 		var status = data.status || '';
-		var previewStatus = data.preview_status || '';
-		return status === 'uploading' || status === 'finalizing' ||
-			previewStatus === 'pending' || previewStatus === 'processing';
+		return status === 'uploading' || status === 'finalizing';
 	}
 
 	function renderDiagnostics( container, data ) {
