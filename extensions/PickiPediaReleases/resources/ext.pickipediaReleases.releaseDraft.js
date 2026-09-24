@@ -696,6 +696,41 @@
 		} );
 	}
 
+	// Say which step failed, and what is still true.
+	//
+	// Finalizing is four steps — prepare, encode, pin to IPFS, record — behind
+	// one button labelled "Finalize & Pin to IPFS". So every failure read as
+	// an IPFS failure, including the encode that died on a melodica overdub
+	// with two audio tracks (maybelle-config#133). The pinning service already
+	// says which stage it was in; the page just wasn't using it.
+	//
+	// The reassurance matters as much as the cause: an upload that fails to
+	// encode is still on the server, and people who think their video is gone
+	// re-upload gigabytes for nothing.
+	function finalizeErrorText( data ) {
+		var detail = data.message || 'Unknown error';
+		// The encoder's output is a wall of stream metadata; the first line is
+		// the part worth putting in front of someone. The whole thing stays in
+		// the log below and on the diagnostics sub-page.
+		var firstLine = detail.split( '\n' )[ 0 ];
+		switch ( data.stage ) {
+			case 'transcode':
+				return 'Encoding failed — your upload is safe. The file is still on the ' +
+					'server and nothing was published. ' + firstLine;
+			case 'ipfs':
+			case 'pinned':
+				return 'Pinning to IPFS failed. The video encoded fine; only storing it ' +
+					'did not. ' + firstLine;
+			case 'prepare':
+				return 'Could not prepare the upload for publishing. ' + firstLine;
+			case 'exception':
+				return 'Publishing failed before it finished. Nothing was published, and ' +
+					'the upload is still on the server. ' + firstLine;
+			default:
+				return 'Error: ' + firstLine;
+		}
+	}
+
 	function showFinalizeError( msg ) {
 		// Always make the progress area visible so the error is seen
 		var progressDiv = el( 'rd-finalize-progress' );
@@ -788,7 +823,7 @@
 			startFinalizePolling();
 		} else if ( event === 'error' ) {
 			setStageError();
-			showFinalizeError( 'Error: ' + ( data.message || 'Unknown error' ) );
+			showFinalizeError( finalizeErrorText( data ) );
 			appendLog( 'ERROR: ' + ( data.message || 'Unknown error' ) );
 			var finalizeBtn = el( 'rd-finalize-btn' );
 			var saveBtn = el( 'rd-save-btn' );
