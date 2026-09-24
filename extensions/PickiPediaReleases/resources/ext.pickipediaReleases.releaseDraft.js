@@ -1548,7 +1548,23 @@
 		var draftType = ( draftData.type || 'record' );
 		var draftId = draftData.draft_id;
 
-		if ( !container || !apiUrl || !draftId || !token ) {
+		if ( !container || !draftId ) {
+			return;
+		}
+
+		// No token, or no delivery-kid configured? Read the wiki's own copy.
+		//
+		// This used to return early, so anyone without an upload token saw an
+		// empty page — including the uploader coming back later, once the
+		// token in the page had gone stale. A failure would be sitting on
+		// ReleaseDraft:{id}/diagnostics the whole time, and the page that
+		// should show it rendered nothing at all.
+		if ( !apiUrl || !token ) {
+			loadFromWikiSnapshot().then( function ( data ) {
+				if ( data ) {
+					renderDiagnostics( container, data );
+				}
+			} );
 			return;
 		}
 
@@ -1647,6 +1663,50 @@
 		return status === 'uploading' || status === 'finalizing';
 	}
 
+	// A failure the browser saw, recorded on this page's own YAML.
+	//
+	// delivery-kid cannot write this one down: as far as it knows, nothing
+	// ever arrived. Two of Justin's uploads died this way on 24 September and
+	// left a page that looked like an abandoned draft. The writing half is in
+	// deliverVideo.js; this is the half that shows it.
+	function browserFailureHtml() {
+		var err = draftData.upload_error;
+		if ( !err ) {
+			return '';
+		}
+		var bits = [];
+		if ( err.http_status ) {
+			bits.push( 'HTTP ' + err.http_status );
+		}
+		if ( err.bytes_sent !== null && err.bytes_sent !== undefined && err.bytes_total ) {
+			var pct = Math.round( ( err.bytes_sent / err.bytes_total ) * 100 );
+			bits.push( formatBytes( err.bytes_sent ) + ' of ' + formatBytes( err.bytes_total ) +
+				' sent (' + pct + '%)' );
+		}
+		if ( err.when ) {
+			bits.push( String( err.when ).replace( 'T', ' ' ).replace( /\..*$/, '' ) + ' UTC' );
+		}
+		return '<div class="rd-diag-banner rd-diag-banner-error">' +
+			'<strong>The upload did not reach the server.</strong> ' +
+			mw.html.escape( err.reason || 'No reason recorded.' ) +
+			( bits.length ? ' <span class="rd-diag-meta-inline">(' +
+				mw.html.escape( bits.join( ' · ' ) ) + ')</span>' : '' ) +
+			'<br>Nothing was published. Upload again from ' +
+			'<a href="' + mw.util.getUrl( 'Special:DeliverVideo' ) + '">Special:DeliverVideo</a>.' +
+			( err.user_agent ? '<br><small>' + mw.html.escape( err.user_agent ) + '</small>' : '' ) +
+			'</div>';
+	}
+
+	function formatBytes( n ) {
+		if ( n >= 1024 * 1024 * 1024 ) {
+			return ( n / ( 1024 * 1024 * 1024 ) ).toFixed( 1 ) + ' GB';
+		}
+		if ( n >= 1024 * 1024 ) {
+			return Math.round( n / ( 1024 * 1024 ) ) + ' MB';
+		}
+		return Math.round( n / 1024 ) + ' KB';
+	}
+
 	function renderDiagnostics( container, data ) {
 		var status = data.status || 'unknown';
 		var previewStatus = data.preview_status || 'none';
@@ -1661,7 +1721,9 @@
 			( previewStatus === 'pending' ) || ( previewStatus === 'processing' );
 		var hasAnyLog = uploadLog.length > 0 || finalizeLog.length > 0 || previewLog.length > 0;
 
-		if ( !failed && !inFlight && !hasAnyLog ) {
+		var browserFailure = browserFailureHtml();
+
+		if ( !failed && !inFlight && !hasAnyLog && !browserFailure ) {
 			container.hidden = true;
 			container.innerHTML = '';
 			return;
@@ -1669,6 +1731,11 @@
 		container.hidden = false;
 
 		var parts = [];
+
+		// First, because it is the one failure nothing else can report.
+		if ( browserFailure ) {
+			parts.push( browserFailure );
+		}
 
 		// Banner
 		if ( failed ) {
@@ -1715,6 +1782,12 @@
 		details += '<summary>' + mw.html.escape( summaryText ) + '</summary>';
 		details += '<dl class="rd-diag-meta">';
 		details += '<dt>Status</dt><dd>' + mw.html.escape( status ) + '</dd>';
+		// The full record outlives delivery-kid's storage, and nothing used to
+		// say it existed — you had to know the URL.
+		details += '<dt>Full record</dt><dd><a href="' +
+			mw.util.getUrl( mw.config.get( 'wgPageName' ) + '/diagnostics' ) +
+			'">' + mw.html.escape( mw.config.get( 'wgPageName' ) + '/diagnostics' ) +
+			'</a></dd>';
 		if ( previewStatus !== 'none' ) {
 			details += '<dt>Preview</dt><dd>' + mw.html.escape( previewStatus ) + '</dd>';
 		}
