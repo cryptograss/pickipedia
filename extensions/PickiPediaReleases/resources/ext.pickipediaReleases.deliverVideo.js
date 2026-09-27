@@ -311,6 +311,7 @@
 	// links the user to the (already-existing) ReleaseDraft page so they
 	// can see the upload_log.
 	function beginFileUpload( files, draftId, createPageFirst, knownCommit ) {
+		lastKnownCommit = knownCommit || lastKnownCommit;
 		var uploadBtn = el( 'dv-upload-btn' );
 		var cancelBtn = el( 'dv-cancel-btn' );
 		var progressBar = el( 'dv-upload-progress' );
@@ -333,8 +334,19 @@
 		} );
 		xhr.setRequestHeader( 'X-Draft-Id', draftId );
 
+		// How far the bytes got, so a failure can say so. An upload that dies
+		// at 4% of 2GB on a phone is a different problem from one that dies at
+		// 99%, and until now the draft page recorded neither.
+		var sent = 0;
+		var total = files.reduce( function ( n, f ) {
+			return n + ( f.size || 0 );
+		}, 0 );
+		uploadInFlight = { draftId: draftId, draft: pendingDraft( draftId ) };
+
 		xhr.upload.addEventListener( 'progress', function ( e ) {
 			if ( e.lengthComputable ) {
+				sent = e.loaded;
+				total = e.total;
 				var pct = Math.round( ( e.loaded / e.total ) * 100 );
 				progressFill.style.width = pct + '%';
 				setStatus( 'dv-upload-status',
@@ -350,6 +362,13 @@
 			if ( xhr.status !== 200 ) {
 				var errMsg = parseDkError( xhr );
 				var pageHref = mw.util.getUrl( 'ReleaseDraft:' + draftId );
+				uploadInFlight = null;
+				recordUploadFailure( draftId, {
+					reason: errMsg,
+					httpStatus: xhr.status,
+					sent: sent,
+					total: total
+				} );
 				setStatus( 'dv-upload-status',
 					'Upload failed (' + xhr.status + '): ' + errMsg +
 					' — see the draft page for the full upload log: ' + pageHref,
@@ -357,6 +376,7 @@
 				uploadBtn.disabled = false;
 				return;
 			}
+			uploadInFlight = null;
 
 			var draft = JSON.parse( xhr.responseText );
 			if ( knownCommit && !draft.commit ) {
@@ -376,14 +396,36 @@
 			progressBar.style.display = 'none';
 			cancelBtn.style.display = 'none';
 			var pageHref = mw.util.getUrl( 'ReleaseDraft:' + draftId );
+			uploadInFlight = null;
+			recordUploadFailure( draftId, {
+				reason: 'The connection dropped before the upload finished',
+				httpStatus: null,
+				sent: sent,
+				total: total
+			} );
 			setStatus( 'dv-upload-status',
-				'Network error during upload — the draft page exists at ' + pageHref +
-				' and any partial log will be visible there.',
+				'Network error during upload — recorded on the draft page at ' + pageHref,
+				'error' );
+			uploadBtn.disabled = false;
+		} );
+
+		xhr.addEventListener( 'timeout', function () {
+			progressBar.style.display = 'none';
+			cancelBtn.style.display = 'none';
+			uploadInFlight = null;
+			recordUploadFailure( draftId, {
+				reason: 'The upload timed out',
+				httpStatus: null,
+				sent: sent,
+				total: total
+			} );
+			setStatus( 'dv-upload-status', 'Upload timed out — recorded on the draft page.',
 				'error' );
 			uploadBtn.disabled = false;
 		} );
 
 		xhr.addEventListener( 'abort', function () {
+			uploadInFlight = null;
 			progressBar.style.display = 'none';
 			progressFill.style.width = '0%';
 			cancelBtn.style.display = 'none';
@@ -409,6 +451,65 @@
 	//      full draft. Updates the page YAML and redirects to it.
 	//
 	// In re-upload mode (REDRAFT_ID is set) only the second call happens.
+	// An upload that dies in the browser used to leave nothing behind.
+	//
+	// The draft page is created before the bytes are pushed, so a failed
+	// upload leaves a page reading `status: awaiting_upload` and no files —
+	// indistinguishable from someone who opened the form and wandered off.
+	// Two of Justin's uploads died that way on 24 September 2026, from a
+	// phone, and there was nothing to look at afterwards: no error, no
+	// status, no sign of how far the bytes got.
+	//
+	// Every failure the browser can see is now written onto the draft page.
+	// The server records its own failures; this covers the half it never
+	// hears about.
+	var uploadInFlight = null;
+	var lastKnownCommit = null;
+
+	function pendingDraft( draftId ) {
+		return { draft_id: draftId, files: [], commit: lastKnownCommit || 'unknown' };
+	}
+
+	function recordUploadFailure( draftId, failure ) {
+		var yaml = buildVideoYaml( draftId, pendingDraft( draftId ), failure );
+		return new mw.Api().postWithEditToken( {
+			action: 'edit',
+			title: 'ReleaseDraft:' + draftId,
+			text: yaml,
+			summary: 'Upload failed in the browser: ' + ( failure.reason || 'unknown' )
+		} ).catch( function () {
+			// Best effort. A failed upload must not become a failed upload
+			// plus an error about recording the failed upload.
+		} );
+	}
+
+	// If the tab is closed, backgrounded to death, or the phone sleeps mid
+	// upload, none of the xhr handlers run. sendBeacon is the one thing the
+	// browser will still deliver on the way out.
+	window.addEventListener( 'pagehide', function () {
+		if ( !uploadInFlight ) {
+			return;
+		}
+		var body = new FormData();
+		body.append( 'action', 'edit' );
+		body.append( 'format', 'json' );
+		body.append( 'title', 'ReleaseDraft:' + uploadInFlight.draftId );
+		body.append( 'text', buildVideoYaml( uploadInFlight.draftId,
+			pendingDraft( uploadInFlight.draftId ), {
+				reason: 'The page was closed or the device slept before the upload finished',
+				httpStatus: null,
+				sent: null,
+				total: null
+			} ) );
+		body.append( 'summary', 'Upload interrupted: the page closed mid-upload' );
+		body.append( 'token', mw.user.tokens.get( 'csrfToken' ) );
+		try {
+			navigator.sendBeacon( mw.util.wikiScript( 'api' ), body );
+		} catch ( e ) {
+			// Nothing further to try at this point in the page's life.
+		}
+	} );
+
 	function createReleaseDraftPage( draft, andRedirect ) {
 		var draftId = draft.draft_id;
 		var pageName = 'ReleaseDraft:' + draftId;
@@ -447,7 +548,7 @@
 		} );
 	}
 
-	function buildVideoYaml( draftId, draft ) {
+	function buildVideoYaml( draftId, draft, failure ) {
 		// Collect metadata from form fields
 		var title = ( el( 'dv-title' ) || {} ).value || '';
 		var venue = ( el( 'dv-venue' ) || {} ).value || '';
@@ -469,7 +570,9 @@
 		// status: explicit for stub pages so renderers know the upload is
 		// still pending. After bytes are saved this YAML is rewritten with
 		// no status field, falling back to the PHP default ('draft').
-		if ( !draft.files || draft.files.length === 0 ) {
+		if ( failure ) {
+			lines.push( 'status: upload_failed' );
+		} else if ( !draft.files || draft.files.length === 0 ) {
 			lines.push( 'status: awaiting_upload' );
 		}
 		// commit: the maybelle-config build hash that delivery-kid reports
@@ -533,6 +636,24 @@
 					contentDateInput.dispatchEvent( new Event( 'change' ) );
 				}
 			}
+		}
+
+		// What the browser saw, when an upload died on this side of the wire.
+		// The server cannot write this down: as far as it knows, nothing ever
+		// arrived. Recording how far the bytes got is the difference between
+		// "died at 4% on cellular" and "died at 99%, look at the server".
+		if ( failure ) {
+			lines.push( 'upload_error:' );
+			lines.push( '    when: ' + quoteYamlValue( new Date().toISOString() ) );
+			lines.push( '    reason: ' + quoteYamlValue( failure.reason || 'unknown' ) );
+			lines.push( '    http_status: ' +
+				( failure.httpStatus ? failure.httpStatus : 'null' ) );
+			lines.push( '    bytes_sent: ' +
+				( failure.sent === null || failure.sent === undefined ? 'null' : failure.sent ) );
+			lines.push( '    bytes_total: ' +
+				( failure.total === null || failure.total === undefined ? 'null' : failure.total ) );
+			lines.push( '    user_agent: ' +
+				quoteYamlValue( ( navigator.userAgent || '' ).slice( 0, 200 ) ) );
 		}
 
 		return lines.join( '\n' ) + '\n';
