@@ -1,0 +1,103 @@
+# Checks on every push and pull request.
+#
+# Until this existed, nothing in this repository was checked by anything. The
+# wiki's own extensions, the Lua modules, and 203 passing Python tests all went
+# unrun: a syntax error in a PHP hook or a Lua module would have been found by
+# a person loading a page after deploy. When the video player moved here from
+# MediaWiki:Common.js (#124), the PHP was verified by piping it through a
+# container by hand, because there was nothing else.
+#
+# These are syntax checks plus the Python suite — cheap, fast, and enough to
+# catch the class of mistake that takes a wiki page down.
+
+name: checks
+
+on: [push, pull_request]
+
+jobs:
+  php:
+    name: PHP syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Matches the Dockerfile (php:8.2-apache), so a pass here means
+      # something about the PHP that actually runs.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: Lint every PHP file
+        run: |
+          set -e
+          count=0
+          while IFS= read -r file; do
+            php -l "$file" > /dev/null
+            count=$((count + 1))
+          done < <(find . -name '*.php' -not -path './.git/*' -not -path './vendor/*')
+          echo "$count PHP files OK"
+
+  web:
+    name: JavaScript and JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check every JavaScript file parses
+        run: |
+          set -e
+          count=0
+          while IFS= read -r file; do
+            node --check "$file"
+            count=$((count + 1))
+          done < <(find . -name '*.js' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*')
+          echo "$count JavaScript files OK"
+      - name: Check every JSON file parses
+        # extension.json decides whether an extension loads at all; a stray
+        # comma there takes the wiki down rather than degrading it.
+        run: |
+          set -e
+          count=0
+          while IFS= read -r file; do
+            python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$file"
+            count=$((count + 1))
+          done < <(find . -name '*.json' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*')
+          echo "$count JSON files OK"
+
+  lua:
+    name: Lua syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Scribunto runs Lua 5.1, so check against that rather than a newer one.
+      - run: sudo apt-get update && sudo apt-get install -y lua5.1
+      - name: Check every Lua module parses
+        run: |
+          set -e
+          count=0
+          while IFS= read -r file; do
+            luac5.1 -p "$file"
+            count=$((count + 1))
+          done < <(find . -name '*.lua' -not -path './.git/*')
+          echo "$count Lua modules OK"
+
+  python:
+    name: Python tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest
+      - name: Run the podcast tooling tests
+        # blue-railroad-import is excluded deliberately, and loudly: its two
+        # test files import blue_railroad_import.importer, .leaderboard and
+        # .models, none of which exist in this repository — only wiki_client.py
+        # is here. They cannot have passed since whenever that code moved.
+        # Remove this exclusion when the package is whole again, or delete the
+        # tests if the code has genuinely gone elsewhere. See #126.
+        run: pytest -q --ignore=blue-railroad-import
