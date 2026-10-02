@@ -100,6 +100,21 @@
 			"styles": ["ext.pickipediaReleases.upload.css"],
 			"dependencies": ["mediawiki.util"]
 		},
+		"ext.pickipediaReleases.blueRailroadDate": {
+			"scripts": [
+				"ext.pickipediaReleases.blueRailroadDate.js"
+			]
+		},
+		"ext.pickipediaReleases.blocksAgo": {
+			"scripts": [
+				"ext.pickipediaReleases.blocksAgo.js"
+			]
+		},
+		"ext.pickipediaReleases.instrumentForm": {
+			"scripts": [
+				"ext.pickipediaReleases.instrumentForm.js"
+			]
+		},
 		"ext.pickipediaReleases.videoPlayer": {
 			"scripts": [
 				"ext.pickipediaReleases.videoPlayer.js"
