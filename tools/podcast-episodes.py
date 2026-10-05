@@ -25,6 +25,7 @@ import podcast_budget
 import podcast_config
 import podcast_names
 import podcast_net
+import podcast_wikitext
 
 TOOLS_DIR = Path(__file__).parent
 USER_AGENT = "PickiPedia Bluegrass Podcast Firehose/1.0"
@@ -188,20 +189,26 @@ def make_wikitext(podcast_name, episode, guests):
     if episode["pubdate"]:
         date_str = episode["pubdate"].strftime("%Y-%m-%d")
 
+    # Everything below comes out of somebody else's XML, so every value goes
+    # through escape_param on its way into a parameter — see
+    # podcast_wikitext. The URL-ish fields too: a feed is as free to put a
+    # pipe in <enclosure url> as in <title>.
+    esc = podcast_wikitext.escape_param
+
     # Build template params
-    params = [f"|podcast={podcast_name}"]
-    params.append(f"|title={episode['title']}")
+    params = [f"|podcast={esc(podcast_name)}"]
+    params.append(f"|title={esc(episode['title'], limit=300)}")
     if date_str:
         params.append(f"|date={date_str}")
     if episode["link"]:
-        params.append(f"|url={episode['link']}")
+        params.append(f"|url={esc(episode['link'])}")
 
     if episode.get("audio"):
-        params.append(f"|audio={episode['audio']}")
+        params.append(f"|audio={esc(episode['audio'])}")
     if episode.get("duration"):
-        params.append(f"|duration={episode['duration']}")
+        params.append(f"|duration={esc(episode['duration'])}")
     if episode.get("image"):
-        params.append(f"|image={episode['image']}")
+        params.append(f"|image={esc(episode['image'])}")
 
     # "topic", not "guest". A title gives up proper nouns without saying
     # whether the named party turned up or was merely discussed — Tony Rice
@@ -209,7 +216,7 @@ def make_wikitext(podcast_name, episode, guests):
     # happen puts a false claim on somebody's page. See Property:Has topic.
     for i, topic in enumerate(guests):
         key = "topic" if i == 0 else f"topic{i+1}"
-        params.append(f"|{key}={topic}")
+        params.append(f"|{key}={esc(topic)}")
 
     # Clean description (strip HTML tags/entities, truncate).
     #
@@ -220,8 +227,11 @@ def make_wikitext(podcast_name, episode, guests):
     desc = re.sub(r'<[^>]+>', ' ', episode.get("description", ""))
     desc = html.unescape(desc)
     desc = re.sub(r'\s+', ' ', desc).strip()
-    if len(desc) > 500:
-        desc = desc[:500].rsplit(' ', 1)[0] + "..."
+    # escape_param does the trimming as well, so a cut never lands inside an
+    # entity it just inserted. Note the ordering against html.unescape above:
+    # unescaping is right for reading the text, and turns &#124; back into a
+    # real pipe, so the escape has to come after it rather than instead.
+    desc = esc(desc, limit=500)
     if desc:
         params.append(f"|description={desc}")
 
