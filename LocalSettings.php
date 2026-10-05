@@ -370,6 +370,31 @@ wfLoadExtension( 'Echo' );
 # Thanks - thank editors for contributions
 wfLoadExtension( 'Thanks' );
 
+# OAuth - "Sign in with PickiPedia" for other cryptograss sites, magenta first:
+# a wiki account signs in there without sharing any cookie or password.
+#
+# Loaded only once its OAuth 2 signing keys are in LocalSettings.local.php --
+# $wgOAuth2PrivateKey and $wgOAuth2PublicKey, an RSA pair kept in the vault --
+# so this does nothing until then. Right after adding them, run
+# maintenance/update.php once, for the extension's tables.
+#
+# Sites are registered by an admin at Special:OAuthConsumerRegistration and
+# approved at Special:OAuthManageConsumers. Each person sees and can revoke
+# what they've allowed at Special:OAuthManageMyGrants.
+if ( !empty( $wgOAuth2PrivateKey ) && !empty( $wgOAuth2PublicKey ) ) {
+	wfLoadExtension( 'OAuth' );
+	$wgMWOAuthCentralWiki = false;           // this wiki is its own authority
+	$wgMWOAuthSecureTokenTransfer = true;    // HTTPS only
+	// Sign-in for sites with their own server (magenta is one); no
+	// client_credentials, which would let a site act with no person present.
+	$wgOAuth2EnabledGrantTypes = [ 'authorization_code', 'refresh_token' ];
+	$wgGroupPermissions['sysop']['mwoauthproposeconsumer'] = true;
+	$wgGroupPermissions['sysop']['mwoauthupdateownconsumer'] = true;
+	$wgGroupPermissions['sysop']['mwoauthmanageconsumer'] = true;
+	$wgGroupPermissions['sysop']['mwoauthviewprivate'] = true;
+	$wgGroupPermissions['user']['mwoauthmanagemygrants'] = true;
+}
+
 # UserMerge - merge and delete user accounts (for bot cleanup)
 # DISABLED: Not in Docker image
 # wfLoadExtension( 'UserMerge' );

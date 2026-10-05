@@ -85,7 +85,10 @@ RUN git clone --depth 1 https://github.com/wikimedia/mediawiki-extensions-YouTub
     && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-LinkSuggest.git extensions/LinkSuggest \
     && git clone --depth 1 --branch REL1_43 https://github.com/wikimedia/mediawiki-extensions-MediaUploader.git extensions/MediaUploader \
     && php /usr/local/bin/prepare-composer.php extensions/MediaUploader/composer.json \
-    && cd extensions/MediaUploader && composer install --no-dev --no-interaction && cd ../..
+    && cd extensions/MediaUploader && composer install --no-dev --no-interaction && cd ../.. \
+    && git clone --depth 1 --branch REL1_43 https://gerrit.wikimedia.org/r/mediawiki/extensions/OAuth.git extensions/OAuth \
+    && php /usr/local/bin/prepare-composer.php extensions/OAuth/composer.json \
+    && cd extensions/OAuth && composer install --no-dev --no-interaction && cd ../..
 
 # Copy custom extensions and create symlinks in extensions/
 COPY extensions/ /var/www/html/custom-extensions/

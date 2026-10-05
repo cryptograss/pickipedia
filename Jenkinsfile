@@ -218,6 +218,15 @@ pipeline {
                         git clone --depth 1 --branch REL1_43 https://gerrit.wikimedia.org/r/mediawiki/extensions/Thanks.git Thanks
                     fi
 
+                    # OAuth - "Sign in with PickiPedia" for other cryptograss sites
+                    # (magenta first). Its own dependencies (league/oauth2-server,
+                    # the JWT libraries) come through its own composer install.
+                    if [ ! -d "OAuth" ]; then
+                        git clone --depth 1 --branch REL1_43 https://gerrit.wikimedia.org/r/mediawiki/extensions/OAuth.git OAuth
+                        php "${WORKSPACE}/docker/prepare-composer.php" OAuth/composer.json
+                        cd OAuth && composer install --no-dev --no-interaction && cd ..
+                    fi
+
                     # UserMerge - merge and delete user accounts (for bot cleanup)
                     if [ ! -d "UserMerge" ]; then
                         git clone --depth 1 --branch REL1_43 https://gerrit.wikimedia.org/r/mediawiki/extensions/UserMerge.git UserMerge

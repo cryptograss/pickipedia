@@ -21,3 +21,10 @@ $wgDBpassword = "your-db-password-here";
 // $wgServer = "http://hunter.cryptograss.live:4005";
 // $wgSiteNotice = '<div style="background: #ffcc00; color: #000; padding: 10px; text-align: center; font-weight: bold; border: 2px solid #cc9900; margin-bottom: 10px;">PREVIEW ENVIRONMENT - Changes will NOT be saved.</div>';
 // $wgShowExceptionDetails = true;
+
+## OAuth 2 signing keys (extension OAuth: "Sign in with PickiPedia").
+## Unset, the extension isn't loaded. An RSA pair, kept in the vault:
+##   openssl genrsa -out oauth2.key 2048 && openssl rsa -in oauth2.key -pubout -out oauth2.pub
+## Then run maintenance/update.php once, for the extension's tables.
+// $wgOAuth2PrivateKey = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----";
+// $wgOAuth2PublicKey = "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----";
