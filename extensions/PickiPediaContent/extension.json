@@ -22,6 +22,7 @@
 	},
 	"Hooks": {
 		"BeforePageDisplay": "main",
+		"ParserFirstCallInit": "main",
 		"ScribuntoExternalLibraryPaths": "main"
 	},
 	"MessagesDirs": {

@@ -110,3 +110,13 @@ in two files, and renaming it in one fails *silently* — the page still
 renders, just unstyled. It fails in both directions, so a rule for markup
 nothing emits is also an error. Both run in the Jenkinsfile's
 `Check Verification Gate` stage, before anything is built.
+
+## `<todo>`: a Mood's to-do list
+
+`Cryptograss:Moods/<slug>/todo` keeps what a magenta Mood's people have to do,
+as YAML that magenta reads and shows beside the Mood. Between `<todo>` tags it
+renders here as a checklist: a task with a `link` is the link (a web address, a
+page here, `#m-<id>` for a message in that Mood, `#<slug>` for a Mood), with
+`who`, `kind` and `note` beneath it and `done: true` items folded away. YAML
+that can't be read says where, over the text. `src/Todo.php`;
+`php tests/check-todo.php path/to/vendor/autoload.php` runs its checks.
