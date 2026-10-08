@@ -50,6 +50,19 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook {
 		// .hls-video-player element.
 		$out->addModules( 'ext.pickipediaReleases.videoPlayer' );
 
+		// The rest of what MediaWiki:Common.js used to do, moved here for
+		// the same reasons as the player. Loaded on every page because that
+		// is what Common.js did; each script returns immediately unless the
+		// form or element it cares about is on the page being shown.
+		//
+		// Not moved yet: the user-subpage zine styling, which is bound to
+		// classes defined in MediaWiki:Common.css. Moving its script alone
+		// would split one feature across two homes, so it goes with its
+		// stylesheet in a change of its own.
+		$out->addModules( 'ext.pickipediaReleases.blueRailroadDate' );
+		$out->addModules( 'ext.pickipediaReleases.blocksAgo' );
+		$out->addModules( 'ext.pickipediaReleases.instrumentForm' );
+
 		// Also inject tokens on Special:FormEdit pages and any page using
 		// the deliveryKidInput module (PageForms forms).
 		$modules = $out->getModules();
