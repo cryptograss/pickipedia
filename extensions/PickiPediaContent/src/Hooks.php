@@ -19,8 +19,29 @@
 namespace MediaWiki\Extension\PickiPediaContent;
 
 use MediaWiki\Hook\BeforePageDisplayHook;
+use MediaWiki\Hook\ParserFirstCallInitHook;
+use MediaWiki\Title\Title;
 
-class Hooks implements BeforePageDisplayHook {
+class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook {
+
+	/**
+	 * <todo>: a to-do list kept as YAML, shown as a checklist (Todo.php).
+	 *
+	 * @param \Parser $parser
+	 */
+	public function onParserFirstCallInit( $parser ): void {
+		$parser->setHook( 'todo', static function ( $input, array $args, $parser, $frame ) {
+			$page = $parser->getPage();
+			$pageTitle = $page ? Title::newFromPageReference( $page )->getPrefixedText() : '';
+			return Todo::render( (string)$input, static fn ( string $link ) => Todo::hrefFrom(
+				$link, $pageTitle,
+				static function ( string $title ) {
+					$t = Title::newFromText( $title );
+					return $t ? $t->getLocalURL() : null;
+				}
+			) );
+		} );
+	}
 
 	/**
 	 * Let wiki modules require() the Lua that ships in this extension.

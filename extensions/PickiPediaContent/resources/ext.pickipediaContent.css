@@ -194,3 +194,44 @@
 .pp-nowrap {
 	white-space: nowrap;
 }
+
+/*
+ * <todo>: a Mood's to-do list (src/Todo.php). One line per task, its box
+ * first; who and what kind beneath it, quieter; done ones folded away.
+ */
+.pp-todo ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.pp-todo-item {
+	display: flex;
+	gap: .6em;
+	padding: .45em 0;
+	border-top: 1px solid #e6e1d8;
+}
+
+.pp-todo-box {
+	flex: 0 0 auto;
+	color: #6b6560;
+}
+
+.pp-todo-meta,
+.pp-todo-note {
+	font-size: .88em;
+	color: #6b6560;
+}
+
+.pp-todo-done {
+	margin-top: .6em;
+	color: #6b6560;
+}
+
+.pp-todo-done summary {
+	cursor: pointer;
+}
+
+.pp-todo-done .pp-todo-task {
+	text-decoration: line-through;
+}
