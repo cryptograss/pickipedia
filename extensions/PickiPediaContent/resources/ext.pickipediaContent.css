@@ -235,3 +235,35 @@
 .pp-todo-done .pp-todo-task {
 	text-decoration: line-through;
 }
+
+/* The rest of what Todo.php emits. check-classes.php reads the PHP now,
+   so every class it writes needs a rule here, and these earn theirs. */
+.pp-todo-open {
+	margin-bottom: .4em;
+}
+
+.pp-todo-text {
+	flex: 1 1 auto;
+	min-width: 0;          /* let long notes and links wrap, not overflow */
+	overflow-wrap: anywhere;
+}
+
+.pp-todo-empty {
+	color: #6b6560;
+	font-style: italic;
+}
+
+/* The YAML-error box. It has to be noticed: until it is fixed, nobody can
+   see the list. */
+.pp-todo-problem {
+	border: 1px solid #c9a227;
+	background: #fdf8e7;
+	padding: .5em .8em;
+}
+
+.pp-todo-problem pre {
+	max-height: 18em;
+	overflow: auto;
+	white-space: pre-wrap;
+}
+

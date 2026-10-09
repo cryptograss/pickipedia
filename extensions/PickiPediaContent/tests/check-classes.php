@@ -15,16 +15,27 @@
 $root = dirname( __DIR__ );
 
 /**
- * Class names this extension's Lua emits.
+ * Class names this extension emits — from its Lua modules and its PHP.
+ *
+ * It used to read only the Lua, which was true until the <todo> tag
+ * (#134) rendered its checklist from src/Todo.php. Its classes were then
+ * "styled but nothing emits it", this check failed, the Jenkins gate
+ * stopped the build before it marked a deploy, and the wiki silently
+ * stayed on the 5 October build while #134 and #131 sat merged. Reading
+ * both is what the comment above the CSS always meant.
  *
  * Only ours. A module also emits class="error", which is MediaWiki's own and
  * styled by MediaWiki; claiming it here would either fail this check forever
  * or push us into redefining a core class, and both are worse than the prefix
  * rule. Everything this extension styles is named pp-something.
  */
-function emittedClasses( string $dir ): array {
+function emittedClasses( array $patterns ): array {
 	$found = [];
-	foreach ( glob( "$dir/*.lua" ) ?: [] as $file ) {
+	$files = [];
+	foreach ( $patterns as $pattern ) {
+		$files = array_merge( $files, glob( $pattern ) ?: [] );
+	}
+	foreach ( $files as $file ) {
 		$source = file_get_contents( $file );
 		// class="a b c" and class="' .. concat .. '" — take the literal
 		// names out of both, since a built list still starts with one.
@@ -56,7 +67,7 @@ function definedClasses( string $file ): array {
 	return array_values( array_unique( $matches[1] ) );
 }
 
-$emitted = emittedClasses( "$root/lua/pickipedia" );
+$emitted = emittedClasses( [ "$root/lua/pickipedia/*.lua", "$root/src/*.php" ] );
 $defined = definedClasses( "$root/resources/ext.pickipediaContent.css" );
 
 $failures = [];
@@ -64,7 +75,7 @@ $failures = [];
 sort( $emitted );
 foreach ( $emitted as $name ) {
 	if ( !in_array( $name, $defined, true ) ) {
-		$failures[] = "  emitted by Lua but not styled: .$name";
+		$failures[] = "  emitted but not styled: .$name";
 	}
 }
 

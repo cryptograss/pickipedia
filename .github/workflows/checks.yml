@@ -34,6 +34,18 @@ jobs:
             count=$((count + 1))
           done < <(find . -name '*.php' -not -path './.git/*' -not -path './vendor/*')
           echo "$count PHP files OK"
+      # The same checks Jenkins runs in its verification gate, here so they
+      # fail on the pull request instead of after the merge. When only
+      # Jenkins ran them, a failure there stopped the build before it marked
+      # a deploy, and nothing said so: #134 and #131 sat merged and
+      # undeployed for most of a day while the wiki ran the 5 October build.
+      - name: Verification gate (as Jenkins runs it)
+        run: |
+          set -e
+          php extensions/PickiPediaVerification/tests/check-gate.php
+          php extensions/PickiPediaVerification/tests/check-proposed-tag.php
+          php docker/check-extensions.php "$GITHUB_WORKSPACE"
+          cd extensions/PickiPediaContent && php tests/check-classes.php
 
   web:
     name: JavaScript and JSON
