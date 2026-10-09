@@ -45,7 +45,7 @@ from collections import Counter
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
 
 import podcast_config                                      # noqa: E402
-import podcast_topics                                      # noqa: E402
+import podcast_preserve                                      # noqa: E402
 import podcast_wiki                                        # noqa: E402
 
 # The wiki is a small VPS running its own database and there is no hurry.
@@ -115,35 +115,77 @@ def decide_text(wiki, title, wanted, bot_name):
     """
     What to write to one page, given what the feed says and what is there.
 
-    The feed owns everything except the topics. The topics belong to whoever
-    last *set* them — which is not the same as whoever last edited the page,
-    because keeping a person's topics still means writing the page, and that
-    write is signed by the bot. See podcast_topics.who_set_topics.
+    The feed owns the date, url, audio, duration and artwork outright, and
+    they are regenerated every night. Two fields are not the feed's to take
+    back: the topics, which the parser only guessed at, and the description,
+    which a person may have turned into links. Each belongs to whoever last
+    *set* it — which is not whoever last edited the page, because keeping a
+    person's value still means writing the page, and that write is signed by
+    the bot. See podcast_preserve.who_set.
 
-    History is read only when it can matter: when the page's topics differ from
-    the feed's. On a normal night that is the pages people have corrected, and
-    any show whose pattern was just changed.
+    History is read once per page, and only when it can matter: when a
+    protected field differs from what this run produced. On a normal night
+    that is the pages people have corrected, and any show whose pattern was
+    just changed.
 
-    @return: (current, text, kept_for) — the page as it stands (None if
-        missing), the text to compare and write, and the username whose topics
-        were kept (None when the feed's topics are used).
+    @return: (current, text, kept) — the page as it stands (None if missing),
+        the text to compare and write, and a list of (field, editor, note)
+        for each protected field kept from a person.
     """
-    current, last_editor = wiki.get_text_and_last_editor(title)
-    if current is None or podcast_topics.same_topics(current, wanted):
-        return current, wanted, None
+    current, _last_editor = wiki.get_text_and_last_editor(title)
+    if current is None:
+        return None, wanted, []
 
-    if is_ours(last_editor, bot_name):
-        setter = podcast_topics.who_set_topics(wiki.history(title))
-    else:
-        setter = last_editor
+    fields = [
+        ("topics", podcast_preserve.same_topics,
+         podcast_preserve.who_set_topics, podcast_preserve.keep_human_topics),
+        ("description", podcast_preserve.same_description,
+         podcast_preserve.who_set_description,
+         podcast_preserve.keep_human_description),
+    ]
 
-    if is_ours(setter, bot_name):
-        # The bot set these topics itself, so a different answer from the feed
-        # means the pattern changed. Take the new one.
-        return current, wanted, None
+    contested = [f for f in fields if not f[1](current, wanted)]
+    if not contested:
+        return current, wanted, []
 
-    merged, _ = podcast_topics.keep_human_topics(wanted, current)
-    return current, merged, setter or "an unknown editor"
+    history = None
+    text = wanted
+    kept = []
+    for name, _same, who_set, merge in contested:
+        # Always ask who *set* this field, never who edited the page last.
+        #
+        # The page's last editor used to be taken as the answer whenever it
+        # was not the bot, which was fine while topics were the only thing
+        # protected. With two fields it credits a person with both whenever
+        # they touched either: link a name in the blurb and the topic freezes
+        # too, so a corrected show pattern can never reach that page again.
+        # Walking the history answers the narrower question the field is
+        # actually asking.
+        if history is None:
+            history = wiki.history(title)
+        setter = who_set(history)
+
+        if is_ours(setter, bot_name):
+            # The bot set this itself, so a different answer from the feed
+            # means the pattern or the feed changed. Take the new one.
+            continue
+
+        text, changed = merge(text, current)
+        if not changed:
+            continue
+
+        note = ""
+        if name == "description" and not podcast_preserve.is_annotation(
+                podcast_preserve.description(current),
+                podcast_preserve.description(wanted)):
+            # They did not merely add links: the words differ too. Either the
+            # publisher rewrote the blurb or the person did. Their text stands
+            # either way, but this is the one case worth a look, so it is the
+            # one case named — and named without guessing which it was.
+            note = " (their wording differs from the feed's too)"
+        kept.append((name, setter or "an unknown editor", note))
+
+    return current, text, kept
 
 
 def main():
@@ -251,7 +293,7 @@ def main():
     # nobody chose, with some pages on the new patterns and some on the old.
     # Reading is cheap; being half-applied is not.
     plan = []
-    kept_topics = []
+    kept_human = []
 
     # First pass: one small batched request per fifty pages, asking only for
     # each page's content hash and last editor. Most nights nearly every page
@@ -282,10 +324,10 @@ def main():
                 # Differs, or the survey said nothing: read it, and let the
                 # topic rules decide what to write.
                 read_in_full += 1
-                current, wanted_text, setter = decide_text(
+                current, wanted_text, kept = decide_text(
                     wiki, title, wanted_text, bot_name)
-                if setter:
-                    kept_topics.append((title, setter))
+                for field, editor, note in kept:
+                    kept_human.append((title, field, editor, note))
                 if current is None:
                     outcome = "created"
                 elif current.strip() != wanted_text.strip():
@@ -303,13 +345,14 @@ def main():
     # Say which pages the run deferred on, and to whom. A count alone would
     # make this feel like something going wrong, when it is the feature
     # working: the wiki correcting the parser.
-    if kept_topics:
-        print(f"\nkept the topics a person set on {len(kept_topics)} page(s):",
+    if kept_human:
+        print(f"\nkept what a person wrote on {len(kept_human)} page(s):",
               file=sys.stderr)
-        for title, editor in kept_topics[:25]:
-            print(f"  {title[:60]:60} topics set by {editor}", file=sys.stderr)
-        if len(kept_topics) > 25:
-            print(f"  … and {len(kept_topics) - 25} more", file=sys.stderr)
+        for title, field, editor, note in kept_human[:25]:
+            print(f"  {title[:52]:52} {field} set by {editor}{note}",
+                  file=sys.stderr)
+        if len(kept_human) > 25:
+            print(f"  … and {len(kept_human) - 25} more", file=sys.stderr)
 
     changes = [row for row in plan if row[2] != "unchanged"]
     print(f"\n{len(changes)} pages would change "
