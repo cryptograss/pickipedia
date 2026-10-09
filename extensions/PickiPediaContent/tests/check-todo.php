@@ -74,5 +74,11 @@ if ( is_file( $live ) ) {
 		&& substr_count( $rendered, 'class="external"' ) >= 13, substr( $rendered, 0, 400 ) );
 }
 
+// `code` renders as code, escaped; each item carries the name magenta links it by.
+$coded = Todo::render( "- task: \"Make a secret (`openssl rand -hex 32`)\"\n  note: \"Then `<b>` stays text\"\n", $hrefFor );
+check( 'backticks become code', str_contains( $coded, '<code>openssl rand -hex 32</code>' ), $coded );
+check( 'code is still escaped', str_contains( $coded, '<code>&lt;b&gt;</code>' ), $coded );
+check( 'each item has its anchor', str_contains( $coded, 'id="todo-make-a-secret-openssl-rand-hex-32"' ), $coded );
+
 echo $failures === 0 ? "\nAll checks passed.\n" : "\n$failures FAILED\n";
 exit( $failures === 0 ? 0 : 1 );
