@@ -89,7 +89,8 @@ class Todo {
 	 * @return string
 	 */
 	private static function item( array $raw, callable $hrefFor ): string {
-		$task = htmlspecialchars( trim( (string)$raw['task'] ) );
+		$words = trim( (string)$raw['task'] );
+		$task = self::text( $words );
 		$link = is_scalar( $raw['link'] ?? null ) ? trim( (string)$raw['link'] ) : '';
 		$href = $link !== '' ? $hrefFor( $link ) : null;
 		if ( $href !== null ) {
@@ -108,11 +109,32 @@ class Todo {
 		$kind = is_scalar( $raw['kind'] ?? null ) ? trim( (string)$raw['kind'] ) : '';
 		$meta = array_values( array_filter( [ $kind, implode( ', ', $who ) ] ) );
 		$note = is_scalar( $raw['note'] ?? null ) ? trim( (string)$raw['note'] ) : '';
-		return '<li class="pp-todo-item"><span class="pp-todo-box">' . ( empty( $raw['done'] ) ? '☐' : '☑' ) . '</span>'
+		return '<li class="pp-todo-item" id="' . htmlspecialchars( self::anchor( $words ) ) . '"><span class="pp-todo-box">' . ( empty( $raw['done'] ) ? '☐' : '☑' ) . '</span>'
 			. '<div class="pp-todo-text"><span class="pp-todo-task">' . $task . '</span>'
 			. ( $meta ? '<div class="pp-todo-meta">' . htmlspecialchars( implode( ' · ', $meta ) ) . '</div>' : '' )
-			. ( $note !== '' ? '<div class="pp-todo-note">' . htmlspecialchars( $note ) . '</div>' : '' )
+			. ( $note !== '' ? '<div class="pp-todo-note">' . self::text( $note ) . '</div>' : '' )
 			. '</div></li>';
+	}
+
+	/**
+	 * Words of a task or note: escaped, with `code` as code, as magenta shows them.
+	 *
+	 * @param string $words
+	 * @return string
+	 */
+	public static function text( string $words ): string {
+		return preg_replace( '/`([^`\n]+)`/', '<code>$1</code>', htmlspecialchars( $words ) );
+	}
+
+	/**
+	 * An item's name in a link (#todo-<its words>), the same one magenta gives it.
+	 *
+	 * @param string $task
+	 * @return string
+	 */
+	public static function anchor( string $task ): string {
+		$slug = trim( preg_replace( '/[^a-z0-9]+/', '-', strtolower( $task ) ), '-' );
+		return 'todo-' . substr( $slug, 0, 60 );
 	}
 
 	/**
