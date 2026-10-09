@@ -118,6 +118,9 @@
 		"ext.pickipediaReleases.videoPlayer": {
 			"scripts": [
 				"ext.pickipediaReleases.videoPlayer.js"
+			],
+			"styles": [
+				"ext.pickipediaReleases.videoPlayer.css"
 			]
 		},
 		"ext.pickipediaReleases.releaseDraft": {
