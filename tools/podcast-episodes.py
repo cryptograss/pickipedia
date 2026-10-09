@@ -35,6 +35,19 @@ USER_AGENT = "PickiPedia Bluegrass Podcast Firehose/1.0"
 PATTERN_BUDGET_SECONDS = 20
 FETCH_TIMEOUT = 30
 
+# Tags that separate one block of text from the next. Everything else is
+# inline — it sits inside a sentence, where the writer has already put
+# whatever spacing they wanted.
+BLOCK_TAGS = (
+    "p", "div", "br", "hr", "li", "ul", "ol", "dl", "dt", "dd",
+    "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre",
+    "table", "tr", "td", "th", "section", "article", "header", "footer",
+)
+BLOCK_TAG_RE = re.compile(
+    r"</?(?:" + "|".join(BLOCK_TAGS) + r")\b[^>]*>", re.IGNORECASE
+)
+INLINE_TAG_RE = re.compile(r"<[^>]+>")
+
 
 def load_config(prefer_wiki=True):
     """
@@ -213,11 +226,20 @@ def make_wikitext(podcast_name, episode, guests):
 
     # Clean description (strip HTML tags/entities, truncate).
     #
-    # Tags become a space, not nothing. Show notes are paragraphs, and dropping
-    # a </p> without leaving anything behind runs the sentences together —
-    # "...exactly who he is.This one gets..."
+    # Block tags become a space; inline tags become nothing. Show notes are
+    # paragraphs, and dropping a </p> without leaving anything behind runs the
+    # sentences together — "...exactly who he is.This one gets..."
+    #
+    # But doing the same to an inline tag puts a space where the writer put
+    # none. "bluegrass—<strong>Harry and Cory of East Nash Grass</strong>."
+    # came out as "bluegrass— Harry and Cory of East Nash Grass ." — and
+    # "<em>Banjo Beginnings &amp; Mandolin Magic</em>:" as "Mandolin Magic :".
+    # The stray space before the punctuation is the visible half. The costly
+    # half is that every injected space is spent out of the 500-character
+    # budget below, so real words fall off the end instead.
     import html
-    desc = re.sub(r'<[^>]+>', ' ', episode.get("description", ""))
+    desc = BLOCK_TAG_RE.sub(' ', episode.get("description", ""))
+    desc = INLINE_TAG_RE.sub('', desc)
     desc = html.unescape(desc)
     desc = re.sub(r'\s+', ' ', desc).strip()
     if len(desc) > 500:
