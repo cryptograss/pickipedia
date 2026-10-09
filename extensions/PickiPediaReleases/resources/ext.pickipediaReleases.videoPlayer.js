@@ -28,7 +28,11 @@
     'use strict';
 
     var IPFS_GATEWAY = 'https://ipfs.delivery-kid.cryptograss.live/ipfs';
-    var HLS_JS_URL = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
+    // Pinned, and checked by its hash: '@latest' ran whatever the CDN served
+    // that day on every page with a video, signed-in editors' included.
+    // Moving it is a deliberate edit: the new version, and its sha384.
+    var HLS_JS_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.7.3/dist/hls.min.js';
+    var HLS_JS_INTEGRITY = 'sha384-cciJ0zi8d1uMKC2zJd7jvPY4HQt7W4ByUI/FlMkltvBi31aW61rcpVBhpmW8/NwX';
     var hlsLoadPromise = null;
 
     // CIDv1 (bafy...) is Base32 lowercase, but MediaWiki capitalizes page titles.
@@ -50,7 +54,12 @@
         hlsLoadPromise = new Promise(function(resolve) {
             var script = document.createElement('script');
             script.src = HLS_JS_URL;
+            script.integrity = HLS_JS_INTEGRITY;
+            script.crossOrigin = 'anonymous';
             script.onload = resolve;
+            // Not loaded (blocked, or the hash didn't match): initPlayer finds
+            // no Hls and takes the native or direct path, as before.
+            script.onerror = resolve;
             document.head.appendChild(script);
         });
         return hlsLoadPromise;
@@ -177,7 +186,14 @@
     // first, then Audio only. hls.js chooses by bandwidth on its own; this is
     // for the times a person wants to overrule it — to save data deliberately,
     // or to stop it switching around mid-tune.
-    function addQualitySelector(container, video, hls) {
+    //
+    // "Audio only" can't be a level switch: hls.js cannot take the picture out
+    // of a stream that is already playing, so it fetched one audio segment and
+    // quietly went back to 1080p. It loads the audio stream's own playlist
+    // instead, and choosing a picture again reloads the master playlist at
+    // that level -- both from the same moment, still playing if it was.
+    function addQualitySelector(container, video, player) {
+        var hls = player.hls;
         var levels = hls.levels || [];
         if (levels.length < 2) {
             return;   // nothing to choose between
@@ -206,7 +222,8 @@
             choices.push({
                 value: levelLabel(entry.level),
                 text: levelLabel(entry.level),
-                index: entry.index
+                index: entry.index,
+                level: entry.level
             });
         });
 
@@ -230,15 +247,31 @@
             button.style.cssText = 'padding:2px 8px; cursor:pointer; border:1px solid #a2a9b1;'
                                 + 'border-radius:2px; background:#fff; font-size:inherit;';
             button.addEventListener('click', function() {
-                // -1 is hls.js's "pick for me". Setting currentLevel switches
-                // at the next segment rather than reloading the video.
-                hls.currentLevel = choice.index;
+                choose(choice);
                 rememberQuality(choice.value);
                 paint(choice.value);
             });
             buttons.push(button);
             bar.appendChild(button);
         });
+
+        function choose(choice) {
+            if (choice.value === 'Audio only') {
+                if (!player.audioOnly) {
+                    player.audioOnly = true;
+                    var url = choice.level.uri || [].concat(choice.level.url)[0];
+                    player.reload(url, -1);
+                }
+                return;
+            }
+            if (player.audioOnly) {
+                player.audioOnly = false;
+                player.reload(player.src, choice.index);
+                return;
+            }
+            // -1 is hls.js's "pick for me"; a level is switched to at once.
+            player.hls.currentLevel = choice.index;
+        }
 
         container.appendChild(bar);
 
@@ -248,9 +281,55 @@
             return choice.value === wanted;
         })[0];
         if (match && match.index !== -1) {
-            hls.currentLevel = match.index;
+            choose(match);
         }
         paint(match ? match.value : 'auto');
+    }
+
+    // delivery-kid's ASCII portrait, from its page's infobox: asked for once
+    // per page view, the first time someone hovers over a video.
+    var dkArtPromise = null;
+
+    function deliveryKidArt() {
+        if (dkArtPromise) {
+            return dkArtPromise;
+        }
+        var script = (typeof mw !== 'undefined' && mw.config.get('wgScript')) || '/index.php';
+        dkArtPromise = fetch(script + '?title=Cryptograss:Delivery-kid&action=raw')
+            .then(function(resp) { return resp.ok ? resp.text() : ''; })
+            .then(function(text) {
+                var m = /\|\s*image\s*=\s*<pre[^>]*>\n?([\s\S]*?)<\/pre>/.exec(text);
+                return m ? m[1].replace(/^\n+/, '').replace(/\s+$/, '') : '';
+            })
+            .catch(function() { return ''; });
+        return dkArtPromise;
+    }
+
+    // Shown over the video on hover (the stylesheet does the showing); it
+    // never takes a click.
+    function addDeliveryKidMark(container) {
+        var mask = document.createElement('div');
+        mask.className = 'hls-dk-mask';
+        mask.setAttribute('aria-hidden', 'true');
+        var words = document.createElement('span');
+        var name = document.createElement('b');
+        name.textContent = 'delivery-kid';
+        var where = document.createElement('small');
+        where.textContent = 'pinned on IPFS';
+        words.appendChild(name);
+        words.appendChild(where);
+        mask.appendChild(words);
+        container.appendChild(mask);
+        container.addEventListener('mouseenter', function() {
+            deliveryKidArt().then(function(art) {
+                if (!art || mask.querySelector('pre')) {
+                    return;
+                }
+                var pre = document.createElement('pre');
+                pre.textContent = art;
+                mask.insertBefore(pre, words);
+            });
+        }, { once: true });
     }
 
     // One honest failure message. The old text blamed IPFS unconditionally,
@@ -293,6 +372,7 @@ function fallbackToDirectVideo(container, cid, width, maxWidth, startSeconds) {
         });
         seekWhenReady(video, startSeconds);
         container.appendChild(video);
+        addDeliveryKidMark(container);
     }
 
 function initPlayer(container) {
@@ -337,20 +417,49 @@ function initPlayer(container) {
         //
         // Native remains the fallback for anything hls.js cannot drive
         // (no Media Source Extensions), which includes iOS Safari.
+        addDeliveryKidMark(container);
+
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-            var hls = new Hls();
-            hls.loadSource(hlsSrc);
-            hls.attachMedia(video);
+            // The stream playing now: replaced when someone picks Audio only
+            // or comes back from it (see addQualitySelector).
+            var player = { hls: null, src: hlsSrc, audioOnly: false };
+            player.attach = function(url, options) {
+                var instance = new Hls(options || {});
+                player.hls = instance;
+                instance.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal && instance === player.hls) {
+                        onFatal(instance, data);
+                    }
+                });
+                instance.loadSource(url);
+                instance.attachMedia(video);
+                return instance;
+            };
+            player.reload = function(url, level) {
+                var at = video.currentTime;
+                var playing = !video.paused;
+                player.hls.destroy();
+                var instance = player.attach(url, { startPosition: at, startLevel: level });
+                instance.on(Hls.Events.MANIFEST_PARSED, function() {
+                    if (level >= 0) {
+                        instance.currentLevel = level;   // chosen, not just started at
+                    }
+                    if (playing) {
+                        video.play().catch(function() {});
+                    }
+                });
+            };
+            var hls = player.attach(hlsSrc);
             // The renditions are only known once the master playlist is
             // parsed, so the selector is built then rather than up front.
             hls.on(Hls.Events.MANIFEST_PARSED, function() {
                 try {
-                    addQualitySelector(container, video, hls);
+                    addQualitySelector(container, video, player);
                 } catch (e) {
                     // A broken selector must never cost anyone the video.
                 }
             });
-            hls.on(Hls.Events.ERROR, function(event, data) {
+            var onFatal = function(hls, data) {
                 if (data.fatal) {
                     hls.destroy();
                     // A media-type fatal on a browser without AV1 is a decoder
@@ -365,7 +474,7 @@ function initPlayer(container) {
                     // video file rather than an HLS directory.
                     fallbackToDirectVideo(container, cid, width, maxWidth, startSeconds);
                 }
-            });
+            };
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             // Native HLS. The browser picks the rendition itself, so there is
             // nothing to offer a selector over.

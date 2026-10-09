@@ -1,0 +1,53 @@
+/*
+ * delivery-kid's mark over a release's video, shown on hover: its ASCII
+ * portrait (from Cryptograss:Delivery-kid's infobox) and where the release
+ * lives. It never takes a click: the controls under it stay the controls.
+ */
+.hls-video-player {
+	position: relative;
+}
+
+.hls-dk-mask {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	z-index: 2;
+	display: flex;
+	gap: 8px;
+	align-items: flex-end;
+	padding: 6px 8px;
+	border-radius: 4px;
+	background: rgba( 12, 10, 14, 0.62 );
+	color: #ece7e1;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.2s;
+}
+
+.hls-video-player:hover .hls-dk-mask,
+.hls-video-player:focus-within .hls-dk-mask {
+	opacity: 1;
+}
+
+.hls-dk-mask pre {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-family: monospace, monospace;
+	font-size: 2.1px;
+	line-height: 1.05;
+	letter-spacing: 0;
+	white-space: pre;
+}
+
+.hls-dk-mask b {
+	font: 600 12px/1.2 monospace, monospace;
+}
+
+.hls-dk-mask small {
+	display: block;
+	font-size: 10px;
+	opacity: 0.75;
+}
