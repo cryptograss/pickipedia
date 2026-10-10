@@ -1,0 +1,485 @@
+/* Moved from MediaWiki:Common.css. The server sends the elements these
+ * style (src/Zine.php); see also ext.pickipediaReleases.zine.js. */
+
+/* Until MediaWiki:Common.js is emptied it still builds its own logo, topbar,
+ * hero and toggle on top of the ones the server sent. Hide those: everything
+ * the server sends is marked .pp-server. Harmless once Common.js is empty,
+ * and can go then. */
+.pickipedia-userpost .pp-corner-logo:not(.pp-server),
+.pickipedia-userpost .pickipedia-topbar:not(.pp-server),
+.pickipedia-userpost .pickipedia-hero:not(.pp-server),
+.pickipedia-userpost .pickipedia-mode:not(.pp-server) {
+  display: none !important;
+}
+
+/* ============================================================
+ * Pickipedia — User-subpage zine/Substack styling
+ * ============================================================ */
+
+.pickipedia-userpost {
+  --pp-paper:   #f5efe4;
+  --pp-ink:     #2b1d12;
+  --pp-muted:   #7a6450;
+  --pp-rule:    #d9cdb8;
+  --pp-accent:  #9a3b1b;
+  --pp-card:    #ede4d2;
+  --pp-serif:   Georgia, "Iowan Old Style", "Charter", "Times New Roman", serif;
+  --pp-mono:    ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+  --pp-sans:    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+.pickipedia-userpost.pickipedia-dark {
+  --pp-paper:   #1a1410;
+  --pp-ink:     #e8dccb;
+  --pp-muted:   #a89888;
+  --pp-rule:    #3a2e22;
+  --pp-accent:  #d97a4a;
+  --pp-card:    #221a14;
+}
+
+.pickipedia-userpost {
+  background: var(--pp-paper) !important;
+  color: var(--pp-ink);
+  position: relative;
+}
+
+.pickipedia-userpost #column-one,
+.pickipedia-userpost #sidebar,
+.pickipedia-userpost #mw-panel,
+.pickipedia-userpost .vector-main-menu-container,
+.pickipedia-userpost .vector-page-toolbar,
+.pickipedia-userpost #mw-navigation .portal,
+.pickipedia-userpost .mw-sidebar-container,
+.pickipedia-userpost #p-views,
+.pickipedia-userpost #p-cactions,
+.pickipedia-userpost #p-cactions-mobile,
+.pickipedia-userpost #p-personal,
+.pickipedia-userpost #p-logo,
+.pickipedia-userpost .vector-page-tools,
+.pickipedia-userpost .mw-footer,
+.pickipedia-userpost #footer,
+.pickipedia-userpost .printfooter,
+.pickipedia-userpost .catlinks,
+.pickipedia-userpost .mw-indicators,
+.pickipedia-userpost #siteSub,
+.pickipedia-userpost #contentSub,
+.pickipedia-userpost .subpages,
+.pickipedia-userpost #jump-to-nav,
+.pickipedia-userpost .mw-jump-link {
+  display: none !important;
+}
+
+.pickipedia-userpost #globalWrapper,
+.pickipedia-userpost #column-content,
+.pickipedia-userpost .monobook-body {
+  float: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: auto !important;
+  background: transparent !important;
+}
+
+.pickipedia-userpost #content,
+.pickipedia-userpost .mw-body,
+.pickipedia-userpost #bodyContent,
+.pickipedia-userpost .mw-content-container {
+  background: var(--pp-paper) !important;
+  border: none !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  color: var(--pp-ink);
+}
+
+.pickipedia-userpost .mw-first-heading,
+.pickipedia-userpost #firstHeading,
+.pickipedia-userpost h1.firstHeading {
+  display: none !important;
+}
+
+/* ---------- Corner logo: flush to upper-left, fluid sized. ---------- */
+.pp-corner-logo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: clamp(60px, 9vw, 130px);
+  z-index: 5;
+  display: block;
+  text-decoration: none;
+}
+.pp-corner-logo img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ---------- Topbar (nav only) — non-sticky, slim. ---------- */
+.pickipedia-topbar {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 14px 24px;
+  background: transparent;
+}
+
+.pickipedia-topbar-nav {
+  display: flex;
+  gap: 16px;
+  font-family: var(--pp-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pickipedia-topbar-nav a {
+  color: var(--pp-muted);
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+  padding-bottom: 1px;
+}
+
+.pickipedia-topbar-nav a:hover { color: var(--pp-accent); }
+
+/* ---------- Hero ---------- */
+.pickipedia-hero {
+  font-family: var(--pp-serif);
+  color: var(--pp-ink);
+}
+
+.pickipedia-hero .pp-kicker {
+  font-family: var(--pp-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pp-accent);
+  margin: 0;
+  padding: 0;
+  font-weight: 600;
+}
+.pickipedia-hero .pp-kicker a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+}
+.pickipedia-hero .pp-kicker a:hover { color: var(--pp-ink); }
+
+/* When the kicker follows the title (letter variant), give it a small
+   gap so it reads as a byline. */
+.pickipedia-hero h1.pp-title + .pp-kicker {
+  margin-top: 12px;
+}
+
+.pickipedia-hero h1.pp-title {
+  font-family: var(--pp-serif);
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  margin: 0;
+  padding: 0;
+  border: none;
+  color: var(--pp-ink);
+  text-wrap: balance;
+}
+.pickipedia-hero .pp-dek {
+  font-family: var(--pp-serif);
+  font-style: italic;
+  color: var(--pp-muted);
+  text-wrap: pretty;
+  margin: 14px 0 0;
+}
+.pickipedia-hero .pp-meta {
+  font-family: var(--pp-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-muted);
+  margin: 12px 0 0;
+  padding: 0;
+  border: none;
+}
+
+/* ---------- Body type ---------- */
+.pickipedia-userpost .mw-parser-output {
+  font-family: var(--pp-serif);
+  color: var(--pp-ink);
+}
+
+.pickipedia-userpost .mw-parser-output > p {
+  text-wrap: pretty;
+  margin: 0 0 24px;
+}
+
+.pickipedia-userpost .mw-parser-output > h2 {
+  font-family: var(--pp-serif);
+  font-weight: 700;
+  border: none;
+  padding: 0;
+  margin: 44px 0 16px;
+  color: var(--pp-ink);
+  letter-spacing: -0.01em;
+}
+.pickipedia-userpost .mw-parser-output > h3 {
+  font-family: var(--pp-serif);
+  font-weight: 700;
+  margin: 32px 0 12px;
+  color: var(--pp-ink);
+}
+
+.pickipedia-userpost .mw-parser-output a {
+  color: var(--pp-ink);
+  text-decoration: none;
+  background-image: linear-gradient(var(--pp-accent), var(--pp-accent));
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: 0 100%;
+  padding-bottom: 1px;
+  transition: color .15s, background-size .15s;
+}
+.pickipedia-userpost .mw-parser-output a:hover {
+  color: var(--pp-accent);
+}
+.pickipedia-userpost .mw-parser-output a.new {
+  color: var(--pp-muted);
+  background-image: linear-gradient(var(--pp-muted), var(--pp-muted));
+  background-size: 100% 1px;
+  background-repeat: repeat-x;
+  background-position: 0 100%;
+  font-style: italic;
+}
+
+.pickipedia-userpost .mw-parser-output blockquote {
+  border-left: 3px solid var(--pp-accent);
+  margin: 32px 0;
+  padding: 4px 0 4px 24px;
+  font-family: var(--pp-serif);
+  font-style: italic;
+  color: var(--pp-ink);
+}
+
+.pickipedia-userpost .mw-parser-output hr {
+  border: none;
+  text-align: center;
+  margin: 40px 0;
+  height: 1em;
+  color: var(--pp-muted);
+}
+.pickipedia-userpost .mw-parser-output hr::before {
+  content: "❦";
+  font-size: 18px;
+  color: var(--pp-muted);
+}
+
+.pickipedia-userpost .mw-parser-output figure,
+.pickipedia-userpost .mw-parser-output .thumb,
+.pickipedia-userpost .mw-parser-output iframe,
+.pickipedia-userpost .mw-parser-output video,
+.pickipedia-userpost .mw-parser-output embed,
+.pickipedia-userpost .mw-parser-output .hls-video-player {
+  max-width: 100%;
+}
+.pickipedia-userpost .mw-parser-output .thumb,
+.pickipedia-userpost .mw-parser-output figure {
+  border: none;
+  background: transparent;
+}
+
+.pickipedia-userpost .mw-parser-output > div[style*="max-width:800px"],
+.pickipedia-userpost .mw-parser-output > div[style*="width:400px"] {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.pickipedia-userpost .mw-parser-output .thumbcaption,
+.pickipedia-userpost .mw-parser-output figcaption {
+  font-family: var(--pp-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--pp-muted);
+  text-align: center;
+  margin-top: 12px;
+  text-wrap: balance;
+}
+
+.pickipedia-variant-letter .mw-parser-output > p:first-of-type::first-letter {
+  font-family: var(--pp-serif);
+  font-size: 76px;
+  line-height: 0.86;
+  font-weight: 700;
+  float: left;
+  padding: 6px 10px 0 0;
+  color: var(--pp-accent);
+}
+
+/* ---------- Variant: Letter (default) ---------- */
+.pickipedia-variant-letter .pickipedia-hero,
+.pickipedia-variant-letter .mw-parser-output {
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+.pickipedia-variant-letter .pickipedia-hero {
+  padding-top: 10px;
+}
+.pickipedia-variant-letter .pickipedia-hero .pp-title {
+  font-size: 52px;
+  line-height: 1.08;
+}
+.pickipedia-variant-letter .pickipedia-hero .pp-dek {
+  font-size: 21px;
+  line-height: 1.45;
+}
+.pickipedia-variant-letter .mw-parser-output {
+  font-size: 19px;
+  line-height: 1.65;
+}
+.pickipedia-variant-letter .mw-parser-output > h2 { font-size: 28px; line-height: 1.2; }
+.pickipedia-variant-letter .mw-parser-output > h3 { font-size: 22px; line-height: 1.25; }
+.pickipedia-variant-letter .mw-parser-output blockquote { font-size: 22px; line-height: 1.45; }
+
+/* On medium-narrow viewports the centered column would slide under
+   the corner logo — push it right enough to clear. */
+@media (min-width: 720px) and (max-width: 1100px) {
+  .pickipedia-variant-letter .pickipedia-hero,
+  .pickipedia-variant-letter .mw-parser-output {
+    margin-left: 160px;
+    margin-right: 24px;
+  }
+}
+
+/* ---------- Variant: Masthead ---------- */
+.pickipedia-variant-masthead .pickipedia-hero {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 36px 48px 28px;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 28px;
+  align-items: end;
+}
+.pickipedia-variant-masthead .pickipedia-hero .pp-topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 0;
+}
+.pickipedia-variant-masthead .pickipedia-hero .pp-topbar-rule {
+  flex: 1; height: 1px; background: var(--pp-rule);
+}
+.pickipedia-variant-masthead .pickipedia-hero .pp-topbar-vol {
+  font-family: var(--pp-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--pp-muted);
+}
+.pickipedia-variant-masthead .pickipedia-hero .pp-titlewrap {
+  grid-column: 1 / -1;
+}
+.pickipedia-variant-masthead .pickipedia-hero .pp-title {
+  font-size: 76px;
+  line-height: 0.96;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+.pickipedia-variant-masthead .pickipedia-hero .pp-dek {
+  font-size: 22px;
+  line-height: 1.4;
+  margin: 22px 0 0;
+  max-width: 620px;
+}
+
+.pickipedia-variant-masthead .mw-parser-output {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px 48px 80px;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 32px;
+  font-size: 19px;
+  line-height: 1.7;
+}
+.pickipedia-variant-masthead .mw-parser-output > * {
+  grid-column: 4 / span 7;
+}
+.pickipedia-variant-masthead .mw-parser-output > figure,
+.pickipedia-variant-masthead .mw-parser-output > .thumb,
+.pickipedia-variant-masthead .mw-parser-output > iframe,
+.pickipedia-variant-masthead .mw-parser-output > video,
+.pickipedia-variant-masthead .mw-parser-output > .hls-video-player {
+  grid-column: 1 / -1;
+  margin: 24px 0 48px;
+}
+.pickipedia-variant-masthead .mw-parser-output > h2 {
+  font-size: 26px;
+  margin: 40px 0 14px;
+}
+.pickipedia-variant-masthead .mw-parser-output blockquote {
+  font-size: 28px;
+  line-height: 1.3;
+  color: var(--pp-accent);
+  border: none;
+  border-top: 1px solid var(--pp-rule);
+  border-bottom: 1px solid var(--pp-rule);
+  padding: 12px 0;
+  margin: 36px 0;
+  text-wrap: balance;
+}
+
+/* ---------- Light/dark toggle ---------- */
+.pickipedia-mode {
+  position: absolute;
+  bottom: 5px;
+  right: 10px;
+  background: var(--pp-card);
+  color: var(--pp-ink);
+  border: 1px solid var(--pp-rule);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-family: var(--pp-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 50;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.pickipedia-mode:hover {
+  border-color: var(--pp-accent);
+  color: var(--pp-accent);
+}
+
+/* ---------- Responsive (small screens) ---------- */
+@media (max-width: 720px) {
+  .pickipedia-topbar { padding: 10px 16px; }
+  .pickipedia-topbar-nav { gap: 12px; font-size: 10px; }
+
+  .pickipedia-variant-letter .pickipedia-hero,
+  .pickipedia-variant-letter .mw-parser-output {
+    padding-left: max(24px, calc(9vw + 24px));
+  }
+
+  .pickipedia-variant-letter .pickipedia-hero { padding-top: 10px; }
+  .pickipedia-variant-letter .pickipedia-hero .pp-title { font-size: 32px; }
+  .pickipedia-variant-letter .pickipedia-hero .pp-dek { font-size: 17px; }
+  .pickipedia-variant-letter .mw-parser-output { font-size: 17px; }
+  .pickipedia-variant-letter .mw-parser-output > p:first-of-type::first-letter { font-size: 56px; }
+
+  .pickipedia-variant-masthead .pickipedia-hero {
+    padding: 24px 16px 18px;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .pickipedia-variant-masthead .pickipedia-hero .pp-titlewrap {
+    grid-column: 1 / -1;
+  }
+  .pickipedia-variant-masthead .pickipedia-hero .pp-title { font-size: 36px; }
+  .pickipedia-variant-masthead .mw-parser-output {
+    padding: 12px 16px 64px;
+    grid-template-columns: 1fr;
+    font-size: 17px;
+  }
+  .pickipedia-variant-masthead .mw-parser-output > * { grid-column: 1; }
+}

@@ -115,6 +115,16 @@
 				"ext.pickipediaReleases.instrumentForm.js"
 			]
 		},
+		"ext.pickipediaReleases.zine.styles": {
+			"styles": [
+				"ext.pickipediaReleases.zine.css"
+			]
+		},
+		"ext.pickipediaReleases.zine": {
+			"scripts": [
+				"ext.pickipediaReleases.zine.js"
+			]
+		},
 		"ext.pickipediaReleases.videoPlayer": {
 			"scripts": [
 				"ext.pickipediaReleases.videoPlayer.js"

@@ -54,14 +54,16 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook {
 		// the same reasons as the player. Loaded on every page because that
 		// is what Common.js did; each script returns immediately unless the
 		// form or element it cares about is on the page being shown.
-		//
-		// Not moved yet: the user-subpage zine styling, which is bound to
-		// classes defined in MediaWiki:Common.css. Moving its script alone
-		// would split one feature across two homes, so it goes with its
-		// stylesheet in a change of its own.
 		$out->addModules( 'ext.pickipediaReleases.blueRailroadDate' );
 		$out->addModules( 'ext.pickipediaReleases.blocksAgo' );
 		$out->addModules( 'ext.pickipediaReleases.instrumentForm' );
+
+		// The zine look for user subpages (User:Name/Post), sent by the server
+		// so the page arrives styled instead of flashing the default skin
+		// first. See Zine.php.
+		if ( Zine::applies( $out ) ) {
+			Zine::addTo( $out );
+		}
 
 		// Also inject tokens on Special:FormEdit pages and any page using
 		// the deliveryKidInput module (PageForms forms).

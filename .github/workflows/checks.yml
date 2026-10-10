@@ -45,6 +45,7 @@ jobs:
           php extensions/PickiPediaVerification/tests/check-gate.php
           php extensions/PickiPediaVerification/tests/check-proposed-tag.php
           php docker/check-extensions.php "$GITHUB_WORKSPACE"
+          php extensions/PickiPediaReleases/tests/check-zine.php
           cd extensions/PickiPediaContent && php tests/check-classes.php
 
   web:
