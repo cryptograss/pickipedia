@@ -123,9 +123,6 @@
 		"ext.pickipediaReleases.zine": {
 			"scripts": [
 				"ext.pickipediaReleases.zine.js"
-			],
-			"dependencies": [
-				"mediawiki.util"
 			]
 		},
 		"ext.pickipediaReleases.videoPlayer": {

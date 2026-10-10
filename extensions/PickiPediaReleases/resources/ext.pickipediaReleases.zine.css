@@ -1,4 +1,16 @@
-/* Moved from MediaWiki:Common.css; see ext.pickipediaReleases.zine.js. */
+/* Moved from MediaWiki:Common.css. The server sends the elements these
+ * style (src/Zine.php); see also ext.pickipediaReleases.zine.js. */
+
+/* Until MediaWiki:Common.js is emptied it still builds its own logo, topbar,
+ * hero and toggle on top of the ones the server sent. Hide those: everything
+ * the server sends is marked .pp-server. Harmless once Common.js is empty,
+ * and can go then. */
+.pickipedia-userpost .pp-corner-logo:not(.pp-server),
+.pickipedia-userpost .pickipedia-topbar:not(.pp-server),
+.pickipedia-userpost .pickipedia-hero:not(.pp-server),
+.pickipedia-userpost .pickipedia-mode:not(.pp-server) {
+  display: none !important;
+}
 
 /* ============================================================
  * Pickipedia — User-subpage zine/Substack styling

@@ -58,17 +58,11 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook {
 		$out->addModules( 'ext.pickipediaReleases.blocksAgo' );
 		$out->addModules( 'ext.pickipediaReleases.instrumentForm' );
 
-		// The zine styling for user subpages (User:Name/Post), script and
-		// stylesheet together, from MediaWiki:Common.js and Common.css. Unlike
-		// the others this can be gated here, on the same test the script
-		// makes; the styles go in as a style module so the page doesn't
-		// repaint, as it didn't when they were in Common.css.
-		if ( $title && $title->getNamespace() === NS_USER
-			&& str_contains( $title->getText(), '/' )
-			&& $out->getActionName() === 'view'
-		) {
-			$out->addModuleStyles( 'ext.pickipediaReleases.zine.styles' );
-			$out->addModules( 'ext.pickipediaReleases.zine' );
+		// The zine look for user subpages (User:Name/Post), sent by the server
+		// so the page arrives styled instead of flashing the default skin
+		// first. See Zine.php.
+		if ( Zine::applies( $out ) ) {
+			Zine::addTo( $out );
 		}
 
 		// Also inject tokens on Special:FormEdit pages and any page using
