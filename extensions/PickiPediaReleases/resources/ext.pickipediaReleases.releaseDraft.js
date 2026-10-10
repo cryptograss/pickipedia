@@ -332,6 +332,9 @@
 			if ( data.abandoned_keep_files ) {
 				lines.push( 'abandoned_keep_files: true' );
 			}
+			if ( data.abandoned_files_deleted_at ) {
+				lines.push( 'abandoned_files_deleted_at: ' + quoteYamlValue( data.abandoned_files_deleted_at ) );
+			}
 		}
 
 		// Finalize markers — set by showFinalizeResult after the SSE
@@ -1902,10 +1905,44 @@
 		} );
 	}
 
-	// Mark this draft as abandoned. Both buttons just write YAML markers —
-	// the actual staging-dir cleanup (when keepFiles is false) is handled
-	// out-of-band by the cleanup script that already does the equivalent
-	// for delete/unpin on Releases. Single source of truth: the YAML.
+	// Mark this draft as abandoned, and with "delete files", delete them.
+	//
+	// "Abandon — delete files" used to write the same YAML marker as "keep
+	// files" and leave the deleting to a cleanup script that no longer
+	// exists, so nothing was ever deleted. Now it asks delivery-kid to delete
+	// the draft's staging directory (DELETE /draft-content/<id>, which only
+	// its uploader or a finalize-release account may do) and records on the
+	// page that it did. If delivery-kid refuses, the page is left as it was.
+	function deleteStagedFiles( draftId ) {
+		var apiUrl = mw.config.get( 'wgDeliveryKidUrl' );
+		var token = mw.config.get( 'wgFinalizeToken' ) || mw.config.get( 'wgUploadToken' );
+		if ( !apiUrl || !token ) {
+			return Promise.reject( new Error( 'delivery-kid is not configured here, or you are not signed in' ) );
+		}
+		return fetch( apiUrl + '/draft-content/' + encodeURIComponent( draftId ), {
+			method: 'DELETE',
+			headers: {
+				'X-Upload-Token': token,
+				'X-Upload-User': mw.config.get( 'wgUploadUser' ),
+				'X-Upload-Timestamp': String( mw.config.get( 'wgUploadTimestamp' ) )
+			}
+		} ).then( function ( resp ) {
+			if ( resp.ok || resp.status === 404 ) {
+				return; // deleted now, or already gone: either way, nothing left
+			}
+			return resp.json().catch( function () { return {}; } ).then( function ( body ) {
+				var detail = body && body.detail;
+				var said = ( detail && ( detail.error || detail ) ) || resp.statusText;
+				if ( resp.status === 403 ) {
+					said = 'only the uploader or someone who can finalize may delete its files';
+				} else if ( resp.status === 409 ) {
+					said = 'it is being finalized right now';
+				}
+				throw new Error( 'delivery-kid said ' + resp.status + ': ' + said );
+			} );
+		} );
+	}
+
 	function abandonDraft( keepFiles ) {
 		var draftId = ( draftData && draftData.draft_id ) || '';
 		if ( !draftId ) {
@@ -1914,39 +1951,47 @@
 
 		var prompt_ = keepFiles
 			? 'Abandon this draft and keep the uploaded files for now?\n\nReason (optional):'
-			: 'Abandon this draft and flag its files for cleanup?\n\nReason (optional):';
+			: 'Abandon this draft and DELETE its uploaded files from delivery-kid? This cannot be undone.\n\nReason (optional):';
 		// eslint-disable-next-line no-alert
 		var reason = window.prompt( prompt_, '' );
 		if ( reason === null ) {
 			return; // user cancelled
 		}
 
-		var data = collectFormData();
-		data.abandoned = true;
-		data.abandoned_reason = reason;
-		data.abandoned_keep_files = !!keepFiles;
-		var yaml = serializeToYaml( data );
+		var deleted = keepFiles ? Promise.resolve( null ) :
+			deleteStagedFiles( draftId ).then( function () { return new Date().toISOString(); } );
 
-		var summary = keepFiles
-			? 'Abandon draft (files kept)'
-			: 'Abandon draft (files flagged for cleanup)';
-		if ( reason ) {
-			summary += ': ' + reason;
-		}
+		deleted.then( function ( deletedAt ) {
+			var data = collectFormData();
+			data.abandoned = true;
+			data.abandoned_reason = reason;
+			data.abandoned_keep_files = !!keepFiles;
+			if ( deletedAt ) {
+				data.abandoned_files_deleted_at = deletedAt;
+			}
+			var yaml = serializeToYaml( data );
 
-		new mw.Api().postWithEditToken( {
-			action: 'edit',
-			title: mw.config.get( 'wgPageName' ),
-			text: yaml,
-			summary: summary
-		} ).then( function () {
-			window.location.reload();
-		} ).fail( function ( code, result ) {
+			var summary = keepFiles
+				? 'Abandon draft (files kept)'
+				: 'Abandon draft (files deleted from delivery-kid)';
+			if ( reason ) {
+				summary += ': ' + reason;
+			}
+
+			return new mw.Api().postWithEditToken( {
+				action: 'edit',
+				title: mw.config.get( 'wgPageName' ),
+				text: yaml,
+				summary: summary
+			} ).then( function () {
+				window.location.reload();
+			}, function ( code, result ) {
+				throw new Error( ( deletedAt ? 'Files deleted, but the page could not be updated: ' : '' ) +
+					( result && result.error ? result.error.info : code ) );
+			} );
+		} ).catch( function ( err ) {
 			// eslint-disable-next-line no-alert
-			window.alert(
-				'Could not abandon: ' +
-				( result && result.error ? result.error.info : code )
-			);
+			window.alert( 'Could not abandon: ' + ( err && err.message ? err.message : String( err ) ) );
 		} );
 	}
 

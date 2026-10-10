@@ -103,7 +103,8 @@ class ReleaseDraftContentHandler extends TextContentHandler {
 
 		// Abandoned banner (shown above the normal status)
 		if ( $content->isAbandoned() ) {
-			$html .= $this->renderAbandonedBanner( $content->getAbandonedReason() );
+			$html .= $this->renderAbandonedBanner( $content->getAbandonedReason(),
+				isset( $data['abandoned_files_deleted_at'] ) ? (string)$data['abandoned_files_deleted_at'] : null );
 		}
 
 		// Status banner
@@ -151,10 +152,13 @@ class ReleaseDraftContentHandler extends TextContentHandler {
 		$output->addCategory( 'Release_Drafts' );
 	}
 
-	private function renderAbandonedBanner( ?string $reason ): string {
+	private function renderAbandonedBanner( ?string $reason, ?string $filesDeletedAt = null ): string {
 		$text = 'This draft has been abandoned.';
 		if ( $reason !== null ) {
 			$text .= ' Reason: ' . $reason;
+		}
+		if ( $filesDeletedAt !== null && $filesDeletedAt !== '' ) {
+			$text .= ' Its uploaded files were deleted from delivery-kid on ' . substr( $filesDeletedAt, 0, 10 ) . '.';
 		}
 		return Html::rawElement( 'div', [
 			'class' => 'release-draft-abandoned-banner',
