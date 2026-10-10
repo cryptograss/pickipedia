@@ -1,5 +1,5 @@
 /*
- * delivery-kid's mark over a release's video, shown on hover: its ASCII
+ * delivery-kid's mark over a release's video, shown as the controls are: its ASCII
  * portrait (from Cryptograss:Delivery-kid's infobox) and where the release
  * lives. It never takes a click: the controls under it stay the controls.
  */
@@ -24,8 +24,8 @@
 	transition: opacity 0.2s;
 }
 
-.hls-video-player:hover .hls-dk-mask,
-.hls-video-player:focus-within .hls-dk-mask {
+/* As the controls: while the pointer moves over the video, or for a moment after a tap. */
+.hls-video-player.hls-awake .hls-dk-mask {
 	opacity: 1;
 }
 

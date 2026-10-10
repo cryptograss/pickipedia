@@ -305,9 +305,47 @@
         return dkArtPromise;
     }
 
-    // Shown over the video on hover (the stylesheet does the showing); it
-    // never takes a click.
-    function addDeliveryKidMark(container) {
+    // Shown over the video as its controls are: while the pointer moves over
+    // it, gone after a still moment while it plays and when the pointer
+    // leaves; a tap shows it for a moment. (It showed on :focus-within too,
+    // so after a click it stayed.) It never takes a click.
+    var AWAKE_MS = 2500;
+
+    function wakeWithPointer(container, video) {
+        var timer = null;
+        var touch = false;
+        function sleep() {
+            clearTimeout(timer);
+            container.classList.remove('hls-awake');
+        }
+        function wake(event) {
+            if (event && event.pointerType) {
+                touch = event.pointerType !== 'mouse';
+            }
+            container.classList.add('hls-awake');
+            clearTimeout(timer);
+            // A mouse resting over a paused video keeps it; a tap shows it for a moment.
+            timer = setTimeout(function() {
+                if (touch || !video.paused) {
+                    sleep();
+                }
+            }, AWAKE_MS);
+        }
+        video.addEventListener('pointermove', wake);
+        video.addEventListener('pointerdown', wake);
+        video.addEventListener('pointerleave', function(event) {
+            if (event.pointerType === 'mouse') {
+                sleep();
+            }
+        });
+        video.addEventListener('play', function() {
+            if (container.classList.contains('hls-awake')) {
+                wake();
+            }
+        });
+    }
+
+    function addDeliveryKidMark(container, video) {
         var mask = document.createElement('div');
         mask.className = 'hls-dk-mask';
         mask.setAttribute('aria-hidden', 'true');
@@ -320,7 +358,10 @@
         words.appendChild(where);
         mask.appendChild(words);
         container.appendChild(mask);
-        container.addEventListener('mouseenter', function() {
+        if (video) {
+            wakeWithPointer(container, video);
+        }
+        container.addEventListener('pointerover', function() {
             deliveryKidArt().then(function(art) {
                 if (!art || mask.querySelector('pre')) {
                     return;
@@ -372,7 +413,7 @@ function fallbackToDirectVideo(container, cid, width, maxWidth, startSeconds) {
         });
         seekWhenReady(video, startSeconds);
         container.appendChild(video);
-        addDeliveryKidMark(container);
+        addDeliveryKidMark(container, video);
     }
 
 function initPlayer(container) {
@@ -417,7 +458,7 @@ function initPlayer(container) {
         //
         // Native remains the fallback for anything hls.js cannot drive
         // (no Media Source Extensions), which includes iOS Safari.
-        addDeliveryKidMark(container);
+        addDeliveryKidMark(container, video);
 
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
             // The stream playing now: replaced when someone picks Audio only
