@@ -284,10 +284,16 @@
   background: transparent;
 }
 
+/* Video embeds ({{HLSVideo}}) take the whole column. They arrive floated
+ * right with a margin, and a float as wide as the column left the next
+ * heading (display: flow-root, from core) a zero-width gap beside it: one
+ * letter per line. Full width means not floating. */
 .pickipedia-userpost .mw-parser-output > div[style*="max-width:800px"],
 .pickipedia-userpost .mw-parser-output > div[style*="width:400px"] {
   width: 100% !important;
   max-width: 100% !important;
+  float: none !important;
+  margin-left: 0 !important;
 }
 
 .pickipedia-userpost .mw-parser-output .thumbcaption,
