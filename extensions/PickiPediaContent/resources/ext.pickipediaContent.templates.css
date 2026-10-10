@@ -1,0 +1,208 @@
+/* Styles for wiki templates and site chrome, moved from MediaWiki:Common.css.
+ *
+ * The classes here are emitted by templates on the wiki (Template:Listening
+ * list, the Record infobox, Template:Firehose row, Template:PodcastEpisode),
+ * not by this extension's Lua or PHP, so tests/check-classes.php — which reads
+ * only ext.pickipediaContent.css — deliberately doesn't look at this file.
+ * Loaded on every page, as Common.css was, in the same style module.
+ */
+
+#siteSub {
+    display: block;
+    font-size: 10px;
+}
+
+@media screen and (max-width: 600px) {
+    .show-infobox {
+        float: none !important;
+        width: 100% !important;
+        margin: 0 0 1em 0 !important;
+        box-sizing: border-box;
+    }
+}
+
+/* ============================================================
+ * Listening lists — see [[Template:Listening list]]
+ * ============================================================ */
+
+.pp-ll-head {
+  border-left: 3px solid #7d8c76;
+  padding: 0.1em 0 0.25em 1em;
+  margin: 0.4em 0 1.5em 0;
+}
+.pp-ll-kicker {
+  font-size: 0.72em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6b7566;
+  margin-bottom: 0.5em;
+}
+.pp-ll-name {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.55em;
+  line-height: 1.22;
+  font-weight: 600;
+  color: #2f3a2e;
+  margin-bottom: 0.4em;
+  max-width: 24em;
+}
+.pp-ll-dek {
+  font-size: 0.95em;
+  line-height: 1.5;
+  color: #3d4a3e;
+  margin-bottom: 0.7em;
+  max-width: 42em;
+}
+.pp-ll-meta {
+  font-family: monospace;
+  font-size: 0.78em;
+  color: #6b7566;
+}
+.pp-ll-meta a { color: #6b7566; }
+
+.pp-ll-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3em 1em;
+  padding: 0.6em 0.3em;
+  border-bottom: 1px solid #d4dacd;
+  max-width: 60em;
+}
+.pp-ll-row:hover { background: #f4f6f2; }
+
+.pp-ll-main { flex: 1 1 20em; min-width: 0; }
+
+.pp-ll-artist {
+  font-size: 0.72em;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #5a6858;
+}
+/* an entry with no credited artist shouldn't leave a blank line */
+.pp-ll-artist:empty { display: none; }
+
+.pp-ll-title {
+  font-weight: 600;
+  font-size: 1.02em;
+  line-height: 1.35;
+}
+
+.pp-ll-note {
+  font-size: 0.87em;
+  font-style: italic;
+  line-height: 1.45;
+  color: #3d4a3e;
+  margin-top: 0.2em;
+  max-width: 40em;
+}
+.pp-ll-note::before { content: "\201C"; }
+.pp-ll-note::after  { content: "\201D"; }
+
+.pp-ll-starts { margin-top: 0.35em; }
+.pp-ll-chip {
+  display: inline-block;
+  font-size: 0.82em;
+  border: 1px solid #d4dacd;
+  border-radius: 999px;
+  padding: 0.05em 0.7em;
+  margin: 0.15em 0.35em 0.15em 0;
+  background: #fbfcfa;
+}
+
+.pp-ll-side {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-family: monospace;
+  font-size: 0.76em;
+  color: #6b7566;
+  white-space: nowrap;
+}
+.pp-ll-nosource { color: #a8a08e; }
+
+@media screen and (max-width: 600px) {
+  .pp-ll-row  { flex-wrap: wrap; }
+  .pp-ll-side { flex-basis: 100%; text-align: left; padding-top: 0.25em; }
+}
+/* ============================================================
+ * Listening list art cell + Record infobox
+ * ============================================================ */
+
+.pp-ll-art {
+  flex: 0 0 auto;
+  width: 64px;
+  align-self: center;
+}
+.pp-ll-art img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #d4dacd;
+  display: block;
+}
+/* no art yet: hold the column so titles align, hint the gap */
+.pp-ll-art:empty {
+  height: 64px;
+  border-radius: 4px;
+  border: 1px dashed #d4dacd;
+  background: #fbfcfa;
+}
+@media screen and (max-width: 600px) {
+  .pp-ll-art, .pp-ll-art:empty { width: 48px; height: 48px; }
+  .pp-ll-art img { width: 48px; height: 48px; }
+}
+
+.pp-record-box {
+  float: right;
+  clear: right;
+  width: 20em;
+  margin: 0 0 1em 1em;
+  border: 1px solid #d4dacd;
+  background: #fbfcfa;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.pp-record-box .pp-record-art img { width: 100%; height: auto; display: block; }
+.pp-record-head {
+  padding: .6em .8em .1em;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.15em;
+  font-weight: 600;
+  color: #2f3a2e;
+}
+.pp-record-meta {
+  padding: 0 .8em .6em;
+  font-size: .85em;
+  color: #3d4a3e;
+}
+.pp-record-listen {
+  border-top: 1px solid #d4dacd;
+  padding: .45em .8em;
+  font-family: monospace;
+  font-size: .78em;
+}
+@media screen and (max-width: 600px) {
+  .pp-record-box { float: none; width: 100%; margin: 0 0 1em 0; }
+}
+
+/* Podcast episode artwork — see Template:Firehose row and Template:PodcastEpisode. */
+.pp-episode-art img {
+  display: block;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #d4dacd;
+}
+.pp-episode-art--row { flex: 0 0 auto; width: 56px; height: 56px; }
+.pp-episode-art--row img { width: 56px; height: 56px; box-sizing: border-box; }
+/* no art: hold the column so the titles still line up */
+.pp-episode-art--none {
+  border-radius: 4px;
+  border: 1px dashed #d4dacd;
+  background: #fbfcfa;
+  box-sizing: border-box;
+}
+.pp-episode-art--large img { width: 100%; max-width: 250px; height: auto; margin: 0 auto; }
+@media screen and (max-width: 600px) {
+  .pp-episode-art--row, .pp-episode-art--row img { width: 44px; height: 44px; }
+}

@@ -33,7 +33,8 @@
 	"ResourceModules": {
 		"ext.pickipediaContent.styles": {
 			"styles": [
-				"ext.pickipediaContent.css"
+				"ext.pickipediaContent.css",
+				"ext.pickipediaContent.templates.css"
 			]
 		}
 	},
