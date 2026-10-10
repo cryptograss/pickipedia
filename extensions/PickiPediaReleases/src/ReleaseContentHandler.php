@@ -147,7 +147,11 @@ YAML;
 		// Determine if this release is a video:
 		// 1. Explicit file_type in YAML
 		// 2. Inferred from backlinks (pages using HLSVideo template link here)
-		$isVideo = !empty( $data['file_type'] ) && str_starts_with( $data['file_type'], 'video/' );
+		// file_type is a MIME type ("video/mp4") for most releases, but
+		// delivery-kid writes the bare word "video" for Blue Railroad
+		// submissions; those got no player at all.
+		$fileType = (string)( $data['file_type'] ?? '' );
+		$isVideo = $fileType === 'video' || str_starts_with( $fileType, 'video/' );
 		if ( !$isVideo && ( $data['release_type'] ?? '' ) === 'video' ) {
 			$isVideo = true;
 		}
