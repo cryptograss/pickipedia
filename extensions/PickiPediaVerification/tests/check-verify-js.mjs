@@ -12,21 +12,23 @@ const src = readFileSync(
 	new URL('../resources/ext.pickipediaVerification.verify.js', import.meta.url),
 	'utf8');
 
+// A function ends at the first line holding only its own indentation and a
+// closing brace -- not by counting braces, which its regexes and quoted '{'
+// would throw off (findTemplateContaining has both).
 function lift(name) {
 	const start = src.indexOf(`function ${name}(`);
 	if (start < 0) throw new Error(`no ${name}`);
-	let depth = 0, i = src.indexOf('{', start);
-	const open = i;
-	for (; i < src.length; i++) {
-		if (src[i] === '{') depth++;
-		else if (src[i] === '}' && --depth === 0) break;
-	}
-	return src.slice(start, i + 1);
+	const indent = src.slice(src.lastIndexOf('\n', start) + 1, start);
+	const end = src.indexOf(`\n${indent}}`, start);
+	if (end < 0) throw new Error(`no end to ${name}`);
+	return src.slice(start, end + indent.length + 2);
 }
 
 const scope = {};
 eval(lift('stripWikitext') + lift('findProposedTagBySource') + lift('findProposedTagContaining') +
-	'\nscope.bySource = findProposedTagBySource; scope.byText = findProposedTagContaining;');
+	lift('findTemplateContaining') +
+	'\nscope.bySource = findProposedTagBySource; scope.byText = findProposedTagContaining;' +
+	' scope.byTemplate = findTemplateContaining;');
 
 let failures = 0;
 const check = (name, ok, detail = '') => {
@@ -72,6 +74,23 @@ console.log('\nThe old rendered-text search, kept as a fallback:');
 check('still finds prose', scope.byText(page, 'He plays a 1923 Loar.') !== null);
 check('still cannot find a template, which is the bug',
 	scope.byText(page, 'On the podcasts Bluegrass Jam Along Tony Rice audio') === null);
+
+console.log('\n{{Bot_proposes}} found by its rendered text, links and code included:');
+// 2026-10-15: Skyler couldn't verify these on Cryptograss:Magenta 26 Million.
+// The rendered text has a link's words, or code's, where the source has markup.
+const proposals = [
+	"{{Bot_proposes|Open [https://memory-lane.maybelle.cryptograss.live/moods/ memory-lane /moods/] and pick a Mood from the list on the side.|by=Magent}}",
+	"{{Bot_proposes|Run <code>./magenta.sh login</code> there. It signs a challenge with your key.|by=Magent}}",
+	"{{Bot_proposes|Every message is tagged by author, so agents can tell who is speaking.|by=Magent}}",
+].join('\n\n');
+const linked = scope.byTemplate(proposals, 'Open memory-lane /moods/ and pick a Mood from the list on the side.');
+check('a link in its first words', linked && linked.content.startsWith('Open [https://'));
+const coded = scope.byTemplate(proposals, 'Run ./magenta.sh login there. It signs a challenge with your key.');
+check('code in its first words', coded && coded.content.startsWith('Run <code>'));
+check('plain prose, as before',
+	scope.byTemplate(proposals, 'Every message is tagged by author, so agents can tell who is speaking.') !== null);
+check('and nothing that is not there',
+	scope.byTemplate(proposals, 'Open the gates and let the bus through.') === null);
 
 console.log(failures === 0 ? '\nAll checks passed.\n' : `\n${failures} FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);
