@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libfreetype6-dev \
     imagemagick \
+    ghostscript \
+    poppler-utils \
+    librsvg2-bin \
     git \
     unzip \
     curl \
