@@ -303,6 +303,11 @@
      */
     function stripWikitext(text) {
         return text
+            // External links and HTML render as their text alone: without
+            // these, a claim with a link or <code> in its first 40 characters
+            // could never be found ("Could not find the claim in page source").
+            .replace(/\[(?:https?:)?\/\/[^\s\]]+\s+([^\]]+)\]/g, '$1')  // [https://x text] -> text
+            .replace(/<\/?[a-z][^>]*>/gi, '')  // <code>, <b>...: their contents stay
             .replace(/'{2,}/g, '')  // Remove '' and '''
             .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2')  // [[link|text]] -> text
             .replace(/\{\{!\}\}/g, '|')  // {{!}} -> |
