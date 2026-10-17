@@ -155,6 +155,28 @@ $wgFileExtensions = array_merge( $wgFileExtensions, ['mp4', 'webm', 'mov', 'ogv'
 # Disable strict MIME verification for iPhone HEVC videos (mov containers)
 $wgVerifyMimeType = false;
 
+# PDFs (sheet music, tabs, posters, liner notes) and SVGs (logos, diagrams):
+# Justin, 15 Oct 2026. AVIF waits until MediaWiki itself knows the type.
+#
+# PDF pages are drawn by PdfHandler, bundled with MediaWiki: ghostscript
+# renders a page, ImageMagick scales it, poppler's pdfinfo/pdftotext read its
+# size and text (all installed in the wiki image: maybelle-config,
+# pickipedia-vps docker-wiki Dockerfile.j2).
+#
+# SVGs go to browsers as they are (native rendering); librsvg draws a PNG
+# where one is needed (og:image, old clients). Script in an uploaded SVG is
+# refused by MediaWiki's own check (UploadBase::detectScriptInSvg), which runs
+# whatever $wgVerifyMimeType says.
+$wgFileExtensions = array_merge( $wgFileExtensions, [ 'pdf', 'svg' ] );
+wfLoadExtension( 'PdfHandler' );
+$wgPdfProcessor = '/usr/bin/gs';
+$wgPdfPostProcessor = '/usr/bin/convert';
+$wgPdfInfo = '/usr/bin/pdfinfo';
+$wgPdftoText = '/usr/bin/pdftotext';
+$wgSVGConverter = 'rsvg';
+$wgSVGConverterPath = '/usr/bin';
+$wgSVGNativeRendering = true;
+
 ## InstantCommons allows wiki to use images from commons.wikimedia.org
 $wgUseInstantCommons = true;
 
