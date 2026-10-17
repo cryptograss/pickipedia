@@ -3,6 +3,14 @@
 Rank the subjects the podcasts talk about that PickiPedia has no page for.
 
     python3 podcast-most-wanted.py > mostwanted.wiki
+    python3 podcast-most-wanted.py --top 8 > top.wiki
+
+The first writes [[PickiPedia:Most wanted]], the whole reading list. The second
+writes [[Template:Most wanted/top]], the short list the front page transcludes.
+They come from the same query on purpose: a front page that names the eight
+most-wanted people by hand is a front page that is wrong a month later, which
+is exactly what happened to the first draft — it still led with Tony Trischka
+after somebody wrote his page.
 
 Reads the wiki rather than the feeds. Every episode page carries Has topic and
 Has podcast, and Semantic MediaWiki reports whether a page-valued property
@@ -141,12 +149,47 @@ def render(subjects):
     return "\n".join(out)
 
 
+def render_top(subjects, count):
+    """
+    The short list, for the front page.
+
+    No prose and no counts of its own beyond the episode tallies: this gets
+    transcluded into a column beside the firehose, and whatever frames it
+    lives on the front page where it can be edited without a script.
+
+    The staleness line is the same trick the news box uses — a timeago span
+    pointed at this template's own last edit. The list cannot say when it was
+    regenerated, but the wiki knows, so it asks the wiki.
+    """
+    missing = {n: e for n, e in subjects.items() if not e["exists"]}
+    ranked = sorted(missing,
+                    key=lambda n: (-len(missing[n]["episodes"]), n.lower()))
+
+    out = []
+    for i, name in enumerate(ranked[:count]):
+        episodes = len(missing[name]["episodes"])
+        # Only the first row says what the number means.
+        unit = " episodes" if i == 0 else ""
+        out.append(f"* [[{name}]] &mdash; {episodes}{unit}")
+
+    out.append("")
+    out.append('<small>Regenerated <span class="timeago" '
+               'data-lastmod-page="Template:Most wanted/top"></span> by '
+               "<code>tools/podcast-most-wanted.py --top</code>.</small>")
+    return "\n".join(out)
+
+
 def main():
+    count = None
+    if "--top" in sys.argv:
+        at = sys.argv.index("--top")
+        count = int(sys.argv[at + 1]) if len(sys.argv) > at + 1 else 8
+
     subjects = collect()
     missing = sum(1 for e in subjects.values() if not e["exists"])
     print(f"{len(subjects)} distinct subjects, {missing} without a page",
           file=sys.stderr)
-    print(render(subjects))
+    print(render(subjects) if count is None else render_top(subjects, count))
     return 0
 
 
