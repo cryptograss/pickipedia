@@ -63,10 +63,55 @@ cat >> LocalSettings.php <<'EOF'
 wfLoadExtension( 'Scribunto' );
 $wgScribuntoDefaultEngine = 'luastandalone';
 wfLoadExtension( 'PickiPediaContent' );
+# The Agent namespace, as the repository's LocalSettings.php sets it up.
+define( "NS_AGENT", 3010 );
+define( "NS_AGENT_TALK", 3011 );
+$wgExtraNamespaces[NS_AGENT] = "Agent";
+$wgExtraNamespaces[NS_AGENT_TALK] = "Agent_talk";
+$wgNamespaceProtection[NS_AGENT] = ['agent-edit'];
+$wgGroupPermissions['agent']['agent-edit'] = true;
+$wgGroupPermissions['sysop']['agent-edit'] = true;
+$wgGroupPermissions['sysop']['agent-edit-any'] = true;
 EOF
 
 printf "%s\n" "return require( 'pickipedia.instruments' )" > /tmp/shim.lua
 php maintenance/edit.php -u Admin -s "shim" "Module:Instruments" < /tmp/shim.lua >/dev/null
+
+# Who may change which Agent: page, asked of MediaWiki's own permission manager.
+cat > maintenance/checkAgentPages.php <<'EOF'
+<?php
+require_once __DIR__ . '/Maintenance.php';
+use MediaWiki\MediaWikiServices;
+use MediaWiki\Permissions\PermissionManager;
+use MediaWiki\Title\Title;
+class CheckAgentPages extends Maintenance {
+	public function execute() {
+		$services = MediaWikiServices::getInstance();
+		$users = $services->getUserFactory();
+		$groups = $services->getUserGroupManager();
+		$permissions = $services->getPermissionManager();
+		foreach ( [ 'Magent', 'Re', 'Someone' ] as $name ) {
+			\User::createNew( $name );
+		}
+		$groups->addUserToGroup( $users->newFromName( 'Magent' ), 'agent' );
+		$groups->addUserToGroup( $users->newFromName( 'Re' ), 'agent' );
+		foreach ( [
+			[ 'Magent', 'edit', NS_AGENT, 'Magent/Notes' ], [ 'Magent', 'create', NS_AGENT, 'Magent' ],
+			[ 'Re', 'edit', NS_AGENT, 'Magent/Notes' ], [ 'Re', 'edit', NS_AGENT, 'Re/Hunter' ],
+			[ 'Magent', 'move-target', NS_AGENT, 'Re/Taken' ], [ 'Someone', 'edit', NS_AGENT, 'Someone/x' ],
+			[ 'Admin', 'edit', NS_AGENT, 'Re/Hunter' ], [ 'Someone', 'read', NS_AGENT, 'Magent/Notes' ],
+			[ 'Re', 'edit', NS_AGENT_TALK, 'Magent/Notes' ], [ 'Someone', 'edit', NS_AGENT_TALK, 'Magent' ],
+		] as [ $who, $action, $ns, $page ] ) {
+			$user = $users->newFromName( $who );
+			$can = $permissions->userCan( $action, $user, Title::makeTitle( $ns, $page ), PermissionManager::RIGOR_SECURE );
+			echo "AGENT $who $action " . ( $ns === NS_AGENT ? 'Agent' : 'Agent_talk' ) . ":$page=" . ( $can ? 'yes' : 'no' ) . "\n";
+		}
+	}
+}
+$maintClass = CheckAgentPages::class;
+require_once RUN_MAINTENANCE_IF_MAIN;
+EOF
+php maintenance/checkAgentPages.php 2>&1 | grep '^AGENT\|rror' || true
 
 printf '%s' 'FAMILY:{{#invoke:Instruments|family|5-string banjo}} EMPTY:[{{#invoke:Instruments|family|cello}}] BADGE:{{#invoke:Instruments|badge|1=5-string banjo|size=18|tuck=1}}' \
     | php maintenance/parse.php --title "Test" 2>/dev/null
@@ -107,6 +152,19 @@ echo "Class names survive the parser:"
 # test rather than an eye.
 expect "the box class arrives intact" 'class="pp-instrument-box"'
 refute "nothing is mangled into an entity" '&#95;'
+
+echo
+echo "Agent: pages, each its own agent's (AgentPages.php):"
+expect "an agent edits its own notes" "AGENT Magent edit Agent:Magent/Notes=yes"
+expect "and creates its root page" "AGENT Magent create Agent:Magent=yes"
+expect "another agent can't edit them" "AGENT Re edit Agent:Magent/Notes=no"
+expect "but edits its own" "AGENT Re edit Agent:Re/Hunter=yes"
+expect "nor move a page into another's" "AGENT Magent move-target Agent:Re/Taken=no"
+expect "someone not an agent can't, even under their own name" "AGENT Someone edit Agent:Someone/x=no"
+expect "a sysop can change any" "AGENT Admin edit Agent:Re/Hunter=yes"
+expect "anyone reads them" "AGENT Someone read Agent:Magent/Notes=yes"
+expect "another agent leaves a note on the talk page" "AGENT Re edit Agent_talk:Magent/Notes=yes"
+expect "and so can anyone" "AGENT Someone edit Agent_talk:Magent=yes"
 
 echo
 if [ "$failures" -ne 0 ]; then

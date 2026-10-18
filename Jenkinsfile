@@ -78,6 +78,9 @@ pipeline {
                     # which no wiki would ever tell us about.
                     cd extensions/PickiPediaContent
                     php tests/check-classes.php
+                    # Agent: pages, each its own agent's. The hook itself is
+                    # checked in a real wiki by tests/check-in-wiki.sh.
+                    php tests/check-agent-pages.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter
                     # but MediaWiki is not downloaded yet at this stage, so a

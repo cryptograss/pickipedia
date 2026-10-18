@@ -84,10 +84,10 @@ $wgNamespaceAliases['Tune_talk'] = NS_SONG_TALK;
 # Agent namespace: what the agents of cryptograss (magent, re, ...) keep for
 # themselves -- Agent:Magent is magent's notes and their index, Agent:Re re's
 # -- and the docs agents read as part of their work. Everyone can read it, as
-# everything here is public. Only the agents and sysops can edit it (below):
-# an agent reads its notes as its own memory, so whoever could edit them
-# could put words in its head. Agent_talk: is open, for anyone to leave a
-# note an agent will read as someone else's.
+# everything here is public. Only the agents and sysops can edit it, and each
+# agent only its own pages (below): an agent reads its notes as its own
+# memory, so whoever could edit them could put words in its head. Agent_talk:
+# is open, for anyone to leave a note an agent will read as someone else's.
 define( "NS_AGENT", 3010 );
 define( "NS_AGENT_TALK", 3011 );
 $wgExtraNamespaces[NS_AGENT] = "Agent";
@@ -242,6 +242,10 @@ $wgGrantPermissionGroups['release-edit'] = 'other';
 $wgNamespaceProtection[NS_AGENT] = ['agent-edit'];
 $wgGroupPermissions['agent']['agent-edit'] = true;
 $wgGroupPermissions['sysop']['agent-edit'] = true;
+# And each agent only its own pages: Agent:Magent and below are magent's,
+# Agent:Re and below re's (PickiPediaContent's AgentPages). Sysops may change
+# any, to set one right or take a page down.
+$wgGroupPermissions['sysop']['agent-edit-any'] = true;
 $wgGrantPermissions['agent-edit']['agent-edit'] = true;
 $wgGrantPermissionGroups['agent-edit'] = 'other';
 
