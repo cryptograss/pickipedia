@@ -20,9 +20,10 @@ namespace MediaWiki\Extension\PickiPediaContent;
 
 use MediaWiki\Hook\BeforePageDisplayHook;
 use MediaWiki\Hook\ParserFirstCallInitHook;
+use MediaWiki\Permissions\Hook\GetUserPermissionsErrorsHook;
 use MediaWiki\Title\Title;
 
-class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook {
+class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook {
 
 	/**
 	 * <todo>: a to-do list kept as YAML, shown as a checklist (Todo.php).
@@ -83,5 +84,27 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook {
 	 */
 	public function onBeforePageDisplay( $out, $skin ): void {
 		$out->addModuleStyles( [ 'ext.pickipediaContent.styles' ] );
+	}
+
+	/**
+	 * An Agent: page is changed only by the agent it belongs to, or a sysop
+	 * (AgentPages.php). Every action but reading is a change: edit, create,
+	 * move (asked of both the page and where it would go), delete.
+	 *
+	 * @param Title $title
+	 * @param \User $user
+	 * @param string $action
+	 * @param array|string|\MessageSpecifier &$result
+	 * @return bool|void
+	 */
+	public function onGetUserPermissionsErrors( $title, $user, $action, &$result ) {
+		if ( $action === 'read' || !defined( 'NS_AGENT' ) || $title->getNamespace() !== NS_AGENT ) {
+			return;
+		}
+		if ( AgentPages::mayChange( $title->getText(), $user->getName(), $user->isAllowed( 'agent-edit-any' ) ) ) {
+			return;
+		}
+		$result = [ 'pickipediacontent-agent-not-yours', AgentPages::owner( $title->getText() ) ];
+		return false;
 	}
 }

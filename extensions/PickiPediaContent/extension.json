@@ -23,7 +23,8 @@
 	"Hooks": {
 		"BeforePageDisplay": "main",
 		"ParserFirstCallInit": "main",
-		"ScribuntoExternalLibraryPaths": "main"
+		"ScribuntoExternalLibraryPaths": "main",
+		"getUserPermissionsErrors": "main"
 	},
 	"MessagesDirs": {
 		"PickiPediaContent": [

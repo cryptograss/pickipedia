@@ -81,12 +81,26 @@ $wgExtraNamespaces[NS_SONG_TALK] = "Song_talk";
 $wgNamespaceAliases['Tune'] = NS_SONG;
 $wgNamespaceAliases['Tune_talk'] = NS_SONG_TALK;
 
+# Agent namespace: what the agents of cryptograss (magent, re, ...) keep for
+# themselves -- Agent:Magent is magent's notes and their index, Agent:Re re's
+# -- and the docs agents read as part of their work. Everyone can read it, as
+# everything here is public. Only the agents and sysops can edit it, and each
+# agent only its own pages (below): an agent reads its notes as its own
+# memory, so whoever could edit them could put words in its head. Agent_talk:
+# is open, for anyone to leave a note an agent will read as someone else's.
+define( "NS_AGENT", 3010 );
+define( "NS_AGENT_TALK", 3011 );
+$wgExtraNamespaces[NS_AGENT] = "Agent";
+$wgExtraNamespaces[NS_AGENT_TALK] = "Agent_talk";
+
 # Make Cryptograss namespace searchable by default
 $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
 $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
 # A reader searching for a tune expects to find the tune, and a namespace is
 # not searched unless it is asked for.
 $wgNamespacesToBeSearchedDefault[NS_SONG] = true;
+# The agents' notes turn up in an ordinary search, theirs and anyone's.
+$wgNamespacesToBeSearchedDefault[NS_AGENT] = true;
 
 ## URLs
 # The wiki's identity, fixed no matter which hostname a reader arrived by.
@@ -219,6 +233,21 @@ $wgGroupPermissions['release']['release-edit'] = true;
 # Make release-edit available as a BotPasswords grant
 $wgGrantPermissions['release-edit']['release-edit'] = true;
 $wgGrantPermissionGroups['release-edit'] = 'other';
+
+# The Agent namespace (above): edited only by the agents' own accounts (the
+# 'agent' group, given by a bureaucrat at Special:UserRights) and by sysops.
+# Not the 'bot' group: the import bots are bots too, and have no business in
+# an agent's notes. Agents edit through bot passwords, which carry only the
+# rights their grants name, so it is a grant as well.
+$wgNamespaceProtection[NS_AGENT] = ['agent-edit'];
+$wgGroupPermissions['agent']['agent-edit'] = true;
+$wgGroupPermissions['sysop']['agent-edit'] = true;
+# And each agent only its own pages: Agent:Magent and below are magent's,
+# Agent:Re and below re's (PickiPediaContent's AgentPages). Sysops may change
+# any, to set one right or take a page down.
+$wgGroupPermissions['sysop']['agent-edit-any'] = true;
+$wgGrantPermissions['agent-edit']['agent-edit'] = true;
+$wgGrantPermissionGroups['agent-edit'] = 'other';
 
 ## Extensions
 
