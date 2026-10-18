@@ -80,5 +80,15 @@ check( 'backticks become code', str_contains( $coded, '<code>openssl rand -hex 3
 check( 'code is still escaped', str_contains( $coded, '<code>&lt;b&gt;</code>' ), $coded );
 check( 'each item has its anchor', str_contains( $coded, 'id="todo-make-a-secret-openssl-rand-hex-32"' ), $coded );
 
+// Which pages Recent Changes hides as Mood to-do lists (Hooks::onChangesListSpecialPageStructuredFilters).
+check( 'a Mood to-do list is one', Todo::isMoodList( 3000, 'Moods/magenta-interface/todo' ) );
+check( 'not in another namespace', !Todo::isMoodList( 0, 'Moods/magenta-interface/todo' )
+	&& !Todo::isMoodList( 3001, 'Moods/magenta-interface/todo' ) );
+check( "not a Mood's other pages, nor Moods itself", !Todo::isMoodList( 3000, 'Moods/magenta-interface' )
+	&& !Todo::isMoodList( 3000, 'Moods/Dials' ) && !Todo::isMoodList( 3000, 'Moods' )
+	&& !Todo::isMoodList( 3000, 'Moods/todo' ) );
+check( 'not a page that only ends in todo', !Todo::isMoodList( 3000, 'Moods/x/todos' )
+	&& !Todo::isMoodList( 3000, 'Agents/Magent/todo' ) );
+
 echo $failures === 0 ? "\nAll checks passed.\n" : "\n$failures FAILED\n";
 exit( $failures === 0 ? 0 : 1 );
