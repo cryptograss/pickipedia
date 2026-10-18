@@ -194,3 +194,109 @@
 .pp-nowrap {
 	white-space: nowrap;
 }
+
+/*
+ * The "Listen in Rabbithole" button, and the rabbit chasing the carrot.
+ *
+ * Emitted by Template:Listen in Rabbithole, which sits on every song page
+ * that has a recording. The template also carries inline styles for the
+ * button itself, so it still reads as a button on a wiki that has not
+ * deployed this file; what lives here is the part inline styles cannot do --
+ * hover, and the chase.
+ *
+ * The rabbit never catches the carrot. That is the point of a rabbithole.
+ */
+.pp-listen-rh {
+	display: inline-flex;
+	align-items: center;
+	gap: .5em;
+	padding: .35em .8em;
+	border: 1px solid #3c6749;
+	border-radius: 999px;
+	background: #4a7c59;
+	line-height: 1.4;
+	white-space: nowrap;
+	transition: background .15s ease, transform .15s ease;
+}
+
+.pp-listen-rh:hover {
+	background: #3c6749;
+	transform: translateY( -1px );
+}
+
+/* The link inside carries the text; the button carries the colour. */
+.pp-listen-rh a,
+.pp-listen-rh a:visited {
+	color: #fff;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.pp-listen-rh a:hover {
+	text-decoration: none;
+}
+
+/* The chase sits to the right of the text, in its own track. */
+.pp-listen-chase {
+	position: relative;
+	display: inline-block;
+	width: 3.1em;
+	height: 1.2em;
+	vertical-align: middle;
+}
+
+.pp-listen-chase .pp-rabbit,
+.pp-listen-chase .pp-carrot {
+	position: absolute;
+	top: 0;
+	font-size: 1em;
+	line-height: 1.2;
+}
+
+.pp-listen-chase .pp-rabbit {
+	left: 0;
+	animation: pp-rabbit-hop 1.6s ease-in-out infinite;
+}
+
+.pp-listen-chase .pp-carrot {
+	right: 0;
+	animation: pp-carrot-bob 1.6s ease-in-out infinite;
+}
+
+/* Hovering closes the gap -- but not all of it. */
+.pp-listen-rh:hover .pp-rabbit {
+	animation: pp-rabbit-chase .9s ease-in-out infinite;
+}
+
+@keyframes pp-rabbit-hop {
+	0%, 100% { transform: translate( 0, 0 ); }
+	50% { transform: translate( .12em, -.14em ); }
+}
+
+@keyframes pp-carrot-bob {
+	0%, 100% { transform: translate( 0, 0 ); }
+	50% { transform: translate( .1em, 0 ); }
+}
+
+@keyframes pp-rabbit-chase {
+	0% { transform: translate( 0, 0 ); }
+	50% { transform: translate( 1.3em, -.2em ); }
+	100% { transform: translate( 0, 0 ); }
+}
+
+/*
+ * Motion is decoration here: the button says what it does in words, so a
+ * reader who has asked for less of it loses nothing.
+ */
+@media ( prefers-reduced-motion: reduce ) {
+	.pp-listen-rh,
+	.pp-listen-rh .pp-rabbit,
+	.pp-listen-rh .pp-carrot {
+		animation: none;
+		transition: none;
+	}
+
+	.pp-listen-rh:hover {
+		transform: none;
+	}
+}
