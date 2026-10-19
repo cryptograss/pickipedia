@@ -168,6 +168,11 @@ Messages in #magenta-interface that link pages here, October 2026.
   who: justin
   when: '2026-10-19T15:44:12Z'
   words: Is Bill Monroe on the page yet?
+- page: Peter Rowan
+  message: 5c5c5c5c-1111-4222-8333-444455556666
+  who: magent
+  when: '2026-10-19T16:30:00Z'
+  words: Peter Rowan has no page yet.
 </moodlinks>
 EOF
 cat > /tmp/ledger-september.txt <<'EOF'
@@ -189,7 +194,8 @@ sleep 2
 cat > /tmp/foot.php <<'EOF'
 <?php
 $html = (string)@file_get_contents( 'http://127.0.0.1:8080/index.php?title=' . rawurlencode( $argv[1] )
-	. ( isset( $argv[2] ) ? '&action=' . $argv[2] : '' ) );
+	. ( isset( $argv[2] ) ? '&action=' . $argv[2] : '' ), false,
+	stream_context_create( [ 'http' => [ 'ignore_errors' => true ] ] ) );  // a page not yet written answers 404
 $foot = preg_match( '#<div class="pp-moodlinks pp-moodlinks-foot">(.*?)</div>#s', $html, $m ) ? $m[1] : '';
 preg_match_all( '#<li><a [^>]*href="([^"]+)"[^>]*>([^<]*)</a>#', $foot, $rows, PREG_SET_ORDER );
 echo 'FOOT ' . $argv[1] . ( isset( $argv[2] ) ? " ($argv[2])" : '' ) . ' rows=' . count( $rows ) . ' '
@@ -200,6 +206,9 @@ for page in 'Bill_Monroe' 'Tony_Rice' 'Cryptograss:Banjo_setups' 'Cryptograss:Mo
     php /tmp/foot.php "$page"
 done
 php /tmp/foot.php 'Bill_Monroe' history
+php /tmp/foot.php 'Bill_Monroe' edit
+php /tmp/foot.php 'Peter_Rowan'
+php /tmp/foot.php 'Peter_Rowan' edit
 php -r '$h = file_get_contents("http://127.0.0.1:8080/index.php?title=Cryptograss:Moods/magenta-interface/links/2026-10");
     echo "LEDGER " . ( str_contains( $h, "href=\"/index.php/Bill_Monroe\"" ) || str_contains( $h, "title=Bill_Monroe" ) ? "links-pages" : "no-page-links" ) . "\n";'
 
@@ -269,7 +278,10 @@ expect "a page shows its links from every Mood's ledger, newest first" \
 expect "another page only its own" "FOOT Tony_Rice rows=1 justin in #magenta-interface"
 expect "a page no message links shows nothing" "FOOT Cryptograss:Banjo_setups rows=0"
 expect "nor does the ledger itself" "FOOT Cryptograss:Moods/magenta-interface/links/2026-10 rows=0"
-expect "nor a page's history" "FOOT Bill_Monroe (history) rows=0"
+expect "and on its history" "FOOT Bill_Monroe (history) rows=2"
+expect "and its edit form" "FOOT Bill_Monroe (edit) rows=2"
+expect "a page with none yet shows what was said of it" "FOOT Peter_Rowan rows=1 magent in #magenta-interface"
+expect "and so does the form that starts it" "FOOT Peter_Rowan (edit) rows=1 magent in #magenta-interface"
 refute "a message's words never become markup" " MARKUP"
 refute "every page answered" " NOPAGE"
 expect "the ledger links the pages it names" "LEDGER links-pages"

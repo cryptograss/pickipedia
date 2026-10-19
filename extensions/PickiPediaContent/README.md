@@ -130,8 +130,9 @@ Between `<moodlinks>` tags it is YAML, a row for each page a message links:
 `page`, `message` (its id), `who`, `when`, `block` and `words` (its first
 words). The ledger page shows the rows, and records a link to each page named,
 so the wiki's own link table knows which ledgers name which page. Every page
-viewed asks that table for the ledgers naming it, and lists their rows for it
-at its foot, under "Linked from magenta", newest first, each going to its
+-- read, edited or its history, and one not written yet, a red link's edit form
+-- asks that table for the ledgers naming it, and lists their rows for it at
+its foot, under "Linked from magenta", newest first, each going to its
 message in magenta. `src/MoodLinks.php`;
 `php tests/check-moodlinks.php path/to/vendor/autoload.php` runs its checks,
 and `tests/check-in-wiki.sh` checks the foot of real pages.

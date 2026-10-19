@@ -73,13 +73,17 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	 * "Linked from magenta", at the foot of a page some Mood message links (MoodLinks.php):
 	 * the ledgers naming it are found in the link table, and their rows for it shown.
 	 *
+	 * On every view of the page -- reading, editing, its history -- and on a page that
+	 * doesn't exist yet: a red link from a Mood leads to the page's edit form, where
+	 * what was said about it is what whoever starts it wants (Justin, 19 Oct 2026).
+	 * Not on the ledgers themselves, nor special pages.
+	 *
 	 * @param string &$data
 	 * @param \Skin $skin
 	 */
 	public function onSkinAfterContent( &$data, $skin ) {
 		$title = $skin->getTitle();
-		if ( !$title || !$title->exists() || $title->getNamespace() < 0
-			|| !$skin->getOutput()->isArticle() || $skin->getRequest()->getVal( 'action', 'view' ) !== 'view'
+		if ( !$title || $title->getNamespace() < 0
 			|| MoodLinks::moodOf( $title->getNamespace(), $title->getDBkey() ) !== null
 		) {
 			return;
