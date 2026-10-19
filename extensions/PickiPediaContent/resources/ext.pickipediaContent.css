@@ -267,3 +267,30 @@
 	white-space: pre-wrap;
 }
 
+
+/*
+ * <moodlinks> and "Linked from magenta" (src/MoodLinks.php): the magenta
+ * messages that link a page. A message's first words are quieter than who
+ * said it and when.
+ */
+.pp-moodlinks ul {
+	margin-left: 1.2em;
+}
+
+.pp-moodlinks li {
+	overflow-wrap: anywhere;
+}
+
+.pp-moodlinks-words,
+.pp-moodlinks-more {
+	color: #6b6560;
+}
+
+.pp-moodlinks-foot {
+	margin-top: 2em;
+	font-size: .92em;
+}
+
+.pp-moodlinks-foot h2 {
+	font-size: 1.2em;
+}

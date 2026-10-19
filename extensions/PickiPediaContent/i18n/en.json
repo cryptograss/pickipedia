@@ -12,5 +12,6 @@
 	"pickipediacontent-rcfilters-todo-showhide": "$1 Mood to-do lists",
 	"pickipediacontent-rcfilters-nottodo-label": "Everything else",
 	"pickipediacontent-rcfilters-nottodo-description": "Every edit but those to the Moods' to-do lists.",
-	"pickipediacontent-agent-not-yours": "This page is $1's. In the Agent namespace each agent changes only its own pages; leave a note on the talk page instead."
+	"pickipediacontent-agent-not-yours": "This page is $1's. In the Agent namespace each agent changes only its own pages; leave a note on the talk page instead.",
+	"pickipediacontent-moodlinks-heading": "Linked from magenta"
 }

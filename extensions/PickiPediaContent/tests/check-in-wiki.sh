@@ -153,6 +153,65 @@ require_once RUN_MAINTENANCE_IF_MAIN;
 EOF
 php maintenance/checkRcTodos.php 2>&1 | grep '^RC \|rror' || true
 
+# magenta's ledgers of the Moods' links, the pages they name, and each page as a reader gets it.
+cat > /tmp/ledger-october.txt <<'EOF'
+Messages in #magenta-interface that link pages here, October 2026.
+
+<moodlinks>
+- page: Bill Monroe
+  message: 0f132ada-1111-4222-8333-444455556666
+  who: justin
+  when: '2026-10-19T15:44:12Z'
+  words: Is Bill Monroe on the page yet?
+- page: Tony Rice
+  message: 0f132ada-1111-4222-8333-444455556666
+  who: justin
+  when: '2026-10-19T15:44:12Z'
+  words: Is Bill Monroe on the page yet?
+- page: Peter Rowan
+  message: 5c5c5c5c-1111-4222-8333-444455556666
+  who: magent
+  when: '2026-10-19T16:30:00Z'
+  words: Peter Rowan has no page yet.
+</moodlinks>
+EOF
+cat > /tmp/ledger-september.txt <<'EOF'
+<moodlinks>
+- page: bill_Monroe
+  message: 7a7a7a7a-1111-4222-8333-444455556666
+  who: skyler
+  when: '2026-09-02T10:00:00Z'
+  words: "Monroe <script>alert(1)</script>"
+</moodlinks>
+EOF
+php maintenance/edit.php -u Admin -s "links" "Cryptograss:Moods/magenta-interface/links/2026-10" < /tmp/ledger-october.txt >/dev/null
+php maintenance/edit.php -u Admin -s "links" "Cryptograss:Moods/general/links/2026-09" < /tmp/ledger-september.txt >/dev/null
+echo 'The father of bluegrass.' | php maintenance/edit.php -u Admin -s "words" "Bill Monroe" >/dev/null
+echo 'A guitarist.' | php maintenance/edit.php -u Admin -s "words" "Tony Rice" >/dev/null
+php maintenance/runJobs.php >/dev/null 2>&1 || true
+php -S 127.0.0.1:8080 -t /var/www/html >/tmp/php-server.log 2>&1 &
+sleep 2
+cat > /tmp/foot.php <<'EOF'
+<?php
+$html = (string)@file_get_contents( 'http://127.0.0.1:8080/index.php?title=' . rawurlencode( $argv[1] )
+	. ( isset( $argv[2] ) ? '&action=' . $argv[2] : '' ), false,
+	stream_context_create( [ 'http' => [ 'ignore_errors' => true ] ] ) );  // a page not yet written answers 404
+$foot = preg_match( '#<div class="pp-moodlinks pp-moodlinks-foot">(.*?)</div>#s', $html, $m ) ? $m[1] : '';
+preg_match_all( '#<li><a [^>]*href="([^"]+)"[^>]*>([^<]*)</a>#', $foot, $rows, PREG_SET_ORDER );
+echo 'FOOT ' . $argv[1] . ( isset( $argv[2] ) ? " ($argv[2])" : '' ) . ' rows=' . count( $rows ) . ' '
+	. implode( ' | ', array_map( static fn ( $r ) => html_entity_decode( $r[2] ) . ' -> ' . $r[1], $rows ) )
+	. ( str_contains( $foot, '<script>' ) ? ' MARKUP' : '' ) . ( $html === '' ? ' NOPAGE' : '' ) . "\n";
+EOF
+for page in 'Bill_Monroe' 'Tony_Rice' 'Cryptograss:Banjo_setups' 'Cryptograss:Moods/magenta-interface/links/2026-10'; do
+    php /tmp/foot.php "$page"
+done
+php /tmp/foot.php 'Bill_Monroe' history
+php /tmp/foot.php 'Bill_Monroe' edit
+php /tmp/foot.php 'Peter_Rowan'
+php /tmp/foot.php 'Peter_Rowan' edit
+php -r '$h = file_get_contents("http://127.0.0.1:8080/index.php?title=Cryptograss:Moods/magenta-interface/links/2026-10");
+    echo "LEDGER " . ( str_contains( $h, "href=\"/index.php/Bill_Monroe\"" ) || str_contains( $h, "title=Bill_Monroe" ) ? "links-pages" : "no-page-links" ) . "\n";'
+
 printf '%s' 'FAMILY:{{#invoke:Instruments|family|5-string banjo}} EMPTY:[{{#invoke:Instruments|family|cello}}] BADGE:{{#invoke:Instruments|badge|1=5-string banjo|size=18|tuck=1}}' \
     | php maintenance/parse.php --title "Test" 2>/dev/null
 INSIDE
@@ -211,6 +270,21 @@ echo "Recent Changes leaves out the Moods' to-do lists unless asked:"
 expect "by default, an ordinary page's edit shows and a to-do list's doesn't" "RC default todo=hidden other=shown"
 expect "asked for, both show" "RC asked todo=shown other=shown"
 expect "and they can be shown alone" "RC only todo=shown other=hidden"
+
+echo
+echo "Pages list the magenta messages that link them (MoodLinks.php):"
+expect "a page shows its links from every Mood's ledger, newest first" \
+    "FOOT Bill_Monroe rows=2 justin in #magenta-interface, 19 Oct 2026, 15:44 UTC -> https://magenta.cryptograss.live/moods/magenta-interface/#m-0f132ada-1111-4222-8333-444455556666 | skyler in #general, 2 Sep 2026, 10:00 UTC -> https://magenta.cryptograss.live/moods/general/#m-7a7a7a7a-1111-4222-8333-444455556666"
+expect "another page only its own" "FOOT Tony_Rice rows=1 justin in #magenta-interface"
+expect "a page no message links shows nothing" "FOOT Cryptograss:Banjo_setups rows=0"
+expect "nor does the ledger itself" "FOOT Cryptograss:Moods/magenta-interface/links/2026-10 rows=0"
+expect "and on its history" "FOOT Bill_Monroe (history) rows=2"
+expect "and its edit form" "FOOT Bill_Monroe (edit) rows=2"
+expect "a page with none yet shows what was said of it" "FOOT Peter_Rowan rows=1 magent in #magenta-interface"
+expect "and so does the form that starts it" "FOOT Peter_Rowan (edit) rows=1 magent in #magenta-interface"
+refute "a message's words never become markup" " MARKUP"
+refute "every page answered" " NOPAGE"
+expect "the ledger links the pages it names" "LEDGER links-pages"
 
 echo
 if [ "$failures" -ne 0 ]; then
