@@ -300,3 +300,69 @@
 		transform: none;
 	}
 }
+
+/*
+ * The stack of three -- listen, queue, trail -- and where it sits.
+ *
+ * On a wide screen the template pulls it up with a negative top margin so it
+ * lands under the personal-tools bar, beside the page title. That pull is a
+ * measured number, not a rule: it assumes a one-line title and a column wide
+ * enough for the title and the stack to share. On a phone neither holds. At
+ * 390px the title fills the column and the stack lands on top of it, hiding
+ * the listen button behind the heading -- seen on an iPhone-width viewport,
+ * 19 October 2026.
+ *
+ * So below the breakpoint the pull is cancelled and the stack drops into
+ * normal flow under the title, where it has room. The !important is needed
+ * because the template writes the margin inline; when the inline styles come
+ * out of the template, these can lose it.
+ */
+.pp-listen-stack {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: .25em;
+}
+
+@media ( max-width: 720px ) {
+	.pp-listen-stack {
+		float: none !important;
+		clear: both !important;
+		margin: .4em 0 .8em !important;
+		align-items: flex-start !important;
+	}
+}
+
+/* Queue and trail are the quiet two: same shape, no colour, no chase. */
+.pp-queue-rh,
+.pp-trail-rh {
+	display: inline-flex;
+	align-items: center;
+	border: 1px solid #9aa895;
+	border-radius: 999px;
+	background: #f1f4ef;
+	line-height: 1.3;
+	white-space: nowrap;
+	transition: background .15s ease;
+}
+
+.pp-queue-rh:hover,
+.pp-trail-rh:hover {
+	background: #e3e9df;
+}
+
+.pp-queue-rh a,
+.pp-queue-rh a:visited,
+.pp-trail-rh a,
+.pp-trail-rh a:visited {
+	color: #3d4a3e;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.pp-queue-rh,
+	.pp-trail-rh {
+		transition: none;
+	}
+}
