@@ -20,6 +20,9 @@ namespace MediaWiki\Extension\PickiPediaContent;
 
 use MediaWiki\Hook\BeforePageDisplayHook;
 use MediaWiki\Hook\ParserFirstCallInitHook;
+use MediaWiki\Hook\SkinAfterContentHook;
+use MediaWiki\MediaWikiServices;
+use MediaWiki\Revision\SlotRecord;
 use MediaWiki\Permissions\Hook\GetUserPermissionsErrorsHook;
 use MediaWiki\SpecialPage\Hook\ChangesListSpecialPageStructuredFiltersHook;
 use MediaWiki\Title\Title;
@@ -28,7 +31,7 @@ use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\LikeValue;
 
 class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook,
-	ChangesListSpecialPageStructuredFiltersHook {
+	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook {
 
 	/**
 	 * <todo>: a to-do list kept as YAML, shown as a checklist (Todo.php).
@@ -47,6 +50,75 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 				}
 			) );
 		} );
+		$parser->setHook( 'moodlinks', static function ( $input, array $args, $parser, $frame ) {
+			$page = $parser->getPage();
+			$title = $page ? Title::newFromPageReference( $page ) : null;
+			$mood = $title ? MoodLinks::moodOf( $title->getNamespace(), $title->getDBkey() ) : null;
+			$out = $parser->getOutput();
+			// A link to every page named, so the wiki's link table says which ledgers name a page.
+			foreach ( MoodLinks::rows( (string)$input ) ?? [] as $row ) {
+				$linked = Title::newFromText( $row['page'] );
+				if ( $linked ) {
+					$out->addLink( $linked );
+				}
+			}
+			return MoodLinks::render( (string)$input, $mood ?? '', static function ( string $name ) {
+				$t = Title::newFromText( $name );
+				return $t ? $t->getLocalURL() : null;
+			} );
+		} );
+	}
+
+	/**
+	 * "Linked from magenta", at the foot of a page some Mood message links (MoodLinks.php):
+	 * the ledgers naming it are found in the link table, and their rows for it shown.
+	 *
+	 * @param string &$data
+	 * @param \Skin $skin
+	 */
+	public function onSkinAfterContent( &$data, $skin ) {
+		$title = $skin->getTitle();
+		if ( !$title || !$title->exists() || $title->getNamespace() < 0
+			|| !$skin->getOutput()->isArticle() || $skin->getRequest()->getVal( 'action', 'view' ) !== 'view'
+			|| MoodLinks::moodOf( $title->getNamespace(), $title->getDBkey() ) !== null
+		) {
+			return;
+		}
+		$services = MediaWikiServices::getInstance();
+		$dbr = $services->getConnectionProvider()->getReplicaDatabase();
+		$links = $services->getLinksMigration();
+		$info = $links->getQueryInfo( 'pagelinks' );
+		$conds = $links->getLinksConditions( 'pagelinks', $title );
+		$ledgers = $dbr->newSelectQueryBuilder()
+			->select( [ 'page_id', 'page_title' ] )
+			->tables( $info['tables'] )
+			->joinConds( $info['joins'] )
+			->join( 'page', null, 'page_id = pl_from' )
+			->where( $conds )
+			->andWhere( [ 'pl_from_namespace' => Todo::NAMESPACE ] )
+			->andWhere( $dbr->expr( 'page_title', IExpression::LIKE,
+				new LikeValue( MoodLinks::PREFIX, $dbr->anyString(), MoodLinks::INFIX, $dbr->anyString() ) ) )
+			->orderBy( 'page_title', 'DESC' )
+			->limit( 48 )
+			->caller( __METHOD__ )
+			->fetchResultSet();
+		$rows = [];
+		$revisions = $services->getRevisionLookup();
+		foreach ( $ledgers as $ledger ) {
+			$mood = MoodLinks::moodOf( Todo::NAMESPACE, $ledger->page_title );
+			$revision = $mood !== null ? $revisions->getRevisionByPageId( (int)$ledger->page_id ) : null;
+			$content = $revision ? $revision->getContent( SlotRecord::MAIN ) : null;
+			if ( !$content instanceof \TextContent ) {
+				continue;
+			}
+			foreach ( MoodLinks::rows( MoodLinks::body( $content->getText() ) ) ?? [] as $row ) {
+				$named = Title::newFromText( $row['page'] );
+				if ( $named && $named->equals( $title ) ) {
+					$rows[] = $row + [ 'mood' => $mood ];
+				}
+			}
+		}
+		$data .= MoodLinks::footer( $rows, $skin->msg( 'pickipediacontent-moodlinks-heading' )->text() );
 	}
 
 	/**

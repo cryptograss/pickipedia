@@ -25,6 +25,7 @@
 		"ChangesListSpecialPageStructuredFilters": "main",
 		"ParserFirstCallInit": "main",
 		"ScribuntoExternalLibraryPaths": "main",
+		"SkinAfterContent": "main",
 		"getUserPermissionsErrors": "main"
 	},
 	"MessagesDirs": {
