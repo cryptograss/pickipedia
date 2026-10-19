@@ -94,7 +94,7 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		$info = $links->getQueryInfo( 'pagelinks' );
 		$conds = $links->getLinksConditions( 'pagelinks', $title );
 		$ledgers = $dbr->newSelectQueryBuilder()
-			->select( [ 'page_id', 'page_title', 'page_latest' ] )
+			->select( [ 'page_id', 'page_title' ] )
 			->tables( $info['tables'] )
 			->joinConds( $info['joins'] )
 			->join( 'page', null, 'page_id = pl_from' )
@@ -106,34 +106,22 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			->limit( 48 )
 			->caller( __METHOD__ )
 			->fetchResultSet();
-		if ( !$ledgers->numRows() ) {
-			return;
-		}
-		$ledgers = iterator_to_array( $ledgers );
-		// Reading every ledger naming a page, and its YAML, is the cost of a view (about 3 ms a
-		// ledger of 100 rows): kept until one of them changes, as its revision is in the key.
-		$cache = $services->getMainWANObjectCache();
-		$key = $cache->makeKey( 'pickipedia-moodlinks', md5( $title->getPrefixedDBkey() . '|'
-			. implode( ',', array_map( static fn ( $l ) => $l->page_latest, $ledgers ) ) ) );
-		$rows = $cache->getWithSetCallback( $key, $cache::TTL_WEEK, static function () use ( $services, $ledgers, $title ) {
-			$rows = [];
-			$revisions = $services->getRevisionLookup();
-			foreach ( $ledgers as $ledger ) {
-				$mood = MoodLinks::moodOf( Todo::NAMESPACE, $ledger->page_title );
-				$revision = $mood !== null ? $revisions->getRevisionById( (int)$ledger->page_latest ) : null;
-				$content = $revision ? $revision->getContent( SlotRecord::MAIN ) : null;
-				if ( !$content instanceof \TextContent ) {
-					continue;
-				}
-				foreach ( MoodLinks::rows( MoodLinks::body( $content->getText() ) ) ?? [] as $row ) {
-					$named = Title::newFromText( $row['page'] );
-					if ( $named && $named->equals( $title ) ) {
-						$rows[] = $row + [ 'mood' => $mood ];
-					}
+		$rows = [];
+		$revisions = $services->getRevisionLookup();
+		foreach ( $ledgers as $ledger ) {
+			$mood = MoodLinks::moodOf( Todo::NAMESPACE, $ledger->page_title );
+			$revision = $mood !== null ? $revisions->getRevisionByPageId( (int)$ledger->page_id ) : null;
+			$content = $revision ? $revision->getContent( SlotRecord::MAIN ) : null;
+			if ( !$content instanceof \TextContent ) {
+				continue;
+			}
+			foreach ( MoodLinks::rows( MoodLinks::body( $content->getText() ) ) ?? [] as $row ) {
+				$named = Title::newFromText( $row['page'] );
+				if ( $named && $named->equals( $title ) ) {
+					$rows[] = $row + [ 'mood' => $mood ];
 				}
 			}
-			return $rows;
-		} );
+		}
 		$data .= MoodLinks::footer( $rows, $skin->msg( 'pickipediacontent-moodlinks-heading' )->text() );
 	}
 
