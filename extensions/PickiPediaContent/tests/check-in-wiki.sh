@@ -72,6 +72,11 @@ $wgNamespaceProtection[NS_AGENT] = ['agent-edit'];
 $wgGroupPermissions['agent']['agent-edit'] = true;
 $wgGroupPermissions['sysop']['agent-edit'] = true;
 $wgGroupPermissions['sysop']['agent-edit-any'] = true;
+# The Cryptograss namespace, where the Moods' to-do lists live.
+define( "NS_CRYPTOGRASS", 3000 );
+define( "NS_CRYPTOGRASS_TALK", 3001 );
+$wgExtraNamespaces[NS_CRYPTOGRASS] = "Cryptograss";
+$wgExtraNamespaces[NS_CRYPTOGRASS_TALK] = "Cryptograss_talk";
 EOF
 
 printf "%s\n" "return require( 'pickipedia.instruments' )" > /tmp/shim.lua
@@ -112,6 +117,41 @@ $maintClass = CheckAgentPages::class;
 require_once RUN_MAINTENANCE_IF_MAIN;
 EOF
 php maintenance/checkAgentPages.php 2>&1 | grep '^AGENT\|rror' || true
+
+# Recent Changes with a Mood's to-do list and an ordinary page edited: what each view shows.
+echo 'a to-do list' | php maintenance/edit.php -u Admin -s "tick" "Cryptograss:Moods/magenta-interface/todo" >/dev/null
+echo 'a page' | php maintenance/edit.php -u Admin -s "words" "Cryptograss:Banjo setups" >/dev/null
+cat > maintenance/checkRcTodos.php <<'EOF'
+<?php
+require_once __DIR__ . '/Maintenance.php';
+use MediaWiki\Context\DerivativeContext;
+use MediaWiki\Context\RequestContext;
+use MediaWiki\MediaWikiServices;
+use MediaWiki\Output\OutputPage;
+use MediaWiki\Request\FauxRequest;
+use MediaWiki\SpecialPage\SpecialPage;
+class CheckRcTodos extends Maintenance {
+	public function execute() {
+		foreach ( [ 'default' => [], 'asked' => [ 'hidemoodtodos' => 0 ],
+			'only' => [ 'hidemoodtodos' => 0, 'hidenotmoodtodos' => 1 ] ] as $label => $params ) {
+			$ctx = new DerivativeContext( RequestContext::getMain() );
+			$ctx->setRequest( new FauxRequest( $params + [ 'days' => 30, 'limit' => 50 ] ) );
+			$ctx->setTitle( SpecialPage::getTitleFor( 'Recentchanges' ) );
+			$out = new OutputPage( $ctx );
+			$ctx->setOutput( $out );
+			$page = MediaWikiServices::getInstance()->getSpecialPageFactory()->getPage( 'Recentchanges' );
+			$page->setContext( $ctx );
+			$page->execute( null );
+			$html = $out->getHTML();
+			echo "RC $label todo=" . ( str_contains( $html, 'Moods/magenta-interface/todo' ) ? 'shown' : 'hidden' )
+				. " other=" . ( str_contains( $html, 'Banjo setups' ) ? 'shown' : 'hidden' ) . "\n";
+		}
+	}
+}
+$maintClass = CheckRcTodos::class;
+require_once RUN_MAINTENANCE_IF_MAIN;
+EOF
+php maintenance/checkRcTodos.php 2>&1 | grep '^RC \|rror' || true
 
 printf '%s' 'FAMILY:{{#invoke:Instruments|family|5-string banjo}} EMPTY:[{{#invoke:Instruments|family|cello}}] BADGE:{{#invoke:Instruments|badge|1=5-string banjo|size=18|tuck=1}}' \
     | php maintenance/parse.php --title "Test" 2>/dev/null
@@ -165,6 +205,12 @@ expect "a sysop can change any" "AGENT Admin edit Agent:Re/Hunter=yes"
 expect "anyone reads them" "AGENT Someone read Agent:Magent/Notes=yes"
 expect "another agent leaves a note on the talk page" "AGENT Re edit Agent_talk:Magent/Notes=yes"
 expect "and so can anyone" "AGENT Someone edit Agent_talk:Magent=yes"
+
+echo
+echo "Recent Changes leaves out the Moods' to-do lists unless asked:"
+expect "by default, an ordinary page's edit shows and a to-do list's doesn't" "RC default todo=hidden other=shown"
+expect "asked for, both show" "RC asked todo=shown other=shown"
+expect "and they can be shown alone" "RC only todo=shown other=hidden"
 
 echo
 if [ "$failures" -ne 0 ]; then

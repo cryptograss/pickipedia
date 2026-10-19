@@ -21,9 +21,14 @@ namespace MediaWiki\Extension\PickiPediaContent;
 use MediaWiki\Hook\BeforePageDisplayHook;
 use MediaWiki\Hook\ParserFirstCallInitHook;
 use MediaWiki\Permissions\Hook\GetUserPermissionsErrorsHook;
+use MediaWiki\SpecialPage\Hook\ChangesListSpecialPageStructuredFiltersHook;
 use MediaWiki\Title\Title;
+use Wikimedia\Rdbms\IExpression;
+use Wikimedia\Rdbms\IReadableDatabase;
+use Wikimedia\Rdbms\LikeValue;
 
-class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook {
+class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook,
+	ChangesListSpecialPageStructuredFiltersHook {
 
 	/**
 	 * <todo>: a to-do list kept as YAML, shown as a checklist (Todo.php).
@@ -106,5 +111,63 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		}
 		$result = [ 'pickipediacontent-agent-not-yours', AgentPages::owner( $title->getText() ) ];
 		return false;
+	}
+
+	/**
+	 * Mood to-do lists, hidden from Recent Changes (and the watchlist, and related
+	 * changes) unless asked for (Justin, 18 Oct 2026: of a day's 115 changes, 74 were to-do
+	 * edits, most of them not bot edits, so hiding bots didn't help). The lists stay on
+	 * the wiki, linked to and from; magenta shows each Mood its own.
+	 *
+	 * Shaped as core's Bot / Human filter is: two choices, "Mood to-do lists" and
+	 * "Everything else", the first hidden by default, so the filter bar shows
+	 * "Everything else" chosen, and taking it off shows all.
+	 *
+	 * @param \ChangesListSpecialPage $special
+	 */
+	public function onChangesListSpecialPageStructuredFilters( $special ) {
+		$notTodo = static function ( IReadableDatabase $dbr ): IExpression {
+			return $dbr->expr( 'rc_namespace', '!=', Todo::NAMESPACE )->or( 'rc_title', IExpression::NOT_LIKE,
+				new LikeValue( Todo::PREFIX, $dbr->anyString(), Todo::SUFFIX ) );
+		};
+		$special->registerFilterGroup( new \ChangesListBooleanFilterGroup( [
+			'name' => 'pickipediatodo',
+			'title' => 'pickipediacontent-rcfilters-todo-title',
+			'priority' => -10,
+			'filters' => [
+				[
+					'name' => 'hidemoodtodos',
+					'label' => 'pickipediacontent-rcfilters-todo-label',
+					'description' => 'pickipediacontent-rcfilters-todo-description',
+					'showHide' => 'pickipediacontent-rcfilters-todo-showhide',
+					'default' => true,
+					'queryCallable' => static function ( string $specialClassName, $ctx, IReadableDatabase $dbr,
+						&$tables, &$fields, &$conds, &$query_options, &$join_conds
+					) use ( $notTodo ) {
+						$conds[] = $notTodo( $dbr );
+					},
+					'isRowApplicableCallable' => static function ( $ctx, $rc ) {
+						return Todo::isMoodList( (int)$rc->getAttribute( 'rc_namespace' ),
+							(string)$rc->getAttribute( 'rc_title' ) );
+					},
+				],
+				[
+					'name' => 'hidenotmoodtodos',
+					'label' => 'pickipediacontent-rcfilters-nottodo-label',
+					'description' => 'pickipediacontent-rcfilters-nottodo-description',
+					'default' => false,
+					'queryCallable' => static function ( string $specialClassName, $ctx, IReadableDatabase $dbr,
+						&$tables, &$fields, &$conds, &$query_options, &$join_conds
+					) use ( $notTodo ) {
+						$conds[] = $dbr->expr( 'rc_namespace', '=', Todo::NAMESPACE )->and( 'rc_title', IExpression::LIKE,
+							new LikeValue( Todo::PREFIX, $dbr->anyString(), Todo::SUFFIX ) );
+					},
+					'isRowApplicableCallable' => static function ( $ctx, $rc ) {
+						return !Todo::isMoodList( (int)$rc->getAttribute( 'rc_namespace' ),
+							(string)$rc->getAttribute( 'rc_title' ) );
+					},
+				],
+			],
+		] ) );
 	}
 }

@@ -34,6 +34,26 @@ class Todo {
 
 	public const MAGENTA = 'https://magenta.cryptograss.live';
 
+	/** Where Mood to-do lists live: Cryptograss:Moods/<mood>/todo. */
+	public const NAMESPACE = 3000;  // NS_CRYPTOGRASS (LocalSettings.php)
+	public const PREFIX = 'Moods/';
+	public const SUFFIX = '/todo';
+
+	/**
+	 * Whether a page is a Mood's to-do list. Its edits come many an hour, from people,
+	 * agents and the bot that ticks merges, and they're magenta's working state rather
+	 * than the encyclopedia: Recent Changes hides them unless asked (Hooks).
+	 *
+	 * @param int $namespace
+	 * @param string $dbKey The title without its namespace, underscores for spaces
+	 * @return bool
+	 */
+	public static function isMoodList( int $namespace, string $dbKey ): bool {
+		return $namespace === self::NAMESPACE
+			&& str_starts_with( $dbKey, self::PREFIX ) && str_ends_with( $dbKey, self::SUFFIX )
+			&& strlen( $dbKey ) > strlen( self::PREFIX . self::SUFFIX );
+	}
+
 	/**
 	 * The list as HTML.
 	 *
