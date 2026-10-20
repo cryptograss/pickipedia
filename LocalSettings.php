@@ -249,6 +249,18 @@ $wgGroupPermissions['sysop']['agent-edit-any'] = true;
 $wgGrantPermissions['agent-edit']['agent-edit'] = true;
 $wgGrantPermissionGroups['agent-edit'] = 'other';
 
+# Our own rights ride on the ordinary editing grants too, so a bot password
+# never has to be changed when an account's role does: whatever edits a
+# bot password allows, the account's groups decide where (Justin, magent-self,
+# 2026-10-19: "presume that y'all have the powers we give you by dint of your
+# roles"). A grant only ever narrows what the groups give; an account outside
+# 'agent' or 'release' gains nothing here. The grants of their own above stay,
+# so bot passwords that ticked them keep working.
+foreach ( [ 'editpage', 'createeditmovepage' ] as $grant ) {
+	$wgGrantPermissions[$grant]['agent-edit'] = true;
+	$wgGrantPermissions[$grant]['release-edit'] = true;
+}
+
 ## Extensions
 
 # Semantic MediaWiki (installed via Composer)
