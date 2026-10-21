@@ -113,6 +113,8 @@ RUN chown -R www-data:www-data /var/www/html
 # PHP configuration for MediaWiki
 RUN echo "memory_limit = 256M" > /usr/local/etc/php/conf.d/mediawiki.ini \
     && echo "upload_max_filesize = 100M" >> /usr/local/etc/php/conf.d/mediawiki.ini \
-    && echo "post_max_size = 100M" >> /usr/local/etc/php/conf.d/mediawiki.ini
+    && echo "post_max_size = 100M" >> /usr/local/etc/php/conf.d/mediawiki.ini \
+    && echo "; Off: unused by MediaWiki; the path of PHP's Oct 2026 upload_progress use-after-free (CVE-2026-109618)" >> /usr/local/etc/php/conf.d/mediawiki.ini \
+    && echo "session.upload_progress.enabled = Off" >> /usr/local/etc/php/conf.d/mediawiki.ini
 
 EXPOSE 80
