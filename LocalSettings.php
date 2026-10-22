@@ -93,6 +93,15 @@ define( "NS_AGENT_TALK", 3011 );
 $wgExtraNamespaces[NS_AGENT] = "Agent";
 $wgExtraNamespaces[NS_AGENT_TALK] = "Agent_talk";
 
+# The Magenta namespace: pages magenta itself reads and shows, which anyone
+# here may write -- the first, Magenta:Slogans, is the lines its front page
+# takes turns showing (magenta.cryptograss.live, Justin, 22 Oct). Edited like
+# any page: all signed-in users.
+define( "NS_MAGENTA", 3012 );
+define( "NS_MAGENTA_TALK", 3013 );
+$wgExtraNamespaces[NS_MAGENTA] = "Magenta";
+$wgExtraNamespaces[NS_MAGENTA_TALK] = "Magenta_talk";
+
 # Make Cryptograss namespace searchable by default
 $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
 $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
@@ -101,6 +110,7 @@ $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
 $wgNamespacesToBeSearchedDefault[NS_SONG] = true;
 # The agents' notes turn up in an ordinary search, theirs and anyone's.
 $wgNamespacesToBeSearchedDefault[NS_AGENT] = true;
+$wgNamespacesToBeSearchedDefault[NS_MAGENTA] = true;
 
 ## URLs
 # The wiki's identity, fixed no matter which hostname a reader arrived by.
@@ -329,6 +339,7 @@ $wgVisualEditorAvailableNamespaces = [
     NS_CRYPTOGRASS => true,
     NS_BLUERAILROAD => true,
     NS_SONG => true,
+    NS_MAGENTA => true,
 ];
 
 # CodeMirror - syntax highlighting in the editor
