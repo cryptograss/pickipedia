@@ -95,3 +95,37 @@ body.pickipedia-dark .pv-proposed__badge,
 body.pickipedia-dark .pv-proposed__byline {
 	color: #f0d98a;
 }
+
+/*
+ * "Verify all on this page" (PageHooks), among the page's indicators at the
+ * top right: the same amber as the claims it verifies.
+ */
+.pv-verify-all {
+	display: inline;
+	margin: 0;
+}
+
+.pv-verify-all__button {
+	font: inherit;
+	font-size: 85%;
+	padding: 2px 10px;
+	border: 1px solid #ffc107;
+	border-radius: 3px;
+	background-color: #fff3cd;
+	color: #533f03;
+	cursor: pointer;
+}
+
+.pv-verify-all__button:hover {
+	background-color: #ffe69c;
+}
+
+body.pickipedia-dark .pv-verify-all__button {
+	background-color: #3d3000;
+	border-color: #b38600;
+	color: #ffe69c;
+}
+
+body.pickipedia-dark .pv-verify-all__button:hover {
+	background-color: #524000;
+}
