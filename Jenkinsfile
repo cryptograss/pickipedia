@@ -81,6 +81,9 @@ pipeline {
                     # Agent: pages, each its own agent's. The hook itself is
                     # checked in a real wiki by tests/check-in-wiki.sh.
                     php tests/check-agent-pages.php
+                    # Agents' rules bundles, rebuilt from revisions byte for byte
+                    # as memory-lane's bundler made them (Special:AgentBundles).
+                    php tests/check-bundles.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter
                     # but MediaWiki is not downloaded yet at this stage, so a
