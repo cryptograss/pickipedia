@@ -139,9 +139,9 @@ and `tests/check-in-wiki.sh` checks the foot of real pages.
 
 ## Special:AgentBundles: what each agent was told
 
-Each turn an agent of cryptograss is woken for, its runner gathers its rules
+Each turn an agent of cryptograss is woken for, its runner gathers its instructions
 from pages here into one text, its system prompt, and magenta records it
-(memory-lane `poller/rules_bundle.py`, `conversations/views_bundles.py`): not
+(memory-lane `poller/instructions.py`, `conversations/views_bundles.py`): not
 the text, but its parts -- the bundle's own words as strings and, in each
 page's place, only `{page, revision}` -- with the sha256 of the whole, and when
 it was asked for, made and delivered. Special:AgentBundles lists those records

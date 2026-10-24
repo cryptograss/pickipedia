@@ -1,12 +1,12 @@
 <?php
 /**
- * Special:AgentBundles: every rules bundle an agent was given, newest first,
+ * Special:AgentBundles: every bundle of instructions an agent was given, newest first,
  * and any one of them rebuilt from this wiki's revisions to read
  * (Special:AgentBundles/<id>). The list comes from magenta, where the runners
  * record them; the text never does: it is rebuilt here, and checked against
  * the sha256 the runner recorded (src/Bundles.php).
  *
- * Open to anyone, as the rules pages and the Moods are.
+ * Open to anyone, as the instructions pages and the Moods are.
  */
 
 namespace MediaWiki\Extension\PickiPediaContent;
@@ -72,7 +72,7 @@ class SpecialAgentBundles extends SpecialPage {
 			'before' => $request->getVal( 'before', '' ),
 			'limit' => self::PER_PAGE,
 		] );
-		$out->addWikiTextAsInterface( "Every rules bundle an agent of cryptograss was given as its system prompt, "
+		$out->addWikiTextAsInterface( "Every bundle of instructions an agent of cryptograss was given as its system prompt, "
 			. "newest first, as magenta recorded it: which revisions of which pages, and when it was asked for, "
 			. "made and delivered. '''Read''' rebuilds one from this wiki's own revisions and checks it against "
 			. "the checksum recorded when it was given." );
@@ -109,7 +109,7 @@ class SpecialAgentBundles extends SpecialPage {
 				$notes[] = 'degraded';
 			}
 			if ( !empty( $b['error'] ) ) {
-				$notes[] = 'recovery rules';
+				$notes[] = 'recovery instructions';
 			}
 			$read = Html::openElement( 'form', [ 'method' => 'get',
 					'action' => $this->getPageTitle( $b['id'] )->getLocalURL() ] )
@@ -157,7 +157,7 @@ class SpecialAgentBundles extends SpecialPage {
 			return;
 		}
 		$agent = (string)( $record['agent'] ?? '?' );
-		$out->setPageTitle( "The rules $agent was given" . ( !empty( $record['mood'] ) ? " in #{$record['mood']}" : '' ) );
+		$out->setPageTitle( "The instructions $agent was given" . ( !empty( $record['mood'] ) ? " in #{$record['mood']}" : '' ) );
 
 		$facts = [
 			'Asked for' => $record['requested_at'] ?? '',
@@ -184,8 +184,8 @@ class SpecialAgentBundles extends SpecialPage {
 			$out->addHTML( Html::warningBox( htmlspecialchars( "Degraded: $line" ) ) );
 		}
 		if ( !empty( $record['error'] ) ) {
-			$out->addHTML( Html::warningBox( htmlspecialchars( "Its rules couldn't be gathered ({$record['error']}): "
-				. 'it was given the recovery rules.' ) ) );
+			$out->addHTML( Html::warningBox( htmlspecialchars( "Its instructions couldn't be gathered ({$record['error']}): "
+				. 'it was given the recovery instructions.' ) ) );
 		}
 
 		$again = Bundles::rebuild( $record['parts'], $this->revisionText( ... ) );
