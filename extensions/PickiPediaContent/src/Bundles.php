@@ -1,12 +1,12 @@
 <?php
 /**
- * The rules bundles the agents of cryptograss were given, rebuilt here from
+ * The instructions the agents of cryptograss were given, rebuilt here from
  * this wiki's own revisions (Special:AgentBundles).
  *
- * Each turn an agent is woken for, its runner gathers its rules from pages
- * here (Cryptograss:Agents/GeneralOrders, Cryptograss:Agents/<Name>/Rules, a
- * Mood's Rules page) into one text, its system prompt, and magenta records
- * it (memory-lane poller/rules_bundle.py, conversations/views_bundles.py):
+ * Each turn an agent is woken for, its runner gathers its instructions from
+ * pages here (Cryptograss:Agents/GeneralOrders, Cryptograss:Agents/<Name>/Instructions,
+ * a Mood's Instructions page) into one text, its system prompt, and magenta records
+ * it (memory-lane poller/instructions.py, conversations/views_bundles.py):
  * not the text, but its parts -- the bundle's own words as strings, and in
  * each page's place only {page, revision} -- and the sha256 of the whole.
  * Justin, magent-self, 2026-10-24: "a list of every bundle action, somewhere
@@ -28,7 +28,7 @@ final class Bundles {
 
 	/**
 	 * A revision's wikitext as it goes into a bundle: less its <!-- comments -->,
-	 * and stripped, as Python's str.strip() strips (rules_bundle.layer_body).
+	 * and stripped, as Python's str.strip() strips (instructions.layer_body).
 	 */
 	public static function layerBody( string $wikitext ): string {
 		$text = preg_replace( '/<!--.*?-->/s', '', $wikitext );
