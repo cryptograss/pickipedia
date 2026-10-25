@@ -199,12 +199,24 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			}
 		}
 
+		// From a page's own "Verify all on this page" button (PageHooks): back to
+		// the page, now without its markers -- unless something went wrong, which
+		// is said here.
+		$returnTo = Title::newFromText( (string)$request->getVal( 'returnto', '' ) );
+		if ( $returnTo && $verified === count( $pageIds ) ) {
+			$out->redirect( $returnTo->getFullURL() );
+			return;
+		}
+
 		$out->addWikiTextAsInterface( "'''Verification complete.''' Verified $verified page(s)." );
 
 		if ( !empty( $errors ) ) {
 			$out->addWikiTextAsInterface( "\n'''Errors:'''\n* " . implode( "\n* ", $errors ) );
 		}
 
+		if ( $returnTo ) {
+			$out->addWikiTextAsInterface( "\n\n[[:" . $returnTo->getPrefixedText() . "|Back to " . $returnTo->getPrefixedText() . "]]" );
+		}
 		$out->addWikiTextAsInterface( "\n\n[[Special:VerifyBotEdits|Return to verification list]]" );
 	}
 

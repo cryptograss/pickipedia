@@ -27,11 +27,15 @@
 		},
 		"parser": {
 			"class": "MediaWiki\\Extension\\PickiPediaVerification\\ParserHooks"
+		},
+		"page": {
+			"class": "MediaWiki\\Extension\\PickiPediaVerification\\PageHooks"
 		}
 	},
 	"Hooks": {
 		"EditFilterMergedContent": "main",
-		"ParserFirstCallInit": "parser"
+		"ParserFirstCallInit": "parser",
+		"BeforePageDisplay": "page"
 	},
 	"MessagesDirs": {
 		"PickiPediaVerification": [
