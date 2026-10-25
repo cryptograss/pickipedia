@@ -4,7 +4,7 @@
  *
  * Each magenta Mood keeps a running list of what its people have to do at
  * Cryptograss:Moods/<slug>/todo (memory-lane services/todo.py), and magenta
- * shows it beside the Mood. It is YAML, so agents can keep it current and
+ * shows it beside the Mood. It is YAML, so emergents can keep it current and
  * magenta can read it:
  *
  *     <todo>
@@ -41,7 +41,7 @@ class Todo {
 
 	/**
 	 * Whether a page is a Mood's to-do list. Its edits come many an hour, from people,
-	 * agents and the bot that ticks merges, and they're magenta's working state rather
+	 * emergents and the bot that ticks merges, and they're magenta's working state rather
 	 * than the encyclopedia: Recent Changes hides them unless asked (Hooks).
 	 *
 	 * @param int $namespace

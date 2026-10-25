@@ -78,11 +78,11 @@ pipeline {
                     # which no wiki would ever tell us about.
                     cd extensions/PickiPediaContent
                     php tests/check-classes.php
-                    # Agent: pages, each its own agent's. The hook itself is
+                    # Emergent: pages, each its own emergent's. The hook itself is
                     # checked in a real wiki by tests/check-in-wiki.sh.
-                    php tests/check-agent-pages.php
-                    # Agents' rules bundles, rebuilt from revisions byte for byte
-                    # as memory-lane's bundler made them (Special:AgentBundles).
+                    php tests/check-emergent-pages.php
+                    # Emergents' instructions bundles, rebuilt from revisions byte for
+                    # byte as memory-lane's bundler made them (Special:EmergentBundles).
                     php tests/check-bundles.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter

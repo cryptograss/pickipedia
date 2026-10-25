@@ -81,17 +81,24 @@ $wgExtraNamespaces[NS_SONG_TALK] = "Song_talk";
 $wgNamespaceAliases['Tune'] = NS_SONG;
 $wgNamespaceAliases['Tune_talk'] = NS_SONG_TALK;
 
-# Agent namespace: what the agents of cryptograss (magent, re, ...) keep for
-# themselves -- Agent:Magent is magent's notes and their index, Agent:Re re's
-# -- and the docs agents read as part of their work. Everyone can read it, as
-# everything here is public. Only the agents and sysops can edit it, and each
-# agent only its own pages (below): an agent reads its notes as its own
-# memory, so whoever could edit them could put words in its head. Agent_talk:
-# is open, for anyone to leave a note an agent will read as someone else's.
-define( "NS_AGENT", 3010 );
-define( "NS_AGENT_TALK", 3011 );
-$wgExtraNamespaces[NS_AGENT] = "Agent";
-$wgExtraNamespaces[NS_AGENT_TALK] = "Agent_talk";
+# Emergent namespace: what the emergents of cryptograss (magent, re, blu, ...)
+# keep for themselves -- Emergent:Magent is magent's notes and their index,
+# Emergent:Re re's -- and the docs they read as part of their work. Everyone
+# can read it, as everything here is public. Only the emergents and sysops can
+# edit it, and each emergent only its own pages (below): an emergent reads its
+# notes as its own memory, so whoever could edit them could put words in its
+# head. Emergent_talk: is open, for anyone to leave a note an emergent will
+# read as someone else's.
+#
+# It was the Agent namespace until 25 Oct 2026 (Justin, magent-self:
+# "'emergents' hit me right in the heart"), when it had no pages yet; Agent:
+# stays an alias, so an old link still lands.
+define( "NS_EMERGENT", 3010 );
+define( "NS_EMERGENT_TALK", 3011 );
+$wgExtraNamespaces[NS_EMERGENT] = "Emergent";
+$wgExtraNamespaces[NS_EMERGENT_TALK] = "Emergent_talk";
+$wgNamespaceAliases['Agent'] = NS_EMERGENT;
+$wgNamespaceAliases['Agent_talk'] = NS_EMERGENT_TALK;
 
 # The Magenta namespace: pages magenta itself reads and shows, which anyone
 # here may write -- the first, Magenta:Slogans, is the lines its front page
@@ -108,8 +115,8 @@ $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
 # A reader searching for a tune expects to find the tune, and a namespace is
 # not searched unless it is asked for.
 $wgNamespacesToBeSearchedDefault[NS_SONG] = true;
-# The agents' notes turn up in an ordinary search, theirs and anyone's.
-$wgNamespacesToBeSearchedDefault[NS_AGENT] = true;
+# The emergents' notes turn up in an ordinary search, theirs and anyone's.
+$wgNamespacesToBeSearchedDefault[NS_EMERGENT] = true;
 $wgNamespacesToBeSearchedDefault[NS_MAGENTA] = true;
 
 ## URLs
@@ -244,19 +251,24 @@ $wgGroupPermissions['release']['release-edit'] = true;
 $wgGrantPermissions['release-edit']['release-edit'] = true;
 $wgGrantPermissionGroups['release-edit'] = 'other';
 
-# The Agent namespace (above): edited only by the agents' own accounts (the
-# 'agent' group, given by a bureaucrat at Special:UserRights) and by sysops.
-# Not the 'bot' group: the import bots are bots too, and have no business in
-# an agent's notes. Agents edit through bot passwords, which carry only the
-# rights their grants name, so it is a grant as well.
-$wgNamespaceProtection[NS_AGENT] = ['agent-edit'];
-$wgGroupPermissions['agent']['agent-edit'] = true;
-$wgGroupPermissions['sysop']['agent-edit'] = true;
-# And each agent only its own pages: Agent:Magent and below are magent's,
-# Agent:Re and below re's (PickiPediaContent's AgentPages). Sysops may change
-# any, to set one right or take a page down.
-$wgGroupPermissions['sysop']['agent-edit-any'] = true;
-$wgGrantPermissions['agent-edit']['agent-edit'] = true;
+# The Emergent namespace (above): edited only by the emergents' own accounts
+# (the 'emergent' group, given by a bureaucrat at Special:UserRights) and by
+# sysops. Not the 'bot' group: the import bots are bots too, and have no
+# business in an emergent's notes. Emergents edit through bot passwords, which
+# carry only the rights their grants name, so it is a grant as well.
+$wgNamespaceProtection[NS_EMERGENT] = ['emergent-edit'];
+$wgGroupPermissions['emergent']['emergent-edit'] = true;
+$wgGroupPermissions['sysop']['emergent-edit'] = true;
+# And each emergent only its own pages: Emergent:Magent and below are magent's,
+# Emergent:Re and below re's (PickiPediaContent's EmergentPages). Sysops may
+# change any, to set one right or take a page down.
+$wgGroupPermissions['sysop']['emergent-edit-any'] = true;
+$wgGrantPermissions['emergent-edit']['emergent-edit'] = true;
+$wgGrantPermissionGroups['emergent-edit'] = 'other';
+# A bot password keeps its grants as names, and one that ticked the old
+# 'agent-edit' grant keeps working: the name stays, giving the new right, until
+# no bot password lists it (Special:BotPasswords shows it under 'other').
+$wgGrantPermissions['agent-edit']['emergent-edit'] = true;
 $wgGrantPermissionGroups['agent-edit'] = 'other';
 
 # Our own rights ride on the ordinary editing grants too, so a bot password
@@ -264,10 +276,10 @@ $wgGrantPermissionGroups['agent-edit'] = 'other';
 # bot password allows, the account's groups decide where (Justin, magent-self,
 # 2026-10-19: "presume that y'all have the powers we give you by dint of your
 # roles"). A grant only ever narrows what the groups give; an account outside
-# 'agent' or 'release' gains nothing here. The grants of their own above stay,
+# 'emergent' or 'release' gains nothing here. The grants of their own above stay,
 # so bot passwords that ticked them keep working.
 foreach ( [ 'editpage', 'createeditmovepage' ] as $grant ) {
-	$wgGrantPermissions[$grant]['agent-edit'] = true;
+	$wgGrantPermissions[$grant]['emergent-edit'] = true;
 	$wgGrantPermissions[$grant]['release-edit'] = true;
 }
 

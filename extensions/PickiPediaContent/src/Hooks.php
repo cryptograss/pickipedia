@@ -168,8 +168,8 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	}
 
 	/**
-	 * An Agent: page is changed only by the agent it belongs to, or a sysop
-	 * (AgentPages.php). Every action but reading is a change: edit, create,
+	 * An Emergent: page is changed only by the emergent it belongs to, or a
+	 * sysop (EmergentPages.php). Every action but reading is a change: edit, create,
 	 * move (asked of both the page and where it would go), delete.
 	 *
 	 * @param Title $title
@@ -179,13 +179,13 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	 * @return bool|void
 	 */
 	public function onGetUserPermissionsErrors( $title, $user, $action, &$result ) {
-		if ( $action === 'read' || !defined( 'NS_AGENT' ) || $title->getNamespace() !== NS_AGENT ) {
+		if ( $action === 'read' || !defined( 'NS_EMERGENT' ) || $title->getNamespace() !== NS_EMERGENT ) {
 			return;
 		}
-		if ( AgentPages::mayChange( $title->getText(), $user->getName(), $user->isAllowed( 'agent-edit-any' ) ) ) {
+		if ( EmergentPages::mayChange( $title->getText(), $user->getName(), $user->isAllowed( 'emergent-edit-any' ) ) ) {
 			return;
 		}
-		$result = [ 'pickipediacontent-agent-not-yours', AgentPages::owner( $title->getText() ) ];
+		$result = [ 'pickipediacontent-emergent-not-yours', EmergentPages::owner( $title->getText() ) ];
 		return false;
 	}
 

@@ -1,8 +1,9 @@
 <?php
 /**
- * Special:AgentBundles: every bundle of instructions an agent was given, newest first,
+ * Special:EmergentBundles (Special:AgentBundles until 25 Oct 2026, still an alias): every
+ * bundle of instructions an emergent was given, newest first,
  * and any one of them rebuilt from this wiki's revisions to read
- * (Special:AgentBundles/<id>). The list comes from magenta, where the runners
+ * (Special:EmergentBundles/<id>). The list comes from magenta, where the runners
  * record them; the text never does: it is rebuilt here, and checked against
  * the sha256 the runner recorded (src/Bundles.php).
  *
@@ -19,12 +20,12 @@ use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Title\Title;
 use TextContent;
 
-class SpecialAgentBundles extends SpecialPage {
+class SpecialEmergentBundles extends SpecialPage {
 
 	private const PER_PAGE = 50;
 
 	public function __construct() {
-		parent::__construct( 'AgentBundles' );
+		parent::__construct( 'EmergentBundles' );
 	}
 
 	/**
@@ -66,20 +67,22 @@ class SpecialAgentBundles extends SpecialPage {
 	private function showList(): void {
 		$out = $this->getOutput();
 		$request = $this->getRequest();
+		// ?emergent=, or ?agent= as links from before 25 Oct 2026 say; magenta's
+		// /api/bundles/ is asked with its own name for it, agent, until it takes both.
 		$query = array_filter( [
-			'agent' => $request->getVal( 'agent', '' ),
+			'agent' => $request->getVal( 'emergent', $request->getVal( 'agent', '' ) ),
 			'mood' => $request->getVal( 'mood', '' ),
 			'before' => $request->getVal( 'before', '' ),
 			'limit' => self::PER_PAGE,
 		] );
-		$out->addWikiTextAsInterface( "Every bundle of instructions an agent of cryptograss was given as its system prompt, "
+		$out->addWikiTextAsInterface( "Every bundle of instructions an emergent of cryptograss was given as its system prompt, "
 			. "newest first, as magenta recorded it: which revisions of which pages, and when it was asked for, "
 			. "made and delivered. '''Read''' rebuilds one from this wiki's own revisions and checks it against "
 			. "the checksum recorded when it was given." );
 
 		$form = Html::openElement( 'form', [ 'method' => 'get', 'action' => $this->getPageTitle()->getLocalURL() ] )
-			. Html::label( 'Agent ', 'ab-agent' )
-			. Html::input( 'agent', $query['agent'] ?? '', 'text', [ 'id' => 'ab-agent', 'size' => 10 ] ) . ' '
+			. Html::label( 'Emergent ', 'ab-emergent' )
+			. Html::input( 'emergent', $query['agent'] ?? '', 'text', [ 'id' => 'ab-emergent', 'size' => 10 ] ) . ' '
 			. Html::label( 'Mood ', 'ab-mood' )
 			. Html::input( 'mood', $query['mood'] ?? '', 'text', [ 'id' => 'ab-mood', 'size' => 20 ] ) . ' '
 			. Html::element( 'button', [ 'type' => 'submit' ], 'Show' )
@@ -97,7 +100,7 @@ class SpecialAgentBundles extends SpecialPage {
 			return;
 		}
 		$rows = Html::openElement( 'table', [ 'class' => 'wikitable' ] )
-			. '<tr><th>Asked for (UTC)</th><th>Block</th><th>Agent</th><th>Mood</th><th>Delivered</th>'
+			. '<tr><th>Asked for (UTC)</th><th>Block</th><th>Emergent</th><th>Mood</th><th>Delivered</th>'
 			. '<th>Revisions</th><th>sha256</th><th></th></tr>';
 		foreach ( $data['bundles'] as $b ) {
 			if ( !preg_match( Bundles::ID, (string)( $b['id'] ?? '' ) ) ) {
@@ -118,7 +121,7 @@ class SpecialAgentBundles extends SpecialPage {
 			$rows .= '<tr>'
 				. Html::element( 'td', [], substr( (string)( $b['requested_at'] ?? '' ), 0, 19 ) )
 				. Html::element( 'td', [], isset( $b['block'] ) && is_int( $b['block'] ) ? number_format( $b['block'] ) : '' )
-				. Html::element( 'td', [], (string)( $b['agent'] ?? '' ) )
+				. Html::element( 'td', [], (string)( $b['emergent'] ?? $b['agent'] ?? '' ) )
 				. Html::element( 'td', [], (string)( $b['mood'] ?? '' ) )
 				. Html::element( 'td', [], !empty( $b['delivered_at'] ) ? substr( (string)$b['delivered_at'], 11, 8 ) : 'never' )
 				. Html::rawElement( 'td', [], $pages . ( $notes ? '<br><i>' . htmlspecialchars( implode( ', ', $notes ) ) . '</i>' : '' ) )
@@ -156,8 +159,8 @@ class SpecialAgentBundles extends SpecialPage {
 			$out->addHTML( Html::errorBox( htmlspecialchars( "magenta has no bundle $id, or couldn't be read just now." ) ) . $back );
 			return;
 		}
-		$agent = (string)( $record['agent'] ?? '?' );
-		$out->setPageTitle( "The instructions $agent was given" . ( !empty( $record['mood'] ) ? " in #{$record['mood']}" : '' ) );
+		$emergent = (string)( $record['emergent'] ?? $record['agent'] ?? '?' );
+		$out->setPageTitle( "The instructions $emergent was given" . ( !empty( $record['mood'] ) ? " in #{$record['mood']}" : '' ) );
 
 		$facts = [
 			'Asked for' => $record['requested_at'] ?? '',
@@ -194,9 +197,9 @@ class SpecialAgentBundles extends SpecialPage {
 				. implode( ', ', $again['missing'] ) . '.' ) ) );
 		} elseif ( Bundles::matches( $again['text'], (string)( $record['sha256'] ?? '' ) ) ) {
 			$out->addHTML( Html::successBox( htmlspecialchars( "Rebuilt from this wiki's revisions, it is identical to what "
-				. "$agent was given: the sha256 matches." ) ) );
+				. "$emergent was given: the sha256 matches." ) ) );
 		} else {
-			$out->addHTML( Html::errorBox( htmlspecialchars( "Rebuilt from this wiki's revisions, it DIFFERS from what $agent "
+			$out->addHTML( Html::errorBox( htmlspecialchars( "Rebuilt from this wiki's revisions, it DIFFERS from what $emergent "
 				. 'was given (sha256 ' . hash( 'sha256', $again['text'] ) . '). What follows is the rebuild, not what was given.' ) ) );
 		}
 		if ( $again['text'] !== null ) {

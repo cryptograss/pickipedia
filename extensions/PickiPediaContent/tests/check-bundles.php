@@ -1,6 +1,6 @@
 <?php
 /**
- * Rebuilding an agent's rules bundle (src/Bundles.php), without a wiki.
+ * Rebuilding an emergent's bundle of instructions (src/Bundles.php), without a wiki.
  *
  * fixtures/bundle-record.json is a record as magenta keeps it, made by the
  * bundler itself (memory-lane poller/rules_bundle.py), with the revisions it

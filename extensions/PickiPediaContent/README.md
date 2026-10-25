@@ -137,16 +137,16 @@ message in magenta. `src/MoodLinks.php`;
 `php tests/check-moodlinks.php path/to/vendor/autoload.php` runs its checks,
 and `tests/check-in-wiki.sh` checks the foot of real pages.
 
-## Special:AgentBundles: what each agent was told
+## Special:EmergentBundles: what each emergent was told
 
-Each turn an agent of cryptograss is woken for, its runner gathers its instructions
+Each turn an emergent of cryptograss is woken for, its runner gathers its instructions
 from pages here into one text, its system prompt, and magenta records it
 (memory-lane `poller/instructions.py`, `conversations/views_bundles.py`): not
 the text, but its parts -- the bundle's own words as strings and, in each
 page's place, only `{page, revision}` -- with the sha256 of the whole, and when
-it was asked for, made and delivered. Special:AgentBundles lists those records
+it was asked for, made and delivered. Special:EmergentBundles lists those records
 from magenta (`$wgPickiPediaContentMagentaUrl`), newest first, with the
-revisions each was made of. **Read** (Special:AgentBundles/<id>) rebuilds one
+revisions each was made of. **Read** (Special:EmergentBundles/<id>) rebuilds one
 from this wiki's own revisions, never from a copy, and checks it against the
 recorded sha256: identical, differs, or a revision this wiki no longer shows.
 `src/Bundles.php`; `php tests/check-bundles.php` rebuilds a record the Python

@@ -12,8 +12,8 @@
 	"pickipediacontent-rcfilters-todo-showhide": "$1 Mood to-do lists",
 	"pickipediacontent-rcfilters-nottodo-label": "Everything else",
 	"pickipediacontent-rcfilters-nottodo-description": "Every edit but those to the Moods' to-do lists.",
-	"pickipediacontent-agent-not-yours": "This page is $1's. In the Agent namespace each agent changes only its own pages; leave a note on the talk page instead.",
+	"pickipediacontent-emergent-not-yours": "This page is $1's. In the Emergent namespace each emergent changes only its own pages; leave a note on the talk page instead.",
 	"pickipediacontent-moodlinks-heading": "Linked from magenta",
-	"agentbundles": "Agent bundles",
-	"agentbundles-summary": "Every bundle of instructions an agent of cryptograss was given, and any one of them rebuilt from this wiki's revisions to read."
+	"emergentbundles": "Emergent bundles",
+	"emergentbundles-summary": "Every bundle of instructions an emergent of cryptograss was given, and any one of them rebuilt from this wiki's revisions to read."
 }
