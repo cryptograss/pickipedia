@@ -165,6 +165,8 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	 */
 	public function onBeforePageDisplay( $out, $skin ): void {
 		$out->addModuleStyles( [ 'ext.pickipediaContent.styles' ] );
+		// Blue Railroads beside user links: counted in the reader's browser, from two SMW queries, kept ten minutes.
+		$out->addModules( [ 'ext.pickipediaContent.blueRailroads' ] );
 	}
 
 	/**
