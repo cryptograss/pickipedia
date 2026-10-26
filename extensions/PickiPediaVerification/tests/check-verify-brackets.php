@@ -70,7 +70,7 @@ namespace MediaWiki\Extension\PickiPediaVerification {
 		count( $p2 ) === 1 && str_contains( $p2[0], "unclosed '{'" ),
 		var_export( $p2, true ) );
 
-	$unclosedLink = "{{Bot_proposes|See [[Cryptograss:Moods/Dials|the dials and [[another|by=Magent}}";
+	$unclosedLink = "{{Bot_proposes|See [[Cryptograss:Moods/Dials{{!}}the dials and [[another]]|by=Magent}}";
 	$p3 = problemsAfterVerify( $unclosedLink );
 	check( 'an unclosed [[ link is caught',
 		count( $p3 ) === 1 && str_contains( $p3[0], "unclosed '[['" ),
