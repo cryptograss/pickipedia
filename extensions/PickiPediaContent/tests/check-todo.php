@@ -88,7 +88,7 @@ check( "not a Mood's other pages, nor Moods itself", !Todo::isMoodList( 3000, 'M
 	&& !Todo::isMoodList( 3000, 'Moods/Dials' ) && !Todo::isMoodList( 3000, 'Moods' )
 	&& !Todo::isMoodList( 3000, 'Moods/todo' ) );
 check( 'not a page that only ends in todo', !Todo::isMoodList( 3000, 'Moods/x/todos' )
-	&& !Todo::isMoodList( 3000, 'Agents/Magent/todo' ) );
+	&& !Todo::isMoodList( 3000, 'Emergents/Magent/todo' ) );
 
 echo $failures === 0 ? "\nAll checks passed.\n" : "\n$failures FAILED\n";
 exit( $failures === 0 ? 0 : 1 );

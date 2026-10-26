@@ -46,7 +46,7 @@
 		"remoteExtPath": "PickiPediaContent/resources"
 	},
 	"SpecialPages": {
-		"AgentBundles": "MediaWiki\\Extension\\PickiPediaContent\\SpecialAgentBundles"
+		"EmergentBundles": "MediaWiki\\Extension\\PickiPediaContent\\SpecialEmergentBundles"
 	},
 	"ExtensionMessagesFiles": {
 		"PickiPediaContentAlias": "PickiPediaContent.alias.php"
@@ -54,7 +54,7 @@
 	"config": {
 		"PickiPediaContentMagentaUrl": {
 			"value": "https://memory-lane.maybelle.cryptograss.live",
-			"description": "Where magenta is: Special:AgentBundles reads the agents' bundle records from its /api/bundles/"
+			"description": "Where magenta is: Special:EmergentBundles reads the emergents' bundle records from its /api/bundles/"
 		}
 	},
 	"manifest_version": 2

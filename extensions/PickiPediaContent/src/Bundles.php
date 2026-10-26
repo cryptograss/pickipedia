@@ -1,10 +1,10 @@
 <?php
 /**
- * The instructions the agents of cryptograss were given, rebuilt here from
- * this wiki's own revisions (Special:AgentBundles).
+ * The instructions the emergents of cryptograss were given, rebuilt here from
+ * this wiki's own revisions (Special:EmergentBundles).
  *
- * Each turn an agent is woken for, its runner gathers its instructions from
- * pages here (Cryptograss:Agents/GeneralOrders, Cryptograss:Agents/<Name>/Instructions,
+ * Each turn an emergent is woken for, its runner gathers its instructions from
+ * pages here (Cryptograss:Emergents/GeneralOrders, Cryptograss:Emergents/<Name>/Instructions,
  * a Mood's Instructions page) into one text, its system prompt, and magenta records
  * it (memory-lane poller/instructions.py, conversations/views_bundles.py):
  * not the text, but its parts -- the bundle's own words as strings, and in
@@ -15,7 +15,7 @@
  * So the wiki rebuilds a bundle without asking magenta for its text: it
  * reads each revision itself, takes it as the bundler did (layerBody), joins
  * the parts, and checks the sha256. A match means this is, byte for byte,
- * what the agent was told; a revision deleted since can't be had, and is
+ * what the emergent was told; a revision deleted since can't be had, and is
  * named. Nothing here needs a wiki, so tests/check-bundles.php can run it.
  */
 
@@ -78,7 +78,7 @@ final class Bundles {
 		return [ 'text' => $missing ? null : $out, 'missing' => $missing ];
 	}
 
-	/** Whether $text is what the record says the agent was given. */
+	/** Whether $text is what the record says the emergent was given. */
 	public static function matches( string $text, string $sha256 ): bool {
 		return hash_equals( strtolower( $sha256 ), hash( 'sha256', $text ) );
 	}
