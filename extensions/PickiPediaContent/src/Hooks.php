@@ -25,6 +25,7 @@ use MediaWiki\MediaWikiServices;
 use MediaWiki\Revision\SlotRecord;
 use MediaWiki\Permissions\Hook\GetUserPermissionsErrorsHook;
 use MediaWiki\Preferences\Hook\GetPreferencesHook;
+use MediaWiki\User\Options\Hook\SaveUserOptionsHook;
 use MediaWiki\SpecialPage\Hook\ChangesListSpecialPageStructuredFiltersHook;
 use MediaWiki\Title\Title;
 use Wikimedia\Rdbms\IExpression;
@@ -32,11 +33,29 @@ use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\LikeValue;
 
 class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook,
-	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook {
+	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook, SaveUserOptionsHook {
 
-	/** Pronouns on Special:Preferences, beside MediaWiki's own three (Pronouns.php). */
+	/**
+	 * Pronouns on Special:Preferences, in place of MediaWiki's own three (Pronouns.php; Justin, 26 Oct: one field,
+	 * not two). Its gender stays a preference -- the API still sets it -- set from the pronouns when they're saved.
+	 */
 	public function onGetPreferences( $user, &$preferences ) {
-		$preferences[Pronouns::OPTION] = Pronouns::preference();
+		$field = Pronouns::preference();
+		$lookup = MediaWikiServices::getInstance()->getUserOptionsLookup();
+		if ( Pronouns::clean( $lookup->getOption( $user, Pronouns::OPTION, '' ) ) === '' ) {
+			$field['default'] = Pronouns::fromGender( $lookup->getOption( $user, 'gender' ) );
+		}
+		$preferences[Pronouns::OPTION] = $field;
+		if ( isset( $preferences['gender'] ) ) {
+			$preferences['gender'] = [ 'type' => 'api' ];
+		}
+	}
+
+	/** Saving pronouns sets MediaWiki's gender to match (Pronouns::genderFor). */
+	public function onSaveUserOptions( $user, &$modifiedOptions, $originalOptions ) {
+		if ( array_key_exists( Pronouns::OPTION, $modifiedOptions ) ) {
+			$modifiedOptions['gender'] = Pronouns::genderFor( $modifiedOptions[Pronouns::OPTION] );
+		}
 	}
 
 	/** A user's pronouns, as they set them; '' if they haven't, or there's no such user. */

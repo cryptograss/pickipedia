@@ -27,6 +27,20 @@ class Pronouns {
 		return preg_match( "/^[\\p{L}\\p{M}][\\p{L}\\p{M} \\/,'’-]*$/u", $value ) ? $value : '';
 	}
 
+	/**
+	 * MediaWiki's own gender, which {{GENDER:}} grammar reads, from theirs: their first pronoun he, male; she,
+	 * female; anything else, unknown -- MediaWiki's "they". Its own field is hidden, so it follows this one.
+	 */
+	public static function genderFor( $pronouns ): string {
+		$first = strtolower( (string)preg_split( '/[\/,\s]+/u', self::clean( $pronouns ) )[0] );
+		return $first === 'he' ? 'male' : ( $first === 'she' ? 'female' : 'unknown' );
+	}
+
+	/** Someone who set only MediaWiki's gender before there was this field: theirs to start from. */
+	public static function fromGender( $gender ): string {
+		return $gender === 'male' ? 'he/him' : ( $gender === 'female' ? 'she/her' : '' );
+	}
+
 	/** The field on Special:Preferences (personal info, near "How do you prefer to be described?"). */
 	public static function preference(): array {
 		$options = [ '(not said)' => '' ];

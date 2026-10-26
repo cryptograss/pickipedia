@@ -29,5 +29,13 @@ foreach ( [ '[[User:X]]', '<b>he</b>', '{{tpl}}', "he\u{0007}him", '/him', str_r
 	check( 'refused: ' . json_encode( $bad ), Pronouns::clean( $bad ) === '', Pronouns::clean( $bad ) );
 }
 
+// MediaWiki's gender, for {{GENDER:}}, follows (its own field is hidden).
+foreach ( [ 'he/him' => 'male', 'she/her' => 'female', 'they/them' => 'unknown', 'it/its' => 'unknown',
+	'she/they' => 'female', 'He/Him' => 'male', 'xe/xem' => 'unknown', '' => 'unknown', 'hey/hem' => 'unknown' ] as $p => $g ) {
+	check( "gender of '$p' is $g", Pronouns::genderFor( $p ) === $g, Pronouns::genderFor( $p ) );
+}
+check( 'a male gender starts as he/him', Pronouns::fromGender( 'male' ) === 'he/him' );
+check( 'unknown starts unsaid', Pronouns::fromGender( 'unknown' ) === '' );
+
 echo $failures === 0 ? "\nAll checks passed.\n" : "\n$failures FAILED\n";
 exit( $failures === 0 ? 0 : 1 );

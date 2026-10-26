@@ -25,6 +25,7 @@
 		"ChangesListSpecialPageStructuredFilters": "main",
 		"GetPreferences": "main",
 		"ParserFirstCallInit": "main",
+		"SaveUserOptions": "main",
 		"ScribuntoExternalLibraryPaths": "main",
 		"SkinAfterContent": "main",
 		"getUserPermissionsErrors": "main"
