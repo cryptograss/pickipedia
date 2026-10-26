@@ -187,7 +187,15 @@ class SpecialVerifyBotEdits extends SpecialPage {
 				->caller( __METHOD__ )
 				->fetchResultSet();
 
+			$wikiPageFactory = MediaWikiServices::getInstance()->getWikiPageFactory();
 			foreach ( $res as $row ) {
+				$t = Title::newFromID( $row->page_id );
+				$c = $t ? $wikiPageFactory->newFromTitle( $t )->getContent() : null;
+				$raw = $c ? ContentHandler::getContentText( $c ) : null;
+				if ( is_string( $raw ) && !empty( self::bracketProblems( self::stripMarkers( $raw ) ) ) ) {
+					$errors[] = "Skipped " . $t->getPrefixedText() . " in Verify All (unbalanced brackets; use its row verify button to override)";
+					continue;
+				}
 				$pageIds[] = $row->page_id;
 			}
 		} elseif ( $request->getVal( 'verify_page' ) ) {
@@ -270,11 +278,9 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			return "No bot proposals found in " . $title->getPrefixedText();
 		}
 
-		$problems = self::bracketProblems( $newText );
-		if ( !empty( $problems ) ) {
-			return "Cannot verify " . $title->getPrefixedText() . " (unbalanced brackets after stripping markers: "
-				. implode( '; ', $problems ) . ")";
-		}
+		// Explicit single-page or selected verify is allowed through even if
+		// bracketProblems() warns (so a false positive never locks a page out);
+		// bulk Verify All skips unbalanced pages above.
 
 		// Save the page
 		$newContent = ContentHandler::makeContent( $newText, $title );
@@ -404,7 +410,8 @@ class SpecialVerifyBotEdits extends SpecialPage {
 				$i += 2;
 				continue;
 			}
-			if ( $ch === '{' && !empty( $braceStack ) ) {
+			if ( $ch === '{' && !empty( $braceStack )
+				&& preg_match( '/^\{(?:[a-zA-Z_][a-zA-Z0-9_]*\}|\{)/', substr( $clean, $i, 32 ) ) ) {
 				$braceStack[] = [ 'tok' => '{', 'line' => $line ];
 				$i++;
 				continue;
