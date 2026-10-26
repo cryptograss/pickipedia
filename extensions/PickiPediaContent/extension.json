@@ -23,6 +23,7 @@
 	"Hooks": {
 		"BeforePageDisplay": "main",
 		"ChangesListSpecialPageStructuredFilters": "main",
+		"GetPreferences": "main",
 		"ParserFirstCallInit": "main",
 		"ScribuntoExternalLibraryPaths": "main",
 		"SkinAfterContent": "main",
@@ -49,7 +50,11 @@
 		"EmergentBundles": "MediaWiki\\Extension\\PickiPediaContent\\SpecialEmergentBundles"
 	},
 	"ExtensionMessagesFiles": {
-		"PickiPediaContentAlias": "PickiPediaContent.alias.php"
+		"PickiPediaContentAlias": "PickiPediaContent.alias.php",
+		"PickiPediaContentMagic": "PickiPediaContent.i18n.magic.php"
+	},
+	"DefaultUserOptions": {
+		"pickipedia-pronouns": ""
 	},
 	"config": {
 		"PickiPediaContentMagentaUrl": {

@@ -24,6 +24,7 @@ use MediaWiki\Hook\SkinAfterContentHook;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Revision\SlotRecord;
 use MediaWiki\Permissions\Hook\GetUserPermissionsErrorsHook;
+use MediaWiki\Preferences\Hook\GetPreferencesHook;
 use MediaWiki\SpecialPage\Hook\ChangesListSpecialPageStructuredFiltersHook;
 use MediaWiki\Title\Title;
 use Wikimedia\Rdbms\IExpression;
@@ -31,7 +32,22 @@ use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\LikeValue;
 
 class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook,
-	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook {
+	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook {
+
+	/** Pronouns on Special:Preferences, beside MediaWiki's own three (Pronouns.php). */
+	public function onGetPreferences( $user, &$preferences ) {
+		$preferences[Pronouns::OPTION] = Pronouns::preference();
+	}
+
+	/** A user's pronouns, as they set them; '' if they haven't, or there's no such user. */
+	public static function pronounsOf( string $name ): string {
+		$services = MediaWikiServices::getInstance();
+		$user = $services->getUserFactory()->newFromName( $name );
+		if ( !$user || !$user->isRegistered() ) {
+			return '';
+		}
+		return Pronouns::clean( $services->getUserOptionsLookup()->getOption( $user, Pronouns::OPTION, '' ) );
+	}
 
 	/**
 	 * <todo>: a to-do list kept as YAML, shown as a checklist (Todo.php).
@@ -39,6 +55,12 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	 * @param \Parser $parser
 	 */
 	public function onParserFirstCallInit( $parser ): void {
+		// {{#pronouns:Name}}: theirs, or nothing. A preference changes without an edit, so a page using it is
+		// parsed again within the hour.
+		$parser->setFunctionHook( 'pronouns', static function ( $parser, $name = '' ) {
+			$parser->getOutput()->updateCacheExpiry( 3600 );
+			return wfEscapeWikiText( self::pronounsOf( trim( (string)$name ) ) );
+		} );
 		$parser->setHook( 'todo', static function ( $input, array $args, $parser, $frame ) {
 			$page = $parser->getPage();
 			$pageTitle = $page ? Title::newFromPageReference( $page )->getPrefixedText() : '';
@@ -165,6 +187,15 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	 */
 	public function onBeforePageDisplay( $out, $skin ): void {
 		$out->addModuleStyles( [ 'ext.pickipediaContent.styles' ] );
+		// A user page says whose pronouns are what, under its title.
+		$title = $out->getTitle();
+		if ( $title && $title->getNamespace() === NS_USER && !$title->isSubpage()
+			&& $out->getRequest()->getVal( 'action', 'view' ) === 'view' ) {
+			$pronouns = self::pronounsOf( $title->getText() );
+			if ( $pronouns !== '' ) {
+				$out->addSubtitle( htmlspecialchars( $out->msg( 'pickipediacontent-pronouns-subtitle', $pronouns )->text() ) );
+			}
+		}
 	}
 
 	/**
