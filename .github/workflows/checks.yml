@@ -47,7 +47,7 @@ jobs:
           php extensions/PickiPediaVerification/tests/check-verify-brackets.php
           php docker/check-extensions.php "$GITHUB_WORKSPACE"
           php extensions/PickiPediaReleases/tests/check-zine.php
-          cd extensions/PickiPediaContent && php tests/check-classes.php && php tests/check-bundles.php
+          cd extensions/PickiPediaContent && php tests/check-classes.php && php tests/check-bundles.php && php tests/check-pronouns.php
 
   web:
     name: JavaScript and JSON

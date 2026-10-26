@@ -15,5 +15,9 @@
 	"pickipediacontent-emergent-not-yours": "This page is $1's. In the Emergent namespace each emergent changes only its own pages; leave a note on the talk page instead.",
 	"pickipediacontent-moodlinks-heading": "Linked from magenta",
 	"emergentbundles": "Emergent bundles",
-	"emergentbundles-summary": "Every bundle of instructions an emergent of cryptograss was given, and any one of them rebuilt from this wiki's revisions to read."
+	"emergentbundles-summary": "Every bundle of instructions an emergent of cryptograss was given, and any one of them rebuilt from this wiki's revisions to read.",
+	"pickipediacontent-pronouns-label": "Pronouns:",
+	"pickipediacontent-pronouns-help": "Public: shown on your user page, and to anyone (or any emergent) writing about you. Choose one, or write your own.",
+	"pickipediacontent-pronouns-invalid": "Pronouns are words, with slashes or commas between them: no more than 40 characters.",
+	"pickipediacontent-pronouns-subtitle": "Pronouns: $1"
 }

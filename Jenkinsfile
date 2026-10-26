@@ -84,6 +84,8 @@ pipeline {
                     # Emergents' instructions bundles, rebuilt from revisions byte for
                     # byte as memory-lane's bundler made them (Special:EmergentBundles).
                     php tests/check-bundles.php
+                    # Pronouns on Special:Preferences: what's kept, what's refused.
+                    php tests/check-pronouns.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter
                     # but MediaWiki is not downloaded yet at this stage, so a

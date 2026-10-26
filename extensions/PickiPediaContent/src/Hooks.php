@@ -24,6 +24,8 @@ use MediaWiki\Hook\SkinAfterContentHook;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Revision\SlotRecord;
 use MediaWiki\Permissions\Hook\GetUserPermissionsErrorsHook;
+use MediaWiki\Preferences\Hook\GetPreferencesHook;
+use MediaWiki\User\Options\Hook\SaveUserOptionsHook;
 use MediaWiki\SpecialPage\Hook\ChangesListSpecialPageStructuredFiltersHook;
 use MediaWiki\Title\Title;
 use Wikimedia\Rdbms\IExpression;
@@ -31,7 +33,40 @@ use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\LikeValue;
 
 class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook,
-	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook {
+	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook, SaveUserOptionsHook {
+
+	/**
+	 * Pronouns on Special:Preferences, in place of MediaWiki's own three (Pronouns.php; Justin, 26 Oct: one field,
+	 * not two). Its gender stays a preference -- the API still sets it -- set from the pronouns when they're saved.
+	 */
+	public function onGetPreferences( $user, &$preferences ) {
+		$field = Pronouns::preference();
+		$lookup = MediaWikiServices::getInstance()->getUserOptionsLookup();
+		if ( Pronouns::clean( $lookup->getOption( $user, Pronouns::OPTION, '' ) ) === '' ) {
+			$field['default'] = Pronouns::fromGender( $lookup->getOption( $user, 'gender' ) );
+		}
+		$preferences[Pronouns::OPTION] = $field;
+		if ( isset( $preferences['gender'] ) ) {
+			$preferences['gender'] = [ 'type' => 'api' ];
+		}
+	}
+
+	/** Saving pronouns sets MediaWiki's gender to match (Pronouns::genderFor). */
+	public function onSaveUserOptions( $user, &$modifiedOptions, $originalOptions ) {
+		if ( array_key_exists( Pronouns::OPTION, $modifiedOptions ) ) {
+			$modifiedOptions['gender'] = Pronouns::genderFor( $modifiedOptions[Pronouns::OPTION] );
+		}
+	}
+
+	/** A user's pronouns, as they set them; '' if they haven't, or there's no such user. */
+	public static function pronounsOf( string $name ): string {
+		$services = MediaWikiServices::getInstance();
+		$user = $services->getUserFactory()->newFromName( $name );
+		if ( !$user || !$user->isRegistered() ) {
+			return '';
+		}
+		return Pronouns::clean( $services->getUserOptionsLookup()->getOption( $user, Pronouns::OPTION, '' ) );
+	}
 
 	/**
 	 * <todo>: a to-do list kept as YAML, shown as a checklist (Todo.php).
@@ -39,6 +74,12 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	 * @param \Parser $parser
 	 */
 	public function onParserFirstCallInit( $parser ): void {
+		// {{#pronouns:Name}}: theirs, or nothing. A preference changes without an edit, so a page using it is
+		// parsed again within the hour.
+		$parser->setFunctionHook( 'pronouns', static function ( $parser, $name = '' ) {
+			$parser->getOutput()->updateCacheExpiry( 3600 );
+			return wfEscapeWikiText( self::pronounsOf( trim( (string)$name ) ) );
+		} );
 		$parser->setHook( 'todo', static function ( $input, array $args, $parser, $frame ) {
 			$page = $parser->getPage();
 			$pageTitle = $page ? Title::newFromPageReference( $page )->getPrefixedText() : '';
@@ -165,6 +206,15 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	 */
 	public function onBeforePageDisplay( $out, $skin ): void {
 		$out->addModuleStyles( [ 'ext.pickipediaContent.styles' ] );
+		// A user page says whose pronouns are what, under its title.
+		$title = $out->getTitle();
+		if ( $title && $title->getNamespace() === NS_USER && !$title->isSubpage()
+			&& $out->getRequest()->getVal( 'action', 'view' ) === 'view' ) {
+			$pronouns = self::pronounsOf( $title->getText() );
+			if ( $pronouns !== '' ) {
+				$out->addSubtitle( htmlspecialchars( $out->msg( 'pickipediacontent-pronouns-subtitle', $pronouns )->text() ) );
+			}
+		}
 	}
 
 	/**
