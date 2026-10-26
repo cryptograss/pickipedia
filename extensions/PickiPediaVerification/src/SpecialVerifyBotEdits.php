@@ -94,21 +94,38 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			Html::element( 'th', [], '' ) .
 			Html::element( 'th', [], 'Page' ) .
 			Html::element( 'th', [], 'Namespace' ) .
+			Html::element( 'th', [], 'Brackets' ) .
 			Html::element( 'th', [], 'Actions' )
 		);
+
+		$wikiPageFactory = MediaWikiServices::getInstance()->getWikiPageFactory();
 
 		foreach ( $pages as $page ) {
 			$title = Title::makeTitle( $page['namespace'], $page['title'] );
 			$displayTitle = $title->getPrefixedText();
+			$problems = [];
+			$content = $wikiPageFactory->newFromTitle( $title )->getContent();
+			$rawText = $content ? ContentHandler::getContentText( $content ) : null;
+			if ( is_string( $rawText ) ) {
+				$after = self::stripMarkers( $rawText );
+				$problems = self::bracketProblems( $after );
+			}
+			$bracketCell = empty( $problems )
+				? Html::element( 'span', [ 'style' => 'color:#1b6e2b;' ], '✓ balanced' )
+				: Html::element( 'span', [
+					'style' => 'color:#b32424;font-weight:bold;',
+					'title' => implode( '; ', $problems )
+				], '⚠ ' . implode( '; ', $problems ) );
 
 			$html .= Html::rawElement( 'tr', [],
 				Html::rawElement( 'td', [],
-					Html::check( 'pages[]', false, [ 'value' => $page['id'] ] )
+					Html::check( 'pages[]', false, [ 'value' => $page['id'], 'disabled' => !empty( $problems ) ] )
 				) .
 				Html::rawElement( 'td', [],
 					Html::element( 'a', [ 'href' => $title->getLocalURL() ], $displayTitle )
 				) .
 				Html::element( 'td', [], $title->getNsText() ?: '(main)' ) .
+				Html::rawElement( 'td', [], $bracketCell ) .
 				Html::rawElement( 'td', [],
 					Html::element( 'a', [
 						'href' => $title->getLocalURL( 'action=edit' )
@@ -247,10 +264,16 @@ class SpecialVerifyBotEdits extends SpecialPage {
 
 		// Strip both marker forms. A page can carry a mix: prose marked with
 		// {{Bot_proposes}} alongside a template marked with <proposed>.
-		$newText = $this->stripProposedTags( $this->stripBotProposes( $text ) );
+		$newText = self::stripMarkers( $text );
 
 		if ( $newText === $text ) {
 			return "No bot proposals found in " . $title->getPrefixedText();
+		}
+
+		$problems = self::bracketProblems( $newText );
+		if ( !empty( $problems ) ) {
+			return "Cannot verify " . $title->getPrefixedText() . " (unbalanced brackets after stripping markers: "
+				. implode( '; ', $problems ) . ")";
 		}
 
 		// Save the page
@@ -284,7 +307,144 @@ class SpecialVerifyBotEdits extends SpecialPage {
 	 * @param string $text
 	 * @return string
 	 */
-	private function stripProposedTags( $text ) {
+	/**
+	 * Strip both <proposed> tags and {{Bot_proposes}} templates.
+	 *
+	 * @param string $text
+	 * @return string
+	 */
+	public static function stripMarkers( string $text ): string {
+		return self::stripProposedTags( self::stripBotProposes( $text ) );
+	}
+
+	/**
+	 * Check wikitext for unbalanced template braces ({{ / }}), link brackets
+	 * ([[ / ]]), or single-brace placeholders ({foo}) inside templates after
+	 * comments and <nowiki>/<pre>/<syntaxhighlight>/<code> regions are blanked.
+	 *
+	 * Returns human-readable problem descriptions with 1-based line numbers,
+	 * or [] when balanced.
+	 *
+	 * @param string $text
+	 * @return string[]
+	 */
+	public static function bracketProblems( string $text ): array {
+		$problems = [];
+		if ( preg_match( '/<proposed\b|<\/proposed\s*>|\{\{\s*Bot_proposes\s*\|/i', $text ) ) {
+			$problems[] = 'unclosed or leftover proposal marker';
+		}
+
+		// Blank comments and literal tags while preserving newlines so line numbers match the page.
+		$clean = preg_replace_callback(
+			'/<!--[\s\S]*?-->|<(nowiki|pre|syntaxhighlight|source|code)(?:\s[^>]*)?>[\s\S]*?<\/\1\s*>/i',
+			static function ( array $m ): string {
+				return str_repeat( "\n", substr_count( $m[0], "\n" ) );
+			},
+			$text
+		);
+
+		$braceStack = [];
+		$linkStack = [];
+		$tableStack = [];
+		$len = strlen( $clean );
+		$line = 1;
+		$i = 0;
+
+		while ( $i < $len ) {
+			$ch = $clean[$i];
+			if ( $ch === "\n" ) {
+				$line++;
+				$i++;
+				continue;
+			}
+			$two = substr( $clean, $i, 2 );
+			$three = substr( $clean, $i, 3 );
+
+			if ( $two === '{|' ) {
+				$tableStack[] = $line;
+				$i += 2;
+				continue;
+			}
+			if ( $two === '|}' ) {
+				if ( empty( $tableStack ) ) {
+					$problems[] = "line $line: stray '|}'";
+				} else {
+					array_pop( $tableStack );
+				}
+				$i += 2;
+				continue;
+			}
+			if ( $two === '{{' ) {
+				$braceStack[] = [ 'tok' => '{{', 'line' => $line ];
+				$i += 2;
+				continue;
+			}
+			if ( $three === '}}}' ) {
+				$n = count( $braceStack );
+				if ( $n >= 2 && $braceStack[$n - 1]['tok'] === '{' && $braceStack[$n - 2]['tok'] === '{{' ) {
+					// A {blank} right before the closing }} of a template (e.g. ...{wait}}}).
+					array_pop( $braceStack );
+					array_pop( $braceStack );
+					$i += 3;
+					continue;
+				}
+			}
+			if ( $two === '}}' ) {
+				if ( empty( $braceStack ) ) {
+					$problems[] = "line $line: stray '}}'";
+				} else {
+					$top = array_pop( $braceStack );
+					if ( $top['tok'] === '{' ) {
+						$problems[] = "line {$top['line']}: unclosed '{' (or missing '}}' on line $line)";
+						if ( !empty( $braceStack ) && $braceStack[count( $braceStack ) - 1]['tok'] === '{{' ) {
+							array_pop( $braceStack );
+						}
+					}
+				}
+				$i += 2;
+				continue;
+			}
+			if ( $ch === '{' && !empty( $braceStack ) ) {
+				$braceStack[] = [ 'tok' => '{', 'line' => $line ];
+				$i++;
+				continue;
+			}
+			if ( $ch === '}' && !empty( $braceStack ) && $braceStack[count( $braceStack ) - 1]['tok'] === '{' ) {
+				array_pop( $braceStack );
+				$i++;
+				continue;
+			}
+			if ( $two === '[[' ) {
+				$linkStack[] = $line;
+				$i += 2;
+				continue;
+			}
+			if ( $two === ']]' ) {
+				if ( empty( $linkStack ) ) {
+					$problems[] = "line $line: stray ']]'";
+				} else {
+					array_pop( $linkStack );
+				}
+				$i += 2;
+				continue;
+			}
+			$i++;
+		}
+
+		foreach ( $braceStack as $open ) {
+			$problems[] = "line {$open['line']}: unclosed '{$open['tok']}'";
+		}
+		foreach ( $linkStack as $openLine ) {
+			$problems[] = "line $openLine: unclosed '[['";
+		}
+		foreach ( $tableStack as $openLine ) {
+			$problems[] = "line $openLine: unclosed '{|'";
+		}
+
+		return $problems;
+	}
+
+	public static function stripProposedTags( $text ) {
 		$pattern = '/<proposed(?:\s[^>]*)?>(.*?)<\/proposed\s*>/is';
 
 		// Drop one newline either side of the content. A block-form tag sits
@@ -326,7 +486,7 @@ class SpecialVerifyBotEdits extends SpecialPage {
 	 * @param string $text
 	 * @return string
 	 */
-	private function stripBotProposes( $text ) {
+	public static function stripBotProposes( $text ) {
 		// Match {{Bot_proposes|content|by=...}}
 		// This is tricky because content can contain nested templates
 		// We'll use a simple approach that handles most cases
