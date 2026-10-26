@@ -39,6 +39,16 @@
 				"ext.pickipediaContent.css",
 				"ext.pickipediaContent.templates.css"
 			]
+		},
+		"ext.pickipediaContent.blueRailroads": {
+			"packageFiles": [
+				"ext.pickipediaContent.blueRailroads.js"
+			],
+			"dependencies": [
+				"mediawiki.api",
+				"mediawiki.util",
+				"mediawiki.storage"
+			]
 		}
 	},
 	"ResourceFileModulePaths": {

@@ -294,3 +294,8 @@
 .pp-moodlinks-foot h2 {
 	font-size: 1.2em;
 }
+
+/* Blue Railroads beside user links (ext.pickipediaContent.blueRailroads.js), as magenta shows them by names. */
+.pp-blue-railroads { color: #2563b8; font-size: 0.75em; font-weight: 600; text-decoration: none; margin-left: 0.35em; white-space: nowrap; }
+.pp-blue-railroads:hover { text-decoration: none; }
+.pp-blue-railroads .ico { width: 1.15em; height: 1em; margin-right: 0.15em; vertical-align: -0.1em; fill: currentColor; }
