@@ -110,7 +110,7 @@ class Todo {
 	 */
 	private static function item( array $raw, callable $hrefFor ): string {
 		$words = trim( (string)$raw['task'] );
-		$task = self::text( $words );
+		$task = self::text( $words, $hrefFor );
 		$link = is_scalar( $raw['link'] ?? null ) ? trim( (string)$raw['link'] ) : '';
 		$href = $link !== '' ? $hrefFor( $link ) : null;
 		if ( $href !== null ) {
@@ -132,18 +132,36 @@ class Todo {
 		return '<li class="pp-todo-item" id="' . htmlspecialchars( self::anchor( $words ) ) . '"><span class="pp-todo-box">' . ( empty( $raw['done'] ) ? '☐' : '☑' ) . '</span>'
 			. '<div class="pp-todo-text"><span class="pp-todo-task">' . $task . '</span>'
 			. ( $meta ? '<div class="pp-todo-meta">' . htmlspecialchars( implode( ' · ', $meta ) ) . '</div>' : '' )
-			. ( $note !== '' ? '<div class="pp-todo-note">' . self::text( $note ) . '</div>' : '' )
+			. ( $note !== '' ? '<div class="pp-todo-note">' . self::text( $note, $hrefFor ) . '</div>' : '' )
 			. '</div></li>';
 	}
 
 	/**
-	 * Words of a task or note: escaped, with `code` as code, as magenta shows them.
+	 * Words of a task or note: escaped, with `code` as code and [[Page]] or
+	 * [[Page|label]] a link, as magenta shows them (Justin, 27 Oct 2026: the
+	 * list names a dozen pages a reader had to search for). Brackets inside
+	 * code stay as written.
 	 *
 	 * @param string $words
+	 * @param callable|null $hrefFor As for render(); with none, brackets stay.
 	 * @return string
 	 */
-	public static function text( string $words ): string {
-		return preg_replace( '/`([^`\n]+)`/', '<code>$1</code>', htmlspecialchars( $words ) );
+	public static function text( string $words, ?callable $hrefFor = null ): string {
+		$codes = [];
+		$out = preg_replace_callback( '/`([^`\n]+)`/', static function ( array $m ) use ( &$codes ): string {
+			$codes[] = '<code>' . $m[1] . '</code>';
+			return "\x01" . ( count( $codes ) - 1 ) . "\x01";
+		}, htmlspecialchars( $words ) );
+		if ( $hrefFor !== null ) {
+			$out = preg_replace_callback( '/\[\[([^\[\]|]+?)(?:\|([^\[\]]+?))?\]\]/',
+				static function ( array $m ) use ( $hrefFor ): string {
+					$title = trim( html_entity_decode( $m[1], ENT_QUOTES ) );
+					$label = isset( $m[2] ) && trim( $m[2] ) !== '' ? trim( $m[2] ) : htmlspecialchars( $title );
+					$href = $title !== '' ? $hrefFor( $title ) : null;
+					return $href === null ? $m[0] : '<a href="' . htmlspecialchars( $href ) . '">' . $label . '</a>';
+				}, $out );
+		}
+		return preg_replace_callback( '/\x01(\d+)\x01/', static fn ( array $m ) => $codes[(int)$m[1]], $out );
 	}
 
 	/**
