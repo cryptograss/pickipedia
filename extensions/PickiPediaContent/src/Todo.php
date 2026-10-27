@@ -110,9 +110,12 @@ class Todo {
 	 */
 	private static function item( array $raw, callable $hrefFor ): string {
 		$words = trim( (string)$raw['task'] );
-		$task = self::text( $words, $hrefFor );
 		$link = is_scalar( $raw['link'] ?? null ) ? trim( (string)$raw['link'] ) : '';
 		$href = $link !== '' ? $hrefFor( $link ) : null;
+		// A task with a link is one link, whole: a [[page]] inside it would be a
+		// link in a link, which browsers cut apart (re's review of #164). The
+		// note is never wrapped, so its pages stay links.
+		$task = self::text( $words, $href === null ? $hrefFor : null );
 		if ( $href !== null ) {
 			$external = preg_match( '#^https?://#i', $href ) === 1;
 			$task = '<a href="' . htmlspecialchars( $href ) . '"'
