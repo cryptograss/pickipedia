@@ -65,6 +65,10 @@
 			],
 			"description": "Namespaces where verification is enforced (0 = main)"
 		},
+		"PickiPediaVerificationStrictNamespaces": {
+			"value": [],
+			"description": "Namespaces where a bot edit may not remove or move an existing line either, unless the removal is proposed (<proposed action=\"remove\">); a subset of PickiPediaVerificationNamespaces"
+		},
 		"PickiPediaVerificationTemplate": {
 			"value": "Bot_proposes",
 			"description": "Template to wrap bot edits with"

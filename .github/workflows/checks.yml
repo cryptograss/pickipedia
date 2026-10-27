@@ -44,6 +44,7 @@ jobs:
           set -e
           php extensions/PickiPediaVerification/tests/check-gate.php
           php extensions/PickiPediaVerification/tests/check-proposed-tag.php
+          php extensions/PickiPediaVerification/tests/check-verify-strip.php
           php extensions/PickiPediaVerification/tests/check-verify-brackets.php
           php docker/check-extensions.php "$GITHUB_WORKSPACE"
           php extensions/PickiPediaReleases/tests/check-zine.php

@@ -109,6 +109,24 @@ define( "NS_MAGENTA_TALK", 3013 );
 $wgExtraNamespaces[NS_MAGENTA] = "Magenta";
 $wgExtraNamespaces[NS_MAGENTA_TALK] = "Magenta_talk";
 
+# The Instructions namespace: what the runner acts on, so what a person has to
+# have stood behind. The emergents' general orders, each one's own
+# instructions, the Moods' instructions and dials, and their task pages (a
+# prompt, a schedule, what it may spend) live here. Only the people in
+# 'orders' (Special:UserRights, by a bureaucrat) and the emergents can edit
+# it. An emergent's edit lands as a proposal, and here even taking a line away
+# has to be proposed (PickiPediaVerification's strict namespaces, below), so a
+# revision with nothing proposed on it is one a person read whole and saved.
+# That is the revision the runner takes (Justin, emergence, 26-27 Oct 2026:
+# "the last fully verified version is used"). Instructions_talk: is open.
+define( "NS_INSTRUCTIONS", 3014 );
+define( "NS_INSTRUCTIONS_TALK", 3015 );
+$wgExtraNamespaces[NS_INSTRUCTIONS] = "Instructions";
+$wgExtraNamespaces[NS_INSTRUCTIONS_TALK] = "Instructions_talk";
+# Instructions:Emergents/Re/Instructions and the like: subpages, so each has
+# its parent's breadcrumb.
+$wgNamespacesWithSubpages[NS_INSTRUCTIONS] = true;
+
 # Make Cryptograss namespace searchable by default
 $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
 $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
@@ -118,6 +136,7 @@ $wgNamespacesToBeSearchedDefault[NS_SONG] = true;
 # The emergents' notes turn up in an ordinary search, theirs and anyone's.
 $wgNamespacesToBeSearchedDefault[NS_EMERGENT] = true;
 $wgNamespacesToBeSearchedDefault[NS_MAGENTA] = true;
+$wgNamespacesToBeSearchedDefault[NS_INSTRUCTIONS] = true;
 
 ## URLs
 # The wiki's identity, fixed no matter which hostname a reader arrived by.
@@ -278,9 +297,20 @@ $wgGrantPermissionGroups['agent-edit'] = 'other';
 # roles"). A grant only ever narrows what the groups give; an account outside
 # 'emergent' or 'release' gains nothing here. The grants of their own above stay,
 # so bot passwords that ticked them keep working.
+# The Instructions namespace (above): the 'orders' group and the emergents.
+# 'orders' is given at Special:UserRights by a bureaucrat, as 'emergent' is,
+# and nothing in 'emergent' can change anyone's groups, so an emergent cannot
+# let itself in as a person. A grant too, for the emergents' bot passwords.
+$wgNamespaceProtection[NS_INSTRUCTIONS] = ['instructions-edit'];
+$wgGroupPermissions['orders']['instructions-edit'] = true;
+$wgGroupPermissions['emergent']['instructions-edit'] = true;
+$wgGroupPermissions['sysop']['instructions-edit'] = true;
+$wgGrantPermissions['emergent-edit']['instructions-edit'] = true;
+
 foreach ( [ 'editpage', 'createeditmovepage' ] as $grant ) {
 	$wgGrantPermissions[$grant]['emergent-edit'] = true;
 	$wgGrantPermissions[$grant]['release-edit'] = true;
+	$wgGrantPermissions[$grant]['instructions-edit'] = true;
 }
 
 ## Extensions
@@ -418,6 +448,16 @@ wfLoadExtension( 'PickiPediaVerification' );
 # Add bot accounts to this group via Special:UserRights
 $wgGroupPermissions['exempt-from-verification']['read'] = true;
 $wgPickiPediaVerificationExemptGroups = ['exempt-from-verification'];
+
+# Whose edits are proposals: the import bots, and the emergents (who are in
+# 'bot' too, but say so: the runner's trust rests on this line).
+$wgPickiPediaVerificationBotGroups = [ 'bot', 'emergent' ];
+# Where: the main namespace, and Instructions:, where a bot edit may not take
+# a line away or move it either without proposing that
+# (<proposed action="remove">), so a page with nothing proposed on it is one a
+# person has read whole. The runner reads only such revisions there.
+$wgPickiPediaVerificationNamespaces = [ NS_MAIN, NS_INSTRUCTIONS ];
+$wgPickiPediaVerificationStrictNamespaces = [ NS_INSTRUCTIONS ];
 
 # PickiPediaContent - article styling, and the Lua behind the Module: pages
 # Must load after Scribunto, whose library paths it adds to. A Module: page

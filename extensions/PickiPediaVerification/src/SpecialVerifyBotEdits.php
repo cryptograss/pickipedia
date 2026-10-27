@@ -172,6 +172,19 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			return;
 		}
 
+		// A bot's verifying is no one's verifying (PageHooks says the same of
+		// the button). The save below goes through PageUpdater, past the gate,
+		// and in a strict namespace a page with nothing proposed on it is what
+		// the runner trusts: a bot that could verify could trust itself.
+		$services = MediaWikiServices::getInstance();
+		$config = $services->getMainConfig();
+		$groups = $services->getUserGroupManager()->getUserGroups( $user );
+		if ( !array_intersect( $groups, $config->get( 'PickiPediaVerificationExemptGroups' ) )
+			&& array_intersect( $groups, $config->get( 'PickiPediaVerificationBotGroups' ) ) ) {
+			$out->addWikiTextAsInterface( "'''Error:''' A bot cannot verify. Verification is a person's act." );
+			return;
+		}
+
 		// Determine which pages to verify
 		$pageIds = [];
 
@@ -300,7 +313,8 @@ class SpecialVerifyBotEdits extends SpecialPage {
 	}
 
 	/**
-	 * Strip <proposed> tags, keeping what they wrapped.
+	 * Strip <proposed> tags, keeping what they wrapped; a proposed removal
+	 * goes with its tags.
 	 *
 	 * The whole point of the tag is that its content was never escaped, so
 	 * verifying is just removing the tags — no unescaping, no regex walking
@@ -452,15 +466,21 @@ class SpecialVerifyBotEdits extends SpecialPage {
 	}
 
 	public static function stripProposedTags( $text ) {
-		$pattern = '/<proposed(?:\s[^>]*)?>(.*?)<\/proposed\s*>/is';
+		$pattern = '/(\n?)<proposed((?:\s[^>]*)?)>(.*?)<\/proposed\s*>/is';
 
 		// Drop one newline either side of the content. A block-form tag sits
 		// on its own line, so removing just the tags leaves the newline that
 		// followed the opening one — which reads as a blank line before the
 		// template and accumulates every time something is verified. Inline
 		// use has no newlines to trim, so it is unaffected.
+		//
+		// A proposed removal (action="remove") is verified by taking the text
+		// away, the line it stood on included: the proposal was that it goes.
 		$unwrap = static function ( array $matches ): string {
-			return preg_replace( [ '/\A\n/', '/\n\z/' ], '', $matches[1] );
+			if ( preg_match( '/\baction\s*=\s*["\']?remove\b/i', $matches[2] ) ) {
+				return '';
+			}
+			return $matches[1] . preg_replace( [ '/\A\n/', '/\n\z/' ], '', $matches[3] );
 		};
 
 		$prevText = '';

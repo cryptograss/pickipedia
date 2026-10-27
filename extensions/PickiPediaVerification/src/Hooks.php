@@ -92,23 +92,45 @@ class Hooks implements EditFilterMergedContentHook {
 		// all leave content the bot is entitled to write; refusing those means a
 		// bot can write something it is then forbidden from taking back.
 		$previousText = $this->getCurrentText( $title );
-		$unmarked = $this->firstUnmarkedNewLine( $previousText, $text );
-		if ( $unmarked === null ) {
-			return true;
+		$strict = in_array( $title->getNamespace(), $config->get( 'PickiPediaVerificationStrictNamespaces' ) );
+		$unmarked = $this->firstUnmarkedNewLine( $previousText, $text, $strict );
+		if ( $unmarked !== null ) {
+			// Reject the edit with helpful message
+			wfDebugLog( 'PickiPediaVerification',
+				"Unmarked new content on {$title->getPrefixedText()}: {$unmarked}"
+			);
+			$status->fatal( 'pickipediaverification-bot-needs-proposed' );
+			$status->value = false;
+
+			wfDebugLog( 'PickiPediaVerification',
+				"Rejected bot edit from {$user->getName()} on {$title->getPrefixedText()} - missing verification markers"
+			);
+
+			return false;
 		}
 
-		// Reject the edit with helpful message
-		wfDebugLog( 'PickiPediaVerification',
-			"Unmarked new content on {$title->getPrefixedText()}: {$unmarked}"
-		);
-		$status->fatal( 'pickipediaverification-bot-needs-proposed' );
-		$status->value = false;
+		// In a strict namespace, what the page already says stays, in its
+		// place, unless its going is proposed too. The allowance above (a
+		// bot may take back what it wrote, unmarked) is right for an article,
+		// where a removed claim claims nothing. It is wrong for instructions,
+		// where "never push to main" taken away changes what an agent does as
+		// much as a new line would, and a page with nothing proposed on it is
+		// read by the runner as one a person stood behind. So here a removal
+		// is a proposal: the line stays, struck through, until verified
+		// (Justin, emergence, 27 Oct 2026).
+		if ( $strict ) {
+			$unkept = $this->firstUnkeptOldLine( $previousText, $text );
+			if ( $unkept !== null ) {
+				wfDebugLog( 'PickiPediaVerification',
+					"Unmarked removal on {$title->getPrefixedText()}: {$unkept}"
+				);
+				$status->fatal( 'pickipediaverification-bot-needs-removal-marker' );
+				$status->value = false;
+				return false;
+			}
+		}
 
-		wfDebugLog( 'PickiPediaVerification',
-			"Rejected bot edit from {$user->getName()} on {$title->getPrefixedText()} - missing verification markers"
-		);
-
-		return false;
+		return true;
 	}
 
 	/**
@@ -145,10 +167,15 @@ class Hooks implements EditFilterMergedContentHook {
 	 * @param string|null $oldText Wikitext before the edit, or null on page
 	 *   creation — where every line is new, which is correct.
 	 * @param string $newText Wikitext being saved.
+	 * @param bool $strict In a strict namespace every added line needs a
+	 *   marker, the ones with nowhere to put one included (block form around
+	 *   them): an added heading or table row on an instructions page says as
+	 *   much as a sentence, and here nothing unmarked may reach the runner
+	 *   (re's review of pickipedia#163).
 	 * @return string|null The first unmarked new line, or null if the edit is
 	 *   acceptable.
 	 */
-	private function firstUnmarkedNewLine( ?string $oldText, string $newText ): ?string {
+	private function firstUnmarkedNewLine( ?string $oldText, string $newText, bool $strict = false ): ?string {
 		$existing = [];
 		foreach ( explode( "\n", $oldText ?? '' ) as $line ) {
 			$normalized = $this->normalizeLine( $line );
@@ -173,13 +200,137 @@ class Hooks implements EditFilterMergedContentHook {
 			if ( $marked[$i] ) {
 				continue;
 			}
-			if ( $this->cannotCarryMarker( $line ) ) {
+			if ( !$strict && $this->cannotCarryMarker( $line ) ) {
 				continue;
 			}
 			return $normalized;
 		}
 
 		return null;
+	}
+
+	/**
+	 * The first line of the page that this edit takes away, or moves, without
+	 * proposing it (strict namespaces only).
+	 *
+	 * Every non-blank line of the old text must turn up in the new text in
+	 * the same order, or inside a <proposed action="remove"> marker. A moved
+	 * line fails the order test, on purpose: moving "never push to main"
+	 * under a line that contradicts it changes the page's meaning as surely
+	 * as removing it. To move a line, propose its removal and add it again,
+	 * marked.
+	 *
+	 * @param string|null $oldText Wikitext before the edit, or null on page
+	 *   creation, where nothing can have been taken away.
+	 * @param string $newText Wikitext being saved.
+	 * @return string|null The first old line not kept, or null if every
+	 *   line is kept or its removal is proposed.
+	 */
+	private function firstUnkeptOldLine( ?string $oldText, string $newText ): ?string {
+		if ( $oldText === null ) {
+			return null;
+		}
+		$old = [];
+		foreach ( explode( "\n", $oldText ) as $line ) {
+			$normalized = $this->normalizeLine( $line );
+			if ( $normalized !== '' ) {
+				$old[] = $normalized;
+			}
+		}
+
+		[ $kept, $removed, $unclosed ] = $this->keptAndRemovedLines( explode( "\n", $newText ) );
+		if ( $unclosed !== null ) {
+			// A removal with no end would be read as "to the foot of the
+			// page", which is not a thing anyone meant to propose.
+			return $unclosed;
+		}
+		$removedLeft = array_count_values( $removed );
+
+		// Kept first, then proposed-away: a page saying a thing twice, with
+		// one of them struck, has kept the first and proposed the second.
+		// (A line added back marked is wrapped, so it never reads as the
+		// old one and cannot take its place here.)
+		$at = 0;
+		foreach ( $old as $line ) {
+			$found = false;
+			for ( $i = $at, $n = count( $kept ); $i < $n; $i++ ) {
+				if ( $kept[$i] === $line ) {
+					$at = $i + 1;
+					$found = true;
+					break;
+				}
+			}
+			if ( $found ) {
+				continue;
+			}
+			if ( ( $removedLeft[$line] ?? 0 ) > 0 ) {
+				$removedLeft[$line]--;
+				continue;
+			}
+			return $line;
+		}
+		return null;
+	}
+
+	/**
+	 * The new text's lines, split into the ones that stay on the page and
+	 * the ones a <proposed action="remove"> marker says are to go.
+	 *
+	 * Block form, the tags on their own lines, covers the lines between
+	 * them; inline form covers the rest of its own line, with the tags
+	 * taken out, so "* <proposed action="remove">foo</proposed>" proposes
+	 * removing "* foo". The tag lines of the block form count as kept, so
+	 * a removal proposed earlier and still pending is itself a line of the
+	 * page that stays put.
+	 *
+	 * @param string[] $lines Lines of the text being saved.
+	 * @return array{0: string[], 1: string[], 2: ?string} [kept, removed,
+	 *   unclosed]: kept and removed normalized with blanks dropped; unclosed
+	 *   the opening tag of a block-form removal that never closes, else null.
+	 */
+	private function keptAndRemovedLines( array $lines ): array {
+		$kept = [];
+		$removed = [];
+		$lastOpen = null;
+		$opens = '/<proposed\b[^>]*\baction\s*=\s*["\']?remove\b[^>]*>/i';
+		$closes = '/<\/proposed\s*>/i';
+		$inRemoval = false;
+		foreach ( $lines as $line ) {
+			$normalized = $this->normalizeLine( $line );
+			if ( $inRemoval ) {
+				if ( preg_match( $closes, $line ) ) {
+					$inRemoval = false;
+					$before = $this->normalizeLine( preg_replace( $closes, '', $line ) );
+					if ( $before !== '' ) {
+						$removed[] = $before;
+					}
+					$kept[] = $this->normalizeLine( '</proposed>' );
+					continue;
+				}
+				if ( $normalized !== '' ) {
+					$removed[] = $normalized;
+				}
+				continue;
+			}
+			if ( preg_match( $opens, $line, $open ) ) {
+				if ( preg_match( $closes, $line ) ) {
+					// Inline: the line's own text, tags off, is what goes.
+					$inner = $this->normalizeLine( preg_replace( [ $opens, $closes ], '', $line ) );
+					if ( $inner !== '' ) {
+						$removed[] = $inner;
+					}
+					continue;
+				}
+				$inRemoval = true;
+				$lastOpen = $this->normalizeLine( $open[0] );
+				$kept[] = $lastOpen;
+				continue;
+			}
+			if ( $normalized !== '' ) {
+				$kept[] = $normalized;
+			}
+		}
+		return [ $kept, $removed, $inRemoval ? $lastOpen : null ];
 	}
 
 	/**

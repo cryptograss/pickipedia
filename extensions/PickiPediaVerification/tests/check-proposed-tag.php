@@ -163,6 +163,23 @@ namespace MediaWiki\Extension\PickiPediaVerification {
 	check( 'the badge is still appended',
 		str_contains( render( $prose ), 'pv-proposed__badge' ) );
 
+	echo "\nA proposed removal is shown struck, and says so:\n";
+
+	$gone = render( "He plays a 1923 Loar.", [ 'by' => 'Re', 'action' => 'remove' ] );
+	check( 'it carries the removal class',
+		str_contains( $gone, 'pv-proposed--removal' ), $gone );
+	check( 'and says what it is in data-pv-action',
+		attribute( $gone, 'data-pv-action' ) === 'remove' );
+	check( 'the text itself is still there for the verifier to read',
+		str_contains( $gone, 'He plays a 1923 Loar.' ) );
+	check( 'its badge is the removal badge, not the claim badge',
+		str_contains( $gone, 'pickipediaverification-removal-badge' )
+			&& !str_contains( $gone, 'pickipediaverification-proposed-badge' ) );
+	check( 'its hover text names the proposer of the removal',
+		attribute( $gone, 'title' ) === 'pickipediaverification-removal-hover' );
+	check( 'a plain proposal is unchanged by all this',
+		!str_contains( render( "He plays a 1923 Loar.", [ 'by' => 'Re' ] ), 'removal' ) );
+
 	echo $failures === 0 ? "\nAll checks passed.\n\n" : "\n$failures FAILED\n\n";
 	exit( $failures === 0 ? 0 : 1 );
 
