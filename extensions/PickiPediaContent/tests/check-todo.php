@@ -38,6 +38,11 @@ $list = <<<'YAML'
   link: "#m-0f132ada"
 - task: Look in on the jam
   link: "#jams-and-events"
+- task: Verify [[Cryptograss:Moods/Dials]] and [[Special:VerifyBotEdits|the queue]]; see `[[not a link]]`
+  note: "[[Emergent:Blu/Journal/26274917]] is there"
+- task: Merge pickipedia#163 and move [[Cryptograss:Emergents/GeneralOrders]]
+  link: https://github.com/cryptograss/pickipedia/pull/163
+  note: Then [[Special:UserRights]] for the orders group
 - Bare task
 - task: Redeploy maybelle
   kind: deploy
@@ -56,8 +61,19 @@ check( 'who and kind beneath', str_contains( $out, '<div class="pp-todo-meta">ed
 check( 'a note beneath, escaped', str_contains( $out, "deploy-log edits are marked as a bot&#039;s." ) );
 check( 'nothing written runs', !str_contains( $out, '<script>' ) && str_contains( $out, '&lt;script&gt;' ) );
 check( 'a bare task is an item', str_contains( $out, 'Bare task' ) );
+check( 'a [[page]] in a task is a link to it',
+	str_contains( $out, 'Verify <a href="/wiki/Cryptograss:Moods/Dials">Cryptograss:Moods/Dials</a> and' ), $out );
+check( 'a [[page|label]] shows its label', str_contains( $out, '<a href="/wiki/Special:VerifyBotEdits">the queue</a>;' ) );
+check( 'brackets inside code stay as written', str_contains( $out, '<code>[[not a link]]</code>' ) );
+check( 'a [[page]] in a note is a link too',
+	str_contains( $out, '<div class="pp-todo-note"><a href="/wiki/Emergent:Blu/Journal/26274917">Emergent:Blu/Journal/26274917</a> is there</div>' ) );
+check( 'with no way to make a link, brackets stay', Todo::text( 'see [[A page]]' ) === 'see [[A page]]' );
+check( 'a task that is a link makes no link inside it',
+	str_contains( $out, '<a href="https://github.com/cryptograss/pickipedia/pull/163" class="external" rel="nofollow">Merge pickipedia#163 and move [[Cryptograss:Emergents/GeneralOrders]]</a>' ), $out );
+check( 'but its note still links its pages',
+	str_contains( $out, 'Then <a href="/wiki/Special:UserRights">Special:UserRights</a> for the orders group' ) );
 check( 'done ones folded away', preg_match( '#<details class="pp-todo-done"><summary>Done \(1\)</summary>.*Redeploy maybelle#s', $out ) === 1 );
-check( 'five open, the one without a task left out', substr_count( $out, '☐' ) === 5 && !str_contains( $out, 'no task' ) );
+check( 'seven open, the one without a task left out', substr_count( $out, '☐' ) === 7 && !str_contains( $out, 'no task' ) );
 
 $bad = Todo::render( "- task: one\n  who: [unclosed\n", $hrefFor );
 check( 'unreadable YAML says so, and where', str_contains( $bad, 'class="error"' ) && str_contains( $bad, 'line' ), $bad );
