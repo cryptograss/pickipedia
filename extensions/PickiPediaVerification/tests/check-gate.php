@@ -193,6 +193,21 @@ namespace {
 		strict( $orders, $orders . "\nAn unmarked new claim." ) === null );
 	check( 'page creation takes nothing away',
 		strict( null, "Anything." ) === null );
+	check( 'a removal that never closes is refused, naming its opening tag',
+		strict( $orders, "== Practices ==\n* Never merge a pull request.\n<proposed by=\"Re\" action=\"remove\">\n* Never push to main.\n* Keep time in block heights." )
+			=== '<proposed by="Re" action="remove">',
+		var_export( strict( $orders, "== Practices ==\n* Never merge a pull request.\n<proposed by=\"Re\" action=\"remove\">\n* Never push to main.\n* Keep time in block heights." ), true ) );
+	$twice = "* Say where it is.\n* Read the record.\n* Say where it is.";
+	check( 'of two identical lines, dropping one is still a removal',
+		strict( $twice, "* Say where it is.\n* Read the record." ) === '* Say where it is.' );
+	check( 'and proposing one of them away is accepted',
+		strict( $twice, "* Say where it is.\n* Read the record.\n<proposed by=\"Blu\" action=\"remove\">\n* Say where it is.\n</proposed>" ) === null );
+	$task = "{{Agent task|mood=connectome|schedule=every 3600 blocks|cap=1|tools=full}}\nWrite the next entry.";
+	check( 'a changed number is not the same line: cap=1 to cap=50 is a removal of the old line',
+		strict( $task, "{{Agent task|mood=connectome|schedule=every 3600 blocks|cap=50|tools=full}}\nWrite the next entry." )
+			=== '{{Agent task|mood=connectome|schedule=every 3600 blocks|cap=1|tools=full}}' );
+	check( 'nor is a change of case',
+		strict( "Never push to main.", "never push to main." ) === 'Never push to main.' );
 	check( 'the heading counts as a line too',
 		strict( $orders, "* Never merge a pull request.\n* Never push to main.\n* Keep time in block heights." ) === '== Practices ==' );
 

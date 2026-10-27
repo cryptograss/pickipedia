@@ -233,15 +233,20 @@ class Hooks implements EditFilterMergedContentHook {
 			}
 		}
 
-		[ $kept, $removed ] = $this->keptAndRemovedLines( explode( "\n", $newText ) );
+		[ $kept, $removed, $unclosed ] = $this->keptAndRemovedLines( explode( "\n", $newText ) );
+		if ( $unclosed !== null ) {
+			// A removal with no end would be read as "to the foot of the
+			// page", which is not a thing anyone meant to propose.
+			return $unclosed;
+		}
 		$removedLeft = array_count_values( $removed );
 
+		// Kept first, then proposed-away: a page saying a thing twice, with
+		// one of them struck, has kept the first and proposed the second.
+		// (A line added back marked is wrapped, so it never reads as the
+		// old one and cannot take its place here.)
 		$at = 0;
 		foreach ( $old as $line ) {
-			if ( ( $removedLeft[$line] ?? 0 ) > 0 ) {
-				$removedLeft[$line]--;
-				continue;
-			}
 			$found = false;
 			for ( $i = $at, $n = count( $kept ); $i < $n; $i++ ) {
 				if ( $kept[$i] === $line ) {
@@ -250,9 +255,14 @@ class Hooks implements EditFilterMergedContentHook {
 					break;
 				}
 			}
-			if ( !$found ) {
-				return $line;
+			if ( $found ) {
+				continue;
 			}
+			if ( ( $removedLeft[$line] ?? 0 ) > 0 ) {
+				$removedLeft[$line]--;
+				continue;
+			}
+			return $line;
 		}
 		return null;
 	}
@@ -269,12 +279,14 @@ class Hooks implements EditFilterMergedContentHook {
 	 * page that stays put.
 	 *
 	 * @param string[] $lines Lines of the text being saved.
-	 * @return array{0: string[], 1: string[]} [kept, removed], normalized,
-	 *   blanks dropped.
+	 * @return array{0: string[], 1: string[], 2: ?string} [kept, removed,
+	 *   unclosed]: kept and removed normalized with blanks dropped; unclosed
+	 *   the opening tag of a block-form removal that never closes, else null.
 	 */
 	private function keptAndRemovedLines( array $lines ): array {
 		$kept = [];
 		$removed = [];
+		$lastOpen = null;
 		$opens = '/<proposed\b[^>]*\baction\s*=\s*["\']?remove\b[^>]*>/i';
 		$closes = '/<\/proposed\s*>/i';
 		$inRemoval = false;
@@ -305,14 +317,15 @@ class Hooks implements EditFilterMergedContentHook {
 					continue;
 				}
 				$inRemoval = true;
-				$kept[] = $this->normalizeLine( $open[0] );
+				$lastOpen = $this->normalizeLine( $open[0] );
+				$kept[] = $lastOpen;
 				continue;
 			}
 			if ( $normalized !== '' ) {
 				$kept[] = $normalized;
 			}
 		}
-		return [ $kept, $removed ];
+		return [ $kept, $removed, $inRemoval ? $lastOpen : null ];
 	}
 
 	/**
