@@ -172,6 +172,19 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			return;
 		}
 
+		// A bot's verifying is no one's verifying (PageHooks says the same of
+		// the button). The save below goes through PageUpdater, past the gate,
+		// and in a strict namespace a page with nothing proposed on it is what
+		// the runner trusts: a bot that could verify could trust itself.
+		$services = MediaWikiServices::getInstance();
+		$config = $services->getMainConfig();
+		$groups = $services->getUserGroupManager()->getUserGroups( $user );
+		if ( !array_intersect( $groups, $config->get( 'PickiPediaVerificationExemptGroups' ) )
+			&& array_intersect( $groups, $config->get( 'PickiPediaVerificationBotGroups' ) ) ) {
+			$out->addWikiTextAsInterface( "'''Error:''' A bot cannot verify. Verification is a person's act." );
+			return;
+		}
+
 		// Determine which pages to verify
 		$pageIds = [];
 

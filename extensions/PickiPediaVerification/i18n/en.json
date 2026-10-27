@@ -6,7 +6,7 @@
 		]
 	},
 	"pickipediaverification-desc": "Enforces verification workflow for bot/AI edits on PickiPedia",
-	"pickipediaverification-bot-needs-proposed": "Bot edits must include verification markers. Wrap the new claim in <code>&lt;proposed by=\"YourBot\"&gt;...&lt;/proposed&gt;</code>, or for a template that supports it (Show, Venue, etc.) add <code>|status=proposed</code>. Edits that only remove or rearrange existing content don't need a marker.",
+	"pickipediaverification-bot-needs-proposed": "Bot edits must include verification markers. Wrap the new claim in <code>&lt;proposed by=\"YourBot\"&gt;...&lt;/proposed&gt;</code>, or for a template that supports it (Show, Venue, etc.) add <code>|status=proposed</code>. Edits that only remove or rearrange existing content don't need a marker, except in a strict namespace (Instructions:), where every added line needs one, headings and table rows included (use the block form around them), and a removal is proposed with <code>action=\"remove\"</code>.",
 	"pickipediaverification-bot-needs-removal-marker": "In this namespace a bot edit may not take a line away, or move it, without proposing that too. Keep the line where it was, or wrap it in <code>&lt;proposed by=\"YourBot\" action=\"remove\"&gt;...&lt;/proposed&gt;</code>; it stays on the page, struck through, until a person verifies the removal. A removal that opens and never closes is refused as well.",
 	"verifybotedits": "Verify Bot Edits",
 	"verifybotedits-summary": "Review and verify edits made by bots",

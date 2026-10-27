@@ -92,7 +92,8 @@ class Hooks implements EditFilterMergedContentHook {
 		// all leave content the bot is entitled to write; refusing those means a
 		// bot can write something it is then forbidden from taking back.
 		$previousText = $this->getCurrentText( $title );
-		$unmarked = $this->firstUnmarkedNewLine( $previousText, $text );
+		$strict = in_array( $title->getNamespace(), $config->get( 'PickiPediaVerificationStrictNamespaces' ) );
+		$unmarked = $this->firstUnmarkedNewLine( $previousText, $text, $strict );
 		if ( $unmarked !== null ) {
 			// Reject the edit with helpful message
 			wfDebugLog( 'PickiPediaVerification',
@@ -117,8 +118,7 @@ class Hooks implements EditFilterMergedContentHook {
 		// read by the runner as one a person stood behind. So here a removal
 		// is a proposal: the line stays, struck through, until verified
 		// (Justin, emergence, 27 Oct 2026).
-		$strict = $config->get( 'PickiPediaVerificationStrictNamespaces' );
-		if ( in_array( $title->getNamespace(), $strict ) ) {
+		if ( $strict ) {
 			$unkept = $this->firstUnkeptOldLine( $previousText, $text );
 			if ( $unkept !== null ) {
 				wfDebugLog( 'PickiPediaVerification',
@@ -167,10 +167,15 @@ class Hooks implements EditFilterMergedContentHook {
 	 * @param string|null $oldText Wikitext before the edit, or null on page
 	 *   creation — where every line is new, which is correct.
 	 * @param string $newText Wikitext being saved.
+	 * @param bool $strict In a strict namespace every added line needs a
+	 *   marker, the ones with nowhere to put one included (block form around
+	 *   them): an added heading or table row on an instructions page says as
+	 *   much as a sentence, and here nothing unmarked may reach the runner
+	 *   (re's review of pickipedia#163).
 	 * @return string|null The first unmarked new line, or null if the edit is
 	 *   acceptable.
 	 */
-	private function firstUnmarkedNewLine( ?string $oldText, string $newText ): ?string {
+	private function firstUnmarkedNewLine( ?string $oldText, string $newText, bool $strict = false ): ?string {
 		$existing = [];
 		foreach ( explode( "\n", $oldText ?? '' ) as $line ) {
 			$normalized = $this->normalizeLine( $line );
@@ -195,7 +200,7 @@ class Hooks implements EditFilterMergedContentHook {
 			if ( $marked[$i] ) {
 				continue;
 			}
-			if ( $this->cannotCarryMarker( $line ) ) {
+			if ( !$strict && $this->cannotCarryMarker( $line ) ) {
 				continue;
 			}
 			return $normalized;
