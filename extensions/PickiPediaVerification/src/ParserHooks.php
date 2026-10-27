@@ -104,13 +104,18 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 
 		$by = isset( $args['by'] ) ? trim( $args['by'] ) : '';
 		$source = isset( $args['source'] ) ? trim( $args['source'] ) : '';
+		// action="remove": a proposal that this goes, not that it is so. It
+		// stays on the page, struck through, so the person verifying sees
+		// what would be lost; verifying it takes it away (SpecialVerifyBotEdits).
+		$removal = isset( $args['action'] ) && strtolower( trim( $args['action'] ) ) === 'remove';
 
 		$element = preg_match( '/^\s*<(?:' . self::BLOCK_ELEMENTS . ')\b/i', $html ) ? 'div' : 'span';
-		$classes = 'pv-proposed pv-proposed--' . ( $element === 'div' ? 'block' : 'inline' );
+		$classes = 'pv-proposed pv-proposed--' . ( $element === 'div' ? 'block' : 'inline' )
+			. ( $removal ? ' pv-proposed--removal' : '' );
 
 		$attributes = [
 			'class' => $classes,
-			'title' => self::hoverText( $by ),
+			'title' => self::hoverText( $by, $removal ),
 			// The wikitext this marker wraps, so the verify gadget can find the
 			// block it has to rewrite.
 			//
@@ -132,6 +137,9 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 		if ( $source !== '' ) {
 			$attributes['data-source'] = $source;
 		}
+		if ( $removal ) {
+			$attributes['data-pv-action'] = 'remove';
+		}
 
 		$open = '<' . $element;
 		foreach ( $attributes as $name => $value ) {
@@ -139,7 +147,7 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 		}
 		$open .= '>';
 
-		return $open . $html . self::badge( $by, $source ) . '</' . $element . '>';
+		return $open . $html . self::badge( $by, $source, $removal ) . '</' . $element . '>';
 	}
 
 	/**
@@ -148,10 +156,11 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 	 * @param string $by Proposer, possibly empty.
 	 * @return string
 	 */
-	private static function hoverText( string $by ): string {
+	private static function hoverText( string $by, bool $removal = false ): string {
+		$key = $removal ? 'pickipediaverification-removal-hover' : 'pickipediaverification-proposed-hover';
 		return $by === ''
-			? wfMessage( 'pickipediaverification-proposed-hover-anon' )->text()
-			: wfMessage( 'pickipediaverification-proposed-hover' )->params( $by )->text();
+			? wfMessage( $key . '-anon' )->text()
+			: wfMessage( $key )->params( $by )->text();
 	}
 
 	/**
@@ -161,18 +170,20 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 	 * @param string $source Source hint, possibly empty.
 	 * @return string HTML.
 	 */
-	private static function badge( string $by, string $source ): string {
-		$label = wfMessage( 'pickipediaverification-proposed-badge' )->text();
+	private static function badge( string $by, string $source, bool $removal = false ): string {
+		$label = wfMessage( $removal ? 'pickipediaverification-removal-badge' : 'pickipediaverification-proposed-badge' )->text();
 		$badge = '<sup class="pv-proposed__badge">[' . htmlspecialchars( $label ) . ']</sup>';
 
 		if ( $by === '' && $source === '' ) {
 			return $badge;
 		}
 
-		$byline = $source === ''
+		$byline = $removal
+			? wfMessage( 'pickipediaverification-removal-byline' )->params( $by )->text()
+			: ( $source === ''
 			? wfMessage( 'pickipediaverification-proposed-byline' )->params( $by )->text()
 			: wfMessage( 'pickipediaverification-proposed-byline-source' )
-				->params( $by, $source )->text();
+				->params( $by, $source )->text() );
 
 		return $badge . '<span class="pv-proposed__byline">'
 			. htmlspecialchars( $byline ) . '</span>';

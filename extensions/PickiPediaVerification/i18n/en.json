@@ -7,11 +7,16 @@
 	},
 	"pickipediaverification-desc": "Enforces verification workflow for bot/AI edits on PickiPedia",
 	"pickipediaverification-bot-needs-proposed": "Bot edits must include verification markers. Wrap the new claim in <code>&lt;proposed by=\"YourBot\"&gt;...&lt;/proposed&gt;</code>, or for a template that supports it (Show, Venue, etc.) add <code>|status=proposed</code>. Edits that only remove or rearrange existing content don't need a marker.",
+	"pickipediaverification-bot-needs-removal-marker": "In this namespace a bot edit may not take a line away, or move it, without proposing that too. Keep the line where it was, or wrap it in <code>&lt;proposed by=\"YourBot\" action=\"remove\"&gt;...&lt;/proposed&gt;</code>; it stays on the page, struck through, until a person verifies the removal.",
 	"verifybotedits": "Verify Bot Edits",
 	"verifybotedits-summary": "Review and verify edits made by bots",
 	"pickipediaverification-proposed-badge": "unverified",
 	"pickipediaverification-proposed-hover": "Proposed by $1, a bot. Can you verify it?",
 	"pickipediaverification-proposed-hover-anon": "Proposed by a bot. Can you verify it?",
 	"pickipediaverification-proposed-byline": "Proposed by $1",
-	"pickipediaverification-proposed-byline-source": "Proposed by $1 via $2"
+	"pickipediaverification-proposed-byline-source": "Proposed by $1 via $2",
+	"pickipediaverification-removal-badge": "proposed removal",
+	"pickipediaverification-removal-hover": "$1, a bot, proposes removing this. Can you verify that it goes?",
+	"pickipediaverification-removal-hover-anon": "A bot proposes removing this. Can you verify that it goes?",
+	"pickipediaverification-removal-byline": "Removal proposed by $1"
 }

@@ -53,6 +53,10 @@ pipeline {
                     # (pickipedia#122).
                     php extensions/PickiPediaVerification/tests/check-proposed-tag.php
 
+                    # And what verifying does to them: a claim unwrapped, a
+                    # proposed removal taken away.
+                    php extensions/PickiPediaVerification/tests/check-verify-strip.php
+
                     # And the button that reads them. Skipped rather than
                     # failed where the agent has no node: a missing runtime is
                     # not a broken build, and saying so beats a green tick that

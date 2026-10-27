@@ -486,8 +486,19 @@
             var cleanContent = found.wasTag ?
                 found.content :
                 found.content.replace(/\{\{!\}\}/g, '|');
-            
-            if (source && source.match(/^https?:\/\//)) {
+
+            // A proposed removal is verified by taking the text away, the
+            // line it stood on included.
+            var removal = found.wasTag &&
+                /^<proposed\b[^>]*\baction\s*=\s*["']?remove\b/i.test(found.fullMatch);
+            var end = found.end;
+            if (removal && content.charAt(end) === '\n') {
+                end++;
+            }
+
+            if (removal) {
+                replacement = '';
+            } else if (source && source.match(/^https?:\/\//)) {
                 replacement = cleanContent + '{{source|' + source + '}}';
             } else if (source) {
                 replacement = cleanContent + '{{verified|' + source + '}}';
@@ -495,7 +506,7 @@
                 replacement = cleanContent + '{{verified|by ' + userName + '}}';
             }
             
-            var newContent = content.substring(0, found.start) + replacement + content.substring(found.end);
+            var newContent = content.substring(0, found.start) + replacement + content.substring(end);
 
             var label = (claimSource || claimText).replace(/\s+/g, ' ').trim();
             var editSummary = 'Verified: "' + label.substring(0, 50) +

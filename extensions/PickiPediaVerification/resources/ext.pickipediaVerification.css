@@ -70,6 +70,46 @@
 }
 
 /*
+ * A proposed removal: the text stays, struck through, until a person verifies
+ * that it goes. The badge and byline sit as inline blocks, which the strike
+ * does not reach (decorations propagate to in-flow text, not into atomic
+ * inlines), so they read plainly beside the struck text.
+ */
+.pv-proposed--removal {
+	text-decoration: line-through;
+	text-decoration-color: #b02a37;
+	background-color: #f8d7da;
+}
+
+.pv-proposed--block.pv-proposed--removal {
+	border-left-color: #b02a37;
+}
+
+.pv-proposed--inline.pv-proposed--removal {
+	border-bottom-color: #b02a37;
+}
+
+.pv-proposed--removal .pv-proposed__badge,
+.pv-proposed--removal .pv-proposed__byline {
+	display: inline-block;
+	text-decoration: none;
+	color: #842029;
+}
+
+.pv-proposed--block.pv-proposed--removal .pv-proposed__byline {
+	width: 100%;
+}
+
+body.pickipedia-dark .pv-proposed--removal {
+	background-color: #3b1d20;
+}
+
+body.pickipedia-dark .pv-proposed--removal .pv-proposed__badge,
+body.pickipedia-dark .pv-proposed--removal .pv-proposed__byline {
+	color: #f1aeb5;
+}
+
+/*
  * Dark mode follows the wiki's own switch: MediaWiki:Common.js toggles
  * .pickipedia-dark on <body> and remembers the choice.
  *
