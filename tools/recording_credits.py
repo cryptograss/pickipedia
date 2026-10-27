@@ -44,17 +44,35 @@ DISCOGS_INTERVAL = 2.5
 # MusicBrainz relationship types that mean someone performed.
 MB_PERFORMANCE_TYPES = {"instrument", "vocal", "performer", "performing orchestra"}
 
+def _norm_role(text):
+    """A Discogs role reduced to bare words: 'Lead Guitar [Electric]' -> 'lead guitar'.
+
+    Discogs writes the same job several ways -- 'Executive Producer' and
+    'Executive-Producer', 'Written By' and 'Written-By' -- so both the list
+    below and each role being tested go through here before they are compared.
+    The bracketed part is a qualifier ('Liner Notes [Song Notes]'), never the job.
+    """
+    text = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", text.lower())
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", text)).strip()
+
+
 # Discogs roles that mean someone did something other than perform. Discogs
 # roles are free text, so this list is the dumb part: a role not on it is
-# shown as a performance. Extend it when a new one turns up.
-DISCOGS_OTHER_ROLES = (
-    "producer", "executive-producer", "co-producer", "mixed by", "mastered by",
-    "recorded by", "engineer", "liner notes", "design", "layout", "photography",
-    "art direction", "artwork", "written-by", "written by", "arranged by",
-    "composed by", "lyrics by", "music by", "lacquer cut", "coordinator",
-    "management", "booking", "edited by", "remastered by", "transferred by",
-    "notes", "illustration", "cover", "a&r", "copyright", "licensed",
-)
+# shown as a performance. Extend it when a new one turns up; the entries are
+# normalized the same way a role is, so write them however reads best.
+DISCOGS_OTHER_ROLES = tuple(_norm_role(r) for r in (
+    "producer", "executive producer", "co producer", "associate producer",
+    "mixed by", "mixing", "mastered by", "mastering", "recorded by",
+    "engineer", "liner notes", "sleeve notes", "song notes", "notes",
+    "design", "layout", "graphic design", "art direction", "artwork",
+    "illustration", "cover", "photography", "photography by", "photographer",
+    "written by", "songwriter", "composed by", "lyrics by", "music by",
+    "arranged by", "lacquer cut", "coordinator", "project coordination",
+    "project manager", "production manager", "management", "booking",
+    "edited by", "editor", "remastered by", "transferred by", "compiled by",
+    "a&r", "copyright", "licensed", "manufactured by", "distributed by",
+    "created by", "directed by", "film director", "music director", "legal",
+))
 
 _last_call = {}
 
@@ -119,15 +137,26 @@ def find_recordings(artist, title):
 
 
 def pick_releases(recordings):
-    """One release per release group, the earliest dated; undated ones last."""
+    """One release per release group, the earliest dated; undated ones last.
+
+    Releases outside a group that share a title and date are folded too: the
+    same show turns up as several release groups, sometimes one per taper.
+    """
     groups = {}
     for rec in recordings:
         for rel in rec.get("releases", []):
             group = rel.get("release-group", {}).get("id", rel["id"])
             key = (rel.get("date") or "9999", rel["id"])
             if group not in groups or key < groups[group][0]:
-                groups[group] = (key, rec["id"], rel["id"])
-    return [(rec_id, rel_id) for _, rec_id, rel_id in sorted(groups.values())]
+                groups[group] = (key, rec["id"], rel["id"], rel)
+    seen, picked = set(), []
+    for key, rec_id, rel_id, rel in sorted(groups.values()):
+        shown = (normalize_title(rel.get("title", "")), rel.get("date") or "")
+        if shown in seen:
+            continue
+        seen.add(shown)
+        picked.append((rec_id, rel_id))
+    return picked
 
 
 def mb_credits(release, recording_id):
@@ -175,9 +204,24 @@ def track_in_spec(position, spec):
     return False
 
 
+def performance_roles(role):
+    """The parts of a Discogs role that mean performing.
+
+    A role is often several jobs at once -- 'Banjo, Producer, Mixed By' -- so
+    each part is judged on its own. Judging the whole string would let the
+    first word hide the rest: 'Guitar, Producer' starts with 'guitar', and
+    reporting it as a performance would credit a producer as a player.
+    """
+    parts = []
+    for part in re.split(r"[,/]", role):
+        norm = _norm_role(part)
+        if norm and not any(norm.startswith(other) for other in DISCOGS_OTHER_ROLES):
+            parts.append(part.strip())
+    return parts
+
+
 def is_performance(role):
-    r = role.lower()
-    return not any(r.startswith(other) for other in DISCOGS_OTHER_ROLES)
+    return bool(performance_roles(role))
 
 
 def discogs_credits(release, title):
@@ -196,11 +240,13 @@ def discogs_credits(release, title):
             scope = "track"
         else:
             continue  # credited on other tracks only
-        credits.append({"name": strip_discogs_suffix(e["name"]), "role": e["role"],
+        credits.append({"name": strip_discogs_suffix(e["name"]),
+                        "role": ", ".join(performance_roles(e["role"])),
                         "scope": scope, "source": "Discogs"})
     for e in (track or {}).get("extraartists", []):
         if is_performance(e["role"]):
-            credits.append({"name": strip_discogs_suffix(e["name"]), "role": e["role"],
+            credits.append({"name": strip_discogs_suffix(e["name"]),
+                            "role": ", ".join(performance_roles(e["role"])),
                             "scope": "track", "source": "Discogs"})
     return track, credits
 

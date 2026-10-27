@@ -150,3 +150,56 @@ def test_render_separates_track_from_release():
     track_part, release_part = out.split("Credited on the whole release")
     assert "(none)" in track_part and "Tony Rice" not in track_part.split("track 2", 1)[1]
     assert "Tony Rice: guitar [MusicBrainz]" in release_part
+
+
+# ---------------------------------------------------------------------------
+# Composite roles
+#
+# A Discogs role can name several jobs at once. The first version of the
+# filter judged the whole string, so 'Guitar, Producer' counted as a
+# performance and put a producer in the player list.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("role,performing", [
+    ("Guitar, Producer", ["Guitar"]),
+    ("Banjo, Producer, Mixed By", ["Banjo"]),
+    ("Vocals, Guitar", ["Vocals", "Guitar"]),
+    ("Producer, Guitar", ["Guitar"]),
+    ("Executive Producer", []),
+    ("Executive-Producer", []),
+    ("Songwriter", []),
+    ("Sleeve Notes", []),
+    ("Created By, Executive-Producer", []),
+    ("Film Director [Directed By]", []),
+    ("Project Manager [Project Coordination]", []),
+    ("Liner Notes [Song Notes]", []),
+    ("Written-By", []),
+])
+def test_composite_roles(role, performing):
+    assert rc.performance_roles(role) == performing
+
+
+def test_producer_hidden_behind_a_performance_is_not_reported():
+    _, credits = rc.discogs_credits(
+        discogs_release([{"name": "Tony Rice", "role": "Guitar, Producer", "tracks": ""}],
+                        [{"name": "Scott Vestal", "role": "Banjo, Producer, Mixed By"}]),
+        "House of the Rising Sun")
+    assert [(c["name"], c["role"], c["scope"]) for c in credits] == [
+        ("Tony Rice", "Guitar", "release"), ("Scott Vestal", "Banjo", "track")]
+
+
+def test_literal_duplicates_across_groups_are_folded():
+    """Same title and date in two groups: one entry.
+
+    Differently-titled releases of one show are NOT folded: 'Warfield
+    Theater, 12-08-91 (disc 1)' and '1991-12-08 Warfield Theater, SF, CA'
+    stay two versions, because nothing in the data says they are one tape.
+    """
+    recordings = [{"id": "r1", "releases": [
+        {"id": "a", "title": "Shady Grove", "date": "1996-10-29", "release-group": {"id": "g1"}},
+        {"id": "b", "title": "Shady Grove", "date": "1996-10-29", "release-group": {"id": "g2"}},
+        {"id": "c", "title": "Warfield Theater, 12-08-91 (disc 1)", "date": "1991-12-08",
+         "release-group": {"id": "g3"}},
+        {"id": "d", "title": "1991-12-08 Warfield Theater, SF, CA, USA", "date": "1991-12-08",
+         "release-group": {"id": "g4"}}]}]
+    assert rc.pick_releases(recordings) == [("r1", "c"), ("r1", "d"), ("r1", "a")]
