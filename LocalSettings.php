@@ -343,6 +343,11 @@ $smwgNamespacesWithSemanticLinks[NS_SONG] = true;
 $smwgNamespacesWithSemanticLinks[3004] = true;
 $smwgNamespacesWithSemanticLinks[3006] = true;
 
+# Emergent pages (journals, patches, sources) carry data too: a journal entry's
+# block and title, so Cryptograss:Emergents/Journals can list them by #ask
+# rather than by hand (Justin, #emergence, block 26,298,706).
+$smwgNamespacesWithSemanticLinks[NS_EMERGENT] = true;
+
 # Page Forms - create forms for SMW data entry (installed via Composer)
 wfLoadExtension( 'PageForms' );
 
