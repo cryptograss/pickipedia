@@ -17,7 +17,7 @@
 	"emergentbundles": "Emergent bundles",
 	"emergentbundles-summary": "Every bundle of instructions an emergent of cryptograss was given, and any one of them rebuilt from this wiki's revisions to read.",
 	"pickipediacontent-pronouns-label": "Pronouns:",
-	"pickipediacontent-pronouns-help": "Public: shown on your user page, and to anyone (or any emergent) writing about you. Choose one, or write your own.",
+	"pickipediacontent-pronouns-help": "Public: shown on your user page and in the @ menu. Choose one, or write your own. Emergents are told only pronouns on [[Cryptograss:Pronouns]]; to add one there, ask on [[Cryptograss talk:Pronouns|its talk page]].",
 	"pickipediacontent-pronouns-invalid": "Pronouns are words, with slashes or commas between them: no more than 40 characters.",
 	"pickipediacontent-pronouns-subtitle": "Pronouns: $1"
 }
