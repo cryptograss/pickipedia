@@ -117,7 +117,10 @@
         // showing the user what they are about to verify.
         var claimSource = $element.attr('data-pv-claim') || '';
 
+        // {{Bot_proposes}} says "unspecified" where the bot named no source: not a source, and never to be
+        // written back as one ({{verified|unspecified}} said nothing of who vouched -- Justin, 26 Oct).
         var existingSource = $element.data('source') || '';
+        if (/^unspecified$/i.test(String(existingSource).trim())) existingSource = '';
         var isBotProposal = $element.hasClass('bot-proposal') ||
             $element.hasClass('pv-proposed');
         
@@ -264,7 +267,7 @@
             var newContent = content
                 .replace(/\|status=proposed/g, '|status=verified')
                 .replace(/\|by=[^\n|}]*/g, '|by=' + userName)
-                .replace(/\|source=[^\n|}]*/g, '|source=' + (source || 'verified by ' + userName));
+                .replace(/\|source=[^\n|}]*/g, '|source=' + (source && !/^unspecified$/i.test(source) ? source : 'verified by ' + userName));
 
             if (newContent === content) {
                 mw.notify('Could not update show status. It may have already been verified.', { type: 'error' });
@@ -438,6 +441,18 @@
         return null;
     }
 
+    // What a verified claim ends with: {{source|url}} for a link, {{verified|basis}} for words, and with
+    // neither, who vouched: {{verified|by Name}} -- "I am in a position to know this" (Justin, 26 Oct).
+    // "unspecified" is the template's placeholder, never a basis.
+    function verifiedMark(source, userName) {
+        source = String(source || '').trim();
+        if (/^unspecified$/i.test(source)) source = '';
+        if (source.match(/^https?:\/\//)) {
+            return '{{source|' + source + '}}';
+        }
+        return '{{verified|' + (source || 'by ' + userName) + '}}';
+    }
+
     function submitVerification($claim, $form, claimText, $overlay, $dialog,
         claimSource) {
         var source = $form.find('#verify-source').val().trim();
@@ -496,15 +511,7 @@
                 end++;
             }
 
-            if (removal) {
-                replacement = '';
-            } else if (source && source.match(/^https?:\/\//)) {
-                replacement = cleanContent + '{{source|' + source + '}}';
-            } else if (source) {
-                replacement = cleanContent + '{{verified|' + source + '}}';
-            } else {
-                replacement = cleanContent + '{{verified|by ' + userName + '}}';
-            }
+            replacement = removal ? '' : cleanContent + verifiedMark(source, userName);
             
             var newContent = content.substring(0, found.start) + replacement + content.substring(end);
 

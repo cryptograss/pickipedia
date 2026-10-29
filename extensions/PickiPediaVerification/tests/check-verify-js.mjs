@@ -26,8 +26,8 @@ function lift(name) {
 
 const scope = {};
 eval(lift('stripWikitext') + lift('findProposedTagBySource') + lift('findProposedTagContaining') +
-	lift('findTemplateContaining') +
-	'\nscope.bySource = findProposedTagBySource; scope.byText = findProposedTagContaining;' +
+	lift('findTemplateContaining') + lift('verifiedMark') +
+	'\nscope.mark = verifiedMark; scope.bySource = findProposedTagBySource; scope.byText = findProposedTagContaining;' +
 	' scope.byTemplate = findTemplateContaining;');
 
 let failures = 0;
@@ -91,6 +91,12 @@ check('plain prose, as before',
 	scope.byTemplate(proposals, 'Every message is tagged by author, so agents can tell who is speaking.') !== null);
 check('and nothing that is not there',
 	scope.byTemplate(proposals, 'Open the gates and let the bus through.') === null);
+
+// Left blank, or left as the template's "unspecified": who vouched (Justin, 26 Oct).
+check('blank: by whoever verified', scope.mark('', 'JMyles') === '{{verified|by JMyles}}', scope.mark('', 'JMyles'));
+check('"unspecified" is no basis', scope.mark('unspecified', 'JMyles') === '{{verified|by JMyles}}', scope.mark('unspecified', 'JMyles'));
+check('words: the basis', scope.mark('I was there', 'JMyles') === '{{verified|I was there}}');
+check('a link: a source', scope.mark('https://setlist.fm/x', 'JMyles') === '{{source|https://setlist.fm/x}}');
 
 console.log(failures === 0 ? '\nAll checks passed.\n' : `\n${failures} FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);
