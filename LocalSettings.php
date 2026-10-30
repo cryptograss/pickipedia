@@ -127,6 +127,17 @@ $wgExtraNamespaces[NS_INSTRUCTIONS_TALK] = "Instructions_talk";
 # its parent's breadcrumb.
 $wgNamespacesWithSubpages[NS_INSTRUCTIONS] = true;
 
+# VersionControl namespace: machine-mirrored repository state (pull requests,
+# issues, tags, and deploy records) synced from GitHub and deploy tooling.
+# Holds bare records rather than encyclopedic claims.
+define( "NS_VERSIONCONTROL", 3016 );
+define( "NS_VERSIONCONTROL_TALK", 3017 );
+$wgExtraNamespaces[NS_VERSIONCONTROL] = "VersionControl";
+$wgExtraNamespaces[NS_VERSIONCONTROL_TALK] = "VersionControl_talk";
+$wgNamespaceAliases['VC'] = NS_VERSIONCONTROL;
+$wgNamespaceAliases['VC_talk'] = NS_VERSIONCONTROL_TALK;
+$wgNamespacesWithSubpages[NS_VERSIONCONTROL] = true;
+
 # Make Cryptograss namespace searchable by default
 $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
 $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
@@ -137,6 +148,7 @@ $wgNamespacesToBeSearchedDefault[NS_SONG] = true;
 $wgNamespacesToBeSearchedDefault[NS_EMERGENT] = true;
 $wgNamespacesToBeSearchedDefault[NS_MAGENTA] = true;
 $wgNamespacesToBeSearchedDefault[NS_INSTRUCTIONS] = true;
+$wgNamespacesToBeSearchedDefault[NS_VERSIONCONTROL] = true;
 
 ## URLs
 # The wiki's identity, fixed no matter which hostname a reader arrived by.
@@ -347,6 +359,10 @@ $smwgNamespacesWithSemanticLinks[3006] = true;
 # block and title, so Cryptograss:Emergents/Journals can list them by #ask
 # rather than by hand (Justin, #emergence, block 26,298,706).
 $smwgNamespacesWithSemanticLinks[NS_EMERGENT] = true;
+
+# VersionControl records (PRs, issues, deploys) hold queryable properties
+# (Worked on by, Mood, Deploy, PR number) for semantic search.
+$smwgNamespacesWithSemanticLinks[NS_VERSIONCONTROL] = true;
 
 # Page Forms - create forms for SMW data entry (installed via Composer)
 wfLoadExtension( 'PageForms' );
