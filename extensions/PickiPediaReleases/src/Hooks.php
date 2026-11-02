@@ -11,10 +11,12 @@ namespace MediaWiki\Extension\PickiPediaReleases;
 use MediaWiki\Installer\Hook\LoadExtensionSchemaUpdatesHook;
 use MediaWiki\Installer\DatabaseUpdater;
 use MediaWiki\Hook\BeforePageDisplayHook;
+use MediaWiki\Html\Html;
+use MediaWiki\Output\Hook\OutputPageParserOutputHook;
 use MediaWiki\Output\OutputPage;
 use Skin;
 
-class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook {
+class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook, OutputPageParserOutputHook {
 
 	/**
 	 * Handle schema updates
@@ -149,6 +151,72 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook {
 			$model = CONTENT_MODEL_JSON;
 			return false;
 		}
+		// Release:<CID>/captions holds a release's captions as WebVTT (or
+		// SRT), which the player reads with action=raw. They live on the wiki
+		// rather than in the pin because a CID can't change, and captions
+		// are written and corrected long after a release is pinned. Plain
+		// text, not release-yaml: a cue line is not YAML.
+		if ( $title->getNamespace() === NS_RELEASE && self::isCaptionsPage( $title->getText() ) ) {
+			$model = CONTENT_MODEL_TEXT;
+			return false;
+		}
 		return true;
+	}
+
+	/**
+	 * Is this Release subpage a release's captions? "<CID>/captions".
+	 *
+	 * @param string $text Title text without the namespace
+	 * @return bool
+	 */
+	public static function isCaptionsPage( string $text ): bool {
+		return (bool)preg_match( '#^[^/]+/captions$#i', $text );
+	}
+
+	/**
+	 * A Release page's link card: Open Graph and Twitter tags, so a release
+	 * pasted into a chat, a Mood or a post shows its title, its words and a
+	 * still from it rather than a bare CID. ReleaseContentHandler leaves what
+	 * the card says on the ParserOutput (Release card data); this is where
+	 * the page's head can be written to.
+	 *
+	 * @param OutputPage $out
+	 * @param \MediaWiki\Parser\ParserOutput $parserOutput
+	 */
+	public function onOutputPageParserOutput( $out, $parserOutput ): void {
+		$card = $parserOutput->getExtensionData( ReleaseContentHandler::CARD_KEY );
+		if ( !is_array( $card ) || empty( $card['title'] ) ) {
+			return;
+		}
+		$tags = [
+			'og:site_name' => 'PickiPedia',
+			'og:type' => $card['type'] ?? 'website',
+			'og:title' => $card['title'],
+			'og:url' => $out->getTitle() ? $out->getTitle()->getFullURL() : null,
+			'og:description' => $card['description'] ?? null,
+			'og:image' => $card['image'] ?? null,
+			'og:image:alt' => !empty( $card['image'] ) ? $card['title'] : null,
+		];
+		$twitter = [
+			'twitter:card' => !empty( $card['image'] ) ? 'summary_large_image' : 'summary',
+			'twitter:title' => $card['title'],
+			'twitter:description' => $card['description'] ?? null,
+			'twitter:image' => $card['image'] ?? null,
+		];
+		$head = '';
+		foreach ( $tags as $property => $value ) {
+			if ( $value !== null && $value !== '' ) {
+				$head .= Html::element( 'meta', [ 'property' => $property, 'content' => $value ] ) . "\n";
+			}
+		}
+		foreach ( $twitter as $name => $value ) {
+			if ( $value !== null && $value !== '' ) {
+				$head .= Html::element( 'meta', [ 'name' => $name, 'content' => $value ] ) . "\n";
+			}
+		}
+		if ( !empty( $card['description'] ) ) {
+			$out->addMeta( 'description', $card['description'] );
+		}
+		$out->addHeadItem( 'pickipedia-release-card', $head );
 	}
 }

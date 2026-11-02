@@ -64,6 +64,7 @@
 		"ContentHandlerDefaultModelFor": "main",
 		"LoadExtensionSchemaUpdates": "main",
 		"BeforePageDisplay": "main",
+		"OutputPageParserOutput": "main",
 		"PageForms::FormPrinterSetup": "main"
 	},
 	"MessagesDirs": {

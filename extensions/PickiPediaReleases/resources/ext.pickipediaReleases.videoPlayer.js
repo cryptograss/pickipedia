@@ -286,6 +286,217 @@
         paint(match ? match.value : 'auto');
     }
 
+    // ---- Speed and captions: a row under every player, whichever way it plays ----
+    //
+    // Speed (Justin, Nov 2026): Chrome hides a speed menu behind its ⋮, Firefox
+    // has none, Safari only on a right-click, and none in an embed. A tune you
+    // are learning wants 0.75× with its pitch kept, and the browser keeps pitch
+    // by default (preservesPitch), so only the rate is ours to set. Remembered
+    // across videos like the quality: someone slowing down solos to learn them
+    // means it for the evening.
+    var SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    var SPEED_KEY = 'pickipedia-video-speed';
+    var CAPTIONS_KEY = 'pickipedia-video-captions';
+
+    function remembered(key, fallback) {
+        try {
+            return window.localStorage.getItem(key) || fallback;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
+    function remember(key, value) {
+        try {
+            window.localStorage.setItem(key, value);
+        } catch (e) {
+            // Private windows: the choice holds for this page view only.
+        }
+    }
+
+    function speedLabel(rate) {
+        return (rate === 1 ? '1' : String(rate).replace(/^0\./, '.')) + '×';
+    }
+
+    function styleButton(button) {
+        button.type = 'button';
+        button.style.cssText = 'padding:2px 8px; cursor:pointer; border:1px solid #a2a9b1;'
+                            + 'border-radius:2px; background:#fff; font-size:inherit; color:#202122;';
+    }
+
+    function paintButton(button, on) {
+        button.style.fontWeight = on ? '700' : '400';
+        button.style.background = on ? '#eaf3ff' : '#fff';
+        button.style.borderColor = on ? '#36c' : '#a2a9b1';
+        button.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+
+    // Setting the rate once isn't enough: a new source (hls.js reloading for
+    // Audio only, the fallback to the plain file) runs load(), which resets
+    // playbackRate to defaultPlaybackRate. So both are set, and set again when
+    // a new source's metadata arrives.
+    function applySpeed(video, rate) {
+        video.defaultPlaybackRate = rate;
+        video.playbackRate = rate;
+    }
+
+    function addSpeedSelector(bar, video) {
+        var group = document.createElement('span');
+        group.className = 'hls-speed';
+        group.style.cssText = 'display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center;';
+        var label = document.createElement('span');
+        label.textContent = 'Speed:';
+        label.style.cssText = 'opacity:0.7; margin-right:2px;';
+        group.appendChild(label);
+
+        var buttons = SPEEDS.map(function(rate) {
+            var button = document.createElement('button');
+            styleButton(button);
+            button.textContent = speedLabel(rate);
+            button.setAttribute('data-rate', String(rate));
+            button.title = rate === 1 ? 'Normal speed' : rate + '× speed, pitch kept';
+            button.addEventListener('click', function() {
+                applySpeed(video, rate);
+                remember(SPEED_KEY, String(rate));
+            });
+            group.appendChild(button);
+            return button;
+        });
+
+        function paint() {
+            buttons.forEach(function(button) {
+                paintButton(button, Number(button.getAttribute('data-rate')) === video.playbackRate);
+            });
+        }
+
+        var wanted = Number(remembered(SPEED_KEY, '1'));
+        if (SPEEDS.indexOf(wanted) === -1) {
+            wanted = 1;
+        }
+        // The browser's own menu (Chrome's ⋮) changes it too; the row follows.
+        video.addEventListener('ratechange', paint);
+        video.addEventListener('loadedmetadata', function() {
+            if (video.playbackRate !== Number(remembered(SPEED_KEY, '1'))) {
+                applySpeed(video, Number(remembered(SPEED_KEY, '1')) || 1);
+            }
+        });
+        applySpeed(video, wanted);
+        paint();
+        bar.appendChild(group);
+    }
+
+    // Captions live on the wiki, not in the pin: Release:<CID>/captions holds
+    // WebVTT (or SRT, converted here). A CID can't change after it is pinned,
+    // and captions get written, corrected and translated long after. They play
+    // as a real text track, so they can be turned on and off (here, and in
+    // the browser's own CC menu), they stay sharp at any size, they are
+    // searchable text on the wiki, and their look is ours to set with ::cue in
+    // the stylesheet. Burned-in captions can do none of that.
+    function captionsTitle(cid) {
+        return 'Release:' + cid + '/captions';
+    }
+
+    function toWebVtt(text) {
+        text = String(text || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim();
+        if (/^WEBVTT/.test(text)) {
+            return text + '\n';
+        }
+        // SRT: the same cues, with commas for the decimal point and no header.
+        // Cue numbers are allowed to stay; WebVTT reads them as cue ids.
+        return 'WEBVTT\n\n' + text.replace(
+            /(\d{1,2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2'
+        ) + '\n';
+    }
+
+    function fetchCaptions(cid) {
+        var script = (typeof mw !== 'undefined' && mw.config.get('wgScript')) || '/index.php';
+        return fetch(script + '?title=' + encodeURIComponent(captionsTitle(cid)) + '&action=raw')
+            .then(function(resp) { return resp.ok ? resp.text() : ''; })
+            .then(function(text) { return /-->/.test(text) ? toWebVtt(text) : ''; })
+            .catch(function() { return ''; });
+    }
+
+    function addCaptions(bar, video, cid) {
+        fetchCaptions(normalizeCid(cid)).then(function(vtt) {
+            if (!vtt) {
+                return;
+            }
+            var track = document.createElement('track');
+            track.kind = 'subtitles';
+            track.label = 'Captions';
+            track.srclang = (typeof mw !== 'undefined' && mw.config.get('wgContentLanguage')) || 'en';
+            track.src = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+            video.appendChild(track);
+
+            var button = document.createElement('button');
+            styleButton(button);
+            button.className = 'hls-cc';
+            button.textContent = 'CC';
+            button.title = 'Captions on or off';
+            button.style.marginLeft = '8px';
+
+            function textTrack() {
+                return track.track || (video.textTracks && video.textTracks[0]);
+            }
+            function set(on) {
+                var tt = textTrack();
+                if (tt) {
+                    tt.mode = on ? 'showing' : 'hidden';
+                }
+                paintButton(button, on);
+            }
+            button.addEventListener('click', function() {
+                var on = !(textTrack() && textTrack().mode === 'showing');
+                set(on);
+                remember(CAPTIONS_KEY, on ? 'on' : 'off');
+            });
+            // The browser's own CC menu turns it too; the button follows.
+            if (video.textTracks && video.textTracks.addEventListener) {
+                video.textTracks.addEventListener('change', function() {
+                    var tt = textTrack();
+                    paintButton(button, !!tt && tt.mode === 'showing');
+                });
+            }
+            bar.appendChild(button);
+            // On unless this viewer turned them off: captions are for everyone
+            // in a noisy room, not only for those who go looking.
+            set(remembered(CAPTIONS_KEY, 'on') !== 'off');
+        });
+    }
+
+    // Shift + > and Shift + < while the player has focus, as on most video sites.
+    function speedKeys(container, video) {
+        container.addEventListener('keydown', function(event) {
+            if (!event.shiftKey || (event.key !== '>' && event.key !== '<')) {
+                return;
+            }
+            var at = SPEEDS.indexOf(video.playbackRate);
+            if (at === -1) {
+                at = SPEEDS.indexOf(1);
+            }
+            var next = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, at + (event.key === '>' ? 1 : -1)))];
+            applySpeed(video, next);
+            remember(SPEED_KEY, String(next));
+            event.preventDefault();
+        });
+    }
+
+    function addPlaybackBar(container, video, cid) {
+        var bar = document.createElement('div');
+        bar.className = 'hls-playback-bar';
+        bar.style.cssText = 'display:flex; flex-wrap:wrap; gap:4px; align-items:center;'
+                          + 'margin-top:6px; font-size:0.85em;';
+        container.appendChild(bar);
+        try {
+            addSpeedSelector(bar, video);
+            speedKeys(container, video);
+            addCaptions(bar, video, cid);
+        } catch (e) {
+            // A broken row must never cost anyone the video.
+        }
+        return bar;
+    }
+
     // delivery-kid's ASCII portrait, from its page's infobox: asked for once
     // per page view, the first time someone hovers over a video.
     var dkArtPromise = null;
@@ -414,6 +625,7 @@ function fallbackToDirectVideo(container, cid, width, maxWidth, startSeconds) {
         seekWhenReady(video, startSeconds);
         container.appendChild(video);
         addDeliveryKidMark(container, video);
+        addPlaybackBar(container, video, cid);
     }
 
 function initPlayer(container) {
@@ -459,6 +671,7 @@ function initPlayer(container) {
         // Native remains the fallback for anything hls.js cannot drive
         // (no Media Source Extensions), which includes iOS Safari.
         addDeliveryKidMark(container, video);
+        addPlaybackBar(container, video, cid);
 
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
             // The stream playing now: replaced when someone picks Audio only
