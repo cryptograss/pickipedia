@@ -18,6 +18,12 @@ use StatusValue;
 
 class ReleaseContentHandler extends ContentHandler {
 
+	/** ParserOutput extension-data key for the link card (Hooks::onOutputPageParserOutput) */
+	public const CARD_KEY = 'pickipedia-release-card';
+
+	/** Where a release's still is, beside its stream, once delivery-kid has made one */
+	private const IPFS_GATEWAY = 'https://ipfs.delivery-kid.cryptograss.live/ipfs/';
+
 	/**
 	 * @param string $modelId
 	 */
@@ -159,8 +165,32 @@ YAML;
 			$isVideo = $this->hasHLSVideoBacklink( $pageRef );
 		}
 
+		// The release's own name as the page's heading and the tab's title:
+		// "Cory Walkers Birthday Banjo Cake", not "Release:QmUQwn…". The CID
+		// stays in the table below, where it is still the release's address.
+		$releaseTitle = is_string( $data['title'] ?? null ) ? trim( $data['title'] ) : '';
+		if ( $releaseTitle !== '' ) {
+			$output->setDisplayTitle( htmlspecialchars( $releaseTitle ) );
+		}
+
+		// Who brought it, and when, under the heading.
+		$html .= $this->renderByline( $data );
+
+		// Under the player and its description, before the details table:
+		// what the uploader, and whoever released it, have to say about it,
+		// and whether it has captions (Release:<CID>/captions, which the
+		// player reads) and where to write them.
+		$afterPlayer = $this->renderCommentary( $data['commentary'] ?? null );
+		if ( $cid && $isVideo && $pageRef ) {
+			$afterPlayer .= $this->renderCaptionsLink( $pageRef, $output );
+		}
+
 		// Render the release info
-		$html .= $this->renderReleaseInfo( $cid, $data, $pageRef, $isVideo );
+		$html .= $this->renderReleaseInfo( $cid, $data, $pageRef, $isVideo, $afterPlayer );
+
+		// The card for wherever it's linked (see Hooks::onOutputPageParserOutput).
+		$output->setExtensionData( self::CARD_KEY,
+			$this->card( $cid, $data, $releaseTitle, $isVideo ) );
 
 		// "Play in Rabbithole" button for track-type releases that have an
 		// OGG encoding available. Opens the rabbithole demo (player +
@@ -333,7 +363,9 @@ YAML;
 	 * @param mixed $pageRef
 	 * @return string
 	 */
-	private function renderReleaseInfo( ?string $cid, array $data, $pageRef, bool $isVideo = false ): string {
+	private function renderReleaseInfo(
+		?string $cid, array $data, $pageRef, bool $isVideo = false, string $afterPlayer = ''
+	): string {
 		$html = Html::openElement( 'div', [ 'class' => 'release-info' ] );
 
 		// Render video player if this release is a video
@@ -347,10 +379,13 @@ YAML;
 
 		}
 
-		// Title from YAML
-		if ( !empty( $data['title'] ) ) {
-			$html .= Html::element( 'h2', [ 'class' => 'release-title' ], $data['title'] );
+		// The title from the YAML is the page's own heading now (setDisplayTitle).
+		// Its description reads as the page's opening words, not a table cell.
+		if ( is_string( $data['description'] ?? null ) && trim( $data['description'] ) !== '' ) {
+			$html .= Html::rawElement( 'div', [ 'class' => 'release-lede' ],
+				nl2br( htmlspecialchars( trim( $data['description'] ) ) ) );
 		}
+		$html .= $afterPlayer;
 
 		$html .= Html::openElement( 'table', [ 'class' => 'release-metadata wikitable' ] );
 
@@ -370,14 +405,6 @@ YAML;
 				? implode( ', ', $data['pinned_on'] )
 				: (string)$data['pinned_on'];
 			$html .= Html::element( 'td', [ 'class' => 'release-pinned' ], $pinnedList );
-			$html .= Html::closeElement( 'tr' );
-		}
-
-		// Description from YAML
-		if ( !empty( $data['description'] ) ) {
-			$html .= Html::openElement( 'tr' );
-			$html .= Html::element( 'th', [], 'Description' );
-			$html .= Html::rawElement( 'td', [], nl2br( htmlspecialchars( $data['description'] ) ) );
 			$html .= Html::closeElement( 'tr' );
 		}
 
@@ -435,6 +462,169 @@ YAML;
 		$html .= Html::closeElement( 'div' );
 
 		return $html;
+	}
+
+	/**
+	 * "Uploaded by SkymanJenkins · block 26,172,962 · 12 Oct 2026", from
+	 * what delivery-kid and the draft wrote. Only what's there is said.
+	 *
+	 * @param array $data
+	 * @return string
+	 */
+	private function renderByline( array $data ): string {
+		$parts = [];
+		$by = is_string( $data['uploaded_by'] ?? null ) ? trim( $data['uploaded_by'] ) : '';
+		if ( str_starts_with( $by, 'wiki:' ) ) {
+			$name = substr( $by, 5 );
+			$user = \MediaWiki\Title\Title::makeTitleSafe( NS_USER, $name );
+			$parts[] = 'Uploaded by ' . ( $user
+				? Html::element( 'a', [ 'href' => $user->getLocalURL() ], $name )
+				: htmlspecialchars( $name ) );
+		} elseif ( $by !== '' ) {
+			$parts[] = 'Uploaded by ' . Html::element( 'code', [], $by );
+		}
+		$block = $data['upload_blockheight'] ?? null;
+		if ( is_numeric( $block ) && (int)$block > 0 ) {
+			$parts[] = Html::element( 'span', [ 'class' => 'release-block' ],
+				'block ' . number_format( (int)$block ) );
+		}
+		$at = is_string( $data['created_at'] ?? null ) ? strtotime( $data['created_at'] ) : false;
+		if ( $at ) {
+			$parts[] = Html::element( 'time', [ 'datetime' => gmdate( 'c', $at ) ], gmdate( 'j M Y', $at ) );
+		}
+		if ( !$parts ) {
+			return '';
+		}
+		return Html::rawElement( 'div', [ 'class' => 'release-byline' ], implode( ' · ', $parts ) );
+	}
+
+	/**
+	 * Commentary: words about the release from the people who made it go.
+	 *
+	 *   commentary:
+	 *     - by: SkymanJenkins
+	 *       role: uploader
+	 *       text: |
+	 *         Cory turned 40 and the cake was a banjo.
+	 *
+	 * Plain text, paragraphs on blank lines; `by` is a wiki user name. A
+	 * person writes it: nothing here generates it.
+	 *
+	 * @param mixed $commentary
+	 * @return string
+	 */
+	private function renderCommentary( $commentary ): string {
+		if ( !is_array( $commentary ) || !$commentary ) {
+			return '';
+		}
+		$items = '';
+		foreach ( $commentary as $note ) {
+			if ( !is_array( $note ) ) {
+				continue;
+			}
+			$text = is_string( $note['text'] ?? null ) ? trim( $note['text'] ) : '';
+			if ( $text === '' ) {
+				continue;
+			}
+			$paragraphs = '';
+			foreach ( preg_split( "/\n\s*\n/", $text ) as $para ) {
+				$paragraphs .= Html::rawElement( 'p', [], nl2br( htmlspecialchars( trim( $para ) ) ) );
+			}
+			$by = is_string( $note['by'] ?? null ) ? trim( preg_replace( '/^wiki:/', '', $note['by'] ) ) : '';
+			$role = is_string( $note['role'] ?? null ) ? trim( $note['role'] ) : '';
+			$who = '';
+			if ( $by !== '' ) {
+				$user = \MediaWiki\Title\Title::makeTitleSafe( NS_USER, $by );
+				$who = $user
+					? Html::element( 'a', [ 'href' => $user->getLocalURL() ], $by )
+					: htmlspecialchars( $by );
+			}
+			$cite = trim( $who . ( $role !== '' ? Html::element( 'span', [ 'class' => 'release-commentary-role' ], $role ) : '' ) );
+			$items .= Html::rawElement( 'figure', [ 'class' => 'release-commentary-note' ],
+				Html::rawElement( 'blockquote', [], $paragraphs )
+				. ( $cite !== '' ? Html::rawElement( 'figcaption', [], '— ' . $cite ) : '' )
+			);
+		}
+		if ( $items === '' ) {
+			return '';
+		}
+		return Html::rawElement( 'section', [ 'class' => 'release-commentary' ], $items );
+	}
+
+	/**
+	 * A line saying whether this release has captions, linking to where they
+	 * are written: Release:<CID>/captions, in WebVTT or SRT.
+	 *
+	 * @param mixed $pageRef
+	 * @param ParserOutput $output
+	 * @return string
+	 */
+	private function renderCaptionsLink( $pageRef, ParserOutput $output ): string {
+		$captions = \MediaWiki\Title\Title::makeTitleSafe(
+			$pageRef->getNamespace(), $pageRef->getDBkey() . '/captions' );
+		if ( !$captions ) {
+			return '';
+		}
+		// Recorded as links, so this line is redrawn when the captions page
+		// is made (its links) or edited (its use as a template), rather than
+		// saying "no captions yet" from the parser cache.
+		$output->addLink( $captions );
+		if ( $captions->exists() ) {
+			$output->addTemplate( $captions, $captions->getArticleID(), $captions->getLatestRevID() );
+		}
+		if ( $captions->exists() ) {
+			$words = Html::element( 'a', [ 'href' => $captions->getLocalURL() ], 'Captions' )
+				. ' on, with CC under the player · '
+				. Html::element( 'a', [ 'href' => $captions->getLocalURL( [ 'action' => 'edit' ] ) ], 'edit them' );
+		} else {
+			$words = 'No captions yet · '
+				. Html::element( 'a', [
+					'href' => $captions->getLocalURL( [ 'action' => 'edit' ] ),
+					'title' => 'WebVTT or SRT: paste what VEED, Whisper or a person made',
+				], 'add them' )
+				. ' (WebVTT or SRT)';
+		}
+		return Html::rawElement( 'div', [ 'class' => 'release-captions' ], '💬 ' . $words );
+	}
+
+	/**
+	 * What the link card says: title, a line of description, and a still.
+	 *
+	 * @param string|null $cid
+	 * @param array $data
+	 * @param string $releaseTitle
+	 * @param bool $isVideo
+	 * @return array
+	 */
+	private function card( ?string $cid, array $data, string $releaseTitle, bool $isVideo ): array {
+		$normalizedCid = $cid && str_starts_with( $cid, 'Bafy' ) ? strtolower( $cid ) : $cid;
+		$description = is_string( $data['description'] ?? null ) ? trim( $data['description'] ) : '';
+		if ( $description === '' && is_array( $data['commentary'] ?? null ) ) {
+			foreach ( $data['commentary'] as $note ) {
+				if ( is_array( $note ) && is_string( $note['text'] ?? null ) && trim( $note['text'] ) !== '' ) {
+					$description = trim( $note['text'] );
+					break;
+				}
+			}
+		}
+		if ( $description === '' ) {
+			$by = is_string( $data['uploaded_by'] ?? null ) ? preg_replace( '/^wiki:/', '', $data['uploaded_by'] ) : '';
+			$kind = $isVideo ? 'A video' : 'A release';
+			$description = $by !== '' ? "{$kind} on PickiPedia, uploaded by {$by}." : "{$kind} on PickiPedia.";
+		}
+		$description = mb_strimwidth( preg_replace( '/\s+/', ' ', $description ), 0, 280, '…' );
+		$poster = $data['transcode']['poster'] ?? null;
+		$image = ( $normalizedCid && $isVideo && is_string( $poster ) && $poster !== '' )
+			? self::IPFS_GATEWAY . $normalizedCid . '/' . rawurlencode( $poster )
+			: null;
+		$type = ( $data['release_type'] ?? '' ) === 'track' ? 'music.song'
+			: ( $isVideo ? 'video.other' : 'website' );
+		return [
+			'title' => $releaseTitle !== '' ? $releaseTitle : (string)$normalizedCid,
+			'description' => $description,
+			'image' => $image,
+			'type' => $type,
+		];
 	}
 
 	/**
