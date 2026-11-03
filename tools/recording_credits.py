@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Who plays on a recording: an Artificial Dumb lookup.
+Sideman: who plays on a recording, an Artificial Dumb lookup.
 
     python3 tools/recording_credits.py "Tony Rice" "House of the Rising Sun"
 
