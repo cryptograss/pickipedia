@@ -67,10 +67,10 @@ class SpecialEmergentBundles extends SpecialPage {
 	private function showList(): void {
 		$out = $this->getOutput();
 		$request = $this->getRequest();
-		// ?emergent=, or ?agent= as links from before 25 Oct 2026 say; magenta's
-		// /api/bundles/ is asked with its own name for it, agent, until it takes both.
+		// ?emergent=, or ?agent= as links from before 25 Oct 2026 say. magenta's
+		// /api/bundles/ is asked with ?emergent= (the emergent rename, 4 Nov 2026).
 		$query = array_filter( [
-			'agent' => $request->getVal( 'emergent', $request->getVal( 'agent', '' ) ),
+			'emergent' => $request->getVal( 'emergent', $request->getVal( 'agent', '' ) ),
 			'mood' => $request->getVal( 'mood', '' ),
 			'before' => $request->getVal( 'before', '' ),
 			'limit' => self::PER_PAGE,
@@ -82,7 +82,7 @@ class SpecialEmergentBundles extends SpecialPage {
 
 		$form = Html::openElement( 'form', [ 'method' => 'get', 'action' => $this->getPageTitle()->getLocalURL() ] )
 			. Html::label( 'Emergent ', 'ab-emergent' )
-			. Html::input( 'emergent', $query['agent'] ?? '', 'text', [ 'id' => 'ab-emergent', 'size' => 10 ] ) . ' '
+			. Html::input( 'emergent', $query['emergent'] ?? '', 'text', [ 'id' => 'ab-emergent', 'size' => 10 ] ) . ' '
 			. Html::label( 'Mood ', 'ab-mood' )
 			. Html::input( 'mood', $query['mood'] ?? '', 'text', [ 'id' => 'ab-mood', 'size' => 20 ] ) . ' '
 			. Html::element( 'button', [ 'type' => 'submit' ], 'Show' )
