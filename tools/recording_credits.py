@@ -60,10 +60,15 @@ def _norm_role(text):
 # roles are free text, so this list is the dumb part: a role not on it is
 # shown as a performance. Extend it when a new one turns up; the entries are
 # normalized the same way a role is, so write them however reads best.
+#
+# An entry matches anywhere in a role, as whole words, not only at its start:
+# a job title usually ends with the job and starts with a qualifier, so
+# 'Assistant Engineer' and 'Guitar Technician' are both jobs, not players.
 DISCOGS_OTHER_ROLES = tuple(_norm_role(r) for r in (
     "producer", "executive producer", "co producer", "associate producer",
     "mixed by", "mixing", "mastered by", "mastering", "recorded by",
-    "engineer", "liner notes", "sleeve notes", "song notes", "notes",
+    "engineer", "technician", "tech", "assistant", "roadie",
+    "liner notes", "sleeve notes", "song notes", "notes",
     "design", "layout", "graphic design", "art direction", "artwork",
     "illustration", "cover", "photography", "photography by", "photographer",
     "written by", "songwriter", "composed by", "lyrics by", "music by",
@@ -124,16 +129,30 @@ def credit_line(artist_credit):
     return "".join(a["name"] + a.get("joinphrase", "") for a in artist_credit)
 
 
+MB_PAGE = 100
+MB_MAX_RESULTS = 1000  # "Shady Grove" territory: enough, and a ceiling on calls
+
+
 def find_recordings(artist, title):
-    """Every MusicBrainz recording of title whose artist credit mentions artist."""
+    """Every MusicBrainz recording of title whose artist credit mentions artist.
+
+    MusicBrainz answers at most 100 per call; a title with more recordings
+    than that is paged through by offset until its count is reached.
+    """
     query = f'recording:"{title}" AND artist:"{artist}"'
-    data = mb_get("recording/", query=query, limit=100)
     want = normalize_title(title)
-    return [
-        r for r in data.get("recordings", [])
-        if normalize_title(r["title"]) == want
-        and artist.lower() in credit_line(r["artist-credit"]).lower()
-    ]
+    found, offset = [], 0
+    while True:
+        data = mb_get("recording/", query=query, limit=MB_PAGE, offset=offset)
+        page = data.get("recordings", [])
+        found += [
+            r for r in page
+            if normalize_title(r["title"]) == want
+            and artist.lower() in credit_line(r["artist-credit"]).lower()
+        ]
+        offset += len(page)
+        if not page or offset >= min(data.get("count", 0), MB_MAX_RESULTS):
+            return found
 
 
 def pick_releases(recordings):
@@ -190,18 +209,32 @@ def discogs_id(release):
 
 
 def track_in_spec(position, spec):
-    """Whether a Discogs 'tracks' spec such as '1, 3 to 5' or 'A2' covers position."""
+    """Whether a Discogs 'tracks' spec such as '1, 3 to 5' or 'A2' covers position.
+
+    A sub-track of a medley is positioned '2.1'; a credit on track '2' covers it.
+    """
+    positions = [position]
+    if "." in position:
+        positions.append(position.split(".", 1)[0])
     for part in (p.strip() for p in spec.split(",")):
         if " to " in part:
             lo, hi = (x.strip() for x in part.split(" to ", 1))
-            if lo.isdigit() and hi.isdigit() and position.isdigit():
-                if int(lo) <= int(position) <= int(hi):
+            for pos in positions:
+                if lo.isdigit() and hi.isdigit() and pos.isdigit():
+                    if int(lo) <= int(pos) <= int(hi):
+                        return True
+                elif part == pos:
                     return True
-            elif part == position:
-                return True
-        elif part == position:
+        elif part in positions:
             return True
     return False
+
+
+def discogs_tracks(release):
+    """Every track on a Discogs release, sub-tracks of medleys included."""
+    for t in release.get("tracklist", []):
+        yield t
+        yield from t.get("sub_tracks", [])
 
 
 def performance_roles(role):
@@ -215,7 +248,7 @@ def performance_roles(role):
     parts = []
     for part in re.split(r"[,/]", role):
         norm = _norm_role(part)
-        if norm and not any(norm.startswith(other) for other in DISCOGS_OTHER_ROLES):
+        if norm and not any(re.search(rf"\b{re.escape(other)}\b", norm) for other in DISCOGS_OTHER_ROLES):
             parts.append(part.strip())
     return parts
 
@@ -227,7 +260,7 @@ def is_performance(role):
 def discogs_credits(release, title):
     """Performance credits from a Discogs release for the track titled title."""
     want = normalize_title(title)
-    track = next((t for t in release.get("tracklist", []) if normalize_title(t["title"]) == want), None)
+    track = next((t for t in discogs_tracks(release) if normalize_title(t["title"]) == want), None)
     credits = []
     position = track["position"] if track else None
     for e in release.get("extraartists", []):
@@ -285,7 +318,8 @@ def render(artist, title, versions):
         lines.append("MusicBrainz has no recording with this title and artist.")
     for v in versions:
         lines.append(f'{v["artist"]}: {v["release"]} ({v["date"] or "undated"}), '
-                     f'{"; ".join(v["labels"]) or "no label"}, track {v["track"]}')
+                     f'{"; ".join(v["labels"]) or "no label"}, '
+                     f'{"track " + str(v["track"]) if v["track"] is not None else "track not found"}')
         for scope, heading in (("track", "Credited on this track"),
                                ("release", "Credited on the whole release (check liner notes)")):
             rows = [c for c in v["credits"] if c["scope"] == scope]

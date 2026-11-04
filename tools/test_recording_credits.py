@@ -174,9 +174,69 @@ def test_render_separates_track_from_release():
     ("Project Manager [Project Coordination]", []),
     ("Liner Notes [Song Notes]", []),
     ("Written-By", []),
+    # A job title ends with the job and starts with a qualifier. Matching only
+    # the start of the role let 'Assistant Engineer' through (it doesn't start
+    # with 'engineer') and 'Guitar Technician' (it starts with an instrument).
+    ("Assistant Engineer", []),
+    ("Production Assistant", []),
+    ("Guitar Technician", []),
+    ("Banjo Tech", []),
+    ("Guitar, Guitar Technician", ["Guitar"]),
+    ("Engineer [Assistant]", []),
 ])
 def test_composite_roles(role, performing):
     assert rc.performance_roles(role) == performing
+
+
+# ---------------------------------------------------------------------------
+# Sub-tracks and paging
+# ---------------------------------------------------------------------------
+
+def test_discogs_subtrack_is_covered_by_its_parent_track():
+    """A medley's parts are positioned '2.1', '2.2'; a credit on '2' covers them."""
+    release = {
+        "extraartists": [{"name": "Guest Player", "role": "Dobro", "tracks": "2"},
+                         {"name": "Other Guest", "role": "Fiddle", "tracks": "3"}],
+        "tracklist": [
+            {"position": "1", "title": "Old Train", "extraartists": []},
+            {"position": "2", "title": "Medley", "type_": "index", "extraartists": [],
+             "sub_tracks": [{"position": "2.1", "title": "House Of The Rising Sun", "extraartists": []},
+                            {"position": "2.2", "title": "Shady Grove", "extraartists": []}]},
+        ],
+    }
+    track, credits = rc.discogs_credits(release, "House of the Rising Sun")
+    assert track["position"] == "2.1"
+    assert [(c["name"], c["scope"]) for c in credits] == [("Guest Player", "track")]
+
+
+@pytest.mark.parametrize("position,spec,covered", [
+    ("2.1", "2", True), ("2.1", "1 to 2", True), ("2.1", "2.1", True), ("2.1", "3", False), ("2", "2.1", False),
+])
+def test_track_in_spec_subtracks(position, spec, covered):
+    assert rc.track_in_spec(position, spec) is covered
+
+
+def test_find_recordings_pages_past_100(monkeypatch):
+    calls = []
+
+    def fake_mb_get(path, **params):
+        calls.append(params["offset"])
+        start = params["offset"]
+        page = [{"id": f"r{i}", "title": "Shady Grove", "artist-credit": [{"name": "Jerry Garcia"}]}
+                for i in range(start, min(start + 100, 150))]
+        return {"count": 150, "offset": start, "recordings": page}
+
+    monkeypatch.setattr(rc, "mb_get", fake_mb_get)
+    found = rc.find_recordings("Jerry Garcia", "Shady Grove")
+    assert calls == [0, 100]
+    assert len(found) == 150 and found[-1]["id"] == "r149"
+
+
+def test_render_says_when_track_not_found():
+    out = rc.render("Tony Rice", "Nowhere", [{
+        "artist": "Tony Rice", "release": "A Compilation", "date": "", "labels": [], "track": None,
+        "sources": [], "credits": []}])
+    assert "track not found" in out and "None" not in out
 
 
 def test_producer_hidden_behind_a_performance_is_not_reported():
