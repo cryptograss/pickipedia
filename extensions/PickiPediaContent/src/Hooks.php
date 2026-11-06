@@ -80,6 +80,10 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			$field['default'] = Pronouns::fromGender( $lookup->getOption( $user, 'gender' ) );
 		}
 		$preferences[Pronouns::OPTION] = $field;
+		// The time offset is MediaWiki's own field; it says here that it's read by others (TimeZone.php).
+		if ( isset( $preferences[TimeZone::OPTION] ) ) {
+			$preferences[TimeZone::OPTION]['help-message'] = 'pickipediacontent-timezone-help';
+		}
 		if ( isset( $preferences['gender'] ) ) {
 			$preferences['gender'] = [ 'type' => 'api' ];
 		}
@@ -102,6 +106,16 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		return Pronouns::clean( $services->getUserOptionsLookup()->getOption( $user, Pronouns::OPTION, '' ) );
 	}
 
+	/** A user's time zone, as their time offset preference names it (TimeZone::zoneOf); '' if it doesn't. */
+	public static function timeZoneOf( string $name ): string {
+		$services = MediaWikiServices::getInstance();
+		$user = $services->getUserFactory()->newFromName( $name );
+		if ( !$user || !$user->isRegistered() ) {
+			return '';
+		}
+		return TimeZone::zoneOf( $services->getUserOptionsLookup()->getOption( $user, TimeZone::OPTION, '' ) );
+	}
+
 	/**
 	 * <todo>: a to-do list kept as YAML, shown as a checklist (Todo.php).
 	 *
@@ -113,6 +127,11 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		$parser->setFunctionHook( 'pronouns', static function ( $parser, $name = '' ) {
 			$parser->getOutput()->updateCacheExpiry( 3600 );
 			return wfEscapeWikiText( self::pronounsOf( trim( (string)$name ) ) );
+		} );
+		// {{#timezone:Name}}: the zone their time offset preference names, or nothing (TimeZone.php).
+		$parser->setFunctionHook( 'timezone', static function ( $parser, $name = '' ) {
+			$parser->getOutput()->updateCacheExpiry( 3600 );
+			return wfEscapeWikiText( self::timeZoneOf( trim( (string)$name ) ) );
 		} );
 		$parser->setHook( 'todo', static function ( $input, array $args, $parser, $frame ) {
 			$page = $parser->getPage();
