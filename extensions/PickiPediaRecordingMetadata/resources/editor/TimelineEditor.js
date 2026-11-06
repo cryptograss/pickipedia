@@ -237,7 +237,7 @@ class TimelineEditor {
             // If we're embedded in an iframe, tell the parent so it can
             // hot-swap its player's timeline (the parent's
             // WebampChartifacts isn't reachable from here, but window.parent
-            // is). The demo at /rabbithole/pickipedia-demo.html?track=...
+            // is). The app at /rabbithole/?track=...
             // listens for this.
             if (window.parent && window.parent !== window) {
                 try {
