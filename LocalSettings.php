@@ -486,6 +486,13 @@ $wgPickiPediaVerificationStrictNamespaces = [ NS_INSTRUCTIONS ];
 # directory, so the logic is reviewed in a pull request rather than edited
 # straight onto a live wiki — and no bot needs write access to do it.
 wfLoadExtension( 'PickiPediaContent' );
+# Each save, move and upload is pushed to magenta's /api/wiki/hook/, signed with this (the same secret is
+# magenta's WIKI_HOOK_SECRET; extensions/PickiPediaContent/src/MagentaPush.php). Set it in
+# LocalSettings.local.php as $wgPickiPediaContentMagentaHookSecret, or in the environment. Unset: no push;
+# magenta's minute sweep alone serves.
+if ( getenv( 'MAGENTA_HOOK_SECRET' ) ) {
+	$wgPickiPediaContentMagentaHookSecret = getenv( 'MAGENTA_HOOK_SECRET' );
+}
 
 # RambutanMode - adds "Rambutan" as a middle name/alias to person and band articles
 # Users can toggle via sidebar; auto-disables at midnight Florida time

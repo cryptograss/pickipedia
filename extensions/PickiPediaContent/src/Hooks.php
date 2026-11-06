@@ -19,7 +19,10 @@
 namespace MediaWiki\Extension\PickiPediaContent;
 
 use MediaWiki\Hook\BeforePageDisplayHook;
+use MediaWiki\Hook\PageMoveCompleteHook;
 use MediaWiki\Hook\ParserFirstCallInitHook;
+use MediaWiki\Hook\UploadCompleteHook;
+use MediaWiki\Storage\Hook\PageSaveCompleteHook;
 use MediaWiki\Hook\SkinAfterContentHook;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Revision\SlotRecord;
@@ -33,7 +36,38 @@ use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\LikeValue;
 
 class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook,
-	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook, SaveUserOptionsHook {
+	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook, SaveUserOptionsHook,
+	PageSaveCompleteHook, PageMoveCompleteHook, UploadCompleteHook {
+
+	/** A save, told to magenta at once (MagentaPush.php). */
+	public function onPageSaveComplete( $wikiPage, $user, $summary, $flags, $revisionRecord, $editResult ) {
+		MagentaPush::tell( MagentaPush::payload(
+			$wikiPage->getTitle()->getPrefixedText(), $revisionRecord->getId(), $user->getName(),
+			( $flags & EDIT_NEW ) ? 'new' : 'edit'
+		) );
+	}
+
+	/** A move: both titles, so magenta forgets the old and reads the new. */
+	public function onPageMoveComplete( $old, $new, $user, $pageid, $redirid, $reason, $revision ) {
+		$from = Title::newFromLinkTarget( $old )->getPrefixedText();
+		MagentaPush::tell( MagentaPush::payload(
+			Title::newFromLinkTarget( $new )->getPrefixedText(), $revision ? $revision->getId() : null,
+			$user->getName(), 'move', $from
+		) );
+	}
+
+	/** An upload: its File: page, so a picture's embed is read again. */
+	public function onUploadComplete( $uploadBase ) {
+		$title = $uploadBase->getTitle();
+		if ( !$title ) {
+			return;
+		}
+		$file = $uploadBase->getLocalFile();
+		$user = $file ? $file->getUploader() : null;
+		MagentaPush::tell( MagentaPush::payload(
+			$title->getPrefixedText(), null, $user ? $user->getName() : '', 'upload'
+		) );
+	}
 
 	/**
 	 * Pronouns on Special:Preferences, in place of MediaWiki's own three (Pronouns.php; Justin, 26 Oct: one field,
