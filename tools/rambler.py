@@ -5,6 +5,7 @@ Rambler: who was on a record with whom, walked outward from one record.
     python3 tools/rambler.py 750499ef-cec3-4c3c-9e8d-2caacff30e0e
     python3 tools/rambler.py --hops 2 --json <release-mbid>
     python3 tools/rambler.py --wikitext <release-mbid>
+    python3 tools/rambler.py https://www.discogs.com/release/24433085
 
 An Artificial Dumb crawler for the connectome, built on Sideman
 (recording_credits.py) and its MusicBrainz and Discogs helpers. Starting at
@@ -31,6 +32,13 @@ What makes it dumb, deliberately:
     are kept as edges but go no further.
   - Compilations are skipped: a track on one does not put its players on a
     record together.
+  - Each source's reading is kept apart (by_source) beside the union the
+    walk uses, so a person verifying sees what MusicBrainz said and what
+    Discogs said, not a blend.
+
+A seed can be a Discogs release too, for a record MusicBrainz lacks. It is
+looked up on MusicBrainz by URL first; unlinked, it is read from Discogs
+alone, and since Discogs names carry no MusicBrainz id, it goes no further.
 
 Records that come back with nobody credited are listed as the worklist:
 they need liner notes, or someone who was there.
@@ -58,50 +66,10 @@ DEFAULT_MAX_RECORDS = 40
 # One record's credits
 # ---------------------------------------------------------------------------
 
-def mb_people(release):
-    """Performance credits on a MusicBrainz release, release- and track-level.
-
-    Returns {name: {"mbid", "roles", "scopes"}}. Track-level credits count:
-    a person credited on any track is on the record.
-    """
-    people = {}
-
-    def add(rel, scope):
-        if rel.get("type") not in sideman.MB_PERFORMANCE_TYPES or "artist" not in rel:
-            return
-        a = rel["artist"]
-        p = people.setdefault(a["name"], {"mbid": a.get("id"), "roles": set(), "scopes": set()})
-        p["roles"].add(", ".join(rel.get("attributes") or []) or rel["type"])
-        p["scopes"].add(scope)
-
-    for rel in release.get("relations", []):
-        add(rel, "release")
-    for medium in release.get("media", []):
-        for track in medium.get("tracks", []):
-            for rel in track.get("recording", {}).get("relations", []):
-                add(rel, "track")
-    return people
-
-
-def discogs_people(release):
-    """Performance credits on a Discogs release, release- and track-level."""
-    people = {}
-
-    def add(entry, scope):
-        roles = sideman.performance_roles(entry.get("role", ""))
-        if not roles:
-            return
-        name = sideman.strip_discogs_suffix(entry["name"])
-        p = people.setdefault(name, {"mbid": None, "roles": set(), "scopes": set()})
-        p["roles"].update(roles)
-        p["scopes"].add("track" if (entry.get("tracks") or "").strip() else scope)
-
-    for e in release.get("extraartists", []):
-        add(e, "release")
-    for track in release.get("tracklist", []):
-        for e in track.get("extraartists", []):
-            add(e, "track")
-    return people
+# Reading a release's credits is Sideman's job; these names stay so a
+# reader of Rambler sees where its people come from.
+mb_people = sideman.mb_people
+discogs_people = sideman.discogs_people
 
 
 def is_compilation(release):
@@ -109,8 +77,34 @@ def is_compilation(release):
     return "Compilation" in (group.get("secondary-types") or [])
 
 
+def add_people(record, source, people):
+    """Fold one source's reading of a record into it. The union (roles,
+    scopes, sources) is what the walk uses; by_source keeps what each source
+    said on its own, which is what a person verifying needs to see."""
+    for name, p in people.items():
+        q = record["people"].setdefault(
+            name, {"mbid": None, "roles": set(), "scopes": set(), "sources": set(), "by_source": {}})
+        q["mbid"] = q["mbid"] or p.get("mbid")
+        q["roles"] |= p["roles"]
+        q["scopes"] |= p["scopes"]
+        q["sources"].add(source)
+        q["by_source"][source] = {"roles": set(p["roles"]), "scopes": set(p["scopes"])}
+
+
+DISCOGS_SEED = re.compile(r"(?:discogs\.com/release/|^discogs:)(\d+)")
+
+
 def read_record(release_id):
-    """Fetch one record and everyone credited on it, from both sources."""
+    """Fetch one record and everyone credited on it, from both sources.
+
+    release_id is a MusicBrainz release id, or "discogs:N" for a record that
+    is only on Discogs (or whose MusicBrainz entry is unknown). A Discogs seed
+    is looked up on MusicBrainz by its URL first: if MusicBrainz links it,
+    the record is read from both, and can be walked onward.
+    """
+    m = DISCOGS_SEED.search(release_id)
+    if m:
+        return read_discogs_record(m.group(1))
     release = sideman.mb_get(
         f"release/{release_id}",
         inc="artist-credits+release-groups+recordings+artist-rels+recording-level-rels+url-rels")
@@ -124,16 +118,48 @@ def read_record(release_id):
         "sources": {"MusicBrainz": f"https://musicbrainz.org/release/{release_id}"},
         "people": {},
     }
-    for name, p in mb_people(release).items():
-        record["people"][name] = {**p, "sources": {"MusicBrainz"}}
+    add_people(record, "MusicBrainz", mb_people(release))
     did = sideman.discogs_id(release)
     if did:
         record["sources"]["Discogs"] = f"https://www.discogs.com/release/{did}"
-        for name, p in discogs_people(sideman.discogs_get(f"releases/{did}")).items():
-            q = record["people"].setdefault(name, {"mbid": None, "roles": set(), "scopes": set(), "sources": set()})
-            q["roles"] |= p["roles"]
-            q["scopes"] |= p["scopes"]
-            q["sources"].add("Discogs")
+        add_people(record, "Discogs", discogs_people(sideman.discogs_get(f"releases/{did}")))
+    return record
+
+
+def musicbrainz_release_for_discogs(did):
+    """The MusicBrainz release linked to a Discogs release, if any."""
+    try:
+        url = sideman.mb_get("url", resource=f"https://www.discogs.com/release/{did}", inc="release-rels")
+    except sideman.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+    for rel in url.get("relations", []):
+        if rel.get("target-type") == "release" and "release" in rel:
+            return rel["release"]["id"]
+    return None
+
+
+def read_discogs_record(did):
+    mbid = musicbrainz_release_for_discogs(did)
+    if mbid:
+        record = read_record(mbid)
+        if "Discogs" not in record["sources"]:
+            record["sources"]["Discogs"] = f"https://www.discogs.com/release/{did}"
+            add_people(record, "Discogs", discogs_people(sideman.discogs_get(f"releases/{did}")))
+        return record
+    release = sideman.discogs_get(f"releases/{did}")
+    record = {
+        "id": f"discogs:{did}",
+        "group": f"discogs-master-{release.get('master_id') or did}",
+        "title": release.get("title", ""),
+        "date": str(release.get("year") or ""),
+        "artist": ", ".join(sideman.strip_discogs_suffix(a["name"]) for a in release.get("artists", [])),
+        "compilation": "Compilation" in (release.get("formats", [{}])[0].get("descriptions") or []),
+        "sources": {"Discogs": f"https://www.discogs.com/release/{did}"},
+        "people": {},
+    }
+    add_people(record, "Discogs", discogs_people(release))
     return record
 
 
@@ -253,6 +279,18 @@ def render(graph):
         if len(gids) > 1:
             out.append(f"  {name}: {len(gids)}")
     out.append("")
+    out.append("Each record, as each source reads it:")
+    for gid in sorted(recs, key=lambda g: (recs[g]["date"] or "9999", g)):
+        rec = recs[gid]
+        out.append(f"  {label(rec)}")
+        for src, url in sorted(rec["sources"].items()):
+            out.append(f"    {src}: {url}")
+        for name, p in sorted(rec["people"].items()):
+            says = "; ".join(
+                f'{src} says {", ".join(sorted(r["roles"]))} [{"+".join(sorted(r["scopes"]))}]'
+                for src, r in sorted(p.get("by_source", {}).items()))
+            out.append(f"    {name}: {says or ', '.join(sorted(p['roles']))}")
+    out.append("")
     out.append("Record pairs:")
     for p in graph["pairs"]:
         a, b = (recs[g] for g in p["records"])
@@ -302,7 +340,8 @@ MBID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 
 def main(argv):
     ap = argparse.ArgumentParser(description="Rambler: record-to-record walk from one MusicBrainz release.")
-    ap.add_argument("seed", help="MusicBrainz release id, or a musicbrainz.org/release/... URL")
+    ap.add_argument("seed", help="MusicBrainz release id or musicbrainz.org/release/... URL; "
+                                 "or a discogs.com/release/N URL (or discogs:N)")
     ap.add_argument("--hops", type=int, default=1, help="record-to-record steps (default 1)")
     ap.add_argument("--per-person", type=int, default=DEFAULT_PER_PERSON)
     ap.add_argument("--max-records", type=int, default=DEFAULT_MAX_RECORDS)
@@ -311,9 +350,11 @@ def main(argv):
     out.add_argument("--wikitext", action="store_true")
     args = ap.parse_args(argv[1:])
     m = MBID.search(args.seed)
-    if not m:
-        ap.error("seed must contain a MusicBrainz release id")
-    graph = ramble(m.group(0), args.hops, args.per_person, args.max_records,
+    d = DISCOGS_SEED.search(args.seed)
+    if not m and not d:
+        ap.error("seed must contain a MusicBrainz release id or a Discogs release URL")
+    seed = m.group(0) if m else f"discogs:{d.group(1)}"
+    graph = ramble(seed, args.hops, args.per_person, args.max_records,
                    log=lambda msg: print(msg, file=sys.stderr))
     if args.json:
         print(json.dumps(jsonable(graph), indent=2, ensure_ascii=False))

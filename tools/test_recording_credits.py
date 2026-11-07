@@ -263,3 +263,80 @@ def test_literal_duplicates_across_groups_are_folded():
         {"id": "d", "title": "1991-12-08 Warfield Theater, SF, CA, USA", "date": "1991-12-08",
          "release-group": {"id": "g4"}}]}]
     assert rc.pick_releases(recordings) == [("r1", "c"), ("r1", "d"), ("r1", "a")]
+
+
+# ---------------------------------------------------------------------------
+# --album: a whole record, source by source
+# ---------------------------------------------------------------------------
+
+def test_find_releases_filters_title_and_artist_and_folds_groups(monkeypatch):
+    monkeypatch.setattr(rc, "mb_get", lambda path, **params: {"releases": [
+        {"id": "a", "title": "Manzanita", "date": "1979", "release-group": {"id": "g1"},
+         "artist-credit": [{"name": "Tony Rice"}]},
+        {"id": "b", "title": "Manzanita", "date": "1998", "release-group": {"id": "g1"},
+         "artist-credit": [{"name": "Tony Rice"}]},
+        {"id": "c", "title": "Manzanita Blues", "date": "1979", "release-group": {"id": "g2"},
+         "artist-credit": [{"name": "Tony Rice"}]},
+        {"id": "d", "title": "Manzanita", "date": "1979", "release-group": {"id": "g3"},
+         "artist-credit": [{"name": "Larry Rice"}]},
+    ]})
+    assert [r["id"] for r in rc.find_releases("Tony Rice", "Manzanita")] == ["a"]
+
+
+def test_discogs_find_releases_reads_artist_dash_title(monkeypatch):
+    monkeypatch.setattr(rc, "discogs_get", lambda path: {"results": [
+        {"id": 1, "title": "The Turpentine Ray - The First TV Dinner", "year": "2012", "master_id": 0},
+        {"id": 2, "title": "The Turpentine Ray - The First TV Dinner", "year": "2020", "master_id": 0},
+        {"id": 3, "title": "Kevin Coyne - Matching Head And Feet", "year": "1975", "master_id": 9},
+    ]})
+    hits = rc.discogs_find_releases("Turpentine Ray", "The First TV Dinner")
+    assert [h["id"] for h in hits] == ["1", "2"]  # no master: each release stands alone, earliest first
+
+
+def test_album_reads_a_linked_discogs_release_once(monkeypatch):
+    mb = mb_release(release_relations=[("instrument", ["guitar"], "Tony Rice")],
+                    url="https://www.discogs.com/release/77")
+    mb["release-group"] = {"id": "g1"}
+    calls = []
+    monkeypatch.setattr(rc, "find_releases", lambda a, t: [{"id": "mb-1"}])
+    monkeypatch.setattr(rc, "mb_get", lambda path, **params: mb)
+    monkeypatch.setattr(rc, "discogs_find_releases", lambda a, t: [{"id": "77"}, {"id": "78"}])
+
+    def discogs_get(path):
+        calls.append(path)
+        return {"title": "Unit of Measure", "year": 2000, "artists": [{"name": "Tony Rice Unit (2)"}],
+                "extraartists": [{"name": "Tony Rice", "role": "Guitar", "tracks": ""}], "tracklist": []}
+    monkeypatch.setattr(rc, "discogs_get", discogs_get)
+
+    readings = rc.album("Tony Rice", "Unit of Measure")
+    assert [(r["source"], r["id"]) for r in readings] == [("MusicBrainz", "mb-1"), ("Discogs", "77"), ("Discogs", "78")]
+    assert calls == ["releases/77", "releases/78"]
+    assert readings[1]["linked_to"] == "mb-1" and readings[2]["linked_to"] is None
+    assert readings[2]["artist"] == "Tony Rice Unit"
+    # Nothing merged: each reading carries its own people.
+    assert readings[0]["people"]["Tony Rice"]["scopes"] == {"release"}
+
+
+def test_render_album_keeps_sources_apart_and_marks_scope():
+    readings = [
+        {"source": "MusicBrainz", "url": "https://musicbrainz.org/release/x", "artist": "A", "title": "T",
+         "date": "2000", "tracks": 2, "people": {"Tony Rice": {"roles": {"guitar"}, "scopes": {"track"}}}},
+        {"source": "Discogs", "url": "https://www.discogs.com/release/1", "artist": "A", "title": "T",
+         "date": "", "tracks": 2, "linked_to": "x", "people": {}},
+    ]
+    text = rc.render_album("A", "T", readings)
+    assert "MusicBrainz: A: T (2000), 2 tracks\n" in text
+    assert "  Tony Rice: guitar [track]" in text
+    assert "Discogs: A: T (undated), 2 tracks, linked from MusicBrainz release x" in text
+    assert "Nobody credited as performing" in text
+
+
+def test_render_album_says_when_nobody_has_it():
+    assert "Neither MusicBrainz nor Discogs" in rc.render_album("A", "T", [])
+
+
+def test_main_album_flag(monkeypatch, capsys):
+    monkeypatch.setattr(rc, "album", lambda a, t: [])
+    assert rc.main(["x", "--album", "A", "T"]) == 0
+    assert "Neither MusicBrainz nor Discogs" in capsys.readouterr().out
+    assert rc.main(["x", "--bogus", "A", "T"]) == 2

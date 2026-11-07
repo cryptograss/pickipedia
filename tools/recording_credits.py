@@ -3,6 +3,7 @@
 Sideman: who plays on a recording, an Artificial Dumb lookup.
 
     python3 tools/recording_credits.py "Tony Rice" "House of the Rising Sun"
+    python3 tools/recording_credits.py --album "Tony Rice" "Manzanita"
 
 Asks MusicBrainz for every recording of the title whose artist credit
 mentions the artist, then reads each release's credits from MusicBrainz and,
@@ -22,6 +23,14 @@ promoting them.
 
 Reissues are folded together: one release per MusicBrainz release group,
 the earliest dated one.
+
+--album asks the other question, "who is on this record?", and asks it of
+each source separately: MusicBrainz, then Discogs on its own, because a
+record MusicBrainz has never heard of is often on Discogs. Each source's
+answer is printed under that source, every person with the roles and the
+scope that source gives them. Nobody is merged across sources; a reader
+sees two readings of the same record and decides. This is what Rambler
+reads, and what a person verifies.
 """
 
 import json
@@ -312,6 +321,162 @@ def lookup(artist, title):
     return versions
 
 
+# ---------------------------------------------------------------------------
+# A whole record: --album
+# ---------------------------------------------------------------------------
+
+def mb_people(release):
+    """Everyone credited as performing on a MusicBrainz release.
+
+    Returns {name: {"mbid", "roles", "scopes"}}. A person credited on any
+    track is on the record, so track credits count, marked "track"; credits
+    on the release itself are marked "release".
+    """
+    people = {}
+
+    def add(rel, scope):
+        if rel.get("type") not in MB_PERFORMANCE_TYPES or "artist" not in rel:
+            return
+        a = rel["artist"]
+        p = people.setdefault(a["name"], {"mbid": a.get("id"), "roles": set(), "scopes": set()})
+        p["roles"].add(", ".join(rel.get("attributes") or []) or rel["type"])
+        p["scopes"].add(scope)
+
+    for rel in release.get("relations", []):
+        add(rel, "release")
+    for medium in release.get("media", []):
+        for track in medium.get("tracks", []):
+            for rel in track.get("recording", {}).get("relations", []):
+                add(rel, "track")
+    return people
+
+
+def discogs_people(release):
+    """Everyone credited as performing on a Discogs release, same shape as
+    mb_people. A release-level credit naming tracks is a track credit."""
+    people = {}
+
+    def add(entry, scope):
+        roles = performance_roles(entry.get("role", ""))
+        if not roles:
+            return
+        name = strip_discogs_suffix(entry["name"])
+        p = people.setdefault(name, {"mbid": None, "roles": set(), "scopes": set()})
+        p["roles"].update(roles)
+        p["scopes"].add("track" if (entry.get("tracks") or "").strip() else scope)
+
+    for e in release.get("extraartists", []):
+        add(e, "release")
+    for track in discogs_tracks(release):
+        for e in track.get("extraartists", []):
+            add(e, "track")
+    return people
+
+
+def _one_per_group_earliest(hits, group_of):
+    groups = {}
+    for hit in hits:
+        g = group_of(hit)
+        key = (hit.get("date") or hit.get("year") or "9999", hit["id"])
+        if g not in groups or key < groups[g][0]:
+            groups[g] = (key, hit)
+    return [hit for _, hit in sorted(groups.values(), key=lambda kv: kv[0])]
+
+
+def find_releases(artist, title):
+    """MusicBrainz releases titled title whose artist credit mentions artist:
+    one per release group, the earliest dated."""
+    want = normalize_title(title)
+    data = mb_get("release/", query=f'release:"{title}" AND artist:"{artist}"', limit=25)
+    hits = [r for r in data.get("releases", [])
+            if normalize_title(r.get("title", "")) == want
+            and artist.lower() in credit_line(r.get("artist-credit", [])).lower()]
+    return _one_per_group_earliest(hits, lambda r: (r.get("release-group") or {}).get("id", r["id"]))
+
+
+def discogs_find_releases(artist, title):
+    """Discogs releases of title by artist, searched directly: a record that
+    MusicBrainz has never heard of is often here. One per master, earliest."""
+    want_title, want_artist = normalize_title(title), normalize_title(artist)
+    data = discogs_get("database/search?" + urlencode(
+        {"artist": artist, "release_title": title, "type": "release", "per_page": 25}))
+    hits = []
+    for r in data.get("results", []):
+        # Discogs search titles read "Artist - Title".
+        got_artist, _, got_title = r.get("title", "").partition(" - ")
+        if normalize_title(got_title) == want_title and want_artist in normalize_title(strip_discogs_suffix(got_artist)):
+            hits.append({**r, "id": str(r["id"])})
+    return _one_per_group_earliest(hits, lambda r: r.get("master_id") or r["id"])
+
+
+def album(artist, title):
+    """What each source says about who is on a record, source by source.
+
+    MusicBrainz and Discogs are searched independently, so a record one has
+    and the other lacks still comes back. Where MusicBrainz links a Discogs
+    release, that Discogs release is read under the MusicBrainz entry rather
+    than found again. Nothing is merged across sources: the same person
+    appears once per source that names them, with what that source says.
+    """
+    readings = []
+    linked_discogs = set()
+    for hit in find_releases(artist, title):
+        release = mb_get(f"release/{hit['id']}",
+                         inc="artist-credits+release-groups+recordings+artist-rels+recording-level-rels+url-rels")
+        readings.append({
+            "source": "MusicBrainz",
+            "url": f"https://musicbrainz.org/release/{hit['id']}",
+            "id": hit["id"],
+            "group": (release.get("release-group") or {}).get("id", hit["id"]),
+            "artist": credit_line(release.get("artist-credit", [])),
+            "title": release.get("title", ""),
+            "date": release.get("date", ""),
+            "tracks": sum(len(m.get("tracks", [])) for m in release.get("media", [])),
+            "people": mb_people(release),
+        })
+        did = discogs_id(release)
+        if did:
+            linked_discogs.add(did)
+            readings.append(_discogs_reading(discogs_get(f"releases/{did}"), did, linked_to=hit["id"]))
+    for hit in discogs_find_releases(artist, title):
+        if hit["id"] not in linked_discogs:
+            readings.append(_discogs_reading(discogs_get(f"releases/{hit['id']}"), hit["id"]))
+    return readings
+
+
+def _discogs_reading(release, did, linked_to=None):
+    return {
+        "source": "Discogs",
+        "url": f"https://www.discogs.com/release/{did}",
+        "id": str(did),
+        "group": f"discogs-master-{release.get('master_id') or did}",
+        "linked_to": linked_to,
+        "artist": ", ".join(strip_discogs_suffix(a["name"]) for a in release.get("artists", [])),
+        "title": release.get("title", ""),
+        "date": str(release.get("year") or ""),
+        "tracks": len(release.get("tracklist", [])),
+        "people": discogs_people(release),
+    }
+
+
+def render_album(artist, title, readings):
+    lines = [f'Who is on {artist}: "{title}"', ""]
+    if not readings:
+        lines.append("Neither MusicBrainz nor Discogs has a release with this title and artist.")
+    for r in readings:
+        linked = f', linked from MusicBrainz release {r["linked_to"]}' if r.get("linked_to") else ""
+        lines.append(f'{r["source"]}: {r["artist"]}: {r["title"]} ({r["date"] or "undated"}), '
+                     f'{r["tracks"]} tracks{linked}')
+        lines.append(f'  {r["url"]}')
+        if not r["people"]:
+            lines.append("  Nobody credited as performing. Liner notes, or someone who was there.")
+        for name, p in sorted(r["people"].items()):
+            scope = "track" if p["scopes"] == {"track"} else "release" if p["scopes"] == {"release"} else "track+release"
+            lines.append(f'  {name}: {", ".join(sorted(p["roles"]))} [{scope}]')
+        lines.append("")
+    return "\n".join(lines)
+
+
 def render(artist, title, versions):
     lines = [f'Who plays on {artist}: "{title}"', ""]
     if not versions:
@@ -335,15 +500,32 @@ def render(artist, title, versions):
     return "\n".join(lines)
 
 
+def _jsonable(o):
+    if isinstance(o, set):
+        return sorted(o)
+    if isinstance(o, dict):
+        return {k: _jsonable(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_jsonable(v) for v in o]
+    return o
+
+
 def main(argv):
-    args = [a for a in argv[1:] if a != "--json"]
-    if len(args) != 2:
+    flags = {a for a in argv[1:] if a.startswith("--")}
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    if len(args) != 2 or flags - {"--json", "--album"}:
         print(__doc__.strip().splitlines()[0])
-        print('usage: recording_credits.py [--json] "ARTIST" "TITLE"')
+        print('usage: recording_credits.py [--json] "ARTIST" "SONG TITLE"')
+        print('       recording_credits.py [--json] --album "ARTIST" "RECORD TITLE"')
         return 2
     artist, title = args
-    versions = lookup(artist, title)
-    print(json.dumps(versions, indent=2) if "--json" in argv else render(artist, title, versions))
+    if "--album" in flags:
+        readings = album(artist, title)
+        print(json.dumps(_jsonable(readings), indent=2, ensure_ascii=False) if "--json" in flags
+              else render_album(artist, title, readings))
+    else:
+        versions = lookup(artist, title)
+        print(json.dumps(versions, indent=2) if "--json" in flags else render(artist, title, versions))
     return 0
 
 
