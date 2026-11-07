@@ -6,6 +6,7 @@ Rambler: who was on a record with whom, walked outward from one record.
     python3 tools/rambler.py --hops 2 --json <release-mbid>
     python3 tools/rambler.py --wikitext <release-mbid>
     python3 tools/rambler.py https://www.discogs.com/release/24433085
+    python3 tools/rambler.py --between "Mark Tierney" "Nick Jennings"
 
 An Artificial Dumb crawler for the connectome, built on Sideman
 (recording_credits.py) and its MusicBrainz and Discogs helpers. Starting at
@@ -39,6 +40,13 @@ What makes it dumb, deliberately:
 A seed can be a Discogs release too, for a record MusicBrainz lacks. It is
 looked up on MusicBrainz by URL first; unlinked, it is read from Discogs
 alone, and since Discogs names carry no MusicBrainz id, it goes no further.
+
+--between A B answers a wanted connection: which records credit both A
+and B? Each name is looked up on MusicBrainz and Discogs by exact name;
+records of the same title in both discographies are candidates, and a
+candidate counts only when its own credits name both. That is name-level,
+like everything here: two people who share a name are one name to it, and
+the output says when a name has more than one artist behind it.
 
 Records that come back with nobody credited are listed as the worklist:
 they need liner notes, or someone who was there.
@@ -200,6 +208,152 @@ def pick_earliest(found, limit):
 
 
 # ---------------------------------------------------------------------------
+# A wanted connection: records two people are both on
+# ---------------------------------------------------------------------------
+
+MB_BROWSE_PAGES = 3          # 300 releases under one name is plenty to look through
+DEFAULT_MAX_CANDIDATES = 15  # records read to confirm; each read is 2-3 calls
+
+
+def mb_artists_named(name):
+    """MusicBrainz artists whose name is exactly name, ignoring case. Two
+    people can share a name; both are kept, and the output says so."""
+    data = sideman.mb_get("artist", query=f'artist:"{name}"', limit=25)
+    return [(a["id"], a["name"]) for a in data.get("artists", [])
+            if a.get("name", "").casefold() == name.casefold()]
+
+
+def mb_records_of(mbid):
+    """Every release an artist is on, by relationship or under their own
+    name: {normalized title: (date, release id, title)}, earliest kept."""
+    found = []
+    artist = sideman.mb_get(f"artist/{mbid}", inc="release-rels")
+    for rel in artist.get("relations", []):
+        if rel.get("type") in sideman.MB_PERFORMANCE_TYPES and "release" in rel:
+            r = rel["release"]
+            found.append((r.get("date") or "9999", r["id"], r.get("title", "")))
+    for page in range(MB_BROWSE_PAGES):
+        own = sideman.mb_get("release", artist=mbid, inc="release-groups", limit=100, offset=page * 100)
+        for r in own.get("releases", []):
+            if "Compilation" not in ((r.get("release-group") or {}).get("secondary-types") or []):
+                found.append((r.get("date") or "9999", r["id"], r.get("title", "")))
+        if len(own.get("releases", [])) < 100:
+            break
+    return _by_title(found)
+
+
+def discogs_artists_named(name):
+    data = sideman.discogs_get("database/search?" + sideman.urlencode({"q": name, "type": "artist", "per_page": 25}))
+    return [(str(r["id"]), sideman.strip_discogs_suffix(r["title"])) for r in data.get("results", [])
+            if sideman.strip_discogs_suffix(r.get("title", "")).casefold() == name.casefold()]
+
+
+def discogs_records_of(artist_id):
+    """{normalized title: (year, "discogs:N", title)} for an artist's Discogs
+    releases, credited or under their own name. Masters are resolved to
+    their main release so the record can be read."""
+    found = []
+    try:
+        data = sideman.discogs_get(f"artists/{artist_id}/releases?per_page=100&sort=year")
+    except sideman.HTTPError as e:
+        if e.code != 404:  # search lists some artists whose release list is gone
+            raise
+        return {}
+    for r in data.get("releases", []):
+        rid = r.get("main_release") if r.get("type") == "master" else r.get("id")
+        if rid:
+            found.append((str(r.get("year") or "9999"), f"discogs:{rid}", r.get("title", "")))
+    return _by_title(found)
+
+
+def _by_title(found):
+    out = {}
+    for date, rid, title in sorted(found):
+        out.setdefault(sideman.normalize_title(title), (date, rid, title))
+    return out
+
+
+def between(a, b, max_candidates=DEFAULT_MAX_CANDIDATES, read=read_record,
+            mb_named=mb_artists_named, mb_records=mb_records_of,
+            dg_named=discogs_artists_named, dg_records=discogs_records_of, log=lambda msg: None):
+    """Records that credit both a and b.
+
+    Finding is not evidence. A record turns up as a candidate when both
+    people's discographies list a record of that title; it counts only when
+    the record's own credits, read from the record, name both of them, by
+    exact name. Candidates that fail are reported, so a person sees what
+    was looked at and why it did not count.
+    """
+    result = {"people": {a: {}, b: {}}, "connections": [], "not_confirmed": [], "unresolved": []}
+    titles = {}
+    for name in (a, b):
+        ids = {"MusicBrainz": mb_named(name), "Discogs": dg_named(name)}
+        result["people"][name] = ids
+        if not any(ids.values()):
+            result["unresolved"].append(name)
+        recs = {}
+        for mbid, _ in ids["MusicBrainz"]:
+            for k, v in mb_records(mbid).items():
+                recs.setdefault(k, []).append(v)
+        for did, _ in ids["Discogs"]:
+            for k, v in dg_records(did).items():
+                recs.setdefault(k, []).append(v)
+        titles[name] = recs
+        log(f"{name}: {sum(len(x) for x in ids.values())} exact name matches, {len(recs)} record titles")
+    shared = sorted(set(titles[a]) & set(titles[b]),
+                    key=lambda t: min(v[0] for v in titles[a][t] + titles[b][t]))
+    seen_groups = set()
+    for key in shared[:max_candidates]:
+        # One release per title: prefer a MusicBrainz release, which reads both sources.
+        options = sorted(titles[a][key] + titles[b][key], key=lambda v: (v[1].startswith("discogs:"), v[0]))
+        rec = read(options[0][1])
+        if rec["group"] in seen_groups:
+            continue
+        seen_groups.add(rec["group"])
+        names = {n.casefold(): n for n in rec["people"]}
+        hit = [names.get(a.casefold()), names.get(b.casefold())]
+        if all(hit):
+            result["connections"].append({"record": rec, "as_credited": hit})
+            log(f"  confirmed: {rec['title']}")
+        else:
+            missing = [n for n, h in zip((a, b), hit) if not h]
+            result["not_confirmed"].append({"record": rec, "missing": missing})
+            log(f"  not credited on {rec['title']}: {', '.join(missing)}")
+    if len(shared) > max_candidates:
+        result["unread"] = len(shared) - max_candidates
+    return result
+
+
+def render_between(a, b, result):
+    out = [f"Records that credit both {a} and {b}", ""]
+    for name, ids in result["people"].items():
+        for src, matches in ids.items():
+            if len(matches) > 1:
+                out.append(f"  Note: {len(matches)} {src} artists are named exactly {name}; all were searched.")
+    for name in result["unresolved"]:
+        out.append(f"  Neither source has an artist named exactly {name}.")
+    if not result["connections"]:
+        out.append("  None found in the sources' own credits.")
+    for c in result["connections"]:
+        rec = c["record"]
+        out.append(f"  {label(rec)}")
+        for src, url in sorted(rec["sources"].items()):
+            out.append(f"    {src}: {url}")
+        for name in c["as_credited"]:
+            p = rec["people"][name]
+            says = "; ".join(f'{src} says {", ".join(sorted(r["roles"]))} [{"+".join(sorted(r["scopes"]))}]'
+                             for src, r in sorted(p.get("by_source", {}).items()))
+            out.append(f"    {name}: {says}")
+    if result["not_confirmed"]:
+        out += ["", "Looked at, but the record's own credits do not name both (no connection):"]
+        for x in result["not_confirmed"]:
+            out.append(f"  {label(x['record'])}: {', '.join(x['missing'])} not credited")
+    if result.get("unread"):
+        out += ["", f"{result['unread']} more shared titles not read (--max-candidates)."]
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
 # The walk
 # ---------------------------------------------------------------------------
 
@@ -339,6 +493,8 @@ MBID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 
 
 def main(argv):
+    if len(argv) > 1 and argv[1] == "--between":
+        return main_between(argv)
     ap = argparse.ArgumentParser(description="Rambler: record-to-record walk from one MusicBrainz release.")
     ap.add_argument("seed", help="MusicBrainz release id or musicbrainz.org/release/... URL; "
                                  "or a discogs.com/release/N URL (or discogs:N)")
@@ -362,6 +518,20 @@ def main(argv):
         print(wikitext(graph))
     else:
         print(render(graph))
+    return 0
+
+
+def main_between(argv):
+    ap = argparse.ArgumentParser(prog="rambler.py --between",
+                                 description="Records that credit both of two people.")
+    ap.add_argument("a")
+    ap.add_argument("b")
+    ap.add_argument("--max-candidates", type=int, default=DEFAULT_MAX_CANDIDATES)
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args(argv[2:])
+    result = between(args.a, args.b, args.max_candidates, log=lambda msg: print(msg, file=sys.stderr))
+    print(json.dumps(jsonable(result), indent=2, ensure_ascii=False) if args.json
+          else render_between(args.a, args.b, result))
     return 0
 
 

@@ -224,3 +224,68 @@ def test_seed_forms():
     assert rambler.DISCOGS_SEED.search("https://www.discogs.com/release/24433085-The-Turpentine-Ray").group(1) == "24433085"
     assert rambler.DISCOGS_SEED.search("discogs:5").group(1) == "5"
     assert rambler.DISCOGS_SEED.search("750499ef-cec3-4c3c-9e8d-2caacff30e0e") is None
+
+
+# ---------------------------------------------------------------------------
+# --between: a wanted connection
+# ---------------------------------------------------------------------------
+
+def between_world(records, mb_titles, dg_titles, mb_ids=None, dg_ids=None):
+    """mb_titles/dg_titles: {person: {norm title: (date, rid, title)}}."""
+    mb_ids = mb_ids or {"A": [("ma", "A")], "B": [("mb", "B")]}
+    dg_ids = dg_ids or {"A": [], "B": []}
+    by_id = {i: n for n, ids in mb_ids.items() for i, _ in ids}
+    dg_by_id = {i: n for n, ids in dg_ids.items() for i, _ in ids}
+    reads = []
+
+    def read(rid):
+        reads.append(rid)
+        return records[rid]
+    kw = dict(read=read,
+              mb_named=lambda n: mb_ids.get(n, []), mb_records=lambda i: mb_titles[by_id[i]],
+              dg_named=lambda n: dg_ids.get(n, []), dg_records=lambda i: dg_titles[dg_by_id[i]])
+    return kw, reads
+
+
+def test_between_counts_only_records_whose_own_credits_name_both():
+    recs = {"r1": record("r1", "Together", {"A": person(), "B": person()}),
+            "r2": record("r2", "Art Only", {"A": person()})}
+    kw, reads = between_world(recs, {
+        "A": {"together": ("2000", "r1", "Together"), "art only": ("2001", "r2", "Art Only"), "solo": ("1999", "r9", "Solo")},
+        "B": {"together": ("2000", "r1", "Together"), "art only": ("2001", "r2", "Art Only")}}, {})
+    result = rambler.between("A", "B", **kw)
+    assert [c["record"]["title"] for c in result["connections"]] == ["Together"]
+    assert result["not_confirmed"] == [{"record": recs["r2"], "missing": ["B"]}]
+    assert "r9" not in reads  # a title only one of them has is never read
+
+
+def test_between_matches_names_ignoring_case_and_reports_as_credited():
+    recs = {"r1": record("r1", "T", {"Tony RICE": person(), "B": person()})}
+    kw, _ = between_world(recs, {"A": {"t": ("2000", "r1", "T")}, "B": {"t": ("2000", "r1", "T")}}, {},
+                          mb_ids={"Tony Rice": [("ma", "Tony Rice")], "B": [("mb", "B")]})
+    result = rambler.between("Tony Rice", "B", **{**kw, "mb_records": lambda i: {"t": ("2000", "r1", "T")}})
+    assert result["connections"][0]["as_credited"] == ["Tony RICE", "B"]
+
+
+def test_between_prefers_musicbrainz_release_and_folds_groups():
+    rec = record("mb1", "T", {"A": person(), "B": person()}, group="g")
+    recs = {"mb1": rec, "discogs:5": rec}
+    kw, reads = between_world(recs, {"A": {"t": ("2000", "mb1", "T")}, "B": {}},
+                              {"B": {"t": ("1999", "discogs:5", "T")}},
+                              dg_ids={"A": [], "B": [("d", "B")]})
+    result = rambler.between("A", "B", **kw)
+    assert reads == ["mb1"] and len(result["connections"]) == 1
+
+
+def test_between_says_who_is_unresolved_and_when_candidates_are_capped():
+    kw, _ = between_world({}, {"A": {}, "B": {}}, {}, mb_ids={"A": [("ma", "A")]})
+    result = rambler.between("A", "Nobody", **kw)
+    assert result["unresolved"] == ["Nobody"]
+    text = rambler.render_between("A", "Nobody", result)
+    assert "Neither source has an artist named exactly Nobody." in text
+    assert "None found" in text
+    recs = {f"r{i}": record(f"r{i}", f"T{i}", {"A": person(), "B": person()}) for i in range(3)}
+    titles = {f"t{i}": ("2000", f"r{i}", f"T{i}") for i in range(3)}
+    kw, reads = between_world(recs, {"A": titles, "B": titles}, {})
+    result = rambler.between("A", "B", max_candidates=2, **kw)
+    assert len(reads) == 2 and result["unread"] == 1
