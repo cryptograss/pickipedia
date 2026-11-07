@@ -8,6 +8,8 @@ on canned documents shaped like the real MusicBrainz and Discogs responses,
 so no test touches the network.
 """
 
+import json
+
 import pytest
 
 import recording_credits as rc
@@ -336,7 +338,77 @@ def test_render_album_says_when_nobody_has_it():
 
 
 def test_main_album_flag(monkeypatch, capsys):
-    monkeypatch.setattr(rc, "album", lambda a, t: [])
+    monkeypatch.setattr(rc, "album", lambda a, t, bandcamp=None: [])
     assert rc.main(["x", "--album", "A", "T"]) == 0
     assert "Neither MusicBrainz nor Discogs" in capsys.readouterr().out
     assert rc.main(["x", "--bogus", "A", "T"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# --album --bandcamp: credits copied, never parsed
+# ---------------------------------------------------------------------------
+
+def bc_page(obj):
+    return '<html><script type="application/ld+json">\n' + json.dumps(obj) + "\n</script></html>"
+
+
+BC_ALBUM = {
+    "@type": "MusicAlbum", "name": "Workin&#39;s Too Hard", "byArtist": {"name": "Rayna Gellert"},
+    "datePublished": "20 Jan 2017 00:00:00 GMT",
+    "creditText": "Musicians: Rayna Gellert, Kieran Kane\r\nJoe - keys &amp; vocals",
+    "description": "Cut live in a room.",
+    "track": {"itemListElement": [{"position": 1, "item": {"name": "Starch"}}]},
+}
+
+
+def test_bandcamp_credits_are_copied_not_parsed():
+    r = rc.bandcamp_reading("https://x.bandcamp.com/album/w",
+                            get=lambda url: (url, bc_page(BC_ALBUM)))
+    assert r["source"] == "Bandcamp" and r["url"] == "https://x.bandcamp.com/album/w"
+    assert r["credits_text"] == "Musicians: Rayna Gellert, Kieran Kane\nJoe - keys & vocals"
+    assert r["title"] == "Workin's Too Hard" and r["date"] == "20 Jan 2017" and r["tracks"] == 1
+    assert r["people"] == {}  # nobody is extracted from prose
+
+
+def test_bandcamp_challenge_page_is_an_error():
+    with pytest.raises(rc.NotABandcampRecord):
+        rc.bandcamp_reading("https://x.bandcamp.com/album/w",
+                            get=lambda url: (url, "<title>Client Challenge</title>"))
+
+
+def test_album_reads_bandcamp_last_and_render_says_not_parsed(monkeypatch):
+    monkeypatch.setattr(rc, "find_releases", lambda a, t: [])
+    monkeypatch.setattr(rc, "discogs_find_releases", lambda a, t: [])
+    readings = rc.album("Rayna Gellert", "Workin's Too Hard", bandcamp="https://x.bandcamp.com/album/w",
+                        bandcamp_get=lambda url: (url, bc_page(BC_ALBUM)))
+    assert [r["source"] for r in readings] == ["Bandcamp"]
+    text = rc.render_album("Rayna Gellert", "Workin's Too Hard", readings)
+    assert "Credits, word for word (not parsed" in text
+    assert "    Joe - keys & vocals" in text
+    assert "  About, word for word:\n    Cut live in a room." in text
+
+
+def test_bandcamp_fetch_is_curl_with_an_argument_list(monkeypatch):
+    seen = {}
+
+    def run(cmd, **kw):
+        seen["cmd"] = cmd
+        return rc.subprocess.CompletedProcess(cmd, 0, stdout="<html/>\nhttps://x.bandcamp.com/album/w")
+    monkeypatch.setattr(rc.subprocess, "run", run)
+    monkeypatch.setattr(rc, "BANDCAMP_INTERVAL", 0)
+    assert rc.bandcamp_get("https://x.bandcamp.com/album/w") == ("https://x.bandcamp.com/album/w", "<html/>")
+    assert seen["cmd"][0] == "curl" and seen["cmd"][-2:] == ["--", "https://x.bandcamp.com/album/w"]
+
+
+@pytest.mark.parametrize("url,ok", [
+    ("https://milkweed.bandcamp.com/album/milkweed-ep", True),
+    ("https://evilbandcamp.com/album/x", False),
+    ("https://bandcamp.com.example.org/album/x", False),
+])
+def test_is_bandcamp(url, ok):
+    assert rc.is_bandcamp(url) is ok
+
+
+def test_main_bandcamp_needs_album_and_a_bandcamp_url():
+    assert rc.main(["x", "A", "T", "--bandcamp", "https://x.bandcamp.com/album/w"]) == 2
+    assert rc.main(["x", "--album", "A", "T", "--bandcamp", "https://example.org/album/w"]) == 2

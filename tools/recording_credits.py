@@ -31,13 +31,27 @@ answer is printed under that source, every person with the roles and the
 scope that source gives them. Nobody is merged across sources; a reader
 sees two readings of the same record and decides. This is what Rambler
 reads, and what a person verifies.
+
+--bandcamp URL adds a third reading: the record's Bandcamp page, where small
+bands put the credits MusicBrainz and Discogs never got. Bandcamp's credits
+are prose ("Joe Biglin - keys", "Recorded at 25 Murray Studios") with no
+fields for who or what, so Sideman copies them word for word and parses
+nothing: splitting a line into a person and an instrument is the judgement
+of the person who writes it up, with the text in front of them. Bandcamp
+challenges searches, so the page is a URL a person hands in.
+
+    python3 tools/recording_credits.py --album "Milkweed" "Milkweed EP" \
+        --bandcamp https://milkweed.bandcamp.com/album/milkweed-ep
 """
 
+import argparse
+import html
 import json
 import re
+import subprocess
 import sys
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -409,7 +423,76 @@ def discogs_find_releases(artist, title):
     return _one_per_group_earliest(hits, lambda r: r.get("master_id") or r["id"])
 
 
-def album(artist, title):
+# ---------------------------------------------------------------------------
+# Bandcamp: credits copied, never parsed
+# ---------------------------------------------------------------------------
+
+BANDCAMP_UA = "pickipedia-recording-credits/0.1 (https://pickipedia.xyz; Artificial Dumb)"
+BANDCAMP_INTERVAL = 1.5
+LD_JSON = re.compile(r'<script type="application/ld\+json">\s*(.*?)\s*</script>', re.S)
+
+
+class NotABandcampRecord(Exception):
+    pass
+
+
+def is_bandcamp(url):
+    host = urlparse(url).hostname or ""
+    return host == "bandcamp.com" or host.endswith(".bandcamp.com")
+
+
+def bandcamp_get(url):
+    """(final URL, page), fetched with curl, not urllib.
+
+    Bandcamp answers Python's own HTTPS client with a JavaScript challenge
+    page whatever its headers say, and answers curl with the album (tested
+    7 Nov 2026, same User-Agent both ways). Same honest User-Agent; an
+    argument list, no shell.
+    """
+    wait = BANDCAMP_INTERVAL - (time.monotonic() - _last_call.get("bandcamp", 0.0))
+    if wait > 0:
+        time.sleep(wait)
+    try:
+        out = subprocess.run(
+            ["curl", "-sSL", "--max-time", "30", "-A", BANDCAMP_UA,
+             "-w", "\n%{url_effective}", "--", url],
+            capture_output=True, text=True, check=True).stdout
+    finally:
+        _last_call["bandcamp"] = time.monotonic()
+    page, _, final = out.rpartition("\n")
+    return final, page
+
+
+def _bc_text(value):
+    """Bandcamp's prose as written: entities decoded, line ends made plain."""
+    return html.unescape(value).replace("\r\n", "\n").strip() if value else ""
+
+
+def bandcamp_reading(url, get=bandcamp_get):
+    """A Bandcamp album or track page, from the schema.org JSON-LD it carries:
+    the credits and about text verbatim, and nothing parsed out of them."""
+    final, page = get(url)
+    m = LD_JSON.search(page)
+    d = json.loads(m.group(1)) if m else {}
+    if d.get("@type") not in ("MusicAlbum", "MusicRecording"):
+        raise NotABandcampRecord(f"{url}: no album or track data on the page "
+                                 "(an artist page, or Bandcamp's challenge page)")
+    return {
+        "source": "Bandcamp",
+        "url": final,
+        "id": final,
+        "group": f"bandcamp-{final}",
+        "artist": _bc_text((d.get("byArtist") or {}).get("name")),
+        "title": _bc_text(d.get("name")),
+        "date": re.sub(r"\s+00:00:00 GMT$", "", d.get("datePublished") or ""),
+        "tracks": len((d.get("track") or {}).get("itemListElement", [])),
+        "people": {},
+        "credits_text": _bc_text(d.get("creditText")),
+        "about_text": _bc_text(d.get("description")),
+    }
+
+
+def album(artist, title, bandcamp=None, bandcamp_get=bandcamp_get):
     """What each source says about who is on a record, source by source.
 
     MusicBrainz and Discogs are searched independently, so a record one has
@@ -417,6 +500,7 @@ def album(artist, title):
     release, that Discogs release is read under the MusicBrainz entry rather
     than found again. Nothing is merged across sources: the same person
     appears once per source that names them, with what that source says.
+    A Bandcamp URL, if given, is read last; its credits stay text.
     """
     readings = []
     linked_discogs = set()
@@ -441,6 +525,8 @@ def album(artist, title):
     for hit in discogs_find_releases(artist, title):
         if hit["id"] not in linked_discogs:
             readings.append(_discogs_reading(discogs_get(f"releases/{hit['id']}"), hit["id"]))
+    if bandcamp:
+        readings.append(bandcamp_reading(bandcamp, get=bandcamp_get))
     return readings
 
 
@@ -464,6 +550,16 @@ def render_album(artist, title, readings):
     if not readings:
         lines.append("Neither MusicBrainz nor Discogs has a release with this title and artist.")
     for r in readings:
+        if r["source"] == "Bandcamp":
+            lines.append(f'Bandcamp: {r["artist"]}: {r["title"]} ({r["date"] or "undated"}), {r["tracks"]} tracks')
+            lines.append(f'  {r["url"]}')
+            lines.append("  Credits, word for word (not parsed; a person reads who played what):")
+            lines += [f"    {ln}" for ln in r["credits_text"].splitlines()] or ["    (none)"]
+            if r["about_text"]:
+                lines.append("  About, word for word:")
+                lines += [f"    {ln}" for ln in r["about_text"].splitlines()]
+            lines.append("")
+            continue
         linked = f', linked from MusicBrainz release {r["linked_to"]}' if r.get("linked_to") else ""
         lines.append(f'{r["source"]}: {r["artist"]}: {r["title"]} ({r["date"] or "undated"}), '
                      f'{r["tracks"]} tracks{linked}')
@@ -511,21 +607,37 @@ def _jsonable(o):
 
 
 def main(argv):
-    flags = {a for a in argv[1:] if a.startswith("--")}
-    args = [a for a in argv[1:] if not a.startswith("--")]
-    if len(args) != 2 or flags - {"--json", "--album"}:
-        print(__doc__.strip().splitlines()[0])
-        print('usage: recording_credits.py [--json] "ARTIST" "SONG TITLE"')
-        print('       recording_credits.py [--json] --album "ARTIST" "RECORD TITLE"')
+    ap = argparse.ArgumentParser(
+        description=__doc__.strip().splitlines()[0],
+        usage='%(prog)s [--json] "ARTIST" "SONG TITLE"\n'
+              '       %(prog)s [--json] --album "ARTIST" "RECORD TITLE" [--bandcamp URL]')
+    ap.add_argument("artist")
+    ap.add_argument("title")
+    ap.add_argument("--album", action="store_true", help="who is on a whole record, source by source")
+    ap.add_argument("--bandcamp", metavar="URL", help="with --album: the record's Bandcamp page, read too")
+    ap.add_argument("--json", action="store_true")
+    try:
+        args = ap.parse_args(argv[1:])
+    except SystemExit as e:
+        return e.code
+    if args.bandcamp and not args.album:
+        ap.print_usage()
+        print("--bandcamp goes with --album")
         return 2
-    artist, title = args
-    if "--album" in flags:
-        readings = album(artist, title)
-        print(json.dumps(_jsonable(readings), indent=2, ensure_ascii=False) if "--json" in flags
-              else render_album(artist, title, readings))
+    if args.bandcamp and not is_bandcamp(args.bandcamp):
+        print(f"not a bandcamp.com URL: {args.bandcamp}")
+        return 2
+    if args.album:
+        try:
+            readings = album(args.artist, args.title, bandcamp=args.bandcamp)
+        except NotABandcampRecord as e:
+            print(e, file=sys.stderr)
+            return 1
+        print(json.dumps(_jsonable(readings), indent=2, ensure_ascii=False) if args.json
+              else render_album(args.artist, args.title, readings))
     else:
-        versions = lookup(artist, title)
-        print(json.dumps(versions, indent=2) if "--json" in flags else render(artist, title, versions))
+        versions = lookup(args.artist, args.title)
+        print(json.dumps(versions, indent=2) if args.json else render(args.artist, args.title, versions))
     return 0
 
 
