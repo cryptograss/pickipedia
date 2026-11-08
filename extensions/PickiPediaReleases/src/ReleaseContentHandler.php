@@ -387,7 +387,26 @@ YAML;
 		}
 		$html .= $afterPlayer;
 
+		// How to get it: BitTorrent first and loudest, IPFS beside it.
+		$html .= ReleaseDownload::render( $cid, $data );
+
 		$html .= Html::openElement( 'table', [ 'class' => 'release-metadata wikitable' ] );
+
+		// BitTorrent infohash if present: first, as the way most people can get it
+		if ( !empty( $data['bittorrent_infohash'] ) ) {
+			$html .= Html::openElement( 'tr' );
+			$html .= Html::element( 'th', [], 'BitTorrent' );
+			$html .= Html::rawElement( 'td', [],
+				$this->renderTorrentLink(
+					$data['bittorrent_infohash'],
+					$data['title'] ?? $cid,
+					$data['bittorrent_trackers'] ?? [],
+					$data['bittorrent_webseeds'] ?? [],
+					$data['bittorrent_torrent_url'] ?? null
+				)
+			);
+			$html .= Html::closeElement( 'tr' );
+		}
 
 		// CID from page title (primary identifier)
 		if ( $cid ) {
@@ -405,22 +424,6 @@ YAML;
 				? implode( ', ', $data['pinned_on'] )
 				: (string)$data['pinned_on'];
 			$html .= Html::element( 'td', [ 'class' => 'release-pinned' ], $pinnedList );
-			$html .= Html::closeElement( 'tr' );
-		}
-
-		// BitTorrent infohash if present
-		if ( !empty( $data['bittorrent_infohash'] ) ) {
-			$html .= Html::openElement( 'tr' );
-			$html .= Html::element( 'th', [], 'BitTorrent' );
-			$html .= Html::rawElement( 'td', [],
-				$this->renderTorrentLink(
-					$data['bittorrent_infohash'],
-					$data['title'] ?? $cid,
-					$data['bittorrent_trackers'] ?? [],
-					$data['bittorrent_webseeds'] ?? [],
-					$data['bittorrent_torrent_url'] ?? null
-				)
-			);
 			$html .= Html::closeElement( 'tr' );
 		}
 
@@ -797,9 +800,7 @@ YAML;
 	 * @return string
 	 */
 	private function renderIpfsLink( string $cid ): string {
-		// CIDv1 (bafy...) is Base32 lowercase; MediaWiki capitalizes page titles,
-		// so we must lowercase it back. CIDv0 (Qm...) is Base58, case-sensitive.
-		$normalizedCid = str_starts_with( $cid, 'Bafy' ) ? strtolower( $cid ) : $cid;
+		$normalizedCid = ReleaseDownload::normalizeCid( $cid );
 		$gatewayUrl = "https://ipfs.io/ipfs/" . $normalizedCid;
 		$dweb = "ipfs://{$normalizedCid}";
 
@@ -820,16 +821,7 @@ YAML;
 	 * @return string
 	 */
 	private function renderTorrentLink( string $infohash, string $name, array $trackers = [], array $webseeds = [], ?string $torrentUrl = null ): string {
-		$magnetUri = "magnet:?xt=urn:btih:{$infohash}";
-		if ( $name ) {
-			$magnetUri .= "&dn=" . urlencode( $name );
-		}
-		foreach ( $trackers as $tracker ) {
-			$magnetUri .= "&tr=" . urlencode( $tracker );
-		}
-		foreach ( $webseeds as $webseed ) {
-			$magnetUri .= "&ws=" . urlencode( $webseed );
-		}
+		$magnetUri = ReleaseDownload::magnetUri( $infohash, $name, $trackers, $webseeds );
 
 		$links = Html::element( 'a', [ 'href' => $magnetUri ], '[magnet]' );
 		if ( $torrentUrl ) {
