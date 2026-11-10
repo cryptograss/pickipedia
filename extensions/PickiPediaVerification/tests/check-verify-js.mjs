@@ -26,7 +26,8 @@ function lift(name) {
 
 const scope = {};
 eval(lift('stripWikitext') + lift('findProposedTagBySource') + lift('findProposedTagContaining') +
-	lift('findTemplateContaining') + lift('verifiedMark') +
+	lift('findTemplateContaining') + lift('verifiedMark') + lift('verifiedContent') + lift('sourceLink') +
+	'\nscope.content = verifiedContent; scope.link = sourceLink;' +
 	'\nscope.mark = verifiedMark; scope.bySource = findProposedTagBySource; scope.byText = findProposedTagContaining;' +
 	' scope.byTemplate = findTemplateContaining;');
 
@@ -97,6 +98,22 @@ check('blank: by whoever verified', scope.mark('', 'JMyles') === '{{verified|by 
 check('"unspecified" is no basis', scope.mark('unspecified', 'JMyles') === '{{verified|by JMyles}}', scope.mark('unspecified', 'JMyles'));
 check('words: the basis', scope.mark('I was there', 'JMyles') === '{{verified|I was there}}');
 check('a link: a source', scope.mark('https://setlist.fm/x', 'JMyles') === '{{source|https://setlist.fm/x}}');
+
+console.log('\nA claim corrected before it is verified:');
+check('no box (an older marker): what was proposed', scope.content('He plays a Loar.', null) === 'He plays a Loar.');
+check('untouched: byte for byte, whitespace kept', scope.content(' He plays a Loar.\n', 'He plays a Loar.') === ' He plays a Loar.\n');
+check('corrected: the correction', scope.content('He plays a Loar.', 'He plays a 1924 Loar.') === 'He plays a 1924 Loar.');
+check('emptied: not a correction to nothing', scope.content('He plays a Loar.', '   ') === 'He plays a Loar.');
+
+console.log('\nShowing the source:');
+const lma = scope.link('https://archive.org/details/sgp2023-01-27.flac16');
+check('a link: its host', lma && lma.host === 'archive.org', JSON.stringify(lma));
+check('and the rest of it', lma && lma.rest === '/details/sgp2023-01-27.flac16');
+check('www. is not the place', scope.link('https://www.discogs.com/release/1').host === 'discogs.com');
+check('a bare host has no rest', scope.link('https://watertower.band/').rest === '');
+check('words are not a link', scope.link('I was there') === null);
+check('nor a host without a scheme', scope.link('watertower.band') === null);
+check('nor javascript:', scope.link('javascript:alert(1)') === null);
 
 console.log(failures === 0 ? '\nAll checks passed.\n' : `\n${failures} FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);
