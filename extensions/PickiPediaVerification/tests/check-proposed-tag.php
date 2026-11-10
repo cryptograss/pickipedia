@@ -180,6 +180,16 @@ namespace MediaWiki\Extension\PickiPediaVerification {
 	check( 'a plain proposal is unchanged by all this',
 		!str_contains( render( "He plays a 1923 Loar.", [ 'by' => 'Re' ] ), 'removal' ) );
 
+	echo "\nThe proposer's note:\n";
+
+	$noted = render( "He plays a 1923 Loar.", [ 'by' => 'Magent', 'note' => 'supporting text' ] );
+	check( 'a note reaches the verify dialog', attribute( $noted, 'data-note' ) === 'supporting text' );
+	check( 'and is shown in the byline', str_contains( $noted, '· supporting text' ) );
+	check( 'no note, no attribute', attribute( render( "He plays a 1923 Loar.", [ 'by' => 'Re' ] ), 'data-note' ) === null );
+	$sneaky = render( 'x', [ 'by' => 'Magent', 'note' => '"><script>alert(1)</script>' ] );
+	check( 'a note cannot break out of its attribute', !str_contains( attributeRegion( $sneaky ), '<script' ) );
+	check( 'nor out of the byline', !str_contains( $sneaky, '<script>' ) );
+
 	echo $failures === 0 ? "\nAll checks passed.\n\n" : "\n$failures FAILED\n\n";
 	exit( $failures === 0 ? 0 : 1 );
 

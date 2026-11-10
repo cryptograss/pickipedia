@@ -123,6 +123,14 @@
         if (/^unspecified$/i.test(String(existingSource).trim())) existingSource = '';
         var isBotProposal = $element.hasClass('bot-proposal') ||
             $element.hasClass('pv-proposed');
+        // What the proposer said about the claim: "supporting text" for words
+        // that only explain the page, or a pointer into the source.
+        var existingNote = String($element.attr('data-note') || '').trim();
+        var isRemoval = $element.attr('data-pv-action') === 'remove';
+        // The claim can be corrected before it is verified, but only where we
+        // know its wikitext: a <proposed> block. Older markers are found by
+        // their rendered text, and a correction there could land anywhere.
+        var editable = !isShow && !isRemoval && claimSource !== '';
         
         // Create dialog content
         var $dialog = $('<div>').addClass('verify-dialog');
@@ -137,9 +145,39 @@
             }
         });
 
-        $form.append(
-            $('<p>').css('margin-top', '0').html('<strong>Verifying:</strong> ' + mw.html.escape(claimText))
-        );
+        if (editable) {
+            $form.append(
+                $('<label>').attr('for', 'verify-claim').html('<strong>Verifying</strong> (correct it here if it\'s wrong):'),
+                $('<br>'),
+                $('<textarea>')
+                    .attr({ id: 'verify-claim', name: 'claim', rows: Math.min(12, claimSource.split('\n').length + 1) })
+                    .val(claimSource)
+                    .css({ width: '100%', marginBottom: '1em', padding: '6px', boxSizing: 'border-box',
+                        fontFamily: 'monospace', fontSize: '0.9em' })
+            );
+        } else {
+            $form.append(
+                $('<p>').css('margin-top', '0').html('<strong>Verifying:</strong> ' + mw.html.escape(claimText))
+            );
+        }
+
+        var link = sourceLink(existingSource);
+        if (link) {
+            // The source first and plainest: where it is, and a way to open
+            // the whole of it beside the page.
+            $form.append(
+                $('<div>').addClass('verify-source-preview').css({
+                    border: '1px solid #c8ccd1', borderRadius: '3px', padding: '8px',
+                    marginBottom: '1em', background: '#f8f9fa'
+                }).append(
+                    $('<div>').css({ fontSize: '0.85em', color: '#54595d' }).text('Source'),
+                    $('<div>').css({ fontWeight: 'bold' }).text(link.host),
+                    $('<div>').css({ fontSize: '0.85em', wordBreak: 'break-all' }).text(link.rest),
+                    $('<a>').attr({ href: link.href, target: '_blank', rel: 'noopener noreferrer' })
+                        .text('Open the full source ↗')
+                )
+            );
+        }
 
         $form.append(
             $('<label>').attr('for', 'verify-source').text('Source (optional):'),
@@ -172,6 +210,7 @@
                     rows: 3,
                     placeholder: 'Additional context about your verification...'
                 })
+                .val(existingNote)
                 .css({ width: '100%', marginBottom: '1em', padding: '6px', boxSizing: 'border-box' })
         );
 
@@ -453,9 +492,34 @@
         return '{{verified|' + (source || 'by ' + userName) + '}}';
     }
 
+    // The wikitext that stays once a claim is verified: the person's
+    // correction where they made one, else what was proposed. An emptied box
+    // is not a correction to nothing; deleting is a removal, proposed as one.
+    function verifiedContent(proposed, corrected) {
+        if (corrected === null || corrected === undefined) return proposed;
+        corrected = String(corrected).trim();
+        // Unchanged stays byte for byte what was proposed, whitespace included.
+        if (corrected === '' || corrected === String(proposed).trim()) return proposed;
+        return corrected;
+    }
+
+    // A source the dialog can show as a place: its host, the rest of it, and
+    // a link. Null for words ("I was there"), which need no preview.
+    function sourceLink(source) {
+        var m = String(source || '').trim().match(/^(https?):\/\/([^\/?#\s]+)([^\s]*)$/i);
+        if (!m) return null;
+        return {
+            href: m[0],
+            host: m[2].replace(/^www\./i, ''),
+            rest: m[3] && m[3] !== '/' ? m[3] : ''
+        };
+    }
+
     function submitVerification($claim, $form, claimText, $overlay, $dialog,
         claimSource) {
         var source = $form.find('#verify-source').val().trim();
+        var $edited = $form.find('#verify-claim');
+        var corrected = $edited.length ? $edited.val().trim() : null;
         var note = $form.find('#verify-note').val().trim();
         var pageName = mw.config.get('wgPageName');
         var userName = mw.config.get('wgUserName');
@@ -511,7 +575,10 @@
                 end++;
             }
 
-            replacement = removal ? '' : cleanContent + verifiedMark(source, userName);
+            replacement = removal ? '' :
+                verifiedContent(cleanContent, corrected) + verifiedMark(source, userName);
+            var wasCorrected = !removal && corrected !== null && corrected !== '' &&
+                corrected !== cleanContent.trim();
             
             var newContent = content.substring(0, found.start) + replacement + content.substring(end);
 
@@ -526,7 +593,8 @@
                 summary: editSummary
             }).then(function() {
                 // Add to talk page
-                return addTalkPageEntry(api, pageName, claimText, source, note, userName, timestamp);
+                return addTalkPageEntry(api, pageName, claimText, source, note, userName, timestamp,
+                    wasCorrected ? { from: cleanContent.trim(), to: corrected } : null);
             }).then(function() {
                 mw.notify('Verification recorded!', { type: 'success' });
                 $overlay.remove();
@@ -541,8 +609,20 @@
         });
     }
 
-    function addTalkPageEntry(api, pageName, claimText, source, note, userName, timestamp) {
-        var talkPage = 'Talk:' + pageName.replace(/^Talk:/, '').replace(/_/g, ' ');
+    function addTalkPageEntry(api, pageName, claimText, source, note, userName, timestamp,
+        correction) {
+        // The talk page of the page's own namespace. 'Talk:' + pageName was
+        // only right in main: on Cryptograss:, Song:, Release: and the rest it
+        // made "Talk:Cryptograss:...", which the API refuses as invalidtitle
+        // after the claim itself has already been saved (Justin, 10 Nov).
+        var talkTitle = mw.Title.newFromText(pageName);
+        talkTitle = talkTitle && talkTitle.getTalkPage();
+        if (!talkTitle) {
+            // A namespace with no talk namespace: the claim is verified; there
+            // is nowhere to write the note, and that isn't an error.
+            return $.Deferred().resolve().promise();
+        }
+        var talkPage = talkTitle.getPrefixedText();
 
         var entry = '\n== Verification by ' + userName + ' (' + timestamp + ') ==\n';
         entry += "'''Claim:''' " + claimText + '\n\n';
@@ -551,6 +631,12 @@
         }
         if (note) {
             entry += "\n'''Note:''' " + note + '\n';
+        }
+        if (correction) {
+            // What the bot wrote and what the person made it, so the
+            // correction is on the record and not only in the history.
+            entry += "\n'''Corrected from:''' <code><nowiki>" + correction.from +
+                "</nowiki></code>\n\n'''to:''' <code><nowiki>" + correction.to + '</nowiki></code>\n';
         }
 
         return api.postWithToken('csrf', {

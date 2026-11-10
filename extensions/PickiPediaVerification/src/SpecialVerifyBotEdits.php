@@ -17,8 +17,106 @@ use ContentHandler;
  */
 class SpecialVerifyBotEdits extends SpecialPage {
 
+	/**
+	 * What the queue is grouped by, in the order it is shown. One list of
+	 * three hundred pages mixed every kind of claim together (Justin, 10 Nov):
+	 * a lineup wants a different reader, and a different source, than a
+	 * property's one-line description.
+	 */
+	public const KINDS = [
+		'lineups' => 'Records, recordings and lineups',
+		'people' => 'People and bands',
+		'shows' => 'Shows, venues, festivals and scenes',
+		'songs' => 'Songs and tunes',
+		'releases' => 'Releases',
+		'podcasts' => 'Podcasts',
+		'project' => 'Project pages: Cryptograss, Magenta, emergents, help',
+		'model' => 'Data model: properties, templates, categories',
+		'other' => 'Everything else',
+	];
+
+	private const MODEL_NAMESPACES = [ 'Property', 'Template', 'Module', 'MediaWiki', 'Form',
+		'Concept', 'smw/schema', 'Category' ];
+	private const PROJECT_NAMESPACES = [ 'Cryptograss', 'Magenta', 'Emergent', 'Instructions',
+		'VersionControl', 'PickiPedia', 'Help', 'User' ];
+
 	public function __construct() {
 		parent::__construct( 'VerifyBotEdits', 'edit' );
+	}
+
+	/**
+	 * Which group a page's claims belong to.
+	 *
+	 * @param string $ns The page's subject namespace, by name ('' for main).
+	 * @param string $text The title without its namespace, spaces not underscores.
+	 * @param string[] $categories Its categories, without the prefix.
+	 * @return string A key of KINDS.
+	 */
+	public static function kindOf( string $ns, string $text, array $categories ): string {
+		$cats = array_map( static fn ( $c ) => str_replace( '_', ' ', $c ), $categories );
+		$in = static fn ( array $names ) => (bool)array_intersect( $names, $cats );
+
+		if ( in_array( $ns, self::MODEL_NAMESPACES, true ) ) {
+			return 'model';
+		}
+		if ( $ns === 'Release' || $ns === 'ReleaseDraft' ) {
+			return 'releases';
+		}
+		if ( $ns === 'Song' ) {
+			return 'songs';
+		}
+		// Notes the emergents keep: Cryptograss/..., a page named for a
+		// block ("26329427 maybelle disk full incident"), a gadget candidate.
+		if ( in_array( $ns, self::PROJECT_NAMESPACES, true )
+			|| preg_match( '/^(Cryptograss\/|Candidate:|\d{6,} )/', $text ) ) {
+			return 'project';
+		}
+		if ( $in( [ 'Records', 'Recordings' ] ) || str_starts_with( $text, 'Recording:' ) ) {
+			return 'lineups';
+		}
+		if ( $in( [ 'Podcasts', 'Podcast episodes' ] ) ) {
+			return 'podcasts';
+		}
+		if ( str_starts_with( $text, 'Show:' ) || $in( [ 'Shows', 'Venues', 'Festivals',
+			'Festival editions', 'Jams', 'Recurring events', 'Events', 'Scenes' ] ) ) {
+			return 'shows';
+		}
+		if ( $in( [ 'Musicians', 'People', 'Bands' ] ) ) {
+			return 'people';
+		}
+		if ( $in( [ 'Compositions', 'Songs', 'Tunes', 'Blue Railroad Songs' ] ) ) {
+			return 'songs';
+		}
+		return 'other';
+	}
+
+	/**
+	 * How many claims a page holds, and the sources they name.
+	 *
+	 * Sources are what lets claims be verified together: every claim one
+	 * Discogs release or one LMA item supports is checked against the same
+	 * page (Justin, 10 Nov).
+	 *
+	 * @param string $text The page's wikitext.
+	 * @return array{claims: int, sources: string[]}
+	 */
+	public static function claimsIn( string $text ): array {
+		$claims = 0;
+		$sources = [];
+		if ( preg_match_all( '/<proposed(\s[^>]*)?>/i', $text, $tags ) ) {
+			$claims += count( $tags[0] );
+			foreach ( $tags[1] as $attrs ) {
+				if ( preg_match( '/\bsource\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/i', $attrs, $m ) ) {
+					$sources[] = trim( $m[1] !== '' ? $m[1] : ( $m[2] ?? '' ) );
+				}
+			}
+		}
+		if ( preg_match_all( '/\{\{\s*Bot[_ ]proposes\s*\|/i', $text, $bp ) ) {
+			$claims += count( $bp[0] );
+		}
+		$sources = array_values( array_unique( array_filter( $sources,
+			static fn ( $s ) => $s !== '' && strcasecmp( $s, 'unspecified' ) !== 0 ) ) );
+		return [ 'claims' => $claims, 'sources' => $sources ];
 	}
 
 	/**
@@ -49,7 +147,7 @@ class SpecialVerifyBotEdits extends SpecialPage {
 		$out = $this->getOutput();
 		$categoryName = 'Pages_with_unverified_bot_claims';
 
-		$out->addWikiTextAsInterface( "This page lists all pages containing unverified bot edits (wrapped in <code><nowiki>{{Bot_proposes}}</nowiki></code>).\n\n" );
+		$out->addWikiTextAsInterface( "Pages holding claims an emergent or bot proposed and no person has verified yet, grouped by what they are about. Pages that name the same source sit together.\n\n" );
 
 		// Query category members
 		$dbr = MediaWikiServices::getInstance()->getDBLoadBalancer()->getConnection( DB_REPLICA );
@@ -67,7 +165,7 @@ class SpecialVerifyBotEdits extends SpecialPage {
 		$pages = [];
 		foreach ( $res as $row ) {
 			$pages[] = [
-				'id' => $row->page_id,
+				'id' => (int)$row->page_id,
 				'namespace' => $row->page_namespace,
 				'title' => $row->page_title,
 			];
@@ -78,7 +176,75 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			return;
 		}
 
-		$out->addWikiTextAsInterface( "Found '''%d''' pages with unverified bot claims:\n", count( $pages ) );
+		// Every page's categories in one query, for grouping.
+		$categories = [];
+		$cres = $dbr->newSelectQueryBuilder()
+			->select( [ 'cl_from', 'cl_to' ] )
+			->from( 'categorylinks' )
+			->where( [ 'cl_from' => array_column( $pages, 'id' ) ] )
+			->caller( __METHOD__ )
+			->fetchResultSet();
+		foreach ( $cres as $row ) {
+			$categories[(int)$row->cl_from][] = $row->cl_to;
+		}
+
+		$wikiPageFactory = MediaWikiServices::getInstance()->getWikiPageFactory();
+		$namespaceInfo = MediaWikiServices::getInstance()->getNamespaceInfo();
+		$groups = array_fill_keys( array_keys( self::KINDS ), [] );
+
+		foreach ( $pages as $page ) {
+			$title = Title::makeTitle( $page['namespace'], $page['title'] );
+			$problems = [];
+			$scan = [ 'claims' => 0, 'sources' => [] ];
+			$content = $wikiPageFactory->newFromTitle( $title )->getContent();
+			$rawText = $content ? ContentHandler::getContentText( $content ) : null;
+			if ( is_string( $rawText ) ) {
+				$problems = self::bracketProblems( self::stripMarkers( $rawText ) );
+				$scan = self::claimsIn( $rawText );
+			}
+			$subject = $namespaceInfo->getSubject( $page['namespace'] );
+			$kind = self::kindOf(
+				$subject === NS_MAIN ? '' : (string)$namespaceInfo->getCanonicalName( $subject ),
+				$title->getText(),
+				$categories[$page['id']] ?? []
+			);
+			$groups[$kind][] = [ 'id' => $page['id'], 'title' => $title, 'problems' => $problems ] + $scan;
+		}
+
+		// Within a group, pages that name the same source sit together, so
+		// what one source supports can be checked in one sitting.
+		foreach ( $groups as &$rows ) {
+			usort( $rows, static function ( $a, $b ) {
+				$sa = $a['sources'][0] ?? "\u{10FFFF}";
+				$sb = $b['sources'][0] ?? "\u{10FFFF}";
+				return [ $sa, $a['title']->getPrefixedText() ] <=> [ $sb, $b['title']->getPrefixedText() ];
+			} );
+		}
+		unset( $rows );
+
+		$only = $this->getRequest()->getVal( 'kind' );
+		if ( !isset( self::KINDS[$only] ) ) {
+			$only = null;
+		}
+
+		// Where to go: each group with its pages and claims, and "all".
+		$nav = [];
+		foreach ( self::KINDS as $key => $label ) {
+			if ( !$groups[$key] ) {
+				continue;
+			}
+			$count = count( $groups[$key] ) . ' pages, '
+				. array_sum( array_column( $groups[$key], 'claims' ) ) . ' claims';
+			$nav[] = $key === $only
+				? Html::element( 'strong', [], "$label ($count)" )
+				: Html::element( 'a', [ 'href' => $this->getPageTitle()->getLocalURL( [ 'kind' => $key ] ) ],
+					"$label ($count)" );
+		}
+		$nav[] = $only === null
+			? Html::element( 'strong', [], 'All' )
+			: Html::element( 'a', [ 'href' => $this->getPageTitle()->getLocalURL() ], 'All' );
+		$out->addHTML( Html::rawElement( 'ul', [ 'class' => 'pv-kinds' ],
+			implode( '', array_map( static fn ( $n ) => Html::rawElement( 'li', [], $n ), $nav ) ) ) );
 
 		// Build form
 		$html = Html::openElement( 'form', [
@@ -89,74 +255,92 @@ class SpecialVerifyBotEdits extends SpecialPage {
 		$html .= Html::hidden( 'action', 'verify' );
 		$html .= Html::hidden( 'token', $this->getUser()->getEditToken() );
 
-		$html .= Html::openElement( 'table', [ 'class' => 'wikitable sortable' ] );
-		$html .= Html::rawElement( 'tr', [],
-			Html::element( 'th', [], '' ) .
-			Html::element( 'th', [], 'Page' ) .
-			Html::element( 'th', [], 'Namespace' ) .
-			Html::element( 'th', [], 'Brackets' ) .
-			Html::element( 'th', [], 'Actions' )
-		);
-
-		$wikiPageFactory = MediaWikiServices::getInstance()->getWikiPageFactory();
-
-		foreach ( $pages as $page ) {
-			$title = Title::makeTitle( $page['namespace'], $page['title'] );
-			$displayTitle = $title->getPrefixedText();
-			$problems = [];
-			$content = $wikiPageFactory->newFromTitle( $title )->getContent();
-			$rawText = $content ? ContentHandler::getContentText( $content ) : null;
-			if ( is_string( $rawText ) ) {
-				$after = self::stripMarkers( $rawText );
-				$problems = self::bracketProblems( $after );
+		foreach ( self::KINDS as $key => $label ) {
+			if ( !$groups[$key] || ( $only !== null && $key !== $only ) ) {
+				continue;
 			}
-			$bracketCell = empty( $problems )
-				? Html::element( 'span', [ 'style' => 'color:#1b6e2b;' ], '✓ balanced' )
-				: Html::element( 'span', [
-					'style' => 'color:#b32424;font-weight:bold;',
-					'title' => implode( '; ', $problems )
-				], '⚠ ' . implode( '; ', $problems ) );
-
+			$html .= Html::element( 'h2', [ 'id' => 'kind-' . $key ], $label );
+			$html .= Html::openElement( 'table', [ 'class' => 'wikitable sortable' ] );
 			$html .= Html::rawElement( 'tr', [],
-				Html::rawElement( 'td', [],
-					Html::check( 'pages[]', false, [ 'value' => $page['id'], 'disabled' => !empty( $problems ) ] )
-				) .
-				Html::rawElement( 'td', [],
-					Html::element( 'a', [ 'href' => $title->getLocalURL() ], $displayTitle )
-				) .
-				Html::element( 'td', [], $title->getNsText() ?: '(main)' ) .
-				Html::rawElement( 'td', [], $bracketCell ) .
-				Html::rawElement( 'td', [],
-					Html::element( 'a', [
-						'href' => $title->getLocalURL( 'action=edit' )
-					], 'edit' ) .
-					' | ' .
-					// A submit button, not a link. execute() only calls
-					// handleVerification() on a POST, so the link this
-					// replaces could never do anything but reload the page —
-					// which is exactly what it did. A <button> carrying a
-					// name and value posts the enclosing form and says which
-					// row it came from, and it inherits that form's token.
-					Html::element( 'button', [
-						'type' => 'submit',
-						'name' => 'verify_page',
-						'value' => (string)$page['id']
-					], 'verify' )
-				)
+				Html::element( 'th', [], '' ) .
+				Html::element( 'th', [], 'Page' ) .
+				Html::element( 'th', [], 'Claims' ) .
+				Html::element( 'th', [], 'Sources named' ) .
+				Html::element( 'th', [], 'Brackets' ) .
+				Html::element( 'th', [], 'Actions' )
 			);
+			foreach ( $groups[$key] as $row ) {
+				$html .= $this->renderRow( $row );
+			}
+			$html .= Html::closeElement( 'table' );
 		}
 
-		$html .= Html::closeElement( 'table' );
-
+		// Verify All posts no list: it means every page in the queue. Under
+		// one group that would verify the groups you aren't looking at, so it
+		// is offered only on the whole list.
 		$html .= Html::rawElement( 'p', [],
 			Html::submitButton( 'Verify Selected', [ 'name' => 'verify_selected' ] ) .
-			' ' .
-			Html::submitButton( 'Verify All', [ 'name' => 'verify_all' ] )
+			( $only === null ? ' ' . Html::submitButton( 'Verify All', [ 'name' => 'verify_all' ] ) : '' )
 		);
 
 		$html .= Html::closeElement( 'form' );
 
 		$out->addHTML( $html );
+	}
+
+	/**
+	 * One page's row: tick box, link, how many claims, the sources they name,
+	 * whether its brackets balance, and the actions.
+	 *
+	 * @param array $row id, title, problems, claims, sources.
+	 * @return string HTML.
+	 */
+	private function renderRow( array $row ): string {
+		$title = $row['title'];
+		$problems = $row['problems'];
+		$bracketCell = empty( $problems )
+			? Html::element( 'span', [ 'style' => 'color:#1b6e2b;' ], '✓ balanced' )
+			: Html::element( 'span', [
+				'style' => 'color:#b32424;font-weight:bold;',
+				'title' => implode( '; ', $problems )
+			], '⚠ ' . implode( '; ', $problems ) );
+
+		$sources = [];
+		foreach ( $row['sources'] as $source ) {
+			$sources[] = preg_match( '#^https?://#i', $source )
+				? Html::element( 'a', [ 'href' => $source, 'rel' => 'nofollow noopener', 'target' => '_blank' ],
+					preg_replace( '#^https?://(www\.)?#i', '', $source ) )
+				: Html::element( 'span', [], $source );
+		}
+		$sourceCell = $sources
+			? implode( '<br>', $sources )
+			: Html::element( 'span', [ 'style' => 'color:#72777d;' ], 'none named' );
+
+		return Html::rawElement( 'tr', [],
+			Html::rawElement( 'td', [],
+				Html::check( 'pages[]', false, [ 'value' => $row['id'], 'disabled' => !empty( $problems ) ] )
+			) .
+			Html::rawElement( 'td', [],
+				Html::element( 'a', [ 'href' => $title->getLocalURL() ], $title->getPrefixedText() )
+			) .
+			Html::element( 'td', [ 'data-sort-value' => (string)$row['claims'] ], (string)$row['claims'] ) .
+			Html::rawElement( 'td', [], $sourceCell ) .
+			Html::rawElement( 'td', [], $bracketCell ) .
+			Html::rawElement( 'td', [],
+				Html::element( 'a', [
+					'href' => $title->getLocalURL( 'action=edit' )
+				], 'edit' ) .
+				' | ' .
+				// A submit button, not a link: execute() only verifies on a
+				// POST, and a button carrying a name and value says which row
+				// it came from and inherits the form's token.
+				Html::element( 'button', [
+					'type' => 'submit',
+					'name' => 'verify_page',
+					'value' => (string)$row['id']
+				], 'verify' )
+			)
+		);
 	}
 
 	/**
