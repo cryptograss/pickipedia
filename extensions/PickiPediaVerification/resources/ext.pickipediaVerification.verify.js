@@ -542,7 +542,18 @@
     }
 
     function addTalkPageEntry(api, pageName, claimText, source, note, userName, timestamp) {
-        var talkPage = 'Talk:' + pageName.replace(/^Talk:/, '').replace(/_/g, ' ');
+        // The talk page of the page's own namespace. 'Talk:' + pageName was
+        // only right in main: on Cryptograss:, Song:, Release: and the rest it
+        // made "Talk:Cryptograss:...", which the API refuses as invalidtitle
+        // after the claim itself has already been saved (Justin, 10 Nov).
+        var talkTitle = mw.Title.newFromText(pageName);
+        talkTitle = talkTitle && talkTitle.getTalkPage();
+        if (!talkTitle) {
+            // A namespace with no talk namespace: the claim is verified; there
+            // is nowhere to write the note, and that isn't an error.
+            return $.Deferred().resolve().promise();
+        }
+        var talkPage = talkTitle.getPrefixedText();
 
         var entry = '\n== Verification by ' + userName + ' (' + timestamp + ') ==\n';
         entry += "'''Claim:''' " + claimText + '\n\n';
