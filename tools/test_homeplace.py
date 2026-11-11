@@ -70,7 +70,9 @@ def test_read_arthel_builds_records_and_shows(tmp_path):
     assert set(records) == {"show:0-25254342", "record:vowel sounds"}
     vs = records["record:vowel sounds"]
     assert vs["people"]["Harry Clark"]["scopes"] == {"track"}
-    assert vs["sources"]["arthel"].endswith("songs_and_tunes/august.yaml")
+    # the record cites the folder; only a person cites a song file
+    assert vs["sources"]["arthel"].endswith("/tree/main/src/data/songs_and_tunes")
+    assert vs["people"]["Harry Clark"]["sources"] == {homeplace.ARTHEL_BLOB + "songs_and_tunes/august.yaml"}
     graph = homeplace.graph_of(records)
     # Justin Holmes is on both, so the show and the record are a pair
     assert graph["pairs"] == [{"records": ["record:vowel sounds", "show:0-25254342"],
@@ -136,3 +138,54 @@ def test_render_counts_shows_separately():
     text = homeplace.render(homeplace.graph_of({rec["group"]: rec}))
     assert "1 of the records above are shows" in text
     assert rambler.wikitext(homeplace.graph_of({rec["group"]: rec}))  # Rambler's output works on our graph
+
+
+SILVER = {"studio_versions": {0: {"4masks": {"ensemble": {
+    "Justin Holmes": ["guitar"], "Kyle Tuttle": ["5-string banjo"], "Maddie Denton": ["fiddle"]}}}}}
+BARLOW = {"studio_versions": {0: {"4masks": {"ensemble": {
+    "Justin Holmes": ["guitar"], "Cory Walker": ["5-string banjo"]}}}}}
+
+
+def test_a_hop_cites_only_the_files_both_are_in(tmp_path):
+    # The mistake this guards (blu, #connectome, 10 Nov): the 4masks record
+    # carried barlows-jig.yaml as its source, and that file got cited for
+    # Justin and Kyle. Kyle isn't on Barlow's Jig; Cory Walker is.
+    import yaml
+    (tmp_path / "songs_and_tunes").mkdir()
+    (tmp_path / "songs_and_tunes" / "barlows-jig.yaml").write_text(yaml.safe_dump(BARLOW))
+    (tmp_path / "songs_and_tunes" / "silver-44.yaml").write_text(yaml.safe_dump(SILVER))
+    graph = homeplace.graph_of(homeplace.read_arthel(str(tmp_path)))
+    assert "barlows-jig" not in graph["records"]["record:4masks"]["sources"]["arthel"]
+    hop = {(h["a"], h["b"]): h for h in graph["hops"]}
+    assert hop[("Justin Holmes", "Kyle Tuttle")]["kind"] == "cut"
+    assert [s.rsplit("/", 1)[1] for s in hop[("Justin Holmes", "Kyle Tuttle")]["sources"]] == ["silver-44.yaml"]
+    assert [s.rsplit("/", 1)[1] for s in hop[("Cory Walker", "Justin Holmes")]["sources"]] == ["barlows-jig.yaml"]
+    # Cory and Kyle are on the same record and no same cut: said so, with nothing cited
+    assert hop[("Cory Walker", "Kyle Tuttle")] == {
+        "a": "Cory Walker", "b": "Kyle Tuttle", "record": "record:4masks", "title": "4masks",
+        "kind": "record", "sources": []}
+    text = homeplace.render_with(graph, "Kyle Tuttle")
+    assert "Justin Holmes: same cut, 4masks (silver-44.yaml)" in text
+    assert "Cory Walker: same record, 4masks (no shared source: the record only)" in text
+
+
+def test_a_rambler_credit_is_never_promoted_to_a_cut():
+    # Rambler's sources are names ("Discogs"), not a cut's file: two people at
+    # track scope on one Discogs release may be on different tracks.
+    g = {"g1": {"id": "x", "group": "g1", "title": "Julia Belle", "date": "", "artist": "", "compilation": False,
+                "sources": {}, "people": {
+                    "Maddie Denton": {"mbid": None, "roles": ["fiddle"], "scopes": ["track"], "sources": ["Discogs"]},
+                    "Vickie Vaughn": {"mbid": None, "roles": ["bass"], "scopes": ["track"], "sources": ["Discogs"]}}}}
+    graph = homeplace.graph_of(homeplace.merge(json.loads(json.dumps(g))))
+    assert graph["hops"][0]["kind"] == "record" and graph["hops"][0]["sources"] == ["Discogs"]
+
+
+def test_wiki_cut_and_personnel_on_one_record():
+    cuts = homeplace.wiki_cuts([
+        ask_row("Song:August# 1", **{"Has performer": ["Harry Clark"], "Has instrument": ["mandolin"], "Has cut": ["4masks"]}),
+        ask_row("Song:August# 2", **{"Has performer": ["Maddie Denton"], "Has instrument": ["fiddle"], "Has cut": ["4masks"]}),
+        ask_row("Song:Proximity# 1", **{"Has performer": ["Kaitlyn Raitz"], "Has instrument": ["cello"], "Has cut": ["4masks"]})])
+    hop = {(h["a"], h["b"]): h for h in homeplace.graph_of(cuts)["hops"]}
+    assert hop[("Harry Clark", "Maddie Denton")]["kind"] == "cut"
+    assert hop[("Harry Clark", "Maddie Denton")]["sources"] == ["https://pickipedia.xyz/wiki/Song:August"]
+    assert hop[("Harry Clark", "Kaitlyn Raitz")]["kind"] == "record"

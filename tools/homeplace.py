@@ -45,13 +45,18 @@ from urllib.request import Request, urlopen
 import rambler
 
 ARTHEL_BLOB = "https://github.com/cryptograss/arthel/blob/main/src/data/"
+ARTHEL_TREE = "https://github.com/cryptograss/arthel/tree/main/src/data/"
 WIKI_API = "https://pickipedia.xyz/api.php"
 WIKI_PAGE = "https://pickipedia.xyz/wiki/"
 USER_AGENT = "pickipedia-homeplace/0.1 (https://pickipedia.xyz; blu@cryptograss.live)"
 
 
+NARROW = {"track": 0, "song": 1, "show": 2, "release": 3}
+
+
 def person(instruments, scope, source):
-    return {"mbid": None, "roles": set(instruments), "scopes": {scope}, "sources": {source}}
+    return {"mbid": None, "roles": set(instruments), "scopes": {scope}, "sources": {source},
+            "source_scopes": {source: scope}}
 
 
 def add_person(record, name, instruments, scope, source):
@@ -62,6 +67,11 @@ def add_person(record, name, instruments, scope, source):
     p["roles"].update(i.strip() for i in instruments if i and i.strip())
     p["scopes"].add(scope)
     p["sources"].add(source)
+    # Which scope each source gives this person, so a pair can be cited by the
+    # files both are in. Kept narrowest-first: a cut beats a release credit.
+    ss = p.setdefault("source_scopes", {})
+    if source not in ss or NARROW.get(scope, 9) < NARROW.get(ss[source], 9):
+        ss[source] = scope
 
 
 def new_record(rid, title, date="", artist="", kind="record", sources=None):
@@ -152,7 +162,9 @@ def read_arthel(data_dir):
         for record_title, date, people in arthel_cuts(fn[:-5], data, source):
             rid = "record:" + rambler.sideman.normalize_title(record_title)
             rec = records.setdefault(rid, new_record(rid, record_title, date=str(date)))
-            rec["sources"].setdefault("arthel", source)
+            # The record's own source is the folder, not one song's file: a song
+            # file only says who is on that cut. Each person carries their files.
+            rec["sources"].setdefault("arthel", ARTHEL_TREE + "songs_and_tunes")
             for name, instruments in people.items():
                 add_person(rec, name, instruments, "track", source)
     return records
@@ -247,19 +259,75 @@ def merge(*graphs):
         for rid, rec in g.items():
             if rid in records:
                 for name, p in rec["people"].items():
-                    add_person(records[rid], name, p["roles"], next(iter(p["scopes"])), next(iter(p["sources"])))
+                    for src, scope in source_scopes(p).items():
+                        add_person(records[rid], name, p["roles"], scope, src)
                     records[rid]["people"][name]["scopes"].update(p["scopes"])
-                    records[rid]["people"][name]["sources"].update(p["sources"])
                 records[rid]["sources"].update(rec.get("sources") or {})
             else:
                 records[rid] = {**rec, "people": {
-                    n: {**p, "roles": set(p["roles"]), "scopes": set(p["scopes"]), "sources": set(p["sources"])}
+                    n: {**p, "roles": set(p["roles"]), "scopes": set(p["scopes"]), "sources": set(p["sources"]),
+                        "source_scopes": source_scopes(p)}
                     for n, p in rec["people"].items()}}
     return records
 
 
+def source_scopes(p):
+    """{source: scope} for a person. A graph from Rambler, or an older
+    Homeplace one, has no source_scopes: each source gets the person's
+    widest scope, so nothing is promoted to a cut it never said it was."""
+    if p.get("source_scopes"):
+        return dict(p["source_scopes"])
+    widest = max(p.get("scopes") or ["release"], key=lambda s: NARROW.get(s, 9))
+    return {src: widest for src in p.get("sources") or []}
+
+
+def hops(records):
+    """Every pair of people on a record, cited by the sources both are in.
+
+    kind is "cut" when a shared source puts both on the same cut (an arthel
+    song file, or a wiki Song: page, at track scope), "show" when it is a
+    show both were on, and "record" when all they share is the record: the
+    same LP, maybe not the same track. A pair with no shared source is
+    still listed, as "record", with no sources -- never with someone
+    else's file.
+    """
+    out = []
+    for rid in sorted(records):
+        rec = records[rid]
+        names = sorted(rec["people"])
+        ss = {n: source_scopes(rec["people"][n]) for n in names}
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                shared = sorted(set(ss[a]) & set(ss[b]))
+                cuts = [s for s in shared if s.startswith("http") and ss[a][s] == ss[b][s] == "track"]
+                if cuts:
+                    kind, cite = "cut", cuts
+                elif rec.get("kind") == "show" and shared:
+                    kind, cite = "show", shared
+                else:
+                    kind, cite = "record", shared
+                out.append({"a": a, "b": b, "record": rid, "title": rec["title"], "kind": kind, "sources": cite})
+    return out
+
+
 def graph_of(records):
-    return rambler.summarize(records, {})
+    graph = rambler.summarize(records, {})
+    graph["hops"] = hops(records)
+    return graph
+
+
+def render_with(graph, name):
+    """Everyone name shares a record or show with, and what says so."""
+    rank = {"cut": 0, "show": 1, "record": 2}
+    rows = [h for h in graph["hops"] if name in (h["a"], h["b"])]
+    if not rows:
+        return f"{name}: no one shares a record or show with them here."
+    lines = [f"{name}: {len({h['a'] if h['b'] == name else h['b'] for h in rows})} people", ""]
+    for h in sorted(rows, key=lambda h: (rank[h["kind"]], h["b"] if h["a"] == name else h["a"])):
+        other = h["b"] if h["a"] == name else h["a"]
+        cite = ", ".join(s.rsplit("/", 1)[-1] for s in h["sources"]) or "no shared source: the record only"
+        lines.append(f"  {other}: same {h['kind']}, {h['title']} ({cite})")
+    return "\n".join(lines)
 
 
 def render(graph):
@@ -276,6 +344,8 @@ def main(argv):
     ap.add_argument("--wiki", action="store_true", help="read Has performer and Has personnel from PickiPedia")
     ap.add_argument("--merge", metavar="FILE", action="append", default=[],
                     help="a --json graph from Rambler or Homeplace to fold in")
+    ap.add_argument("--with", dest="with_", metavar="NAME",
+                    help="list NAME's co-players, each cited by the files both are in")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv[1:])
     if not (args.arthel or args.wiki or args.merge):
@@ -289,7 +359,12 @@ def main(argv):
         with open(fn) as f:
             parts.append(json.load(f)["records"])
     graph = graph_of(merge(*parts))
-    print(json.dumps(rambler.jsonable(graph), indent=2, ensure_ascii=False) if args.json else render(graph))
+    if args.json:
+        print(json.dumps(rambler.jsonable(graph), indent=2, ensure_ascii=False))
+    elif args.with_:
+        print(render_with(graph, args.with_))
+    else:
+        print(render(graph))
     return 0
 
 
