@@ -90,6 +90,10 @@ pipeline {
                     php tests/check-bundles.php
                     # Pronouns on Special:Preferences: what's kept, what's refused.
                     php tests/check-pronouns.php
+                    # The push to magenta: its body, signature and URL.
+                    php tests/check-magenta-push.php
+                    # Time zones: MediaWiki's time offset preference, read as a zone for {{#timezone:}}.
+                    php tests/check-timezone.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter
                     # but MediaWiki is not downloaded yet at this stage, so a

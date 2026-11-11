@@ -19,7 +19,10 @@
 namespace MediaWiki\Extension\PickiPediaContent;
 
 use MediaWiki\Hook\BeforePageDisplayHook;
+use MediaWiki\Hook\PageMoveCompleteHook;
 use MediaWiki\Hook\ParserFirstCallInitHook;
+use MediaWiki\Hook\UploadCompleteHook;
+use MediaWiki\Storage\Hook\PageSaveCompleteHook;
 use MediaWiki\Hook\SkinAfterContentHook;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Revision\SlotRecord;
@@ -33,7 +36,38 @@ use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\LikeValue;
 
 class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook,
-	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook, SaveUserOptionsHook {
+	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook, SaveUserOptionsHook,
+	PageSaveCompleteHook, PageMoveCompleteHook, UploadCompleteHook {
+
+	/** A save, told to magenta at once (MagentaPush.php). */
+	public function onPageSaveComplete( $wikiPage, $user, $summary, $flags, $revisionRecord, $editResult ) {
+		MagentaPush::tell( MagentaPush::payload(
+			$wikiPage->getTitle()->getPrefixedText(), $revisionRecord->getId(), $user->getName(),
+			( $flags & EDIT_NEW ) ? 'new' : 'edit'
+		) );
+	}
+
+	/** A move: both titles, so magenta forgets the old and reads the new. */
+	public function onPageMoveComplete( $old, $new, $user, $pageid, $redirid, $reason, $revision ) {
+		$from = Title::newFromLinkTarget( $old )->getPrefixedText();
+		MagentaPush::tell( MagentaPush::payload(
+			Title::newFromLinkTarget( $new )->getPrefixedText(), $revision ? $revision->getId() : null,
+			$user->getName(), 'move', $from
+		) );
+	}
+
+	/** An upload: its File: page, so a picture's embed is read again. */
+	public function onUploadComplete( $uploadBase ) {
+		$title = $uploadBase->getTitle();
+		if ( !$title ) {
+			return;
+		}
+		$file = $uploadBase->getLocalFile();
+		$user = $file ? $file->getUploader() : null;
+		MagentaPush::tell( MagentaPush::payload(
+			$title->getPrefixedText(), null, $user ? $user->getName() : '', 'upload'
+		) );
+	}
 
 	/**
 	 * Pronouns on Special:Preferences, in place of MediaWiki's own three (Pronouns.php; Justin, 26 Oct: one field,
@@ -46,6 +80,10 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			$field['default'] = Pronouns::fromGender( $lookup->getOption( $user, 'gender' ) );
 		}
 		$preferences[Pronouns::OPTION] = $field;
+		// The time offset is MediaWiki's own field; it says here that it's read by others (TimeZone.php).
+		if ( isset( $preferences[TimeZone::OPTION] ) ) {
+			$preferences[TimeZone::OPTION]['help-message'] = 'pickipediacontent-timezone-help';
+		}
 		if ( isset( $preferences['gender'] ) ) {
 			$preferences['gender'] = [ 'type' => 'api' ];
 		}
@@ -68,6 +106,16 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		return Pronouns::clean( $services->getUserOptionsLookup()->getOption( $user, Pronouns::OPTION, '' ) );
 	}
 
+	/** A user's time zone, as their time offset preference names it (TimeZone::zoneOf); '' if it doesn't. */
+	public static function timeZoneOf( string $name ): string {
+		$services = MediaWikiServices::getInstance();
+		$user = $services->getUserFactory()->newFromName( $name );
+		if ( !$user || !$user->isRegistered() ) {
+			return '';
+		}
+		return TimeZone::zoneOf( $services->getUserOptionsLookup()->getOption( $user, TimeZone::OPTION, '' ) );
+	}
+
 	/**
 	 * <todo>: a to-do list kept as YAML, shown as a checklist (Todo.php).
 	 *
@@ -79,6 +127,11 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		$parser->setFunctionHook( 'pronouns', static function ( $parser, $name = '' ) {
 			$parser->getOutput()->updateCacheExpiry( 3600 );
 			return wfEscapeWikiText( self::pronounsOf( trim( (string)$name ) ) );
+		} );
+		// {{#timezone:Name}}: the zone their time offset preference names, or nothing (TimeZone.php).
+		$parser->setFunctionHook( 'timezone', static function ( $parser, $name = '' ) {
+			$parser->getOutput()->updateCacheExpiry( 3600 );
+			return wfEscapeWikiText( self::timeZoneOf( trim( (string)$name ) ) );
 		} );
 		$parser->setHook( 'todo', static function ( $input, array $args, $parser, $frame ) {
 			$page = $parser->getPage();

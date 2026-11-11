@@ -204,7 +204,7 @@ YAML;
 					. ' background: linear-gradient(135deg, #9db89a 0%, #87a96b 100%);'
 					. ' border-radius: 6px; text-align: center;' ],
 				Html::element( 'a',
-					[ 'href' => '/rabbithole/pickipedia-demo.html?track=' . rawurlencode( $cid ),
+					[ 'href' => '/rabbithole/?track=' . rawurlencode( $cid ),
 					  'style' => 'color: #2d5016; text-decoration: none;'
 						. ' font-weight: 600; font-size: 1.05em;' ],
 					'🐇 Play in Rabbithole — edit timeline, see musicians' )
@@ -671,7 +671,7 @@ YAML;
 					$cid )
 				. ' '
 				. Html::element( 'a',
-					[ 'href' => '/rabbithole/pickipedia-demo.html?track=' . rawurlencode( $cid ),
+					[ 'href' => '/rabbithole/?track=' . rawurlencode( $cid ),
 					  'title' => 'Play in Rabbithole',
 					  'style' => 'float: right; color: #4a7c59;'
 						. ' text-decoration: none; font-weight: 600;' ],
