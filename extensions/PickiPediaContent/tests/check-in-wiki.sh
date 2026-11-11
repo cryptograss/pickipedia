@@ -217,6 +217,19 @@ php /tmp/foot.php 'Peter_Rowan' edit
 php -r '$h = file_get_contents("http://127.0.0.1:8080/index.php?title=Cryptograss:Moods/magenta-interface/links/2026-10");
     echo "LEDGER " . ( str_contains( $h, "href=\"/index.php/Bill_Monroe\"" ) || str_contains( $h, "title=Bill_Monroe" ) ? "links-pages" : "no-page-links" ) . "\n";'
 
+# A page's card where its address is shared (SocialCard.php): its head, as served.
+cat > /tmp/card.php <<'EOF'
+<?php
+$html = (string)@file_get_contents( 'http://127.0.0.1:8080/index.php?title=' . rawurlencode( $argv[1] )
+	. ( isset( $argv[2] ) ? '&action=' . $argv[2] : '' ), false, stream_context_create( [ 'http' => [ 'ignore_errors' => true ] ] ) );
+preg_match_all( '#<meta (?:property|name)="((?:og|twitter):[a-z_]+|description)" content="([^"]*)"#', $html, $tags, PREG_SET_ORDER );
+echo 'CARD ' . $argv[1] . ( isset( $argv[2] ) ? " ($argv[2])" : '' ) . ' ['
+	. implode( ' | ', array_map( static fn ( $t ) => $t[1] . '=' . html_entity_decode( $t[2] ), $tags ) ) . "]\n";
+EOF
+php /tmp/card.php 'Bill_Monroe'
+php /tmp/card.php 'Bill_Monroe' edit
+php /tmp/card.php 'Special:RecentChanges'
+
 printf '%s' 'FAMILY:{{#invoke:Instruments|family|5-string banjo}} EMPTY:[{{#invoke:Instruments|family|cello}}] BADGE:{{#invoke:Instruments|badge|1=5-string banjo|size=18|tuck=1}}' \
     | php maintenance/parse.php --title "Test" 2>/dev/null
 INSIDE
@@ -291,6 +304,15 @@ expect "and so does the form that starts it" "FOOT Peter_Rowan (edit) rows=1 mag
 refute "a message's words never become markup" " MARKUP"
 refute "every page answered" " NOPAGE"
 expect "the ledger links the pages it names" "LEDGER links-pages"
+
+echo
+echo "A page's card where its address is shared (SocialCard.php):"
+expect "its title and where it is" "og:site_name=TestWiki | og:type=article | og:title=Bill Monroe | og:url=http://localhost/index.php/Bill_Monroe |"
+expect "what it says" "og:description=The father of bluegrass. |"
+expect "and for search, the same" "CARD Bill_Monroe [description=The father of bluegrass. |"
+expect "with no picture, the wiki's logo and a small card" "og:image=http://localhost/resources/assets/change-your-logo.svg | twitter:card=summary]"
+expect "its edit form has none" "CARD Bill_Monroe (edit) []"
+expect "nor a special page" "CARD Special:RecentChanges []"
 
 echo
 if [ "$failures" -ne 0 ]; then

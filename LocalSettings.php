@@ -554,7 +554,10 @@ if ( !empty( $wgOAuth2PrivateKey ) && !empty( $wgOAuth2PublicKey ) ) {
 # wfLoadExtension( 'UserMerge' );
 
 # WikiSEO - social sharing cards and SEO meta tags (installed via Composer)
-# DISABLED in test environment (not in Docker image)
+# Off: a page's card (og: and twitter: tags) is made by PickiPediaContent
+# (src/SocialCard.php) from the page's own opening and first picture. WikiSEO
+# would need TextExtracts and PageImages for the same, and loaded alongside it
+# would put a second set of tags in the head.
 # wfLoadExtension( 'WikiSEO' );
 # $wgWikiSeoDefaultImage = "$wgServer/w/images/pickipedia-card.png";
 # $wgTwitterSiteHandle = "@cryptograss";
