@@ -1079,7 +1079,7 @@
 			var releaseUrl = mw.util.getUrl( 'Release:' + cid );
 			setStatus( 'Pinned to IPFS! CID: ' + cid, 'success' );
 			appendLog( 'Gateway: ' + ( resultData.gateway_url || '' ) );
-			appendLog( 'Release page will be created by the bot.' );
+			appendLog( 'Release page pending Blue Railroad Imports activity: the bot makes it from this draft, usually within a couple of minutes. Until then, its page says so.' );
 			appendLog( '' );
 
 			// Show a link to the (future) Release page

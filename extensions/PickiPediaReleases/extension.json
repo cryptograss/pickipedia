@@ -65,7 +65,8 @@
 		"LoadExtensionSchemaUpdates": "main",
 		"BeforePageDisplay": "main",
 		"OutputPageParserOutput": "main",
-		"PageForms::FormPrinterSetup": "main"
+		"PageForms::FormPrinterSetup": "main",
+		"BeforeDisplayNoArticleText": "main"
 	},
 	"MessagesDirs": {
 		"PickiPediaReleases": ["i18n"]
@@ -74,6 +75,10 @@
 		"PickiPediaReleasesAlias": "PickiPediaReleases.alias.php"
 	},
 	"ResourceModules": {
+		"ext.pickipediaReleases.releasePending": {
+			"scripts": ["ext.pickipediaReleases.releasePending.js"],
+			"dependencies": ["mediawiki.api"]
+		},
 		"ext.pickipediaReleases.styles": {
 			"styles": ["ext.pickipediaReleases.css"]
 		},
@@ -159,6 +164,10 @@
 		}
 	},
 	"config": {
+		"PickiPediaReleasesBot": {
+			"value": "Blue Railroad Imports",
+			"description": "The account whose bot makes Release pages from finalized ReleaseDrafts (blue-railroad-import). Named on a Release page that is still pending."
+		},
 		"PickiPediaEthRpcUrl": {
 			"value": "https://ethereum-rpc.publicnode.com",
 			"description": "JSON-RPC endpoint used to read the current Ethereum block height. Empty string skips the network call and relies on BlockHeight's offline estimate."

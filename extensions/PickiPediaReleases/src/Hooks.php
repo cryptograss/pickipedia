@@ -14,9 +14,15 @@ use MediaWiki\Hook\BeforePageDisplayHook;
 use MediaWiki\Html\Html;
 use MediaWiki\Output\Hook\OutputPageParserOutputHook;
 use MediaWiki\Output\OutputPage;
+use MediaWiki\Page\Hook\BeforeDisplayNoArticleTextHook;
 use Skin;
 
-class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook, OutputPageParserOutputHook {
+class Hooks implements
+	LoadExtensionSchemaUpdatesHook,
+	BeforePageDisplayHook,
+	OutputPageParserOutputHook,
+	BeforeDisplayNoArticleTextHook
+{
 
 	/**
 	 * Handle schema updates
@@ -25,6 +31,36 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook, Ou
 	 */
 	public function onLoadExtensionSchemaUpdates( $updater ): void {
 		// No schema updates needed at this time
+	}
+
+	/**
+	 * A missing Release page whose release is already pinned says it's on
+	 * its way, and from which draft, instead of "no text in this page".
+	 * See ReleasePending.
+	 *
+	 * @param \Article $article
+	 * @return bool|void False when the notice replaces the default text
+	 */
+	public function onBeforeDisplayNoArticleText( $article ) {
+		$title = $article->getTitle();
+		if ( $title->getNamespace() !== NS_RELEASE || $article->getOldID() ) {
+			return;
+		}
+		$cid = $title->getDBkey();
+		$out = $article->getContext()->getOutput();
+		$config = $out->getConfig();
+		$bot = $config->get( 'PickiPediaReleasesBot' );
+		$finalize = ReleasePending::finalizeOf( $cid, $bot );
+		if ( !$finalize ) {
+			return;
+		}
+		$gateway = str_replace( '://delivery-kid', '://ipfs.delivery-kid',
+			rtrim( (string)$config->get( 'DeliveryKidUrl' ), '/' ) )
+			?: 'https://ipfs.delivery-kid.cryptograss.live';
+		$out->addHTML( ReleasePending::notice(
+			$cid, $finalize, $bot, $gateway ) );
+		$out->addModules( 'ext.pickipediaReleases.releasePending' );
+		return false;
 	}
 
 	/**
