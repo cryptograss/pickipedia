@@ -192,12 +192,17 @@ YAML;
 		$output->setExtensionData( self::CARD_KEY,
 			$this->card( $cid, $data, $releaseTitle, $isVideo ) );
 
-		// "Play in Rabbithole" button for track-type releases that have an
-		// OGG encoding available. Opens the rabbithole demo (player +
-		// timeline editor + ensemble visualization) for this track.
-		$isTrack = ( $data['release_type'] ?? '' ) === 'track';
-		$hasOgg = !empty( $data['encodings']['ogg'] );
-		if ( $cid && $isTrack && $hasOgg ) {
+		// "Play in Rabbithole" button for every release Rabbithole can play:
+		// an album track (it has encodings) or a song uploaded on its own
+		// (its file_type is audio). Opens the player and timeline editor
+		// for it. It was album tracks only, so Reuben's Train from Web3
+		// Summit 2024, uploaded to be charted, had no way into Rabbithole
+		// short of asking someone for the link (Justin, 11 Nov 2026).
+		// A record, which lists its tracks, gets theirs instead.
+		$hasEncoding = !empty( $data['encodings']['ogg'] ) || !empty( $data['encodings']['flac'] );
+		$isAudio = str_starts_with( (string)( $data['file_type'] ?? '' ), 'audio/' );
+		$isRecord = !empty( $data['tracks'] );
+		if ( $cid && !$isRecord && ( $hasEncoding || $isAudio ) ) {
 			$html .= Html::rawElement( 'div',
 				[ 'class' => 'release-rabbithole-link',
 				  'style' => 'margin: 1em 0; padding: 0.75em;'
