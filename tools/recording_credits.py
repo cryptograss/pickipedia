@@ -387,6 +387,59 @@ def discogs_people(release):
     return people
 
 
+def discogs_credit_rows(release):
+    """Every performance credit on a Discogs release, one row per credit as
+    Discogs gives it, with the tracks it covers.
+
+    [{"name", "roles", "scope", "tracks": [{"position", "title"}]}]. A
+    release-level credit with a "tracks" spec covers the tracks the spec
+    names; with none, the whole release (scope "release", tracks []). A
+    credit on a track covers that track.
+    """
+    tracks = list(discogs_tracks(release))
+    rows = []
+    for e in release.get("extraartists", []):
+        roles = performance_roles(e.get("role", ""))
+        if not roles:
+            continue
+        spec = (e.get("tracks") or "").strip()
+        covered = [{"position": t.get("position", ""), "title": t.get("title", "")}
+                   for t in tracks if spec and t.get("position") and track_in_spec(t["position"], spec)]
+        rows.append({"name": strip_discogs_suffix(e["name"]), "roles": roles,
+                     "scope": "track" if spec else "release", "tracks": covered,
+                     **({"tracks_as_written": spec} if spec else {})})
+    for t in tracks:
+        for e in t.get("extraartists", []):
+            roles = performance_roles(e.get("role", ""))
+            if roles:
+                rows.append({"name": strip_discogs_suffix(e["name"]), "roles": roles, "scope": "track",
+                             "tracks": [{"position": t.get("position", ""), "title": t.get("title", "")}]})
+    return rows
+
+
+def mb_credit_rows(release):
+    """Every performance credit on a MusicBrainz release (fetched with
+    recording-level relations), same shape as discogs_credit_rows. A track's
+    position is "<medium>-<number>", as MusicBrainz numbers them."""
+    rows = []
+
+    def row(rel, scope, tracks):
+        if rel.get("type") not in MB_PERFORMANCE_TYPES or "artist" not in rel:
+            return
+        rows.append({"name": rel["artist"]["name"], "mbid": rel["artist"].get("id"),
+                     "roles": [", ".join(rel.get("attributes") or []) or rel["type"]],
+                     "scope": scope, "tracks": tracks})
+
+    for rel in release.get("relations", []):
+        row(rel, "release", [])
+    for medium in release.get("media", []):
+        for track in medium.get("tracks", []):
+            pos = f"{medium.get('position', 1)}-{track.get('number') or track.get('position')}"
+            for rel in track.get("recording", {}).get("relations", []):
+                row(rel, "track", [{"position": pos, "title": track.get("title", "")}])
+    return rows
+
+
 def _one_per_group_earliest(hits, group_of):
     groups = {}
     for hit in hits:
