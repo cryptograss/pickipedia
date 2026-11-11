@@ -197,6 +197,53 @@ def read_item(j, names):
     return out
 
 
+ON_STAGE = {"song", "song?", "show", "stage"}
+
+
+def song_key(text):
+    """A song as a footnote, an inline credit or a file title writes it, cut to
+    what the three share: '07. Hobo Song %', 'd1t07 Hobo Song (w/ Kyle Tuttle)'
+    and 'Hobo Song' all give 'hobosong'."""
+    t = re.sub(r"(?i)^\s*(?:d\d+\s*t\d+|[a-z]?\d{1,3})\s*[.)\-:]?\s*", "", str(text))
+    t = re.sub(r"(?i)\([^)]*\)|\[[^\]]*\]|\s[-–]\s*(?:w/|with)\s.*$|\bw/.*$", "", t)
+    t = re.sub(rf"{MARKS}+", "", t)
+    return re.sub(r"[^a-z0-9]", "", t.casefold())
+
+
+def songs_of(rows):
+    """The song keys a person's song-scope readings in one item name."""
+    out = set()
+    for where, shape, scope, detail in rows:
+        if scope == "song":
+            for d in detail if isinstance(detail, list) else [detail]:
+                k = song_key(d)
+                if len(k) >= 3:
+                    out.add(k)
+    return out
+
+
+def pairs(found):
+    """Each two people read out of one item, and how far the item puts them together:
+
+      song   both are tied to the same song (by its key; see song_key)
+      show   both are on the stage that night (song, song?, show or stage scope)
+      apart  at least one of them isn't on the stage: a bill, a festival
+             roster, a taper, a thank-you, or a line no shape fits
+
+    Returns [{"a", "b", "kind", "songs"}], names sorted, songs as keys.
+    """
+    out = []
+    names = sorted(found)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            shared = sorted(songs_of(found[a]) & songs_of(found[b]))
+            sa = {r[2] for r in found[a]}
+            sb = {r[2] for r in found[b]}
+            kind = "song" if shared else "show" if (sa & ON_STAGE and sb & ON_STAGE) else "apart"
+            out.append({"a": a, "b": b, "kind": kind, "songs": shared})
+    return out
+
+
 def fetch(identifier):
     req = Request(f"https://archive.org/metadata/{identifier}",
                   headers={"User-Agent": "pickipedia-lma-lineup/0.1 (https://pickipedia.xyz)"})
@@ -208,6 +255,7 @@ def main(argv):
     ap = argparse.ArgumentParser(description="Who played, read out of a Live Music Archive item.")
     ap.add_argument("item", help="an archive.org identifier, or an archive.org/details/... URL")
     ap.add_argument("--name", action="append", required=True, help="a person to look for (repeatable)")
+    ap.add_argument("--pairs", action="store_true", help="also say how far the item puts each two of them together")
     args = ap.parse_args(argv[1:])
     ident = re.sub(r"^https?://archive\.org/details/", "", args.item).strip("/")
     found = read_item(fetch(ident), args.name)
@@ -217,6 +265,9 @@ def main(argv):
             print(f"  {n}: [{scope or '?'}] {shape or 'not read; for a person'} ({where}): {detail}")
         if n not in found:
             print(f"  {n}: not named in this item")
+    if args.pairs:
+        for p in pairs(found):
+            print(f"  {p['a']} + {p['b']}: {p['kind']}" + (f" ({', '.join(p['songs'])})" if p["songs"] else ""))
     return 0
 
 

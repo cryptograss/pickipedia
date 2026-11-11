@@ -75,3 +75,31 @@ def test_read_item_covers_description_files_and_fields():
     got = L.read_item(item, ["Kyle Tuttle"])["Kyle Tuttle"]
     assert ("description", "footnote", "song", ["07. Hobo Song"]) in got
     assert ("files", "file comment", "song", "Hobo Song") in got
+
+
+def test_song_key_meets_across_footnote_inline_and_file_title():
+    # SGP2025-07-05 writes the song three ways for the same guest
+    assert L.song_key("07. Hobo Song %") == L.song_key("d1t07 Hobo Song (w/ Kyle Tuttle)") == L.song_key("Hobo Song") == "hobosong"
+    assert L.song_key("My Mountain so High $@") == "mymountainsohigh"
+
+
+def test_pairs_song_show_and_apart():
+    found = {
+        # SGP2025-07-05: "My Mountain so High $@", "$ with Kyle Tuttle", "@ With Molly Tuttle"
+        "Kyle Tuttle": [("description", "footnote", "song", ["My Mountain so High"])],
+        "Molly Tuttle": [("description", "footnote", "song", ["My Mountain so High"])],
+        # in the lineup for the whole show
+        "Sam Grisman": [("description", "listed under header", "show", "Lineup:")],
+        # a taper is not a player
+        "Jamie Burks": [("description", "crew (taper, transfer)", "none", "Taped by Jamie Burks")],
+    }
+    got = {(p["a"], p["b"]): p for p in L.pairs(found)}
+    assert got[("Kyle Tuttle", "Molly Tuttle")] == {"a": "Kyle Tuttle", "b": "Molly Tuttle", "kind": "song", "songs": ["mymountainsohigh"]}
+    assert got[("Kyle Tuttle", "Sam Grisman")]["kind"] == "show"
+    assert got[("Jamie Burks", "Kyle Tuttle")]["kind"] == "apart"
+
+
+def test_pairs_different_songs_is_show_not_song():
+    found = {"A Person": [("description", "song-inline", "song", "05. Julius (w/ A Person)")],
+             "B Person": [("description", "song-inline", "song", "09. Reuben's Train (w/ B Person)")]}
+    assert L.pairs(found)[0]["kind"] == "show"
