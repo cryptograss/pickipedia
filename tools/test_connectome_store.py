@@ -56,3 +56,15 @@ def test_lma_song_credit_carries_the_songs_and_the_line():
     assert rows["Kyle Tuttle"]["scope"] == "song"
     assert rows["Kyle Tuttle"]["tracks"] == [{"position": "", "title": "01. My Mountain so High"}]
     assert rows["Kyle Tuttle"]["target"]["id"] == "lma:SGP2025-07-05"
+
+
+def test_pairs_track_record_show_apart():
+    rows = S.from_discogs(JULIA) + S.from_discogs(SAFE)
+    item = {"metadata": {"identifier": "X", "creator": "Band", "date": "2025",
+                         "description": "01. Song One $\n$ with Kyle Tuttle\nTaped by Jamie Burks\nLineup:\nMolly Tuttle"}}
+    rows += S.from_lma(item, ["Kyle Tuttle", "Molly Tuttle", "Jamie Burks"])
+    got = {(p["a"], p["b"], p["target"]): p for p in S.pairs(rows)}
+    assert got[("Molly Tuttle", "Vickie Vaughn", "discogs:35460307")]["kind"] == "track"
+    assert got[("Maddie Denton", "Vickie Vaughn", "discogs:34168519")]["kind"] == "record"
+    assert got[("Kyle Tuttle", "Molly Tuttle", "lma:X")]["kind"] == "show"
+    assert got[("Jamie Burks", "Kyle Tuttle", "lma:X")]["kind"] == "apart"

@@ -208,6 +208,46 @@ WHERE a.person = ? ORDER BY b.person
 """
 
 
+ON_STAGE = {"song", "song?", "show", "stage"}
+
+
+def pairs(rows):
+    """Each two people credited on one target, and how far the credits put them together:
+
+      track   the same source puts both on the same track (position and title)
+      show    both on the stage at one show (song, song?, show or stage scope)
+      apart   one show, but at least one of them not on its stage (bill, festival, taper, unread)
+      record  one record, and no source puts them on the same track
+
+    Returns [{"a", "b", "target", "kind", "tracks"}], names sorted; tracks are
+    the shared ones, as [source, position, title].
+    """
+    by_target = {}
+    kinds = {}
+    for r in rows:
+        t = r["target"]["id"]
+        kinds[t] = r["target"]["kind"]
+        p = by_target.setdefault(t, {}).setdefault(r["person"], {"tracks": set(), "scopes": set()})
+        p["scopes"].add(r["scope"])
+        for tr in r["tracks"]:
+            p["tracks"].add((r["source"], tr["position"], tr["title"]))
+    out = []
+    for t in sorted(by_target):
+        people = by_target[t]
+        names = sorted(people)
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                shared = sorted(people[a]["tracks"] & people[b]["tracks"])
+                if shared:
+                    kind = "track"
+                elif kinds[t] == "show":
+                    kind = "show" if (people[a]["scopes"] & ON_STAGE and people[b]["scopes"] & ON_STAGE) else "apart"
+                else:
+                    kind = "record"
+                out.append({"a": a, "b": b, "target": t, "kind": kind, "tracks": [list(x) for x in shared]})
+    return out
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description="Connectome store: credits off the wiki.")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -221,6 +261,9 @@ def main(argv):
     b.add_argument("--lma-names", help="a file, one name per line, for the LMA parser to look for")
     b.add_argument("--out", required=True)
     b.add_argument("--db")
+    e = sub.add_parser("pairs", help="write every pair as JSON, for a viewer")
+    e.add_argument("--credits", required=True)
+    e.add_argument("--out", required=True)
     q = sub.add_parser("together")
     q.add_argument("name")
     q.add_argument("--db", required=True)
@@ -238,6 +281,12 @@ def main(argv):
         people = {r["person"] for r in rows}
         targets = {r["target"]["id"] for r in rows}
         print(f"{len(rows)} credits, {len(people)} names, {len(targets)} targets")
+    elif args.cmd == "pairs":
+        rows = [json.loads(l) for l in open(args.credits)]
+        ps = pairs(rows)
+        json.dump(ps, open(args.out, "w"), ensure_ascii=False)
+        from collections import Counter
+        print(len(ps), "pairs", dict(Counter(p["kind"] for p in ps)))
     elif args.cmd == "together":
         db = sqlite3.connect(args.db)
         for other, title, pos, track, src in db.execute(SAME_TRACK, (args.name,)):
