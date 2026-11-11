@@ -268,6 +268,48 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 				$out->addSubtitle( htmlspecialchars( $out->msg( 'pickipediacontent-pronouns-subtitle', $pronouns )->text() ) );
 			}
 		}
+		self::addCard( $out );
+	}
+
+	/**
+	 * The page's card where its address is shared (SocialCard.php): Open Graph
+	 * and Twitter tags, for a page as it reads -- not an edit, a diff, an old
+	 * revision or a special page.
+	 *
+	 * @param \OutputPage $out
+	 */
+	private static function addCard( $out ): void {
+		$title = $out->getTitle();
+		$request = $out->getRequest();
+		if ( !$title || !$title->exists() || $title->isSpecialPage()
+			|| $request->getVal( 'action', 'view' ) !== 'view'
+			|| $request->getVal( 'diff' ) !== null || $request->getVal( 'oldid' ) !== null ) {
+			return;
+		}
+		$config = $out->getConfig();
+		$server = $config->get( 'CanonicalServer' );
+		$card = SocialCard::fromHtml( $out->getHTML(), $server );
+		$urls = MediaWikiServices::getInstance()->getUrlUtils();
+		$logo = $config->get( 'Logos' )['1x'] ?? '';
+		$image = $card['image'] ?? ( $logo !== '' ? $urls->expand( $logo, PROTO_CANONICAL ) : null );
+		$tags = [
+			'og:site_name' => $config->get( 'Sitename' ),
+			'og:type' => 'article',
+			'og:title' => $title->getPrefixedText(),
+			'og:url' => $title->getCanonicalURL(),
+			'og:description' => $card['description'],
+			'og:image' => $image,
+		];
+		foreach ( $tags as $property => $content ) {
+			if ( $content !== null && $content !== '' ) {
+				$out->addHeadItem( $property, \MediaWiki\Html\Html::element( 'meta', [ 'property' => $property, 'content' => $content ] ) );
+			}
+		}
+		$out->addHeadItem( 'twitter:card', \MediaWiki\Html\Html::element( 'meta',
+			[ 'name' => 'twitter:card', 'content' => $card['image'] ? 'summary_large_image' : 'summary' ] ) );
+		if ( $card['description'] !== '' ) {
+			$out->addMeta( 'description', $card['description'] );
+		}
 	}
 
 	/**

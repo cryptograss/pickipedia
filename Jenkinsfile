@@ -94,6 +94,8 @@ pipeline {
                     php tests/check-magenta-push.php
                     # Time zones: MediaWiki's time offset preference, read as a zone for {{#timezone:}}.
                     php tests/check-timezone.php
+                    # A page's card where its address is shared: its opening and its picture.
+                    php tests/check-socialcard.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter
                     # but MediaWiki is not downloaded yet at this stage, so a
