@@ -62,5 +62,20 @@ check( 'one long paragraph, cut at a word', mb_strlen( $long['description'] ) <=
 $accented = SocialCard::fromHtml( '<div class="mw-parser-output"><p>Kuba Hejhal, Roudnice nad Labem, Česko — housle.</p></div>', $server );
 check( 'its letters as written', $accented['description'] === 'Kuba Hejhal, Roudnice nad Labem, Česko — housle.', $accented['description'] );
 
+echo "Nothing unverified, and a listen button isn't words (Justin, 12 Nov 2026)\n";
+$listen = '<span class="pp-listen-stack plainlinks"><span class="pp-listen-rh"><a class="external text" href="https://pickipedia.xyz/rabbithole/?track=Qm">'
+	. '<span>▶&#160;Hear Kuba on Reuben\'s Train</span></a><span class="pp-listen-chase"><span class="pp-rabbit">🐰</span><span class="pp-carrot">🥕</span></span></span>'
+	. '<span class="pp-trail-rh"><a class="external text" href="https://pickipedia.xyz/rabbithole/?track=Qm&amp;action=trail"><span>🐇&#160;find a trail here</span></a></span></span>';
+$checked = SocialCard::fromHtml( '<div class="mw-parser-output"><p>' . $listen . '<i>11 Nov 2026</i></p>'
+	. '<p>Kuba played with <span class="pv-proposed pv-proposed--inline">Billy Strings <sup class="pv-proposed__badge">[bot]</sup></span>everyone.</p>'
+	. '<div class="pv-proposed pv-proposed--block"><p>A whole proposed paragraph.</p>'
+	. '<img src="/images/Proposed.jpg" class="mw-file-element" data-file-width="800" data-file-height="600"></div>'
+	. '<p class="bot-proposal">A claim nobody checked.</p>'
+	. '<p>He toured <span class="pv-proposed pv-proposed--inline pv-proposed--removal">with the band<sup class="pv-proposed__badge">[remove?]</sup></span> in 2024.</p>'
+	. '<img src="/images/Real.jpg" class="mw-file-element" data-file-width="800" data-file-height="600"></div>', $server );
+check( 'the words as verified, the button left out',
+	$checked['description'] === '11 Nov 2026 Kuba played with everyone. He toured with the band in 2024.', $checked['description'] );
+check( 'a picture in unverified words passed over', $checked['image'] === 'https://pickipedia.xyz/images/Real.jpg', (string)$checked['image'] );
+
 echo $failures ? "\ncheck-socialcard.php: $failures FAILED\n" : "\ncheck-socialcard.php: all ok\n";
 exit( $failures ? 1 : 0 );
