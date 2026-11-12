@@ -15,6 +15,14 @@
  * parsed page, so it needs no extension (WikiSEO wants TextExtracts and
  * PageImages for the same) and a page's card changes when its words do.
  *
+ * Nothing unverified (Justin, 12 Nov 2026): what a bot proposed and no person
+ * has verified (PickiPediaVerification: pv-proposed, bot-proposal,
+ * claim-unverified) is left out of the card, words and pictures; a proposal to
+ * remove something leaves it in, as the page reads now. And a page's
+ * {{Listen in Rabbithole}} (pp-listen-stack) is a button, not words: its
+ * "▶ Hear Kuba on Reuben's Train 🐰🥕 🐇 find a trail here" began the Kuba
+ * page's card.
+ *
  * Pure: HTML in, card out. Hooks::onBeforePageDisplay puts it in the head.
  */
 
@@ -25,6 +33,16 @@ class SocialCard {
 	public const MAX_CHARS = 300;
 	public const PICTURE_MIN = 200;   // the file's width in pixels, at least
 	public const PICTURE_RATIO = 3.0; // longer side over shorter, at most
+	/** Classes whose words aren't the page's own, or not yet. */
+	private const LEFT_OUT = [ 'reference', 'mw-editsection', 'pp-listen-stack', 'bot-proposal', 'claim-unverified',
+		'pv-proposed__badge', 'pv-proposed__byline', 'pv-verify-all' ];
+
+	/** Whether an element is left out of the card: unverified, a listen button, a footnote mark. */
+	public static function leftOut( string $class ): bool {
+		$classes = preg_split( '/\s+/', trim( $class ) ) ?: [];
+		return (bool)array_intersect( self::LEFT_OUT, $classes )
+			|| ( in_array( 'pv-proposed', $classes, true ) && !in_array( 'pv-proposed--removal', $classes, true ) );
+	}
 
 	/**
 	 * @param string $html the page's parsed body (OutputPage::getHTML)
@@ -68,7 +86,7 @@ class SocialCard {
 				}
 				continue;
 			}
-			if ( $tag !== 'p' ) {
+			if ( $tag !== 'p' || self::leftOut( $node->getAttribute( 'class' ) ) ) {
 				continue;
 			}
 			$bare = 0;
@@ -105,9 +123,7 @@ class SocialCard {
 			return '';
 		}
 		$tag = strtolower( $node->tagName );
-		$class = ' ' . $node->getAttribute( 'class' ) . ' ';
-		if ( in_array( $tag, [ 'style', 'script' ], true ) || str_contains( $class, ' reference ' )
-			|| str_contains( $class, ' mw-editsection ' ) ) {
+		if ( in_array( $tag, [ 'style', 'script' ], true ) || self::leftOut( $node->getAttribute( 'class' ) ) ) {
 			return '';
 		}
 		$out = '';
@@ -119,6 +135,11 @@ class SocialCard {
 
 	private static function picture( \DOMXPath $xpath, string $server ): ?string {
 		foreach ( $xpath->query( '//img[contains(concat(" ", normalize-space(@class), " "), " mw-file-element ")]' ) as $img ) {
+			for ( $up = $img->parentNode; $up instanceof \DOMElement; $up = $up->parentNode ) {
+				if ( self::leftOut( $up->getAttribute( 'class' ) ) ) {
+					continue 2;  // a picture in unverified words isn't the page's face yet
+				}
+			}
 			$w = (int)$img->getAttribute( 'data-file-width' );
 			$h = (int)$img->getAttribute( 'data-file-height' );
 			if ( $w < self::PICTURE_MIN || $h <= 0 || max( $w, $h ) / min( $w, $h ) > self::PICTURE_RATIO ) {
