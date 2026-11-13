@@ -83,3 +83,105 @@ def test_a_record_keeps_the_formats_its_source_lists(tmp_path):
     assert S.from_mb(rel)[0]["target"]["formats"] == ["CD"]
     db = S.to_sqlite(S.from_discogs(julia), str(tmp_path / "c.sqlite"))
     assert db.execute("SELECT formats FROM targets").fetchall() == [("Vinyl (LP, Album); CD (Album, Copy Protected)",)]
+
+
+# ---------------------------------------------------------------------------
+# fetch, and its budget
+# ---------------------------------------------------------------------------
+
+class Clock:
+    """Time that moves only when a fetch is made: each one takes a second."""
+    def __init__(self):
+        self.t = 100.0
+
+    def __call__(self):
+        return self.t
+
+
+def a_net(monkeypatch, clock, down=()):
+    """The three services, answered from here; returns the list of what was asked for, in order."""
+    asked = []
+
+    def answer(kind, ident):
+        asked.append(f"{kind} {ident}")
+        clock.t += 1.0
+        if ident in down:
+            raise OSError("no answer")
+        return {"metadata": {"identifier": ident}} if kind == "lma" else {"id": ident}
+
+    monkeypatch.setattr(S.lma_lineup, "fetch", lambda ident: answer("lma", ident))
+    monkeypatch.setattr(S.sideman, "discogs_get", lambda path: answer("discogs", path.rsplit("/", 1)[-1]))
+    monkeypatch.setattr(S.sideman, "mb_get", lambda path, **params: answer("mb", path.rsplit("/", 1)[-1]))
+    return asked
+
+
+def cached(raw):
+    return sorted(str(p.relative_to(raw)) for p in raw.rglob("*.json"))
+
+
+TAPES = [f"tape{n}" for n in range(8)]
+
+
+def test_fetch_with_no_budget_takes_all_the_cache_lacks(tmp_path, monkeypatch):
+    clock = Clock()
+    asked = a_net(monkeypatch, clock)
+    assert S.fetch(str(tmp_path), ["34168519"], ["an-mbid"], TAPES, clock=clock) == (10, [], 0)
+    assert asked == ["discogs 34168519", "mb an-mbid"] + [f"lma {t}" for t in TAPES]
+    assert S.fetch(str(tmp_path), ["34168519"], ["an-mbid"], TAPES, clock=clock) == (0, [], 0)
+    assert len(asked) == 10                                 # the second run asks for nothing: it's all cached
+
+
+def test_a_budget_stops_the_run_and_the_next_one_goes_on(tmp_path, monkeypatch):
+    whole = tmp_path / "whole"
+    clock = Clock()
+    a_net(monkeypatch, clock)
+    S.fetch(str(whole), ["34168519"], ["an-mbid"], TAPES, clock=clock)     # what an unbudgeted fetch leaves
+    clock = Clock()
+    asked = a_net(monkeypatch, clock)
+    raw = tmp_path / "raw"
+    runs = []
+    for _ in range(5):                                      # a second a fetch, 2.5 seconds a run: three start
+        runs.append(S.fetch(str(raw), ["34168519"], ["an-mbid"], TAPES, budget=2.5, clock=clock))
+    assert runs == [(3, [], 7), (3, [], 4), (3, [], 1), (1, [], 0), (0, [], 0)]
+    assert asked == ["discogs 34168519", "mb an-mbid"] + [f"lma {t}" for t in TAPES]     # each once, in order
+    assert cached(raw) == cached(whole) and len(cached(raw)) == 10
+    for name in cached(raw):
+        assert (raw / name).read_bytes() == (whole / name).read_bytes()
+
+
+def test_what_the_cache_holds_is_never_counted_as_waiting(tmp_path, monkeypatch):
+    clock = Clock()
+    asked = a_net(monkeypatch, clock)
+    S.fetch(str(tmp_path), [], ["an-mbid"], ["tape7"], clock=clock)         # a release and the last tape: here already
+    del asked[:]
+    # Three records use the budget up. The release and tape 7 come after that, and are not waiting for anything.
+    assert S.fetch(str(tmp_path), ["1", "2", "3"], ["an-mbid"], TAPES, budget=2.5, clock=clock) == (3, [], 7)
+    assert asked == ["discogs 1", "discogs 2", "discogs 3"]
+
+
+def test_a_budget_of_no_seconds_fetches_nothing(tmp_path, monkeypatch):
+    clock = Clock()
+    asked = a_net(monkeypatch, clock)
+    assert S.fetch(str(tmp_path), ["34168519"], [], TAPES, budget=0, clock=clock) == (0, [], 9)
+    assert asked == [] and cached(tmp_path) == []
+
+
+def test_a_source_that_fails_is_failed_not_waiting_and_is_asked_for_again(tmp_path, monkeypatch):
+    clock = Clock()
+    asked = a_net(monkeypatch, clock, down={"tape1"})
+    got, failed, waiting = S.fetch(str(tmp_path), [], [], TAPES[:4], budget=3.5, clock=clock)
+    assert (got, waiting) == (3, 0) and len(failed) == 1 and "tape1" in failed[0]
+    assert S.fetch(str(tmp_path), [], [], TAPES[:4], budget=3.5, clock=clock)[0] == 0
+    assert asked == ["lma tape0", "lma tape1", "lma tape2", "lma tape3", "lma tape1"]
+    assert not list(tmp_path.rglob("*.part"))
+
+
+def test_fetch_says_how_many_wait(tmp_path, monkeypatch, capsys):
+    a_net(monkeypatch, Clock())
+    sources = tmp_path / "sources.txt"
+    sources.write_text("# three\ndiscogs 34168519\nlma tape0\nlma tape1\n")
+    raw = str(tmp_path / "raw")
+    assert S.main(["x", "fetch", "--raw", raw, "--sources", str(sources), "--budget", "0"]) == 0
+    assert capsys.readouterr().out == "fetched 0; 0 failed; 3 waiting for the next run\n"
+    assert S.main(["x", "fetch", "--raw", raw, "--sources", str(sources)]) == 0
+    assert capsys.readouterr().out == "fetched 3; 0 failed\n"                # no budget: the line it always printed
