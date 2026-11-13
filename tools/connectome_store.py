@@ -15,7 +15,9 @@ The atom is a credit:
   person      the name as the source wrote it (never merged; see the people table)
   mbid        MusicBrainz's id for the person, when the source gives one
   roles       instruments or parts, as written
-  target      {"kind": "record" | "show", "id", "title", "date"}
+  target      {"kind": "record" | "show", "id", "title", "date"}; a record also carries
+              "formats", what the source says it came out on ("CD (Album)", "Vinyl (LP)"),
+              as written: the release tier is read from this, and nothing is guessed
   scope       how far the credit reaches: track | release (records);
               song | song? | show | stage | bill | festival | none (LMA shows)
   tracks      [{"position", "title"}] the credit covers; [] when it covers the whole
@@ -60,12 +62,21 @@ def credit(person, roles, target, scope, tracks, source, source_kind, read_by, m
 # Readers: raw source document -> credits
 # ---------------------------------------------------------------------------
 
+def carrier(name, descriptions=()):
+    """A format as the source wrote it: its name, and what the source says about it."""
+    name = str(name or "").strip()
+    said = [str(d).strip() for d in descriptions or () if str(d).strip()]
+    return name + (" (" + ", ".join(said) + ")" if name and said else "")
+
+
 def from_discogs(release):
     rid = str(release["id"])
     artist = ", ".join(sideman.strip_discogs_suffix(a["name"]) for a in release.get("artists", []))
+    formats = [carrier(f.get("name"), f.get("descriptions")) for f in release.get("formats") or []]
     target = {"kind": "record", "id": f"discogs:{rid}", "title": release.get("title", ""),
               "date": str(release.get("released") or release.get("year") or ""), "artist": artist,
-              "group": f"discogs-master:{release['master_id']}" if release.get("master_id") else f"discogs:{rid}"}
+              "group": f"discogs-master:{release['master_id']}" if release.get("master_id") else f"discogs:{rid}",
+              "formats": [f for f in formats if f]}
     return [credit(r["name"], r["roles"], target, r["scope"], r["tracks"], DISCOGS_PAGE + rid, "Discogs",
                    "recording_credits.discogs_credit_rows",
                    **({"tracks_as_written": r["tracks_as_written"]} if "tracks_as_written" in r else {}))
@@ -74,9 +85,11 @@ def from_discogs(release):
 
 def from_mb(release):
     rg = release.get("release-group") or {}
+    formats = [carrier(m.get("format")) for m in release.get("media") or []]
     target = {"kind": "record", "id": f"mb:{release['id']}", "title": release.get("title", ""),
               "date": release.get("date", ""), "artist": sideman.credit_line(release.get("artist-credit", [])),
-              "group": f"mb-group:{rg['id']}" if rg.get("id") else f"mb:{release['id']}"}
+              "group": f"mb-group:{rg['id']}" if rg.get("id") else f"mb:{release['id']}",
+              "formats": sorted({f for f in formats if f})}
     return [credit(r["name"], r["roles"], target, r["scope"], r["tracks"], MB_PAGE + release["id"], "MusicBrainz",
                    "recording_credits.mb_credit_rows", mbid=r.get("mbid"))
             for r in sideman.mb_credit_rows(release)]
@@ -205,7 +218,8 @@ def build(raw, arthel=None, lma_names=()):
 
 
 SCHEMA = """
-CREATE TABLE targets (id TEXT PRIMARY KEY, kind TEXT, title TEXT, date TEXT, artist TEXT, grp TEXT);
+CREATE TABLE targets (id TEXT PRIMARY KEY, kind TEXT, title TEXT, date TEXT, artist TEXT, grp TEXT,
+                      formats TEXT);  -- what the source says a record came out on, "; " between
 CREATE TABLE credits (n INTEGER PRIMARY KEY, person TEXT, mbid TEXT, roles TEXT, target TEXT REFERENCES targets(id),
                       scope TEXT, source TEXT, source_kind TEXT, read_by TEXT, excerpt TEXT);
 CREATE TABLE credit_tracks (credit INTEGER REFERENCES credits(n), position TEXT, title TEXT);
@@ -222,8 +236,9 @@ def to_sqlite(rows, path):
     db.executescript(SCHEMA)
     for i, r in enumerate(rows):
         t = r["target"]
-        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?)",
-                   (t["id"], t["kind"], t["title"], t["date"], t.get("artist", ""), t.get("group", t["id"])))
+        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?)",
+                   (t["id"], t["kind"], t["title"], t["date"], t.get("artist", ""), t.get("group", t["id"]),
+                    "; ".join(t.get("formats") or [])))
         db.execute("INSERT INTO credits VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (i, r["person"], r.get("mbid"), "; ".join(r["roles"]), t["id"], r["scope"], r["source"],
                     r["source_kind"], r["read_by"], r.get("excerpt")))

@@ -132,6 +132,52 @@ def test_a_card_draws_the_featured_paths_and_escapes_every_name():
     assert '/assets/connectome/?from=Kyle+Tuttle&amp;to=Gaven+Largent' in html
 
 
+def test_a_card_is_gold_for_permanent_ink_for_full_and_dotted_for_the_rest():
+    targets = dict(TARGETS, **{'discogs:2': ('Looser', '2016', 'Else')})
+    pairs = [pair('K', 'Tape', 'show', 'lma:show1'), pair('K', 'Disc', 'track', 'discogs:1', [('u', '1', 'Song')]),
+             pair('K', 'Unknown', 'track', 'discogs:2', [('u', '1', 'Other')])]
+    tiers = {'lma:show1': 2, 'discogs:1': 1, 'discogs:2': 0}
+    store = cc.Store(pairs, targets, {t: t for t in targets}, {}, tiers)
+    assert store.evidence('K', 'Tape')['tier'] == 2 and store.evidence('K', 'Disc')['tier'] == 1
+
+    def spoke(html, name):                                                # the lines drawn before this picker's dot
+        return html[:html.index('>' + name + ' ')]
+
+    for name, colour in (('Tape', cc.GOLD), ('Disc', cc.INK2)):
+        html = cc.card('K', cc.Store([p for p in pairs if name in (p['a'], p['b'])], targets, {t: t for t in targets}, {}, tiers),
+                       [], lambda n: True, {})
+        assert f'stroke="{colour}"' in html and 'stroke-dasharray="1 5"' not in html
+    html = cc.card('K', cc.Store(pairs[2:], targets, {t: t for t in targets}, {}, tiers), [], lambda n: True, {})
+    assert 'stroke-dasharray="1 5"' in html and f'stroke="{cc.GOLD}"' not in html
+    assert 'Permanent Release' in html and 'Full Release' in html         # the legend names the tiers
+
+
+def test_a_store_with_no_tiers_given_still_knows_a_tape_is_permanent():
+    store = cc.Store([pair('K', 'Tape', 'show', 'lma:show1'), pair('K', 'Disc', 'record', 'discogs:1')], TARGETS, GROUPS, {})
+    assert store.evidence('K', 'Tape')['tier'] == 2 and store.evidence('K', 'Disc')['tier'] == 0
+
+
+def test_build_writes_the_big_graphs_file_beside_the_cards(tmp_path):
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:4masks', [('u', '', 'silver-44')]),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:show1')]
+    whole = {'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []},
+             'lma:show1': {'kind': 'show', 'title': 'Kyle Live', 'date': '2025-07-05', 'artist': 'Sam Grisman Project',
+                           'grp': 'lma:show1', 'formats': []}}
+    wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
+                    pages={'Justin Myles Holmes', 'Kyle Tuttle', '4masks', 'Song:Silver 44'},
+                    musicians=['Kyle Tuttle'], inst={'Kyle Tuttle': 'banjo'})
+    credits = [('Justin Holmes', 'guitar', 'arthel:4masks', 'track', 'u')]
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 13), None, whole, credits)
+    g = result['graph']
+    names = [p[0] for p in g['people']]
+    assert 'Justin Myles Holmes' in names and 'Justin Holmes' not in names   # the wiki's name, as on the cards
+    assert g['songs'] == {'Silver 44': '/wiki/Song%3ASilver_44'}
+    assert [names[i] for i, _ in g['cast'][[m[0] for m in g['music']].index('arthel:4masks')]] == ['Justin Myles Holmes']
+    cc.write(result, str(tmp_path), {})
+    assert (tmp_path / 'graph.json').exists()
+    assert cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 13))['graph'] is None   # the cards alone, as before
+
+
 def test_no_card_for_someone_who_played_with_nobody():
     store = cc.Store([pair('A', 'B', 'record', 'discogs:1')], TARGETS, GROUPS, {})
     assert cc.card('A', store, ['B'], lambda n: True, {}) is None

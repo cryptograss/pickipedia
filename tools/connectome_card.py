@@ -7,6 +7,7 @@ Connectome card: the small graph on a musician's page, drawn from the connectome
 
 Writes, into DIR:
   cards/<md5 of the page title>.html   one card per musician page the store knows
+  graph.json                           the big graph's one file (connectome_graph.py)
   pairs.json                           the store's pairs, each name as the wiki knows it
   names.json                           each of those names -> the spellings the sources used
   cards.json                           what was built, and from what
@@ -19,11 +20,13 @@ What a card shows:
   spoke, two hops bend off the middle picker; the closest co-players as small dots,
   named on hover. Only people who played *with* the picker (same track or same show)
   get a dot; a same-record link is drawn only when a featured path needs it.
-  Colour is the closest way two played together (track, then show, then record);
-  a solid line is a Permanent Release (the Live Music Archive, or cryptograss's
-  Creative Commons records), dashed grey is not known Permanent; a bigger dot is
-  more times together; a hollow dot has no page yet. A table gives the Bacon number
-  to each featured picker, with the path on hover.
+  The marks are the big graph's (assets/connectome/) and Rabbithole's: one colour, and
+  it means one thing. A gold line is a Permanent Release (a Live Music Archive tape, or
+  one of cryptograss's Creative Commons records); plain ink is a Full Release (no DRM);
+  dotted grey is the rest, counted and not vouched for (PickiPedia:Release_Types;
+  connectome_graph.tier reads which from the source). A bigger dot is more times
+  together; a hollow dot has no page yet. A table gives the Bacon number to each
+  featured picker, with the path on hover.
 
 Names: a source's spelling becomes the page title the wiki resolves it to (a
 redirect counts), so "Sam Grisman" and "Samson Grisman" are one picker, as the
@@ -47,19 +50,21 @@ from collections import defaultdict
 from datetime import date
 from html import escape
 
+import connectome_graph
+
 FEATURED_PAGE = 'Cryptograss:Connectome/Featured'
 TEMPLATE = 'Template:MusicianInfo'
 VIEWER = '/assets/connectome/'          # the big graph, served beside the wiki
 ICON = '/index.php?title=Special:Redirect/file/Instrument-icon-{}.png'
 UA = 'PickiPedia-connectome-card/1.0'
 
-COL = {'track': '#2a78d6', 'show': '#eb6834', 'record': '#1baf7a'}
-SHUT = '#a9a8a3'                        # not known Permanent
+GOLD = '#eda100'                        # a Permanent Release, and nothing else
+INK2 = '#52514e'                        # a Full Release
+SHUT = '#898781'                        # the rest: counted, not vouched for
 PAPER = '#fcfcfb'
 INK = '#0b0b0b'
 RANK = {'record': 1, 'show': 2, 'track': 3}
 WEIGHT = {'track': 1, 'show': 2, 'record': 3}
-PERMANENT = ('lma:', 'arthel:')         # taper-friendly tapes; cryptograss's Creative Commons records
 MAX_CROWD = 12
 MAX_DRAWN_HOPS = 2
 FS = 22.0                               # font size, in the card's own units (it scales to its box)
@@ -164,9 +169,10 @@ def describe(p, targets):
 
 
 class Store:
-    def __init__(self, pairs, targets, groups, alias):
-        """alias: a source's spelling -> the name the card uses."""
+    def __init__(self, pairs, targets, groups, alias, tiers=None):
+        """alias: a source's spelling -> the name the card uses. tiers: target -> 2, 1 or 0 (connectome_graph.tier)."""
         self.targets, self.groups = targets, groups
+        self.tiers = tiers or {}
         self.raw = defaultdict(set)
         self.pairs = []
         for p in pairs:
@@ -190,13 +196,14 @@ class Store:
             g = self.groups.get(p['target'], p['target'])
             cur = ev[o].get(g)
             if cur is None or RANK[p['kind']] > RANK[cur['kind']]:
-                ev[o][g] = {'kind': p['kind'], 'text': describe(p, self.targets),
-                            'open': p['target'].startswith(PERMANENT), 'target': p['target']}
+                ev[o][g] = {'kind': p['kind'], 'text': describe(p, self.targets), 'target': p['target'],
+                            'tier': self.tiers.get(p['target'], connectome_graph.tier(p['target']))}
         out = {}
         for o, gs in ev.items():
-            lst = sorted(gs.values(), key=lambda e: (not e['open'], -RANK[e['kind']], e['text']))
+            lst = sorted(gs.values(), key=lambda e: (-e['tier'], -RANK[e['kind']], e['text']))
+            with_ = [e for e in lst if e['kind'] != 'record'] or lst     # played with, when they have
             out[o] = {'list': lst, 'kind': max((e['kind'] for e in lst), key=RANK.get),
-                      'open': any(e['open'] for e in lst)}
+                      'tier': max(e['tier'] for e in with_)}
         return out if y is None else out.get(y)
 
     def path(self, s, t):
@@ -409,18 +416,21 @@ def card(center, store, featured, has_page, inst):
             return attr(viewer(a=center, b=n))
         return attr(viewer(**{'from': center, 'to': n}))
 
-    def kind_of(n):
-        """A dot's colour: how they played with the centre, or for a picker further out, the hop that reaches them."""
-        if n in nb:
-            return nb[n]['kind']
-        ev = next((ev for _, b, ev in fedges if b == n), None)
-        return ev['kind'] if ev else 'record'
-
     def dot(n, r):
         x, y = pos[n]
-        k = kind_of(n)
-        fill = COL[k] if has_page(n) else PAPER
-        return f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{fill}" stroke="{COL[k]}" stroke-width="1.5"/>'
+        fill = INK if has_page(n) else PAPER
+        return f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{fill}" stroke="{INK}" stroke-width="1.5"/>'
+
+    def strokes(a, b, tier, loose, lit):
+        """A line by what it stands on: gold for a Permanent Release, ink for a Full one, dotted for the rest."""
+        if loose or tier == 0:
+            return line(a, b, stroke=SHUT, stroke_width=2 if lit else 1.2, stroke_dasharray='1 5', stroke_linecap='round')
+        if tier == 2 and lit:
+            return (line(a, b, stroke=GOLD, stroke_width=8, opacity='.6', stroke_linecap='round')
+                    + line(a, b, stroke=INK, stroke_width=2, stroke_linecap='round'))
+        if tier == 2:
+            return line(a, b, stroke=GOLD, stroke_width=2.2, stroke_linecap='round')
+        return line(a, b, stroke=INK2, stroke_width=2 if lit else 1.2, stroke_linecap='round')
 
     out = []
     o = out.append
@@ -429,24 +439,18 @@ def card(center, store, featured, has_page, inst):
       f'aria-label="{attr("Who " + center + " has played with")}">')
     o(f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/>')
     for n in placed:                                 # the crowd: thin spokes
-        op = nb[n]['open']
-        o(line(C, pos[n], stroke=COL[nb[n]['kind']] if op else SHUT, stroke_width=1.3 if op else 1,
-               opacity='.5' if op else '.6', **({} if op else {'stroke_dasharray': '3 3'})))
+        o(strokes(C, pos[n], nb[n]['tier'], False, False))
     for a, b, ev in fedges:
         pa = C if a == center else pos[a]
-        op = bool(ev and ev['open'])
-        k = ev['kind'] if ev else 'record'
-        o(line(pa, pos[b], stroke=COL[k] if op else SHUT, stroke_width=4 if op else 2.5,
-               **({} if op else {'stroke_dasharray': '6 4'})))
+        o(strokes(pa, pos[b], ev['tier'] if ev else 0, not ev or ev['kind'] == 'record', True))
     for n in named:
         x, y = pos[n]
         lx, ly, _ = labels[n]
         r = 7 if n in mids else 10
         ic = ''
         if n in inst:                                # the instrument is the dot
-            k = kind_of(n)
             href = attr(ICON.format(urllib.parse.quote(inst[n])))
-            ic = (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="14" fill="{PAPER}" stroke="{COL[k]}" stroke-width="3"/>'
+            ic = (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="14" fill="{PAPER}" stroke="{INK}" stroke-width="2"/>'
                   f'<image href="{href}" x="{x - 10:.1f}" y="{y - 10:.1f}" width="20" height="20"></image>')
         o(f'<a href="{focus(n)}">{dot(n, r)}{ic}<text class="cc-lab" x="{lx:.1f}" y="{ly:.1f}" '
           f'text-anchor="middle" fill="{INK}" font-weight="bold">{escape(n)}</text></a>')
@@ -472,7 +476,7 @@ def card(center, store, featured, has_page, inst):
         s, e = trim(C, (x, y), 23, rad(n) + 2)
         head = n + (f' · {inst[n]}' if n in inst else '')
         o(f'<g class="cc-h"><a href="{focus(n)}">{line(s, e, **{"class": "cc-hit"})}</a>'
-          f'{line(C, (x, y), **{"class": "cc-hi", "stroke": COL[nb[n]["kind"]], "stroke_width": 2.5})}'
+          f'{line(C, (x, y), **{"class": "cc-hi", "stroke": GOLD if nb[n]["tier"] == 2 else INK2, "stroke_width": 3.5})}'
           f'<a href="{focus(n)}">{dot(n, rad(n))}<circle cx="{x:.1f}" cy="{y:.1f}" r="9" fill="transparent"/></a>'
           f'{tip([head, what(n)], x, y)}</g>')
     o('</svg>')
@@ -488,14 +492,12 @@ def card(center, store, featured, has_page, inst):
             continue
         why = [f'{a} → {b}: {hop_ev(a, b)["text"]}' for a, b in p]
         rows.append(f'<tr><td>{name}</td><td class="cc-n" title="{attr(chr(10).join(why))}">{len(p)}</td></tr>')
-    loose = any(ev and ev['kind'] == 'record' for _, _, ev in fedges)   # a featured path needed a same-record link
     legend = ('<div class="cc-legend">'
-              f'<span class="cc-sw" style="background:{COL["track"]}"></span> same track '
-              f'<span class="cc-sw" style="background:{COL["show"]}"></span> same show '
-              + (f'<span class="cc-sw" style="background:{COL["record"]}"></span> same record ' if loose else '') +
-              f'<span class="cc-dash"></span> not known Permanent<br>'
-              'solid = <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a> '
-              '(Live Music Archive or Creative Commons) · bigger = more times · hollow = no page yet</div>')
+              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
+              'a taper\'s tape or Creative Commons<br>'
+              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
+              '<span class="cc-key cc-rest"></span> the rest<br>'
+              'bigger = more times · hollow = no page yet</div>')
     table = ('<table class="wikitable cc-bacon"><tr><th>Featured</th><th>Bacon #</th></tr>'
              + ''.join(rows) + '</table>') if rows else ''
     return (f'<div class="connectome-card" data-picker="{attr(center)}">'
@@ -521,12 +523,25 @@ def load_store(db_path, pairs_path):
     return pairs, targets, groups
 
 
-def build(pairs, targets, groups, wiki, today, only=None):
+def load_whole(db_path):
+    """What the big graph needs beyond the cards: each record or show in full, and every credit."""
+    db = sqlite3.connect(db_path)
+    cols = [c[1] for c in db.execute('PRAGMA table_info(targets)')]
+    formats = 'formats' if 'formats' in cols else "''"      # a store built before records kept their formats
+    whole = {r[0]: {'kind': r[1], 'title': r[2], 'date': r[3], 'artist': r[4], 'grp': r[5],
+                    'formats': [f for f in (r[6] or '').split('; ') if f]}
+             for r in db.execute(f'SELECT id, kind, title, date, artist, grp, {formats} FROM targets')}
+    credits = db.execute('SELECT person, roles, target, scope, source FROM credits').fetchall()
+    return whole, credits
+
+
+def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()):
     names = {p['a'] for p in pairs} | {p['b'] for p in pairs}
     resolved = wiki.resolve(names)
     alias = {n: (t if ok else n) for n, (t, ok) in resolved.items()}
     exists = {t for t, ok in resolved.values() if ok}
-    store = Store(pairs, targets, groups, alias)
+    tiers = {t: connectome_graph.tier(t, d.get('formats')) for t, d in (whole or {}).items()}
+    store = Store(pairs, targets, groups, alias, tiers)
 
     month, featured_raw = featured_from(wiki.raw(FEATURED_PAGE), today)
     fres = wiki.resolve(featured_raw) if featured_raw else {}
@@ -547,7 +562,15 @@ def build(pairs, targets, groups, wiki, today, only=None):
             skipped.append(title)
         else:
             cards[title] = html
-    return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped),
+    graph = None
+    if whole is not None:                            # the big graph's one file, from the same store and names
+        asked = connectome_graph.arthel_pages(store.pairs, whole, song)
+        found = wiki.resolve(asked) if asked else {}
+        pages = {n: page_url(t) for n, (t, ok) in found.items() if ok}
+        graph = connectome_graph.export(
+            store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
+            has_page, inst, featured, month, song, pages, today.isoformat())
+    return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,
             'pairs': store.pairs, 'names': {k: sorted(v) for k, v in sorted(store.raw.items())}}
 
 
@@ -560,6 +583,9 @@ def write(result, out_dir, built_from):
         json.dump(result['pairs'], f)
     with open(os.path.join(out_dir, 'names.json'), 'w') as f:
         json.dump(result['names'], f)
+    if result.get('graph') is not None:
+        with open(os.path.join(out_dir, 'graph.json'), 'w') as f:
+            json.dump(result['graph'], f, ensure_ascii=False, separators=(',', ':'))
     with open(os.path.join(out_dir, 'cards.json'), 'w') as f:
         json.dump({'month': result['month'], 'featured': result['featured'],
                    'cards': {t: card_file(t) for t in sorted(result['cards'])},
@@ -577,7 +603,8 @@ def main(argv):
     a = ap.parse_args(argv)
     today = date.fromisoformat(a.today) if a.today else date.today()
     pairs, targets, groups = load_store(a.db, a.pairs)
-    result = build(pairs, targets, groups, Wiki(a.wiki), today, a.only)
+    whole, credits = load_whole(a.db)
+    result = build(pairs, targets, groups, Wiki(a.wiki), today, a.only, whole, credits)
     write(result, a.out, {'db': os.path.basename(a.db), 'wiki': a.wiki, 'today': today.isoformat()})
     print(f"{len(result['cards'])} cards, featured {result['month']}: {', '.join(result['featured'])}; "
           f"no card for {len(result['skipped'])} pages", file=sys.stderr)
