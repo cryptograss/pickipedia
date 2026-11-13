@@ -65,6 +65,22 @@
 			"scripts": [
 				"ext.pickipediaContent.connectome.js"
 			]
+		},
+		"ext.pickipediaContent.chartifactButton": {
+			"scripts": [
+				"ext.pickipediaContent.chartifactButton.js"
+			],
+			"messages": [
+				"pickipediacontent-chartifact-button",
+				"pickipediacontent-chartifact-add-title"
+			],
+			"dependencies": [
+				"jquery.textSelection",
+				"mediawiki.util"
+			],
+			"styles": [
+				"ext.pickipediaContent.chartifactButton.css"
+			]
 		}
 	},
 	"ResourceFileModulePaths": {

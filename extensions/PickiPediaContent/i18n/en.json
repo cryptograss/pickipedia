@@ -20,5 +20,7 @@
 	"pickipediacontent-pronouns-help": "Public: shown on your user page and in the @ menu. Choose one, or write your own. Emergents are told only pronouns on [[Cryptograss:Pronouns]]; to add one there, ask on [[Cryptograss talk:Pronouns|its talk page]].",
 	"pickipediacontent-pronouns-invalid": "Pronouns are words, with slashes or commas between them: no more than 40 characters.",
 	"pickipediacontent-pronouns-subtitle": "Pronouns: $1",
-	"pickipediacontent-timezone-help": "Public, like your pronouns: {{#timezone:Name}} gives it to any page, and the emergents are told what time it is where you are. Choose your zone (America/Chicago, say) rather than an offset, so it follows the clocks when they change."
+	"pickipediacontent-timezone-help": "Public, like your pronouns: {{#timezone:Name}} gives it to any page, and the emergents are told what time it is where you are. Choose your zone (America/Chicago, say) rather than an offset, so it follows the clocks when they change.",
+	"pickipediacontent-chartifact-button": "+ chartifact",
+	"pickipediacontent-chartifact-add-title": "Edit this section with a blank chartifact added at its end"
 }
