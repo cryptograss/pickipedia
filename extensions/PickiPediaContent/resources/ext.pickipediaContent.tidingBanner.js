@@ -1,5 +1,5 @@
 /**
- * A page that is a tiding on magenta says so atop itself, in a small magenta
+ * A page that is a tiding on magenta says so at its foot, in a small magenta
  * box linking to the discussion there (Justin, #interfaces, 13 Nov 2026).
  * magenta says whether it is, and the words: Magenta:Interface's
  * wiki-tiding-banner. Not a tiding, or magenta away: nothing is shown.
@@ -33,9 +33,11 @@
 			box.appendChild( mark );
 			box.appendChild( words );
 			box.appendChild( go );
+			// At the article's foot, above its categories (Justin, 13 Nov: "the bottom of the
+			// article instead of the top").
 			var content = document.getElementById( 'mw-content-text' );
 			if ( content ) {
-				content.parentNode.insertBefore( box, content );
+				content.parentNode.insertBefore( box, content.nextSibling );
 			}
 		} )
 		.catch( function () {} );
