@@ -349,13 +349,33 @@ sql-wasm.js 558a72c3ab3415d0e6d243cfd23f9d61543600d59054b4b7b8da3cd65f6b9fd4 htt
 sql-wasm.wasm d7e61b828523001f26ce0b3f88dabcf6c12e5e6edf80eb4f08b26ac7b946ff88 https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.wasm
 LIBS
 
+                        # PyYAML, for arthel's YAML: the Jenkins image has none. A venv in the cache, pinned by
+                        # hash (PyPI's, 6.0.3, 13 Nov 2026), made once per Python version.
+                        VENV="${CACHE}/venv-$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+                        if ! "${VENV}/bin/python" -c 'import yaml' 2>/dev/null; then
+                            rm -rf "${VENV}"
+                            python3 -m venv "${VENV}"
+                            cat > "${CACHE}/requirements.txt" <<'REQS'
+pyyaml==6.0.3 \
+    --hash=sha256:b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d \
+    --hash=sha256:10892704fc220243f5305762e276552a0395f7beb4dbf9b14ec8fd43b57f126c \
+    --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc \
+    --hash=sha256:9149cad251584d5fb4981be1ecde53a1ca46c891a79788c0df828d2f166bda28 \
+    --hash=sha256:0f29edc409a6392443abf94b9cf89ce99889a1dd5376d94316ae5145dfedd5d6 \
+    --hash=sha256:ee2922902c45ae8ccada2c5b501ab86c36525b883eff4255313a253a3160861c \
+    --hash=sha256:d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f
+REQS
+                            "${VENV}/bin/pip" install -q --require-hashes -r "${CACHE}/requirements.txt"
+                        fi
+                        PY="${VENV}/bin/python"
+
                         # arthel's records and shows, as githouse has its production branch.
                         rm -rf "${CACHE}/arthel"
                         git clone -q --depth 1 --branch production file:///srv/git/arthel.git "${CACHE}/arthel"
 
                         # The sources: only what the cache lacks. One that fails is fetched next time.
                         cd "${WORKSPACE}/tools"
-                        python3 connectome_store.py fetch --raw "${CACHE}/raw" --sources connectome_sources.txt
+                        "${PY}" connectome_store.py fetch --raw "${CACHE}/raw" --sources connectome_sources.txt
 
                         # The store, built again only when something it's built from has changed.
                         KEY=$( { cat connectome_store.py recording_credits.py homeplace.py rambler.py lma_lineup.py connectome_sources.txt connectome_names.txt
@@ -365,15 +385,15 @@ LIBS
                         if [ ! -f "${STORE}/pairs.json" ]; then
                             rm -rf "${STORE}.part"
                             mkdir -p "${STORE}.part"
-                            python3 connectome_store.py build --raw "${CACHE}/raw" --arthel "${CACHE}/arthel/src/data" --lma-names connectome_names.txt --out "${STORE}.part/credits.jsonl" --db "${STORE}.part/connectome.sqlite"
-                            python3 connectome_store.py pairs --credits "${STORE}.part/credits.jsonl" --out "${STORE}.part/pairs.json"
+                            "${PY}" connectome_store.py build --raw "${CACHE}/raw" --arthel "${CACHE}/arthel/src/data" --lma-names connectome_names.txt --out "${STORE}.part/credits.jsonl" --db "${STORE}.part/connectome.sqlite"
+                            "${PY}" connectome_store.py pairs --credits "${STORE}.part/credits.jsonl" --out "${STORE}.part/pairs.json"
                             mv "${STORE}.part" "${STORE}"
                             ls -dt "${CACHE}"/store-* | tail -n +4 | xargs -r rm -rf
                         fi
 
                         # The cards, from the store and the wiki as it is now; swapped in whole.
                         rm -rf "${CACHE}/cards.part"
-                        python3 connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part"
+                        "${PY}" connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part"
                         cp "${STORE}/connectome.sqlite" "${OUT}/connectome.sqlite"
                         cp "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"
                         rm -rf "${OUT}/cards"
