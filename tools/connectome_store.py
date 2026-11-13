@@ -33,6 +33,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sqlite3
 import sys
 
@@ -136,17 +137,52 @@ def from_lma(item, names):
 # Fetch (raw, once) and build
 # ---------------------------------------------------------------------------
 
-def fetch(raw, discogs=(), mb=()):
-    for d in discogs:
-        path = os.path.join(raw, "discogs", f"{d}.json")
-        if not os.path.exists(path):
+SOURCE_LINE = re.compile(r"^(discogs [0-9]+|mb [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                         r"|lma [A-Za-z0-9._-]+)$")
+
+
+def read_sources(path):
+    """A sources file (connectome_sources.txt): `discogs <id>`, `mb <mbid>`, `lma <identifier>`, one a line."""
+    out = {"discogs": [], "mb": [], "lma": []}
+    for n, line in enumerate(open(path), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if not SOURCE_LINE.match(line):
+            raise ValueError(f"{path}:{n}: not a source: {line!r}")
+        kind, ident = line.split(" ", 1)
+        out[kind].append(ident)
+    return out
+
+
+def read_names(path):
+    return [l.strip() for l in open(path) if l.strip() and not l.lstrip().startswith("#")]
+
+
+def fetch(raw, discogs=(), mb=(), lma=()):
+    """Fetch what the cache under raw lacks; a source that fails is reported and left for the next run."""
+    got, failed = 0, []
+    for kind, ids, get in (("discogs", discogs, lambda d: sideman.discogs_get(f"releases/{d}")),
+                           ("mb", mb, lambda r: sideman.mb_get(f"release/{r}", inc=MB_INC)),
+                           (os.path.join("lma", "items"), lma, lma_lineup.fetch)):
+        for ident in ids:
+            path = os.path.join(raw, kind, f"{ident}.json")
+            if kind.startswith("lma") and any(os.path.exists(p) for p in
+                                              glob.glob(os.path.join(raw, "lma", "*", f"{glob.escape(ident)}.json"))):
+                continue
+            if os.path.exists(path):
+                continue
+            try:
+                doc = get(ident)
+            except Exception as e:                      # a source down today is fetched next time
+                failed.append(f"{kind} {ident}: {e}")
+                continue
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            json.dump(sideman.discogs_get(f"releases/{d}"), open(path, "w"))
-    for r in mb:
-        path = os.path.join(raw, "mb", f"{r}.json")
-        if not os.path.exists(path):
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            json.dump(sideman.mb_get(f"release/{r}", inc=MB_INC), open(path, "w"))
+            with open(path + ".part", "w") as out:
+                json.dump(doc, out)
+            os.replace(path + ".part", path)
+            got += 1
+    return got, failed
 
 
 def build(raw, arthel=None, lma_names=()):
@@ -255,6 +291,7 @@ def main(argv):
     f.add_argument("--raw", required=True)
     f.add_argument("--discogs", nargs="*", default=[])
     f.add_argument("--mb", nargs="*", default=[])
+    f.add_argument("--sources", help="a sources file (connectome_sources.txt), fetched as well")
     b = sub.add_parser("build")
     b.add_argument("--raw", required=True)
     b.add_argument("--arthel")
@@ -269,9 +306,11 @@ def main(argv):
     q.add_argument("--db", required=True)
     args = ap.parse_args(argv[1:])
     if args.cmd == "fetch":
-        fetch(args.raw, args.discogs, args.mb)
+        src = read_sources(args.sources) if args.sources else {"discogs": [], "mb": [], "lma": []}
+        got, failed = fetch(args.raw, args.discogs + src["discogs"], args.mb + src["mb"], src["lma"])
+        print(f"fetched {got}; {len(failed)} failed" + "".join("\n  " + f for f in failed[:20]))
     elif args.cmd == "build":
-        names = [l.strip() for l in open(args.lma_names) if l.strip()] if args.lma_names else []
+        names = read_names(args.lma_names) if args.lma_names else []
         rows = build(args.raw, args.arthel, names)
         with open(args.out, "w") as out:
             for r in rows:

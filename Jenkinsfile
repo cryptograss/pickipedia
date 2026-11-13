@@ -314,6 +314,77 @@ pipeline {
             }
         }
 
+        stage('Connectome') {
+            // The connectome store and the musician pages' cards (Justin, #connectome, 13 Nov 2026).
+            // tools/connectome_sources.txt says what the store reads, and the responses are kept on maybelle,
+            // so a build fetches only what's new (the first build, all ~1,450 of them). The store is built again
+            // only when its sources, names, readers or arthel's data change; the cards every build, because the
+            // featured pickers and the wiki's pages change without a commit here. A failure marks the build
+            // unstable and leaves the last cards in place: the wiki still deploys.
+            steps {
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    sh '''#!/bin/bash
+                        set -e
+                        CACHE="/var/jenkins_home/shared/connectome"
+                        OUT="${MW_DIR}/assets/connectome"
+                        mkdir -p "${CACHE}/raw" "${CACHE}/lib" "${OUT}"
+
+                        # The big graph's libraries, pinned by hash (checked against npm's packages, 13 Nov 2026),
+                        # fetched once: no reader's browser asks another site for them.
+                        while read -r name sha url; do
+                            f="${CACHE}/lib/${name}"
+                            if [ ! -f "${f}" ] || ! echo "${sha}  ${f}" | sha256sum -c --status; then
+                                curl -fsSL --retry 3 -o "${f}.part" "${url}"
+                                if ! echo "${sha}  ${f}.part" | sha256sum -c --status; then
+                                    echo "ERROR: ${name} from ${url} does not match its pinned hash"
+                                    rm -f "${f}.part"
+                                    exit 1
+                                fi
+                                mv "${f}.part" "${f}"
+                            fi
+                            cp "${f}" "${OUT}/${name}"
+                        done <<'LIBS'
+d3.min.js f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539 https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js
+sql-wasm.js 558a72c3ab3415d0e6d243cfd23f9d61543600d59054b4b7b8da3cd65f6b9fd4 https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js
+sql-wasm.wasm d7e61b828523001f26ce0b3f88dabcf6c12e5e6edf80eb4f08b26ac7b946ff88 https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.wasm
+LIBS
+
+                        # arthel's records and shows, as githouse has its production branch.
+                        rm -rf "${CACHE}/arthel"
+                        git clone -q --depth 1 --branch production file:///srv/git/arthel.git "${CACHE}/arthel"
+
+                        # The sources: only what the cache lacks. One that fails is fetched next time.
+                        cd "${WORKSPACE}/tools"
+                        python3 connectome_store.py fetch --raw "${CACHE}/raw" --sources connectome_sources.txt
+
+                        # The store, built again only when something it's built from has changed.
+                        KEY=$( { cat connectome_store.py recording_credits.py homeplace.py rambler.py lma_lineup.py connectome_sources.txt connectome_names.txt
+                                 git -C "${CACHE}/arthel" rev-parse HEAD
+                                 find "${CACHE}/raw" -name '*.json' | sort; } | sha256sum | cut -c1-16 )
+                        STORE="${CACHE}/store-${KEY}"
+                        if [ ! -f "${STORE}/pairs.json" ]; then
+                            rm -rf "${STORE}.part"
+                            mkdir -p "${STORE}.part"
+                            python3 connectome_store.py build --raw "${CACHE}/raw" --arthel "${CACHE}/arthel/src/data" --lma-names connectome_names.txt --out "${STORE}.part/credits.jsonl" --db "${STORE}.part/connectome.sqlite"
+                            python3 connectome_store.py pairs --credits "${STORE}.part/credits.jsonl" --out "${STORE}.part/pairs.json"
+                            mv "${STORE}.part" "${STORE}"
+                            ls -dt "${CACHE}"/store-* | tail -n +4 | xargs -r rm -rf
+                        fi
+
+                        # The cards, from the store and the wiki as it is now; swapped in whole.
+                        rm -rf "${CACHE}/cards.part"
+                        python3 connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part"
+                        cp "${STORE}/connectome.sqlite" "${OUT}/connectome.sqlite"
+                        cp "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"
+                        rm -rf "${OUT}/cards"
+                        mv "${CACHE}/cards.part/cards" "${OUT}/cards"
+                        rm -rf "${CACHE}/cards.part"
+                        echo "Connectome: $(ls "${OUT}/cards" | wc -l) cards, store ${KEY}"
+                    '''
+                }
+            }
+        }
+
         stage('Copy Chain Data') {
             steps {
                 sh '''#!/bin/bash

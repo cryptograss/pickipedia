@@ -1,0 +1,178 @@
+<!doctype html><html><head><meta charset="utf-8"><title>The connectome</title>
+<style>
+:root{--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--track:#2a78d6;--show:#eb6834;--record:#1baf7a;--apart:#a9a8a3}
+body{margin:0;font:14px system-ui,sans-serif;background:var(--surface);color:var(--ink);display:flex;height:100vh}
+#main{flex:1;position:relative}svg{width:100%;height:100%}
+#side{width:500px;display:flex;flex-direction:column;border-left:1px solid #ddd}
+#tabs{display:flex;border-bottom:1px solid #ddd}#tabs button{flex:1;padding:8px;border:0;background:none;cursor:pointer;font:inherit;color:var(--ink2)}
+#tabs button.on{color:var(--ink);font-weight:600;border-bottom:2px solid var(--ink)}
+#pane{overflow:auto;padding:12px 14px;flex:1}
+h2{font-size:15px;margin:4px 0 8px}.muted{color:var(--ink2);font-size:12px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:6px 0}
+label.k{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px}.sw{width:18px;height:3px;border-radius:2px;display:inline-block}
+input[type=text]{width:170px}textarea{width:100%;height:110px;font:12px ui-monospace,monospace}
+table{border-collapse:collapse;width:100%;font-size:12.5px}td,th{border-bottom:1px solid #eee;padding:3px 4px;text-align:left;vertical-align:top}
+th{color:var(--ink2);font-weight:500}a{color:#1a5fb4;cursor:pointer}
+.chip{font-size:11px;padding:1px 6px;border-radius:9px;color:#fff;white-space:nowrap}
+.ex{font:11.5px ui-monospace,monospace;color:var(--ink2);white-space:pre-wrap}
+line{stroke-linecap:round}text{font-size:10px;fill:var(--ink2);pointer-events:none;paint-order:stroke;stroke:var(--surface);stroke-width:3px}
+circle{cursor:pointer;stroke:var(--surface);stroke-width:1.5px}
+#tip{position:absolute;pointer-events:none;background:#fff;border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-size:12px;display:none}
+#status{position:absolute;top:10px;left:10px;color:var(--ink2)}
+</style></head><body>
+<div id="main"><svg></svg><div id="tip"></div><div id="status">Loading the store…</div></div>
+<div id="side"><div id="tabs"><button data-t="path" class="on">Path</button><button data-t="person">Person</button><button data-t="target">Record / show</button><button data-t="sql">SQL</button><button data-t="about">About</button></div><div id="pane"></div></div>
+<!-- Both fetched at deploy, pinned by hash (Jenkinsfile, stage Connectome): no reader's browser asks another site. -->
+<script src="d3.min.js"></script>
+<script src="sql-wasm.js"></script>
+<script>
+const KIND={track:{c:'var(--track)',label:'same track',w:1},show:{c:'var(--show)',label:'same show, on stage',w:2},
+ record:{c:'var(--record)',label:'same record, no shared track',w:3},apart:{c:'var(--apart)',label:'same show, not both on stage',w:10}};
+const on={track:true,show:true,record:true,apart:false};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const chip=k=>`<span class="chip" style="background:${KIND[k].c}">${KIND[k].label}</span>`;
+const U=new URLSearchParams(location.search);
+let NAMES={},RAW2C={};const AKA=n=>NAMES[n]||[n],CN=r=>RAW2C[r]||r,IN=a=>a.map(()=>'?').join(',');
+let db,G,state={tab:'path',person:'Justin Myles Holmes',target:null,from:'Justin Myles Holmes',to:'Vickie Vaughn',sql:"SELECT source_kind, count(*) credits, count(DISTINCT person) people, count(DISTINCT target) targets FROM credits GROUP BY 1"};
+const q=(sql,p=[])=>{const r=db.exec(sql,p);return r.length?r[0].values.map(v=>Object.fromEntries(r[0].columns.map((c,i)=>[c,v[i]]))):[]};
+const tl=t=>`<a data-target="${esc(t.id||t.target)}">${esc(t.title)}</a>`;
+Promise.all([initSqlJs({locateFile:f=>f}),fetch('connectome.sqlite').then(r=>r.arrayBuffer()),fetch('pairs.json').then(r=>r.json()),fetch('names.json').then(r=>r.ok?r.json():{}).catch(()=>({}))]).then(([SQL,buf,pairs,names])=>{
+ db=new SQL.Database(new Uint8Array(buf));
+ NAMES=names;Object.entries(names).forEach(([c,rs])=>rs.forEach(r=>{RAW2C[r]=c}));
+ ['a','b','from','to','p'].forEach(k=>{if(U.get(k)&&RAW2C[U.get(k)])U.set(k,RAW2C[U.get(k)])});
+ const rank={apart:0,record:1,show:2,track:3};const E=new Map();
+ pairs.forEach(p=>{const k=p.a+'\u0000'+p.b;let e=E.get(k);if(!e){e={a:p.a,b:p.b,kind:p.kind,via:[]};E.set(k,e)}if(rank[p.kind]>rank[e.kind])e.kind=p.kind;e.via.push(p)});
+ const PERM=t=>/^(lma|arthel):/.test(t);E.forEach(e=>{e.perm=e.via.some(v=>PERM(v.target))});
+ const deg=new Map();E.forEach(e=>{deg.set(e.a,(deg.get(e.a)||0)+1);deg.set(e.b,(deg.get(e.b)||0)+1)});
+ G={nodes:[...deg].map(([id,d])=>({id,deg:d})),edges:[...E.values()]};
+ const find=(a,b)=>G.edges.find(e=>(e.a==a&&e.b==b)||(e.a==b&&e.b==a));
+ if(U.get('a')&&U.get('b')&&find(U.get('a'),U.get('b'))){state.edge=find(U.get('a'),U.get('b'));state.tab='pair';state.focus=[U.get('a'),U.get('b')]}
+ else if(U.get('from')&&U.get('to')){state.from=U.get('from');state.to=U.get('to');state.tab='path';state.focus=[state.from,state.to]}
+ else if(U.get('p')){state.person=U.get('p');state.tab='person';state.focus=[state.person]}
+ document.getElementById('status').textContent=`${G.nodes.length} people, ${G.edges.length} connections, from ${q('SELECT count(*) n FROM credits')[0].n} credits`;
+ drawGraph();render();
+});
+let L,N,T,path=new Set(),pathNodes=new Set();
+const MAX=100,RANK={apart:0,record:1,show:2,track:3};let ADJ,byId,sim,Z,gL,gN,gT,shownKey='',SHOWN=new Map(),PIN=new Set(),LBL=new Set(),SEED=new Set();
+const WH=()=>{const s=document.querySelector('svg');return[s.clientWidth,s.clientHeight]};
+function drawGraph(){
+ const svg=d3.select('svg'),[W,H]=WH(),root=svg.append('g');
+ Z=d3.zoom().scaleExtent([.15,6]).on('zoom',e=>root.attr('transform',e.transform));svg.call(Z);
+ byId=new Map(G.nodes.map(n=>[n.id,n]));ADJ=new Map();
+ G.edges.forEach(e=>{e.source=byId.get(e.a);e.target=byId.get(e.b);[[e.a,e.b],[e.b,e.a]].forEach(([x,y])=>{if(!ADJ.has(x))ADJ.set(x,[]);ADJ.get(x).push([y,e])})});
+ gL=root.append('g');gN=root.append('g');gT=root.append('g');
+ sim=d3.forceSimulation([]).force('link',d3.forceLink([]).distance(e=>e.kind=='record'?90:50).strength(.3))
+  .force('charge',d3.forceManyBody().strength(-120)).force('x',d3.forceX(W/2).strength(.05)).force('y',d3.forceY(H/2).strength(.05)).force('hit',d3.forceCollide(7));
+ sim.on('tick',()=>{L.attr('x1',e=>e.source.x).attr('y1',e=>e.source.y).attr('x2',e=>e.target.x).attr('y2',e=>e.target.y);N.attr('cx',n=>n.x).attr('cy',n=>n.y);T.attr('x',n=>n.x).attr('y',n=>n.y)});
+}
+// Who to show: the seeds, then their strongest neighbours (same track first, then show, then record), ring by ring, up to MAX.
+function choose(ids){const V=new Map();ids.forEach(s=>byId.has(s)&&V.set(s,null));let fr=[...V.keys()];
+ while(V.size<MAX&&fr.length){const c=new Map();
+  fr.forEach(x=>(ADJ.get(x)||[]).forEach(([y,e])=>{if(V.has(y)||!on[e.kind])return;const s=RANK[e.kind]*1e4+e.via.length;if(!c.has(y)||c.get(y)[0]<s)c.set(y,[s,x])}));
+  fr=[];for(const[y,[,x]]of[...c].sort((p,r)=>r[1][0]-p[1][0])){if(V.size>=MAX)break;V.set(y,x);fr.push(y)}}
+ return V}
+function seeds(){const[W,H]=WH();
+ if(state.tab=='path'){const ids=pathNodes.size?[...pathNodes]:[state.from,state.to],d=Math.min(W*.6,90*Math.max(1,pathNodes.size-1));return{ids,pin:[[state.from,W/2-d/2,H/2],[state.to,W/2+d/2,H/2]]}}
+ if(state.tab=='person')return{ids:[state.person],pin:[[state.person,W/2,H/2]]};
+ if(state.tab=='pair'&&state.edge)return{ids:[state.edge.a,state.edge.b],pin:[[state.edge.a,W/2-110,H/2],[state.edge.b,W/2+110,H/2]]};
+ if(state.tab=='target'&&state.target)return{ids:[...new Set(q('SELECT DISTINCT person FROM credits WHERE target=?',[state.target]).map(r=>CN(r.person)))],pin:[]};
+ return null}
+function updateGraph(){const sd=seeds();if(sd){const key=sd.ids.join('|')+'#'+Object.values(on).join();if(key!==shownKey){shownKey=key;show(sd)}}restyle()}
+function show(sd){const[W,H]=WH(),V=choose(sd.ids);SEED=new Set(sd.ids);
+ G.nodes.forEach(n=>{n.fx=n.fy=null});PIN=new Set(sd.pin.map(p=>p[0]));
+ sd.pin.forEach(([id,x,y])=>{const n=byId.get(id);if(n){if(!SHOWN.has(id)){n.x=x;n.y=y}n.fx=x;n.fy=y}});
+ V.forEach((par,id)=>{if(SHOWN.has(id)||PIN.has(id))return;const n=byId.get(id),p=par&&byId.get(par),a=Math.random()*6.283;
+  const bx=p&&p.x!=null?p.x:W/2,by=p&&p.y!=null?p.y:H/2;n.x=bx+Math.cos(a)*30;n.y=by+Math.sin(a)*30;n.vx=n.vy=0});
+ SHOWN=V;const nodes=[...V.keys()].map(id=>byId.get(id)),edges=G.edges.filter(e=>V.has(e.a)&&V.has(e.b));
+ nodes.forEach(n=>{n.vis=0});edges.forEach(e=>{e.source.vis++;e.target.vis++});
+ LBL=new Set(nodes.slice().sort((x,y)=>y.deg-x.deg).slice(0,20).map(n=>n.id));
+ L=gL.selectAll('line').data(edges,e=>e.a+'\u0000'+e.b).join(en=>en.append('line').attr('stroke',e=>e.perm?KIND[e.kind].c:'#a9a8a3').attr('stroke-dasharray',e=>!e.perm?'4 3':e.kind=='apart'?'3 3':null)
+  .on('click',(ev,e)=>{state.edge=e;setTab('pair')}).on('mouseover',(ev,e)=>tip(ev,`${e.a} — ${e.b}: ${KIND[e.kind].label} (${e.via.length})${e.perm?' · Permanent Release':' · not known Permanent'}`)).on('mouseout',()=>tip()));
+ N=gN.selectAll('circle').data(nodes,n=>n.id).join(en=>en.append('circle')
+  .on('click',(ev,n)=>{if(ev.defaultPrevented)return;state.person=n.id;setTab('person')}).on('mouseover',(ev,n)=>tip(ev,`${n.id}: ${n.deg} connected${n.deg>n.vis?`, ${n.deg-n.vis} not shown: click to go there`:''}`)).on('mouseout',()=>tip())
+  .call(d3.drag().on('start',(ev,d)=>{if(!ev.active)sim.alphaTarget(.2).restart();d.fx=d.x;d.fy=d.y}).on('drag',(ev,d)=>{d.fx=ev.x;d.fy=ev.y}).on('end',(ev,d)=>{if(!ev.active)sim.alphaTarget(0);if(!PIN.has(d.id)){d.fx=null;d.fy=null}})))
+  .attr('r',n=>PIN.has(n.id)?10:2.5+Math.sqrt(n.deg)*.55).attr('fill',n=>PIN.has(n.id)||SEED.has(n.id)?'#0b0b0b':'#6f6e69').attr('stroke',n=>n.deg>n.vis?'#1976d2':null);
+ T=gT.selectAll('text').data(nodes,n=>n.id).join(en=>en.append('text').text(n=>n.id).attr('dx',8).attr('dy',3));
+ sim.nodes(nodes);sim.force('link').links(edges);sim.alpha(.9).restart();
+ document.getElementById('status').textContent=`Showing ${nodes.length} of ${G.nodes.length} people, ${edges.length} of ${G.edges.length} connections. Blue ring: more beyond it; click to go there.`}
+function restyle(){const pe=state.tab=='pair'&&state.edge;
+ if(pe){const a=pe.a,b=pe.b,nbr=new Set();G.edges.forEach(e=>{if(e.a==a||e.a==b)nbr.add(e.b);if(e.b==a||e.b==b)nbr.add(e.a)});
+  const both=new Set([...nbr].filter(x=>G.edges.some(e=>(e.a==a&&e.b==x)||(e.b==a&&e.a==x))&&G.edges.some(e=>(e.a==b&&e.b==x)||(e.b==b&&e.a==x))));
+  L.style('display',e=>on[e.kind]?null:'none').attr('stroke-width',e=>e===pe?5:1.2).attr('stroke-opacity',e=>e===pe?1:(e.a==a||e.b==a||e.a==b||e.b==b)?.3:.04);
+  N.attr('opacity',n=>n.id==a||n.id==b||nbr.has(n.id)?1:.18);
+  T.style('display',n=>n.id==a||n.id==b||both.has(n.id)?null:'none').style('font-weight',n=>n.id==a||n.id==b?700:400).style('font-size',n=>n.id==a||n.id==b?'13px':null);return}
+ const hp=path.size>0,sel=state.tab=='person'?state.person:null;
+ L.style('display',e=>on[e.kind]?null:'none').attr('stroke-width',e=>path.has(e)?4:e.kind=='track'?1.6:1)
+  .attr('stroke-opacity',e=>hp?(path.has(e)?1:e.perm?.22:.03):sel?((e.a==sel||e.b==sel)?.9:.04):!e.perm?.18:(e.kind=='record'?.05:.6));
+ N.attr('opacity',n=>hp&&!pathNodes.has(n.id)?.2:1);
+ T.style('display',n=>pathNodes.has(n.id)||n.id==sel||n.id==state.from||n.id==state.to||(!hp&&LBL.has(n.id))?null:'none').style('font-weight',n=>pathNodes.has(n.id)||n.id==sel?700:400);}
+function tip(ev,t){const d=document.getElementById('tip');if(!t){d.style.display='none';return}d.textContent=t;d.style.display='block';d.style.left=(ev.offsetX+12)+'px';d.style.top=(ev.offsetY+12)+'px'}
+function setTab(t){state.tab=t;render()}
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
+document.getElementById('pane').addEventListener('click',ev=>{const a=ev.target.closest('a');if(!a)return;
+ if(a.dataset.person){state.person=a.dataset.person;setTab('person')}else if(a.dataset.target){state.target=a.dataset.target;setTab('target')}});
+function findPath(){const s=state.from,t=state.to,adj=new Map();
+ G.edges.forEach(e=>{if(!on[e.kind]||(state.permOnly&&!e.perm))return;[[e.a,e.b],[e.b,e.a]].forEach(([x,y])=>{if(!adj.has(x))adj.set(x,[]);adj.get(x).push([y,e])})});
+ const dist=new Map([[s,0]]),prev=new Map(),done=new Set();
+ for(;;){let u=null,best=Infinity;for(const[k,v]of dist)if(!done.has(k)&&v<best){best=v;u=k}if(u===null||u===t)break;done.add(u);
+  for(const[y,e]of adj.get(u)||[]){const d=best+KIND[e.kind].w;if(d<(dist.get(y)??Infinity)){dist.set(y,d);prev.set(y,[u,e])}}}
+ path=new Set();pathNodes=new Set();if(!dist.has(t))return null;const hops=[];let c=t;while(c!==s){const[p,e]=prev.get(c);hops.unshift([p,c,e]);c=p}
+ hops.forEach(([a,b,e])=>{path.add(e);pathNodes.add(a);pathNodes.add(b)});return hops}
+function via(e){const tg=new Map(q(`SELECT id,title,kind,date,artist FROM targets WHERE id IN (${e.via.map(()=>'?').join(',')})`,e.via.map(v=>v.target)).map(t=>[t.id,t]));
+ return e.via.slice().sort((x,y)=>KIND[x.kind].w-KIND[y.kind].w).map(v=>{const t=tg.get(v.target)||{title:v.target};
+  return `<div style="margin:5px 0">${chip(v.kind)} ${/^(lma|arthel):/.test(v.target)?'<span class="chip" style="background:#0b0b0b">Permanent</span>':'<span class="chip" style="background:#a9a8a3">not known Permanent</span>'} ${tl({id:v.target,title:t.title})} <span class="muted">${esc(t.date)} ${esc(t.artist)}</span>${v.tracks.length?`<div class="ex">${v.tracks.map(x=>`${x[1]?x[1]+' ':''}${x[2]}  ← ${x[0].replace(/^.*\//,'')}`).map(esc).join('\n')}</div>`:''}</div>`}).join('')}
+function render(){
+ document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==state.tab));
+ const P=document.getElementById('pane');if(!db){P.innerHTML='<p class="muted">Loading…</p>';return}
+ const people=`<datalist id="ppl">${G.nodes.map(n=>`<option value="${esc(n.id)}">`).join('')}</datalist>`;
+ const kinds=`<div class="bar">${Object.entries(KIND).map(([k,v])=>`<label class="k"><input type="checkbox" data-k="${k}" ${on[k]?'checked':''}><span class="sw" style="background:${v.c}"></span>${v.label} (${G.edges.filter(e=>e.kind==k).length})</label>`).join('')}</div>`;
+ if(state.tab=='path'){const hops=findPath();
+  P.innerHTML=`<h2>Path</h2>${people}<div class="bar"><input type="text" id="from" list="ppl" value="${esc(state.from)}"> → <input type="text" id="to" list="ppl" value="${esc(state.to)}"></div>${kinds}
+  <label style="display:block;font-size:13px;margin:4px 0"><input type="checkbox" id="perm" ${state.permOnly?'checked':''}> only through <a href="https://pickipedia.xyz/wiki/PickiPedia:Release_Types" target="_blank">Permanent Releases</a> (solid lines; dashed grey = not known Permanent)</label>
+  <div class="muted">Prefers same track (1), then same show (2), then same record (3). Untick a kind to route around it.</div>
+  ${hops?`<p><b>${hops.length} hops</b></p>`+hops.map(([a,b,e],i)=>`<div style="border:1px solid #e3e2de;border-radius:6px;padding:6px 8px;margin:6px 0">${i+1}. <a data-person="${esc(a)}">${esc(a)}</a> → <a data-person="${esc(b)}">${esc(b)}</a>${via(e)}</div>`).join(''):'<p>No path with these kinds.</p>'}`;
+  P.querySelector('#perm').onchange=e=>{state.permOnly=e.target.checked;render()};P.querySelector('#from').onchange=e=>{state.from=e.target.value;render()};P.querySelector('#to').onchange=e=>{state.to=e.target.value;render()};
+ } else if(state.tab=='person'){path=new Set();pathNodes=new Set();const n=state.person;
+  const rows=q(`SELECT c.n,c.roles,c.scope,c.source,c.source_kind,c.excerpt,t.id,t.title,t.kind,t.date,t.artist,(SELECT group_concat(trim(position||' '||title),' · ') FROM credit_tracks WHERE credit=c.n) tracks
+   FROM credits c JOIN targets t ON t.id=c.target WHERE c.person IN (${IN(AKA(n))}) ORDER BY t.kind DESC,t.date,t.title`,AKA(n));
+  const by=new Map();rows.forEach(r=>{if(!by.has(r.id))by.set(r.id,{t:r,rows:[]});const g=by.get(r.id);if(!g.rows.some(x=>x.roles==r.roles&&x.scope==r.scope&&x.tracks==r.tracks&&x.source==r.source))g.rows.push(r)});
+  const co=G.edges.filter(e=>e.a==n||e.b==n).sort((x,y)=>KIND[x.kind].w-KIND[y.kind].w);
+  P.innerHTML=`<h2>${esc(n)}</h2>${people}<div class="bar"><input type="text" id="who" list="ppl" value="${esc(n)}"></div>
+  <div class="muted">${rows.length} credits on ${by.size} records and shows; ${co.length} people connected.</div>
+  <h2 style="margin-top:12px">Connected</h2><table>${co.slice(0,300).map(e=>`<tr><td>${chip(e.kind)}</td><td><a data-person="${esc(e.a==n?e.b:e.a)}">${esc(e.a==n?e.b:e.a)}</a></td><td class="muted">${e.via.length}</td></tr>`).join('')}</table>
+  <h2 style="margin-top:12px">Credits, as each source gives them</h2><table><tr><th>record / show</th><th>role, scope, tracks</th><th>source</th></tr>${[...by.values()].map(g=>g.rows.map((r,i)=>`<tr><td>${i?'':tl(g.t)+`<div class="muted">${esc(g.t.kind)} ${esc(g.t.date)} ${esc(g.t.artist)}</div>`}</td><td>${esc(r.roles)} <span class="muted">[${esc(r.scope)}]</span>${r.tracks?`<div class="ex">${esc(r.tracks)}</div>`:''}${r.excerpt&&r.source_kind=='LMA'?`<div class="ex">“${esc(r.excerpt.slice(0,200))}”</div>`:''}</td><td><a href="${esc(r.source)}" target="_blank">${esc(r.source_kind)}</a></td></tr>`).join('')).join('')}</table>`;
+  P.querySelector('#who').onchange=e=>{state.person=e.target.value;render()};
+ } else if(state.tab=='pair'){const e=state.edge;const nb=x=>new Set(G.edges.filter(f=>f!==e&&f.kind!='record'&&f.kind!='apart'&&(f.a==x||f.b==x)).map(f=>f.a==x?f.b:f.a));
+  const A=nb(e.a),both=[...nb(e.b)].filter(x=>A.has(x)).sort();
+  P.innerHTML=`<h2><a data-person="${esc(e.a)}">${esc(e.a)}</a> — <a data-person="${esc(e.b)}">${esc(e.b)}</a></h2>
+  <div class="muted">${e.via.length} time${e.via.length==1?'':'s'} together in the store. A connection is a claim to check: each one names its source.</div>${via(e)}
+  ${both.length?`<h2 style="margin-top:12px">Also played with both (${both.length})</h2><div>${both.map(x=>`<a data-person="${esc(x)}">${esc(x)}</a>`).join(', ')}</div>`:''}`;
+ } else if(state.tab=='target'){const id=state.target;
+  if(!id){P.innerHTML='<p class="muted">Click a record or show anywhere to open it here.</p>';updateGraph();return}
+  const t=q('SELECT * FROM targets WHERE id=?',[id])[0]||{title:id};
+  const rows=q(`SELECT c.n,c.person,c.roles,c.scope,c.source,c.source_kind,c.excerpt,(SELECT group_concat(trim(position||' '||title),' · ') FROM credit_tracks WHERE credit=c.n) tracks FROM credits c WHERE c.target=? ORDER BY c.person`,[id]).map(r=>({...r,person:CN(r.person)}));
+  const tr=q(`SELECT DISTINCT ct.position,ct.title,c.person,c.source_kind FROM credit_tracks ct JOIN credits c ON c.n=ct.credit WHERE c.target=? ORDER BY ct.position,ct.title,c.person`,[id]).map(r=>({...r,person:CN(r.person)}));
+  const bt=new Map();tr.forEach(r=>{const k=(r.position?r.position+' ':'')+r.title;if(!bt.has(k))bt.set(k,new Set());bt.get(k).add(r.person)});
+  const uniq=[];rows.forEach(r=>{if(!uniq.some(x=>x.person==r.person&&x.roles==r.roles&&x.scope==r.scope&&x.tracks==r.tracks&&x.source==r.source))uniq.push(r)});
+  P.innerHTML=`<h2>${esc(t.title)}</h2><div class="muted">${esc(t.kind)} · ${esc(t.date)} · ${esc(t.artist)} · ${esc(id)}</div>
+  ${bt.size?`<h2 style="margin-top:12px">Track by track</h2><table>${[...bt].map(([k,ps])=>`<tr><td>${esc(k)}</td><td>${[...ps].map(p=>`<a data-person="${esc(p)}">${esc(p)}</a>`).join(', ')}</td></tr>`).join('')}</table>`:''}
+  <h2 style="margin-top:12px">Every credit</h2><table><tr><th>person</th><th>role, scope, tracks</th><th>source</th></tr>${uniq.map(r=>`<tr><td><a data-person="${esc(r.person)}">${esc(r.person)}</a></td><td>${esc(r.roles)} <span class="muted">[${esc(r.scope)}]</span>${r.tracks?`<div class="ex">${esc(r.tracks)}</div>`:''}${r.excerpt&&r.source_kind=='LMA'?`<div class="ex">“${esc(r.excerpt.slice(0,200))}”</div>`:''}</td><td><a href="${esc(r.source)}" target="_blank">${esc(r.source_kind)}</a></td></tr>`).join('')}</table>`;
+ } else if(state.tab=='sql'){
+  P.innerHTML=`<h2>SQL</h2><div class="muted">Tables: <code>credits</code>(person, mbid, roles, target, scope, source, source_kind, read_by, excerpt), <code>credit_tracks</code>(credit, position, title), <code>targets</code>(id, kind, title, date, artist, grp), <code>people</code> (empty: a person fills it).</div>
+  <div class="bar"><a data-ex="0">by source</a><a data-ex="1">most-credited people</a><a data-ex="2">who shares a track with Vickie</a><a data-ex="3">Kyle's shows</a></div>
+  <textarea id="sqlq">${esc(state.sql)}</textarea><button id="run">Run</button><div id="res"></div>`;
+  const EX=["SELECT source_kind, count(*) credits, count(DISTINCT person) people, count(DISTINCT target) targets FROM credits GROUP BY 1",
+   "SELECT person, count(DISTINCT target) targets, group_concat(DISTINCT source_kind) sources FROM credits GROUP BY person ORDER BY targets DESC LIMIT 50",
+   "SELECT DISTINCT b.person, t.title, ta.position, ta.title track FROM credits a JOIN credit_tracks ta ON ta.credit=a.n JOIN credits b ON b.target=a.target AND b.source=a.source AND b.person!=a.person JOIN credit_tracks tb ON tb.credit=b.n AND tb.position=ta.position AND tb.title=ta.title JOIN targets t ON t.id=a.target WHERE a.person='Vickie Vaughn'",
+   "SELECT t.date, t.artist, t.title, group_concat(DISTINCT c.scope) scopes FROM credits c JOIN targets t ON t.id=c.target WHERE c.person='Kyle Tuttle' AND t.kind='show' GROUP BY t.id ORDER BY t.date"];
+  P.querySelectorAll('[data-ex]').forEach(a=>a.onclick=()=>{state.sql=EX[+a.dataset.ex];render();run()});
+  const run=()=>{state.sql=P.querySelector('#sqlq').value;let out;try{const r=db.exec(state.sql);out=r.length?`<div class="muted">${r[0].values.length} rows</div><table><tr>${r[0].columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>${r[0].values.slice(0,500).map(v=>`<tr>${v.map(x=>`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</table>`:'<p>No rows.</p>'}catch(e){out=`<p style="color:#b00">${esc(e.message)}</p>`}P.querySelector('#res').innerHTML=out};
+  P.querySelector('#run').onclick=run;run();
+ } else if(state.tab=='about'){
+  P.innerHTML=`<h2>What this is</h2><p>The connectome store (Justin, #connectome, 11 Nov 2026). Each credit is one person, from one source, on one record or show, with the tracks the source says it covers. Names are as each source wrote them, except where the wiki says two spellings are one picker (a redirect): then the graph uses the page's name.</p><p>Sources: <code>tools/connectome_sources.txt</code> in pickipedia. Readers: Sideman for Discogs and MusicBrainz; Homeplace for arthel; LMA lineup for the Live Music Archive (it finds only the names in <code>tools/connectome_names.txt</code>). Built at each deploy by <code>tools/connectome_store.py</code>; the musician pages' cards by <code>tools/connectome_card.py</code>.</p>
+  <p class="muted">A connection is a claim to check, not a fact.</p>`;
+ }
+ P.querySelectorAll('input[data-k]').forEach(c=>c.onchange=()=>{on[c.dataset.k]=c.checked;render()});
+ updateGraph();
+}
+</script></body></html>
