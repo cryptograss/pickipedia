@@ -269,6 +269,28 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			}
 		}
 		self::addCard( $out );
+		self::addTidingBanner( $out );
+	}
+
+	/**
+	 * A page that is a tiding on magenta says so atop itself, linking to the
+	 * discussion there (Justin, #interfaces, 13 Nov 2026). Whether it is, and
+	 * the words (Magenta:Interface's wiki-tiding-banner), are magenta's to say:
+	 * the reader's browser asks it, so the page here stays cached as it is.
+	 *
+	 * @param \OutputPage $out
+	 */
+	private static function addTidingBanner( $out ): void {
+		$title = $out->getTitle();
+		$request = $out->getRequest();
+		if ( !$title || !$title->exists() || $title->isSpecialPage() || $title->isTalkPage()
+			|| $request->getVal( 'action', 'view' ) !== 'view'
+			|| $request->getVal( 'diff' ) !== null || $request->getVal( 'oldid' ) !== null ) {
+			return;
+		}
+		$out->addJsConfigVars( 'wgPickiPediaMagenta',
+			rtrim( (string)$out->getConfig()->get( 'PickiPediaContentMagentaPublicUrl' ), '/' ) );
+		$out->addModules( [ 'ext.pickipediaContent.tidingBanner' ] );
 	}
 
 	/**

@@ -1,0 +1,33 @@
+/* The banner atop a page that is a tiding on magenta: magenta's own colour. */
+.pp-tiding-banner {
+	display: flex;
+	align-items: center;
+	gap: 0.7em;
+	margin: 0.4em 0 1em;
+	padding: 0.6em 0.9em;
+	border: 1px solid #e04ddd;
+	border-left: 5px solid #ff67fd;
+	border-radius: 6px;
+	background: #fff0fe;
+	color: #4a1448;
+	font-size: 0.95em;
+	line-height: 1.4;
+	text-decoration: none;
+}
+.pp-tiding-banner:hover,
+.pp-tiding-banner:focus {
+	background: #ffe2fd;
+	text-decoration: none;
+}
+.pp-tiding-banner__mark {
+	flex: none;
+	/* A dot of magenta's colour: its mark, from magenta's own server, would be a cross-site mask, which
+	   browsers fetch only with CORS. */
+	width: 0.75em;
+	height: 0.75em;
+	border-radius: 50%;
+	background: #ff67fd;
+	box-shadow: 0 0 0 3px #ffd1fe;
+}
+.pp-tiding-banner__words { flex: 1; }
+.pp-tiding-banner__go { flex: none; font-weight: 700; color: #d63ad3; }

@@ -44,6 +44,17 @@
 				"ext.pickipediaContent.css",
 				"ext.pickipediaContent.templates.css"
 			]
+		},
+		"ext.pickipediaContent.tidingBanner": {
+			"scripts": [
+				"ext.pickipediaContent.tidingBanner.js"
+			],
+			"styles": [
+				"ext.pickipediaContent.tidingBanner.css"
+			],
+			"dependencies": [
+				"mediawiki.util"
+			]
 		}
 	},
 	"ResourceFileModulePaths": {
@@ -68,6 +79,10 @@
 		"PickiPediaContentMagentaHookSecret": {
 			"value": "",
 			"description": "Signs the push to magenta's /api/wiki/hook/ (HMAC-SHA256, X-Magenta-Signature); the same secret is magenta's WIKI_HOOK_SECRET. Empty: nothing is pushed, and magenta's minute sweep alone serves."
+		},
+		"PickiPediaContentMagentaPublicUrl": {
+			"value": "https://magenta.cryptograss.live",
+			"description": "magenta as a reader's browser reaches it: a page that is a tiding there asks its /api/wiki/tiding/, and links to it, in a banner atop the page (ext.pickipediaContent.tidingBanner)"
 		}
 	},
 	"manifest_version": 2
