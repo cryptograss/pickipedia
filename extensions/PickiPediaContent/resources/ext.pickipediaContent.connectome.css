@@ -104,8 +104,9 @@ svg.cc a {
 	text-align: center;
 }
 
-.connectome-card .cc-n[ title ] {
-	cursor: help;
+/* The number is a link to the path in the big graph: the whole cell is, so a finger finds it. */
+.connectome-card .cc-n a {
+	display: block;
 }
 
 .connectome-card .cc-foot {
@@ -162,5 +163,38 @@ svg.cc a {
 		width: auto;
 		max-width: 360px;
 		margin: 1em auto;
+	}
+
+	/* On a phone the big graph takes the whole screen, and its × is big enough for a thumb. */
+	#cc-big {
+		top: 0;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		border: 0;
+		border-radius: 0;
+	}
+
+	#cc-big .cc-bar {
+		height: 44px;
+		line-height: 44px;
+	}
+
+	#cc-big .cc-close {
+		width: 44px;
+		margin-right: -10px;
+		font-size: 30px;
+		line-height: 44px;
+	}
+
+	#cc-big iframe {
+		height: calc( 100% - 45px );
+	}
+}
+
+/* A finger wants more of a line to land on than a pointer does. */
+@media ( pointer: coarse ) {
+	svg.cc .cc-hit {
+		stroke-width: 22;
 	}
 }

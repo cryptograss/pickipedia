@@ -6,6 +6,10 @@
  * without one yet; the rabbit is whose company you're in); a pill is music (a track, a record, a taped show);
  * a line is the music two pickers share: gold for a Permanent Release, plain ink for a Full Release, dotted
  * for what's only counted. A name is a link to that picker's page; the circle is the way further in.
+ * A green rabbit beside a track's name plays it in Rabbithole.
+ *
+ * what() says what any mark stands for and the ways on from it; a pointer gets that as a note and a click, a
+ * finger as a sheet of buttons.
  *
  * Every string from graph.json reaches the page as text, never as markup.
  */
@@ -18,14 +22,18 @@ const FONT = { named: '700 14px Georgia, "Times New Roman", serif', subject: '70
 	pill: '600 12.5px system-ui, -apple-system, "Segoe UI", sans-serif' };
 const still = window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
 const FAINT = 0.22;              // between two pickers, a route through someone not named: behind the rest, still there
+const coarse = window.matchMedia && window.matchMedia( '(pointer: coarse)' ).matches;   // a finger: bigger beads, further apart
+const narrow = () => window.matchMedia( '(max-width: 760px)' ).matches;                 // the list is under the graph
 
 const $ = ( id ) => document.getElementById( id );
-const svg = $( 'g' ), stage = $( 'stage' ), tip = $( 'tip' ), panel = $( 'panel' );
+const svg = $( 'g' ), stage = $( 'stage' ), tip = $( 'tip' ), panel = $( 'panel' ), sheet = $( 'sheet' );
 
 let G = null;
 let view = null;                 // { a } one picker and their company; { a, b } two pickers and what's between
 let sel = { picker: null, music: null };
 let scene = null;
+let fingers = false;             // the last pointer down was a finger or a pen: nothing hovers, so a touch asks before it acts
+let held = null;                 // the mark whose sheet is open
 const trail = [];
 
 /* ------------------------------------------------------------------------------------------------------------
@@ -70,6 +78,21 @@ const pen = document.createElement( 'canvas' ).getContext( '2d' );
 function wide( text, font ) {
 	pen.font = font;
 	return pen.measureText( text ).width;
+}
+
+/** A name, cut short until it fits in `room` pixels. */
+function cut( name, font, room ) {
+	let label = K.clip( name, 26 );
+	for ( let n = label.length - 1; wide( label, font ) > room && n > 4; n-- ) {
+		label = K.clip( name, n );
+	}
+	return label;
+}
+
+/** A name centred on x, kept between lo and hi: what to write, and how far off centre to write it. */
+function fitName( name, x, lo, hi, font ) {
+	const label = cut( name, font, hi - lo );
+	return { label, dx: Math.round( K.nudge( x, wide( label, font ) / 2, lo, hi ) ) };
 }
 
 function pageUrl( title ) {
@@ -118,7 +141,7 @@ function lineWidth( tie ) {
 }
 
 function dotRadius( w ) {
-	return Math.max( 3.2, Math.min( 8, 3.2 + 2.6 * Math.sqrt( w ) ) );
+	return Math.max( coarse ? 4.6 : 3.2, Math.min( 8, 3.2 + 2.6 * Math.sqrt( w ) ) );
 }
 
 function newScene() {
@@ -133,7 +156,18 @@ function addNode( sc, id, at, kind, more ) {
 function endNames( a, b, W ) {
 	const wa = wide( K.clip( first( a ), 26 ), FONT.subject ), wb = wide( K.clip( first( b ), 26 ), FONT.subject );
 	const beside = W >= 700 && wa + wb + 2 * 46 < W * 0.5;
-	return beside ? { la: wa + 34, lb: wb + 34, sa: 'left', sb: 'right' } : { la: wa / 2, lb: wb / 2, sa: null, sb: null };
+	return beside ? { la: wa + 34, lb: wb + 34, sa: 'left', sb: 'right' } :
+		{ la: Math.min( wa / 2, 64 ), lb: Math.min( wb / 2, 64 ), sa: null, sb: null };
+}
+
+/** The two ends, set down: a name under its picker is kept to its own half of the frame, cut short if it must be. */
+function addEnds( sc, a, b, lay, en, W ) {
+	const beads = ( lay.dots || [] ).filter( ( p ) => p.y > lay.A.y ).map( ( p ) => Math.abs( p.x - W / 2 ) + 16 );
+	const clear = Math.max( 20, ...beads );                         // the beads just under the middle line: the names stop short of them
+	const na = en.sa ? {} : fitName( first( a ), lay.A.x, 6, W / 2 - clear, FONT.subject );
+	const nb = en.sb ? {} : fitName( first( b ), lay.B.x, W / 2 + clear, W - 6, FONT.subject );
+	addNode( sc, a, lay.A, 'subject', { rabbit: true, side: en.sa, label: na.label, dx: na.dx } );
+	addNode( sc, b, lay.B, 'subject', { side: en.sb, label: nb.label, dx: nb.dx } );
 }
 
 function addLine( sc, u, v, tie, more ) {
@@ -151,19 +185,21 @@ function pillsFor( tie, room, most ) {
 			break;
 		}
 		const n = K.naming( G, e );
+		const play = n.glyph === 'track' ? K.playOf( G, G.music[ e.m ], e.songs[ 0 ] ) : '';
+		const pad = 34 + ( play ? 38 : 0 );                           // the glyph and the ends; and the way into Rabbithole
 		let label = K.clip( n.short, 34 );
-		let w = 34 + wide( label, FONT.pill );
+		let w = pad + wide( label, FONT.pill );
 		if ( used + w > room && !shown.length ) {                     // the first one always goes in: briefer, then cut to fit
 			label = n.brief;
-			for ( let cut = label.length; 34 + wide( label, FONT.pill ) > room && cut > 6; cut-- ) {
-				label = K.clip( n.brief, cut );
+			for ( let most = label.length; pad + wide( label, FONT.pill ) > room && most > 6; most-- ) {
+				label = K.clip( n.brief, most );
 			}
-			w = 34 + wide( label, FONT.pill );
+			w = pad + wide( label, FONT.pill );
 		}
 		if ( used + w > room && shown.length ) {
 			break;
 		}
-		shown.push( { e, label, w, glyph: n.glyph, tier: G.music[ e.m ].tier } );
+		shown.push( { e, label, w, glyph: n.glyph, tier: G.music[ e.m ].tier, play, song: e.songs[ 0 ] } );
 		used += w + 8;
 	}
 	return { shown, more: tie.ev.length - shown.length, used: Math.max( 0, used - 8 ) };
@@ -176,7 +212,7 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay ) {
 	let x = ( x1 + x2 ) / 2 - ( fit.used + ( moreW ? moreW + 8 : 0 ) ) / 2;
 	for ( const p of fit.shown ) {
 		sc.pills.set( 'm' + lineKey( u, v ) + '.' + p.e.m, { x: x + p.w / 2, y, w: p.w, label: p.label, glyph: p.glyph, tier: p.tier,
-			e: p.e, u, v, o, delay, lit: sel.music === p.e.m } );
+			e: p.e, u, v, o, delay, lit: sel.music === p.e.m, play: p.play, song: p.song } );
 		x += p.w + 8;
 	}
 	if ( moreW ) {
@@ -201,9 +237,10 @@ function pairScene( a, b ) {
 	}
 	const needLoose = !played.length && !( tie && tie.played );      // only looser ties join them: show those
 	let pool = played.length ? played : ( needLoose ? all : [] );
-	const want = Math.min( pool.length, tie ? ( H > 560 ? 6 : 4 ) : ( H > 560 ? 5 : 3 ) );
+	const want = Math.min( pool.length, tie ? ( H > 500 ? 6 : 4 ) : ( H > 500 ? 5 : 3 ) );
 	const en = endNames( a, b, W );
-	const lay = K.bridge( { W, H, direct: !!tie, named: want, dots: pool.length - want, la: en.la, lb: en.lb } );
+	const lay = K.bridge( { W, H, direct: !!tie, named: want, dots: pool.length - want, la: en.la, lb: en.lb,
+		gap: coarse ? 27 : 18, perRow: coarse ? Math.max( 3, Math.min( 7, Math.floor( ( W - 250 ) / 27 ) ) ) : 7 } );
 	const placed = lay.named.length + lay.dots.length;
 	const at = pool.findIndex( ( m ) => m.id === sel.picker );
 	if ( at >= placed ) {                                             // picked from the list, beyond what's drawn
@@ -214,8 +251,7 @@ function pairScene( a, b ) {
 	}
 	const lit = sel.picker !== null ? sel.picker : ( tie ? null : ( pool[ 0 ] ? pool[ 0 ].id : null ) );
 
-	addNode( sc, a, lay.A, 'subject', { rabbit: true, side: en.sa } );
-	addNode( sc, b, lay.B, 'subject', { side: en.sb } );
+	addEnds( sc, a, b, lay, en, W );
 	if ( tie ) {
 		addLine( sc, a, b, tie, { o: lit === null ? 1 : 0.5, role: 'direct', emph: true, w: Math.max( 4.5, lineWidth( tie ) ) } );
 		placePills( sc, a, b, tie, lay.A.x + 48, lay.B.x - 48, lay.band.y, W > 900 ? 3 : ( W > 620 ? 2 : 1 ), lit === null ? 1 : 0.45, 140 );
@@ -225,13 +261,13 @@ function pairScene( a, b ) {
 		const pos = named ? lay.named[ i ] : lay.dots[ i - lay.named.length ];
 		const on = lit === m.id;
 		const picked = sel.picker !== null;
-		addNode( sc, m.id, pos, named ? 'named' : 'dot', { r: dotRadius( m.w ), lit: on, delay: named ? 120 + i * 45 : 330,
-			o: !picked || on || !named ? 1 : 0.55, m } );
+		addNode( sc, m.id, pos, named ? 'named' : 'dot', Object.assign( { r: dotRadius( m.w ), lit: on, delay: named ? 120 + i * 45 : 330,
+			o: !picked || on || !named ? 1 : 0.55, m }, named ? fitName( first( m.id ), pos.x, 4, W - 4, FONT.named ) : null ) );
 		const o = on ? 1 : ( named ? ( picked ? 0.28 : 0.9 ) : ( picked ? FAINT / 2 : FAINT ) );
 		const leg = { via: 'p' + m.id, o, quiet: !named && !on, emph: on, delay: named ? 160 + i * 45 : 360, role: 'leg', c: m.id };
 		addLine( sc, a, m.id, m.ta, leg );
 		addLine( sc, m.id, b, m.tb, leg );
-		if ( on ) {
+		if ( on && W >= 560 ) {
 			const ma = curveMid( lay.A, pos, pos.y ), mb = curveMid( pos, lay.B, pos.y );
 			const half = ( pos.x - lay.A.x ) - 44;
 			placePills( sc, a, m.id, m.ta, ma.x - half / 2, ma.x + half / 2, ma.y, 1, 1, 60 );
@@ -269,8 +305,7 @@ function ladderScene( a, b, W, H, sc ) {
 	sc.head = [ nameLink( a ), ' and ', nameLink( b ) ];
 	if ( !r ) {
 		const lay = K.ladder( { W, H, hops: 1, chains: 1, la: en.la, lb: en.lb } );
-		addNode( sc, a, lay.A, 'subject', { rabbit: true, side: en.sa } );
-		addNode( sc, b, lay.B, 'subject', { side: en.sb } );
+		addEnds( sc, a, b, lay, en, W );
 		sc.sub = [ 'No way between them yet: nobody the sources here know has played with someone who has, all the way across.' ];
 		sc.none = true;
 		return sc;
@@ -281,14 +316,26 @@ function ladderScene( a, b, W, H, sc ) {
 		on = 0;
 		sel.picker = null;
 	}
-	addNode( sc, a, lay.A, 'subject', { rabbit: true, side: en.sa } );
-	addNode( sc, b, lay.B, 'subject', { side: en.sb } );
+	if ( lay.upright ) {                                             // a phone: a at the top, b at the bottom, names beside
+		addNode( sc, a, lay.A, 'subject', { rabbit: true, side: 'right', label: cut( first( a ), FONT.subject, W - lay.A.x - 42 ) } );
+		addNode( sc, b, lay.B, 'subject', { side: 'right', label: cut( first( b ), FONT.subject, W - lay.B.x - 42 ) } );
+	} else {
+		addEnds( sc, a, b, lay, en, W );
+	}
+	const room = ( lay.B.x - lay.A.x ) / r.hops - 10;               // a hop's width: a name on the ladder keeps to its own rung
 	r.chains.forEach( ( chain, c ) => {
 		const row = c === on ? 0 : ( c < on ? c + 1 : c );          // the lit chain takes the middle row
 		chain.forEach( ( id, level ) => {
-			if ( level > 0 && level < r.hops ) {
-				addNode( sc, id, Object.assign( lay.at( row, level ), { below: row === 0 || row % 2 === 0 } ), 'named',
-					{ lit: c === on, o: c === on ? 1 : 0.6, delay: 120 + c * 60, chain: c } );
+			if ( level > 0 && level < r.hops && lay.upright ) {     // the lit chain named, beside; the others as beads
+				const at = lay.at( row, level );
+				addNode( sc, id, at, c === on ? 'named' : 'dot', c === on ?
+					{ lit: true, side: 'right', label: cut( first( id ), FONT.named, W - at.x - 30 ), delay: 120, chain: c } :
+					{ r: 6, o: 0.8, delay: 120 + c * 60, chain: c } );
+			} else if ( level > 0 && level < r.hops ) {
+				const at = lay.at( row, level );
+				addNode( sc, id, Object.assign( at, { below: row === 0 || row % 2 === 0 } ), 'named',
+					Object.assign( { lit: c === on, o: c === on ? 1 : 0.6, delay: 120 + c * 60, chain: c },
+						fitName( first( id ), at.x, Math.max( 4, at.x - room / 2 ), Math.min( W - 4, at.x + room / 2 ), FONT.named ) ) );
 			}
 		} );
 	} );
@@ -303,7 +350,7 @@ function ladderScene( a, b, W, H, sc ) {
 			}
 			addLine( sc, u, v, tie, { o: c === on ? 1 : 0.3, emph: c === on, role: 'hop', c: i === 0 ? v : u, delay: 160 + c * 60 } );
 			if ( c === on ) {
-				const span = Math.abs( pv.x - pu.x ) - 44;
+				const span = lay.upright ? Math.min( 230, W - 2 * Math.abs( W / 2 - pu.x ) - 16 ) : Math.abs( pv.x - pu.x ) - 44;
 				placePills( sc, u, v, tie, ( pu.x + pv.x ) / 2 - span / 2, ( pu.x + pv.x ) / 2 + span / 2, ( pu.y + pv.y ) / 2, 1, 1, 200 );
 			}
 		}
@@ -322,13 +369,14 @@ function egoScene( a ) {
 	if ( looseOnly ) {
 		comp = K.company( G, a, true );
 	}
-	const want = Math.min( comp.length, H > 560 && W > 700 ? 8 : ( W > 460 ? 6 : 4 ) );
+	const want = Math.min( comp.length, H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 ) );
 	const lay = K.ego( { W, H, named: want, dots: comp.length - want } );
 	addNode( sc, a, lay.C, 'subject', { rabbit: true, bare: true } );
 	comp.slice( 0, lay.named.length + lay.dots.length ).forEach( ( c, i ) => {
 		const named = i < lay.named.length;
 		addNode( sc, c.id, named ? lay.named[ i ] : lay.dots[ i - lay.named.length ], named ? 'named' : 'dot',
-			{ r: dotRadius( c.tie.w ), delay: named ? 80 + i * 40 : 300, tie: c.tie } );
+			Object.assign( { r: dotRadius( c.tie.w ), delay: named ? 80 + i * 40 : 300, tie: c.tie },
+				named ? fitName( first( c.id ), lay.named[ i ].x, 4, W - 4, FONT.named ) : null ) );
 		addLine( sc, a, c.id, c.tie, { o: named ? 0.9 : 0, quiet: !named, delay: named ? 120 + i * 40 : 300, role: 'spoke', c: c.id } );
 	} );
 	sc.company = comp;
@@ -370,7 +418,7 @@ const draw = {
 		g.setAttribute( 'aria-label', p.name + instOf( d.id ) );
 		( d.kind === 'dot' ? layers.dots : layers.nodes ).appendChild( g );
 		if ( d.kind === 'dot' ) {
-			g.appendChild( s( 'circle', { class: 'halo', r: Math.max( 12, d.r + 7 ) } ) );
+			g.appendChild( s( 'circle', { class: 'halo', r: coarse ? 15 : Math.max( 12, d.r + 7 ) } ) );
 			g.appendChild( s( 'circle', { class: 'dot' + ( p.page ? '' : ' hollow' ), r: d.r } ) );
 			return;
 		}
@@ -396,10 +444,10 @@ const draw = {
 			return;
 		}
 		const big = d.kind === 'subject';
-		const label = K.clip( p.name, 26 );
+		const label = d.label || K.clip( p.name, 26 );
 		const at = d.side === 'left' ? { x: -R - 12, y: 6, 'text-anchor': 'end' } :
 			d.side === 'right' ? { x: R + 12, y: 6, 'text-anchor': 'start' } :
-				{ y: d.below ? R + ( big ? 21 : 18 ) : -R - 8, 'text-anchor': 'middle' };
+				{ x: d.dx || 0, y: d.below ? R + ( big ? 21 : 18 ) : -R - 8, 'text-anchor': 'middle' };
 		g.appendChild( s( 'a', { href: pageUrl( p.name ), target: '_top', 'aria-label': p.name + ( p.page ? ': the page' : ': no page yet' ) },
 			s( 'text', at, label ) ) );
 	},
@@ -426,6 +474,9 @@ const draw = {
 		g.textContent = '';
 		g.setAttribute( 'class', 'pill ' + ( d.more ? 'more' : 't' + d.tier ) + ( d.lit ? ' lit' : '' ) );
 		layers.pills.appendChild( g );
+		if ( coarse ) {                                              // more to land on than can be seen
+			g.appendChild( s( 'rect', { class: 'reach', x: -d.w / 2 - 4, y: -21, width: d.w + 8, height: 42 } ) );
+		}
 		g.appendChild( s( 'rect', { x: -d.w / 2, y: -12, width: d.w, height: 24, rx: 12 } ) );
 		if ( d.more ) {
 			g.appendChild( s( 'text', { x: 0, y: 4.3, 'text-anchor': 'middle' }, d.label ) );
@@ -435,13 +486,34 @@ const draw = {
 		gl.setAttribute( 'transform', `translate(${ -d.w / 2 + 14 } 0)` );
 		g.appendChild( gl );
 		g.appendChild( s( 'text', { x: -d.w / 2 + 25, y: 4.3 }, d.label ) );
+		if ( d.play ) {                                              // a track that plays: the rabbit takes you there
+			const x = d.w / 2 - 37, say = 'Play ' + d.song + ' in Rabbithole';
+			const r = rabbit( 0.4 );
+			r.setAttribute( 'transform', `translate(${ x + 10.5 } 0.5) scale(0.4)` );
+			g.appendChild( s( 'a', { class: 'play', href: HOME + d.play, target: '_top', 'aria-label': say }, s( 'title', null, say ),
+				s( 'rect', { x, y: -9, width: 33, height: 18, rx: 9 } ), r, s( 'path', { class: 'tri', d: `M${ x + 21.5 } -4.5v9l7.5 -4.5z` } ) ) );
+		}
 	}
 };
 
+/** The way into Rabbithole, small: a rabbit and a play mark. */
+function playMark() {
+	const r = rabbit( 0.4 );
+	r.setAttribute( 'transform', 'translate(9 9.5) scale(0.4)' );
+	return s( 'svg', { class: 'pm', width: 30, height: 18, viewBox: '0 0 30 18', 'aria-hidden': 'true' }, r, s( 'path', { class: 'tri', d: 'M19.5 4.5v9l7.5 -4.5z' } ) );
+}
+
+/** Beside a track's name, wherever it's written: the button that plays it in Rabbithole, when it plays there. */
+function playButton( m, song ) {
+	const to = K.playOf( G, m, song );
+	return to ? h( 'a', { class: 'play', href: HOME + to, target: '_top', title: 'Play ' + song + ' in Rabbithole',
+		'aria-label': 'Play ' + song + ' in Rabbithole' }, playMark() ) : null;
+}
+
 const sig = {
-	node: ( d ) => [ d.kind, d.lit, d.below, d.rabbit, d.side, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) : '' ].join( '|' ),
+	node: ( d ) => [ d.kind, d.lit, d.below, d.rabbit, d.side, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) : '', d.label, d.dx ].join( '|' ),
 	line: ( d ) => [ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph ].join( '|' ),
-	pill: ( d ) => [ d.label, d.tier, d.lit, d.glyph, d.w.toFixed( 0 ) ].join( '|' )
+	pill: ( d ) => [ d.label, d.tier, d.lit, d.glyph, d.w.toFixed( 0 ), d.play ].join( '|' )
 };
 
 function sync( kind, next, now ) {
@@ -569,7 +641,7 @@ function evidence( tie, limit ) {
 	const rows = tie.ev.slice( 0, limit || tie.ev.length ).map( ( e ) => {
 		const m = G.music[ e.m ], n = K.naming( G, e );
 		const songs = e.songs.length ? e.songs.slice( 0, 4 ).map( ( song, i ) => [ i ? ', ' : '', G.songs[ song ] ?
-			h( 'a', { href: wikiUrl( G.songs[ song ] ), target: '_top' }, song ) : '“' + K.clip( song, 60 ) + '”' ] )
+			h( 'a', { href: wikiUrl( G.songs[ song ] ), target: '_top' }, song ) : '“' + K.clip( song, 60 ) + '”', playButton( m, song ) ] )
 			.concat( e.songs.length > 4 ? [ ` and ${ e.songs.length - 4 } more` ] : [] ) : null;
 		return h( 'li', { class: 'go' + ( sel.music === e.m ? ' hot' : '' ), onclick: ( ev ) => {
 			if ( !ev.target.closest( 'a' ) ) {
@@ -623,7 +695,7 @@ function musicPanel( mId, pair ) {
 		shared && shared.songs.length ? [ h( 'h3', null, `${ first( pair[ 0 ] ) } & ${ first( pair[ 1 ] ) }, together on` ),
 			h( 'ul', null, shared.songs.slice( 0, 40 ).map( ( song ) => h( 'li', null, h( 'span', { class: 'mark' }, glyphBox( 'track' ) ),
 				h( 'span', { class: 'body' }, G.songs[ song ] ? h( 'a', { class: 't', href: wikiUrl( G.songs[ song ] ), target: '_top' }, song ) :
-					h( 'span', { class: 't' }, song ) ) ) ) ) ] : null,
+					h( 'span', { class: 't' }, song ), playButton( m, song ) ) ) ) ) ] : null,
 		h( 'h3', null, `On it, of the pickers here · ${ on.length }` ),
 		h( 'ul', null, on.slice( 0, 60 ).map( ( [ id, roles ] ) => h( 'li', { class: 'go', onclick: ( ev ) => {
 			if ( !ev.target.closest( 'a' ) ) {
@@ -724,6 +796,7 @@ function show( quick ) {
 	const q = new URLSearchParams( view.b === undefined ? { p: first( view.a ) } : { a: first( view.a ), b: first( view.b ) } );
 	history.replaceState( null, '', '?' + q );
 	document.title = label( view ) + ' · the connectome';
+	closeSheet();
 	hush();
 }
 
@@ -738,14 +811,25 @@ function go( v ) {
 		trail.shift();
 	}
 	show();
+	if ( narrow() && window.scrollY > 40 ) {                        // asked for from the list, under the graph: up to the graph
+		window.scrollTo( 0, 0 );
+	}
 }
 
-function choose( what ) {
-	Object.assign( sel, what );
-	if ( what.picker !== undefined && what.music === undefined ) {
+function choose( picked ) {
+	Object.assign( sel, picked );
+	if ( picked.picker !== undefined && picked.music === undefined ) {
 		sel.music = null;
 	}
 	show();
+	if ( narrow() ) {                                                // the list is under the graph: bring what changed into sight
+		const smooth = still ? 'auto' : 'smooth';
+		if ( sel.music !== null ) {
+			panel.scrollIntoView( { block: 'start', behavior: smooth } );
+		} else if ( window.scrollY > 0 ) {
+			window.scrollTo( { top: 0, behavior: smooth } );
+		}
+	}
 }
 
 function back() {
@@ -778,7 +862,7 @@ function say( at, title, lines, hint ) {
 
 function hush() {
 	tip.hidden = true;
-	svg.querySelectorAll( '.hot' ).forEach( ( e ) => e.classList.remove( 'hot' ) );
+	svg.querySelectorAll( '.hot, .held' ).forEach( ( e ) => e.classList.remove( 'hot', 'held' ) );
 }
 
 /** Light a picker and the lines that reach them. */
@@ -804,104 +888,254 @@ function tieLines( u, v ) {
 	return [ `with ${ first( u ) }: ${ K.times( t ) }` + ( top && t.ev.length === 1 ? ` (${ K.clip( top.short, 40 ) })` : '' ) ];
 }
 
-function hover( g ) {
-	const kind = g.dataset.kind, it = live[ kind ].get( g.dataset.k );
-	if ( !it || it.dead ) {
-		return;
-	}
-	const d = it.d;
-	if ( kind === 'node' ) {
-		warm( g.dataset.k, true );
-		const title = first( d.id ) + instOf( d.id );
-		if ( view.b === undefined ) {
-			if ( d.id === view.a ) {
-				say( g, title, [ P( d.id ).page ? '' : 'no page yet' ], 'click anyone around them: what the two share' );
-			} else {
-				const top = K.naming( G, d.tie.ev[ 0 ] );
-				say( g, title, [ K.together( d.tie ), K.clip( top.short, 44 ) + ( d.tie.ev.length > 1 ? `, and ${ d.tie.ev.length - 1 } more` : '' ) ],
-					'click: what they share with ' + first( view.a ) );
-			}
-		} else if ( d.id === view.a || d.id === view.b ) {
-			say( g, title, [ K.plural( K.company( G, d.id ).length, 'picker' ) + ' played with' ], 'click: their whole company · the name goes to the page' );
+/* ------------------------------------------------------------------------------------------------------------
+ * What a mark stands for: a picker, a piece of music, or a tie (connectome-core.js's notes say why it is
+ * asked this way). Each answer has the same parts:
+ *
+ *   kind    a word or two for what it is
+ *   title   its name
+ *   lines   what the sources say of it, here
+ *   hint    what a click does, for the note beside a pointer
+ *   acts    the ways on from it, the first being what a click does: { label, run } goes further into the
+ *           graph; { label, href, kind: 'page' | 'play' | 'source' } leaves for a page, Rabbithole or a source
+ * --------------------------------------------------------------------------------------------------------- */
+
+const act = ( label, run ) => ( { label, run, kind: 'in' } );
+const link = ( label, href, kind ) => ( { label, href, kind } );
+const pageAct = ( id ) => link( P( id ).page ? first( id ) + "'s page" : 'Start ' + first( id ) + "'s page", pageUrl( first( id ) ), 'page' );
+
+function aPicker( d ) {
+	const id = d.id, name = first( id );
+	const w = { kind: 'a picker' + instOf( id ), title: name, tipTitle: name + instOf( id ), lines: [], hint: '', acts: [] };
+	if ( view.b === undefined ) {
+		if ( id === view.a ) {
+			w.lines.push( P( id ).page ? '' : 'no page yet' );
+			w.hint = 'click anyone around them: what the two share';
 		} else {
-			say( g, title, [ ...tieLines( view.a, d.id ), ...tieLines( view.b, d.id ) ],
-				scene.chain ? 'click: light this way across' : ( d.lit && sel.picker === d.id ? 'click again to let go' : 'click: light the way through ' + first( d.id ) ) );
+			const top = K.naming( G, d.tie.ev[ 0 ] );
+			w.lines.push( K.together( d.tie ), K.clip( top.short, 44 ) + ( d.tie.ev.length > 1 ? `, and ${ d.tie.ev.length - 1 } more` : '' ) );
+			w.hint = 'click: what they share with ' + first( view.a );
+			w.acts.push( act( `${ name } & ${ first( view.a ) }: what they share`, () => go( { a: view.a, b: id } ) ),
+				act( name + "'s company", () => go( { a: id } ) ) );
 		}
-	} else if ( kind === 'pill' ) {
-		g.classList.add( 'hot' );
-		if ( d.more ) {
-			say( g, d.label, [ 'everything they share is in the list' ], '' );
-		} else {
-			const m = G.music[ d.e.m ], n = K.naming( G, d.e );
-			say( g, n.short, [ n.long !== n.short ? n.long : '', d.e.songs.length > 1 ? d.e.songs.slice( 0, 6 ).join( ', ' ) + ( d.e.songs.length > 6 ? ', …' : '' ) : '',
-				K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) ], "click: who's on it" );
-		}
-	} else if ( kind === 'line' && !d.quiet ) {
-		g.classList.add( 'hot' );
-		const t = d.tie, top = K.naming( G, t.ev[ 0 ] );
-		say( g, `${ first( d.u ) } & ${ first( d.v ) }`, [ K.together( t ), K.clip( top.short, 44 ) + ( t.ev.length > 1 ? `, and ${ t.ev.length - 1 } more` : '' ) ],
-			d.role === 'direct' ? '' : ( view.b === undefined ? 'click: open these two' : 'click: light this way across' ) );
+	} else if ( id === view.a || id === view.b ) {
+		w.lines.push( K.plural( K.company( G, id ).length, 'picker' ) + ' played with' );
+		w.hint = 'click: their whole company · the name goes to the page';
+		w.acts.push( act( name + "'s whole company", () => go( { a: id } ) ) );
+	} else {
+		const on = sel.picker === id;
+		w.lines.push( ...tieLines( view.a, id ), ...tieLines( view.b, id ) );
+		w.hint = scene.chain ? 'click: light this way across' : ( d.lit && on ? 'click again to let go' : 'click: light the way through ' + name );
+		w.acts.push( act( scene.chain ? 'Light this way across' : ( on ? 'Let go of ' + name : 'Light the way through ' + name ),
+			() => choose( { picker: on ? null : id } ) ), act( name + "'s company", () => go( { a: id } ) ) );
 	}
+	w.acts.push( pageAct( id ) );
+	return w;
 }
 
-function click( g ) {
-	const kind = g.dataset.kind, it = live[ kind ].get( g.dataset.k );
-	if ( !it || it.dead ) {
-		return;
-	}
-	const d = it.d;
-	if ( kind === 'node' ) {
-		if ( view.b === undefined ) {
-			if ( d.id !== view.a ) {
-				go( { a: view.a, b: d.id } );
-			}
-		} else if ( d.id === view.a || d.id === view.b ) {
-			go( { a: d.id } );
-		} else {
-			choose( { picker: sel.picker === d.id ? null : d.id } );
-		}
-	} else if ( kind === 'pill' ) {
-		if ( d.more ) {
+function aPiece( d ) {
+	if ( d.more ) {
+		return { kind: 'more of the same', title: d.label, lines: [ 'everything they share is in the list' ], hint: '', acts: [ act( 'See the list', () => {
 			choose( { picker: d.u === view.a && d.v === view.b ? null : sel.picker, music: null } );
 			const top = $( 'together' );
 			if ( top ) {
 				top.scrollIntoView( { block: 'start' } );
 			}
-		} else {
-			choose( { music: sel.music === d.e.m ? null : d.e.m, pair: [ d.u, d.v ] } );
+		} ) ] };
+	}
+	const m = G.music[ d.e.m ], n = K.naming( G, d.e ), on = sel.music === d.e.m;
+	const w = { kind: m.kind === 'show' ? 'a show' : ( n.glyph === 'track' ? ( d.e.songs.length > 1 ? 'tracks on a record' : 'a track' ) : 'a record' ),
+		title: n.short, lines: [ n.long !== n.short ? n.long : '', d.e.songs.length > 1 ? d.e.songs.slice( 0, 6 ).join( ', ' ) + ( d.e.songs.length > 6 ? ', …' : '' ) : '',
+			K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) ], hint: "click: who's on it",
+		acts: [ act( on ? `Back to ${ first( d.u ) } & ${ first( d.v ) }` : "Who's on it", () => choose( { music: on ? null : d.e.m, pair: [ d.u, d.v ] } ) ) ] };
+	for ( const song of d.e.songs.slice( 0, 3 ) ) {
+		const to = K.playOf( G, m, song );
+		if ( to ) {
+			w.acts.push( link( 'Play ' + song, HOME + to, 'play' ) );
 		}
-	} else if ( kind === 'line' ) {
-		if ( view.b === undefined ) {
-			go( { a: view.a, b: d.c } );
-		} else if ( d.role === 'direct' ) {
+	}
+	if ( m.page ) {
+		w.acts.push( link( m.kind === 'show' ? "The show's page" : "The record's page", wikiUrl( m.page ), 'page' ) );
+	}
+	if ( m.source ) {
+		w.acts.push( link( 'Check it at ' + sourceName( m.source ) + ' ↗', m.source, 'source' ) );
+	}
+	return w;
+}
+
+function aTie( d ) {
+	const t = d.tie, top = K.naming( G, t.ev[ 0 ] );
+	const w = { kind: 'two pickers', title: `${ first( d.u ) } & ${ first( d.v ) }`,
+		lines: [ K.together( t ), K.clip( top.short, 44 ) + ( t.ev.length > 1 ? `, and ${ t.ev.length - 1 } more` : '' ) ], hint: '', acts: [] };
+	if ( view.b === undefined ) {
+		w.hint = 'click: open these two';
+		w.acts.push( act( 'Open these two', () => go( { a: view.a, b: d.c } ) ) );
+	} else if ( d.role === 'direct' ) {
+		w.acts.push( act( 'Everything they share', () => {
 			choose( { picker: null, music: null } );
-		} else {
-			choose( { picker: d.c } );
-		}
+			if ( narrow() && $( 'together' ) ) {
+				$( 'together' ).scrollIntoView( { block: 'start' } );
+			}
+		} ) );
+	} else {
+		w.hint = 'click: light this way across';
+		w.acts.push( act( 'Light this way across', () => choose( { picker: d.c } ) ), act( 'Open these two', () => go( { a: d.u, b: d.v } ) ) );
+	}
+	return w;
+}
+
+function what( g ) {
+	const kind = g.dataset.kind, it = live[ kind ].get( g.dataset.k );
+	if ( !it || it.dead ) {
+		return null;
+	}
+	return kind === 'node' ? aPicker( it.d ) : ( kind === 'pill' ? aPiece( it.d ) : ( it.d.quiet ? null : aTie( it.d ) ) );
+}
+
+function hover( g ) {
+	const w = what( g );
+	if ( !w ) {
+		return;
+	}
+	if ( g.dataset.kind === 'node' ) {
+		warm( g.dataset.k, true );
+	} else {
+		g.classList.add( 'hot' );
+	}
+	say( g, w.tipTitle || w.title, w.lines, w.hint );
+}
+
+function click( g ) {
+	const w = what( g ), go1 = w && w.acts[ 0 ];
+	if ( go1 && go1.run ) {
+		go1.run();
 	}
 }
 
+/* ------------------------------------------------------------------------------------------------------------
+ * A finger. It can't hover, so its first touch asks and doesn't act: a sheet says what was touched, with every
+ * way on from it as a button and × (or a touch on the open graph) to go back to exploring. A second touch on
+ * the same mark does what a click does. A finger is blunt, too: the picker nearest the touch is the one meant,
+ * not whichever bead's halo happens to lie on top.
+ * --------------------------------------------------------------------------------------------------------- */
+
+function openSheet( g ) {
+	const w = what( g );
+	if ( !w ) {
+		return;
+	}
+	closeSheet();
+	held = g.dataset.k;
+	g.classList.add( 'held' );
+	if ( g.dataset.kind === 'node' ) {
+		warm( held, true );
+	} else {
+		g.classList.add( 'hot' );
+	}
+	const go1 = w.acts[ 0 ];
+	sheet.replaceChildren( ...[
+		h( 'button', { type: 'button', class: 'x', 'aria-label': 'Back to the graph', onclick: closeSheet }, '×' ),
+		h( 'div', { class: 'k' }, w.kind ),
+		h( 'b', null, w.title ),
+		...w.lines.filter( Boolean ).map( ( l ) => h( 'div', { class: 'l' }, l ) ),
+		h( 'div', { class: 'acts' }, w.acts.map( ( a ) => a.href ?
+			h( 'a', { class: a.kind, href: a.href, target: a.kind === 'source' ? '_blank' : '_top', rel: a.kind === 'source' ? 'noopener' : null },
+				a.kind === 'play' ? playMark() : null, a.label ) :
+			h( 'button', { type: 'button', class: a === go1 ? 'in first' : 'in', onclick: () => {
+				closeSheet();
+				a.run();
+			} }, a.label ) ) ),
+		go1 && go1.run ? h( 'div', { class: 'again' }, 'or touch it again' ) : null ].filter( Boolean ) );
+	const at = g.getBoundingClientRect(), box = stage.getBoundingClientRect();
+	sheet.classList.toggle( 'up', at.top + at.height / 2 > box.top + box.height * 0.58 );    // out of the way of what it's about
+	sheet.hidden = false;
+}
+
+function closeSheet() {
+	if ( held !== null ) {
+		held = null;
+		sheet.hidden = true;
+		hush();
+	}
+}
+
+/** The mark a pointer is on; for a finger, the picker nearest it within reach, before any line or bead under it. */
+function pick( e ) {
+	const g = e.target.closest( '[data-k]' );
+	if ( !fingers || ( g && g.dataset.kind === 'pill' ) ) {
+		return g;
+	}
+	const box = svg.getBoundingClientRect();
+	const x = e.clientX - box.left, y = e.clientY - box.top;
+	let best = null, reach = 30;
+	for ( const [ , it ] of live.node ) {
+		const dist = it.dead || it.o < 0.05 ? Infinity : Math.hypot( it.x - x, it.y - y );
+		if ( dist < reach ) {
+			reach = dist;
+			best = it.el;
+		}
+	}
+	return best || g;
+}
+
+document.addEventListener( 'pointerdown', ( e ) => {
+	fingers = e.pointerType === 'touch' || e.pointerType === 'pen';
+}, true );
 svg.addEventListener( 'pointerover', ( e ) => {
+	if ( e.pointerType && e.pointerType !== 'mouse' ) {
+		return;                                                      // a finger doesn't hover: its touch opens the sheet
+	}
 	const g = e.target.closest( '[data-k]' );
 	hush();
 	if ( g ) {
 		hover( g );
 	}
 } );
-svg.addEventListener( 'pointerleave', hush );
+svg.addEventListener( 'pointerleave', () => {
+	if ( held === null ) {
+		hush();
+	}
+} );
 svg.addEventListener( 'focusin', ( e ) => {
+	if ( fingers ) {
+		return;                                                      // a touch gives the mark the focus too: the sheet answers it
+	}
 	const g = e.target.closest( '[data-k]' );
 	hush();
 	if ( g ) {
 		hover( g );
 	}
 } );
-svg.addEventListener( 'focusout', hush );
-svg.addEventListener( 'click', ( e ) => {
-	if ( e.target.closest( 'a' ) ) {
-		return;                                                      // a name: the browser goes to the page
+svg.addEventListener( 'focusout', () => {
+	if ( held === null ) {
+		hush();
 	}
-	const g = e.target.closest( '[data-k]' );
+} );
+svg.addEventListener( 'click', ( e ) => {
+	const a = e.target.closest( 'a' );
+	if ( a && !( fingers && a.closest( '.pk' ) ) ) {
+		return;                                                      // a name, or the way into Rabbithole: the browser goes
+	}
+	if ( a ) {
+		e.preventDefault();                                          // a finger on a name: say who first; the page is a button on the sheet
+	}
+	const g = pick( e );
+	if ( fingers ) {
+		if ( svg.contains( document.activeElement ) ) {
+			document.activeElement.blur();                           // a touch isn't the keyboard: no ring left round the mark
+		}
+		if ( g && g.dataset.k === held ) {                           // touched again: go on in
+			closeSheet();
+			click( g );
+		} else if ( g ) {
+			openSheet( g );
+		} else if ( held !== null ) {
+			closeSheet();
+		} else if ( sel.picker !== null || sel.music !== null ) {
+			choose( { picker: null, music: null } );
+		}
+		return;
+	}
 	if ( g ) {
 		click( g );
 	} else if ( sel.picker !== null || sel.music !== null ) {
@@ -920,7 +1154,9 @@ document.addEventListener( 'keydown', ( e ) => {
 	if ( e.key !== 'Escape' ) {
 		return;
 	}
-	if ( sel.picker !== null || sel.music !== null ) {
+	if ( held !== null ) {
+		closeSheet();
+	} else if ( sel.picker !== null || sel.music !== null ) {
 		choose( { picker: null, music: null } );
 	} else if ( window.parent !== window ) {
 		window.parent.postMessage( { connectome: 'close' }, location.origin );
@@ -978,5 +1214,8 @@ fetch( 'graph.json' ).then( ( r ) => {
 		go( b === null ? { a } : { a, b } );
 	}
 } ).catch( ( err ) => {
-	$( 'wait' ).textContent = "The connectome couldn't be loaded (" + err.message + '). Try again in a moment.';
+	// #wait is gone once the graph is read: an error after that still has to be said somewhere, and seen in the console.
+	const where = $( 'wait' ) || stage.appendChild( h( 'div', { id: 'wait' } ) );
+	where.textContent = "The connectome couldn't be loaded (" + err.message + '). Try again in a moment.';
+	console.error( err );
 } );

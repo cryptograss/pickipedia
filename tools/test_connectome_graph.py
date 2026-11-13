@@ -65,9 +65,9 @@ TARGETS = {
 }
 
 
-def _export(pairs, credits=(), featured=('Kyle Tuttle',), pages=None):
+def _export(pairs, credits=(), featured=('Kyle Tuttle',), pages=None, plays=None):
     return cg.export(pairs, TARGETS, list(credits), lambda n: n in ('Kyle Tuttle', 'Molly Tuttle'), {'Kyle Tuttle': 'banjo'},
-                     list(featured), '2026-11', cc.song, pages or {}, '2026-11-13')
+                     list(featured), '2026-11', cc.song, pages or {}, '2026-11-13', plays)
 
 
 def test_export_keeps_one_entry_a_show_the_closest_way_they_are_together():
@@ -115,3 +115,12 @@ def test_the_pages_asked_after_are_cryptograsss_records_and_their_songs():
     pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'silver-44'), ('u', '', 'victory-ff7')]),
              pair('A', 'B', 'track', 'lma:tape1', [('u', '', '01. Not [a] title')])]
     assert cg.arthel_pages(pairs, TARGETS, cc.song) == ['4masks', 'Song:Silver 44', 'Song:Victory']
+
+
+def test_only_a_cryptograss_records_own_track_plays_in_rabbithole():
+    pairs = [pair('Kyle Tuttle', 'Justin Myles Holmes', 'track', 'arthel:4masks', [('gh/silver-44.yaml', '', 'silver-44')]),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'track', 'lma:tape2', [('https://archive.org/details/tape2', '', '01. Silver 44')]),
+             pair('Molly Tuttle', 'Vickie Vaughn', 'track', 'discogs:7', [('u', '9', 'Victory')])]
+    plays = {'Silver 44': 'QmSilver', '01. Silver 44': 'QmTaped', 'Victory': 'QmVictory', 'Unasked': 'QmNo'}
+    assert _export(pairs, plays=plays)['plays'] == {'Silver 44': 'QmSilver'}      # not the tape's take, nor another label's record
+    assert _export(pairs)['plays'] == {}
