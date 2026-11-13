@@ -26,6 +26,20 @@ html.bs-root {
 	box-sizing: border-box;
 }
 
+/* Core colours a heading and a link for white paper: a heading black, a link blue, navy once visited,
+   orange while pressed. Here a heading is the colour of the words around it, and a link is the
+   wiki-page blue in every state, unless its part of the page says otherwise further down.
+
+   A rule that colours a link names the element too (a.bs-author, not .bs-author). Core's a:visited
+   outranks a class alone, so a link coloured by its class alone turns navy once the reader has been
+   where it leads, which on the dark paper is near-black on black. No measurement shows it: a browser
+   never tells a script a visited link's colour. tests/check-posts.php looks for such a rule instead. */
+.skin-broadside :where( h1, h2, h3, h4, h5, h6, .mw-heading ) { color: inherit; }
+.skin-broadside a,
+.skin-broadside a:where( :visited, :active ) { color: var( --bs-link ); }
+.skin-broadside a.new,
+.skin-broadside a.new:where( :visited, :active ) { color: var( --bs-link-new ); }
+
 /* What the old zine script still puts on a user subpage, until MediaWiki:Common.js loses it. */
 .skin-broadside .pp-corner-logo,
 .skin-broadside .pickipedia-topbar,
@@ -89,7 +103,7 @@ html.bs-root {
 	padding: 0.5rem clamp( 0.75rem, 3vw, 1.75rem );
 }
 
-.bs-brand {
+a.bs-brand {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.55rem;
@@ -141,7 +155,9 @@ html.bs-root {
 	border-bottom: 1px dotted currentColor;
 }
 .bs-tools-list a:hover { color: var( --bs-rust ); }
-.bs-tools-list a.new { color: var( --bs-muted ); opacity: 0.75; }
+/* A page nobody has started (the talk page, most often): as quiet as the rest, and without the line
+   under it. Not dimmer: these words are small, and any dimmer they can't be read (they were, at 3 to 1). */
+.bs-tools-list a.new { color: var( --bs-muted ); border-bottom-color: transparent; }
 
 .bs-btn {
 	appearance: none;

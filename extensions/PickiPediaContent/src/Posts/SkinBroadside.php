@@ -218,7 +218,6 @@ class SkinBroadside extends \SkinMustache {
 
 		$author = self::blanksGone( PostData::author( $user ) );
 		$author['initial'] = mb_strtoupper( mb_substr( $author['name'], 0, 1 ) );
-		$author['label-user'] = $title->getNsText() . ':' . $user;
 
 		// The rail: what else they have written, newest first; past the first few, behind a fold.
 		$shelf = Post::shelf( $writings, $mine, 200 );

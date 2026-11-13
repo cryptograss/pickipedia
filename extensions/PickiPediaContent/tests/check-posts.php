@@ -144,6 +144,23 @@ same( 'so the track is its own', Post::trackIn( $links ), $wide );
 same( 'a track among other parameters', Post::trackIn( [ 'https://pickipedia.xyz/rabbithole/?record=' . $tall . '&track=' . $wide . '#t=10' ] ), $wide );
 same( 'a name is not a track, nor is another page', Post::trackIn( [ '/rabbithole/?track=august', '/wiki/Song:August' ] ), '' );
 
+echo "\nWhat is charted in Rabbithole\n";
+$parts = [ '0' => [ 'part' => 'intro' ], '7.2' => [ 'part' => 'A' ] ];
+same( 'a timeline of parts', Post::charted( [ 'timeline' => $parts, 'ensemble' => [] ] ), true );
+same( 'the empty one a new metadata page has', Post::charted( [ 'timeline' => [], 'ensemble' => [] ] ), false );
+same( 'one entry is no chart', Post::charted( [ 'timeline' => [ '0' => [ 'part' => 'intro' ] ] ] ), false );
+same( "arthel's tree: the first version's first release",
+	Post::charted( [ 'studio_versions' => [ 'v1' => [ 'a record' => [ 'rabbithole' => [ 'timeline' => $parts ] ] ] ] ] ), true );
+same( 'the tree with nothing charted in it',
+	Post::charted( [ 'studio_versions' => [ 'v1' => [ 'a record' => [ 'ensemble' => [ 'a picker' => 'guitar' ] ] ] ] ] ), false );
+same( 'a page with an ensemble is read flat, as Rabbithole reads it, whatever tree it also has',
+	Post::charted( [ 'ensemble' => [ 'a picker' => 'guitar' ],
+		'studio_versions' => [ 'v1' => [ 'a record' => [ 'rabbithole' => [ 'timeline' => $parts ] ] ] ] ] ), false );
+same( 'so is one whose timeline is there and empty',
+	Post::charted( [ 'timeline' => [], 'studio_versions' => [ 'v1' => [ 'a record' => [ 'rabbithole' => [ 'timeline' => $parts ] ] ] ] ] ), false );
+same( 'a timeline that is only a word is no chart', Post::charted( [ 'timeline' => 'soon' ] ), false );
+same( 'nor is nothing, or what is no YAML map', [ Post::charted( null ), Post::charted( 'timeline' ), Post::charted( [] ) ], [ false, false, false ] );
+
 echo "\nWhat magenta says of its tiding\n";
 $magenta = 'https://magenta.cryptograss.live';
 $tiding = $magenta . '/tidings/3f0c5a52-1111-4222-8333-444455556666/';
@@ -155,9 +172,9 @@ same( 'a tiding nothing more is said of (a magenta older than ?recent)', Post::t
 $found = Post::tiding( [
 	'tiding' => $tiding, 'title' => 'My Long Forgotten Dream', 'score' => '7', 'comments' => 12,
 	'recent' => [
-		[ 'who' => ' blu ', 'text' => "Three shows.\n\nI can add the setlists.", 'href' => $tiding . '#c-1', 'at' => '2026-11-13T20:00:00Z',
+		[ 'who' => ' an emergent ', 'text' => "Three shows.\n\nI can add the setlists.", 'href' => $tiding . '#c-1', 'at' => '2026-11-13T20:00:00Z',
 			'block' => 26408100, 'kind' => 'emergent', 'colour' => '#1976d2' ],
-		[ 'who' => 'justin', 'text' => '<b>Yes</b> please.', 'href' => 'https://example.com/elsewhere', 'at' => 'yesterday',
+		[ 'who' => 'a reader', 'text' => '<b>Yes</b> please.', 'href' => 'https://example.com/elsewhere', 'at' => 'yesterday',
 			'block' => 'soon', 'kind' => 'person', 'colour' => 'red; background: url(x)' ],
 		[ 'who' => 'nobody', 'text' => '   ' ],
 		[ 'who' => 'no words' ],
@@ -167,16 +184,16 @@ $found = Post::tiding( [
 same( 'its address, title and counts', [ $found['url'], $found['title'], $found['score'], $found['comments'] ],
 	[ $tiding, 'My Long Forgotten Dream', 7, 12 ] );
 same( 'what was said, as paragraphs of words, by whom and when', $found['said'][0], [
-	'who' => 'blu', 'paragraphs' => [ 'Three shows.', 'I can add the setlists.' ], 'href' => $tiding . '#c-1',
+	'who' => 'an emergent', 'paragraphs' => [ 'Three shows.', 'I can add the setlists.' ], 'href' => $tiding . '#c-1',
 	'at' => '2026-11-13T20:00:00Z', 'block' => 26408100, 'emergent' => true, 'colour' => '#1976d2',
 ] );
 same( 'an address elsewhere becomes the tiding, and what is not a time, a block or a colour is dropped', $found['said'][1], [
-	'who' => 'justin', 'paragraphs' => [ '<b>Yes</b> please.' ], 'href' => $tiding, 'at' => '', 'block' => 0, 'emergent' => false, 'colour' => '',
+	'who' => 'a reader', 'paragraphs' => [ '<b>Yes</b> please.' ], 'href' => $tiding, 'at' => '', 'block' => 0, 'emergent' => false, 'colour' => '',
 ] );
 same( 'rows with no words or no shape are left out', count( $found['said'] ), 2 );
 $many = [];
 for ( $i = 1; $i <= 11; $i++ ) {
-	$many[] = [ 'who' => 'rj', 'text' => "Said $i." ];
+	$many[] = [ 'who' => 'a reader', 'text' => "Said $i." ];
 }
 $found = Post::tiding( [ 'tiding' => $tiding, 'recent' => $many ], $magenta );
 same( 'the last eight at most', [ count( $found['said'] ), $found['said'][7]['paragraphs'] ], [ 8, [ 'Said 11.' ] ] );
@@ -188,6 +205,65 @@ $long = Post::paragraphs( str_repeat( 'word ', 200 ), 50 );
 check( 'cut at a word, with a mark that they were', count( $long ) === 1 && mb_strlen( $long[0] ) <= 51
 	&& str_ends_with( $long[0], 'word…' ), json_encode( $long, JSON_UNESCAPED_UNICODE ) );
 same( 'nothing said is no paragraphs', Post::paragraphs( " \n ", 420 ), [] );
+
+echo "\nA link keeps its colour once visited\n";
+/**
+ * The rules in a stylesheet that colour a link by its class alone (".bs-author { color: … }").
+ *
+ * Core's "a:visited" (navy, meant for white paper) outranks a class alone, so such a link turns navy once the
+ * reader has been where it leads: the wiki's name and the author's, near-black on the dark paper, at eaf8700.
+ * No measurement in a browser shows it, since a script is never told a visited link's colour; so the rule
+ * itself is looked for. Written "a.bs-author", it ties with core's, and the later of the two, ours, wins.
+ *
+ * @param string $css
+ * @param string[] $classes the classes that are put on links
+ * @return string[] the selectors at fault
+ */
+function bareLinkColours( string $css, array $classes ): array {
+	$css = preg_replace( '#/\*.*?\*/#s', '', $css );
+	preg_match_all( '/([^{}]+)\{([^{}]*)\}/', $css, $rules, PREG_SET_ORDER );
+	$found = [];
+	foreach ( $rules as [ , $selectors, $body ] ) {
+		if ( !preg_match( '/(^|;)\s*color\s*:/', $body ) ) {
+			continue;
+		}
+		// Each selector of the list: a comma inside :is( … ) is not between two of them.
+		foreach ( preg_split( '/,(?![^()]*\))/', $selectors ) as $selector ) {
+			$selector = trim( $selector );
+			if ( preg_match( '/^\.([\w-]+)$/', $selector, $m ) && in_array( $m[1], $classes, true ) ) {
+				$found[] = $selector;
+			}
+		}
+	}
+	return $found;
+}
+$skin = dirname( __DIR__ );
+$onLinks = [];
+preg_match_all( '/<a\b[^>]*?\bclass="([^"]+)"/', (string)file_get_contents( $skin . '/templates/broadside/skin.mustache' ), $inTemplate );
+preg_match_all( "/\\bel\\( 'a', '([^']+)'/", (string)file_get_contents( $skin . '/resources/skins.broadside/broadside.js' ), $inScript );
+foreach ( array_merge( $inTemplate[1], $inScript[1] ) as $list ) {
+	foreach ( preg_split( '/\s+/', trim( $list ) ) as $class ) {
+		if ( preg_match( '/^[\w-]+$/', $class ) ) {
+			$onLinks[$class] = true;
+		}
+	}
+}
+$onLinks = array_keys( $onLinks );
+check( 'the classes on links are found, in the template and in the script',
+	!array_diff( [ 'bs-brand', 'bs-author', 'bs-tidingcard', 'bs-card-in' ], $onLinks ), json_encode( $onLinks ) );
+same( 'a rule that colours a link by its class alone is seen',
+	bareLinkColours( "/* x */ .bs-brand { font: 1rem serif; color: red }\n@media ( min-width: 1px ) { .bs-other, .bs-author { color: blue; } }",
+		[ 'bs-brand', 'bs-author' ] ), [ '.bs-brand', '.bs-author' ] );
+same( 'and one that names the element, or only sets something else, is not',
+	bareLinkColours( "a.bs-brand { color: red } .bs-brand:hover { color: red } .bs-author { background-color: red; text-decoration-color: red }"
+		. " .bs-top :is( .bs-brand, a ) { color: red }", [ 'bs-brand', 'bs-author' ] ), [] );
+$atFault = [];
+foreach ( glob( $skin . '/resources/skins.broadside/*.css' ) as $sheet ) {
+	foreach ( bareLinkColours( (string)file_get_contents( $sheet ), $onLinks ) as $selector ) {
+		$atFault[] = basename( $sheet ) . ': ' . $selector;
+	}
+}
+same( "none of Broadside's stylesheets has one", $atFault, [] );
 
 echo $failures ? "\ncheck-posts.php: $failures FAILED\n" : "\ncheck-posts.php: all ok\n";
 exit( $failures ? 1 : 0 );

@@ -209,7 +209,7 @@
 /* ---- The tiding ---- */
 
 /* Beside the post: that it is on Tidings, and the way there. In magenta's colours: it is magenta's. */
-.bs-tidingcard {
+a.bs-tidingcard {
 	display: grid;
 	gap: 0.3rem;
 	padding: 0.9rem 1rem;
@@ -349,7 +349,7 @@
 		transform: translateY( 4px );
 	}
 }
-.bs-card-in {
+a.bs-card-in {
 	display: grid;
 	grid-template-columns: minmax( 0, 1fr );
 	color: inherit;

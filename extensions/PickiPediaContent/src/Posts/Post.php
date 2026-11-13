@@ -308,6 +308,38 @@ class Post {
 	}
 
 	/**
+	 * Whether a track has a chart: its recording metadata (Release:<cid>/Metadata,
+	 * as parsed) has a timeline with more than one entry. The rule is
+	 * Rabbithole's own (src/wiki/api.js, isCharted and extractMetadata): it is
+	 * what puts a track in Rabbithole's song selector, and what lights up who
+	 * is picking. A track without one still plays there, with nothing lit.
+	 *
+	 * The metadata comes in two shapes, and Rabbithole reads both: flat (what
+	 * its editor saves), and arthel's studio_versions tree (what gets pasted
+	 * from a song's YAML), where the timeline is under the first version's
+	 * first release, in "rabbithole".
+	 *
+	 * @param mixed $metadata the page's YAML, parsed
+	 */
+	public static function charted( $metadata ): bool {
+		if ( !is_array( $metadata ) ) {
+			return false;
+		}
+		// As JavaScript counts a thing as there: an empty map is, an absent key is not.
+		$there = static fn ( $v ) => is_array( $v ) || ( $v !== null && $v !== false && $v !== '' && $v !== 0 && $v !== 0.0 );
+		if ( $there( $metadata['timeline'] ?? null ) || $there( $metadata['ensemble'] ?? null ) ) {
+			$timeline = $metadata['timeline'] ?? null;
+		} else {
+			$versions = $metadata['studio_versions'] ?? null;
+			$version = is_array( $versions ) && $versions ? reset( $versions ) : null;
+			$release = is_array( $version ) && $version ? reset( $version ) : null;
+			$rabbithole = is_array( $release ) ? ( $release['rabbithole'] ?? null ) : null;
+			$timeline = is_array( $rabbithole ) ? ( $rabbithole['timeline'] ?? null ) : null;
+		}
+		return is_array( $timeline ) && count( $timeline ) > 1;
+	}
+
+	/**
 	 * What magenta said of a page's tiding (its api/wiki/tiding/), kept
 	 * only where it is what was asked for: addresses under magenta's own,
 	 * names and words as plain text, cut to size. Anything else is dropped,

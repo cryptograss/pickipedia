@@ -37,7 +37,16 @@
 	font: italic 400 clamp( 1.15rem, 1rem + 0.6vw, 1.4rem ) / 1.4 var( --bs-serif );
 	text-wrap: pretty;
 }
-.bs-dek a { color: inherit; }
+/* A link in it is the dek's own colour, so it has the line under it that the post's links have, or
+   nothing would say it is one. */
+.bs-dek a {
+	color: inherit;
+	text-decoration: underline;
+	text-decoration-thickness: 0.06em;
+	text-underline-offset: 0.18em;
+	text-decoration-color: color-mix( in srgb, currentColor 40%, transparent );
+}
+.bs-dek a:hover { text-decoration-color: currentColor; }
 
 .bs-byline {
 	display: flex;
@@ -50,7 +59,7 @@
 	border-bottom: 1px solid var( --bs-line );
 }
 .bs-byline-words { flex: 1 1 12rem; min-width: 0; }
-.bs-author {
+a.bs-author {
 	color: var( --bs-ink );
 	font-size: 0.9375rem;
 	font-weight: 650;
@@ -84,7 +93,7 @@
 	font-weight: 600;
 	text-decoration: none;
 }
-.bs-chip--magenta {
+a.bs-chip--magenta {
 	background: var( --bs-magenta-soft );
 	color: var( --bs-magenta );
 }
@@ -93,6 +102,20 @@
 
 .bs-sub {
 	margin: 0.75rem 0 0;
+	color: var( --bs-muted );
+	font-size: 0.8125rem;
+}
+/* Core sets what is in it small, grey and indented, and by id, which outranks any class: "(Redirected
+   from …)" over a post that was renamed was 2.4 to 1 on the dark paper. It takes this skin's quiet. */
+.bs-sub #mw-content-subtitle,
+#contentSub2.bs-sub {
+	margin: 0;
+	color: inherit;
+	font-size: inherit;
+	line-height: inherit;
+}
+#contentSub2.bs-sub {
+	margin-top: 0.75rem;
 	color: var( --bs-muted );
 	font-size: 0.8125rem;
 }
@@ -215,9 +238,13 @@
 	text-decoration-style: dotted;
 }
 .bs-body a.mw-selflink { color: inherit; text-decoration: none; }
-/* One mark for a link that leaves, an arrow in the words' own colour; not the wiki skins' little box too. */
-.bs-body a.external,
-.bs-body a.extiw {
+/* A link that leaves is the same blue. Core has a blue of its own for these, and a purple once visited:
+   on the dark paper 3.2 to 1 and 1.9 to 1, where 4.5 is the least that reads. And it has one mark, an
+   arrow in the words' own colour; not the wiki skins' little box too. */
+.bs-body a:is( .external, .extiw ),
+.bs-body .mw-parser-output a:is( .external, .extiw ),
+.bs-body .mw-parser-output a:is( .external, .extiw ):is( :visited, :active ) {
+	color: var( --bs-link );
 	padding-right: 0;
 	background-image: none;
 }
@@ -510,3 +537,17 @@
 }
 .bs-after #pp-build-info { color: inherit !important; }
 .bs-after #pp-build-info a { color: inherit; }
+/* "Linked from magenta" (MoodLinks::footer), which every skin is handed after the page: its heading set
+   as the rail's are, and its quieter words in this skin's own quiet. The wiki's grey for them is 3.2 to 1
+   on the dark paper. */
+.bs-after .pp-moodlinks-foot h2 {
+	margin: 0 0 0.6rem;
+	padding: 0;
+	border: 0;
+	color: var( --bs-rust );
+	font: 600 0.6875rem/1.3 var( --bs-mono );
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+.bs-after .pp-moodlinks-words,
+.bs-after .pp-moodlinks-more { color: var( --bs-muted ); }

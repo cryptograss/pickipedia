@@ -101,7 +101,6 @@
 				"interface-subtitle": true,
 				"interface-user-message": true,
 				"interface-site-notice": true,
-				"interface-message-box": true,
 				"i18n-ordered-lists": true,
 				"i18n-headings": true
 			},
@@ -206,6 +205,7 @@
 						"pickipediacontent-posts-tiding-go",
 						"pickipediacontent-posts-toc",
 						"pickipediacontent-posts-tools",
+						"pickipediacontent-posts-user-page",
 						"pickipediacontent-posts-you"
 					]
 				}

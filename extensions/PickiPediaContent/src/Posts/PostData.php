@@ -233,10 +233,14 @@ class PostData {
 	}
 
 	/**
-	 * The songs a person wrote that play in Rabbithole: [ 'title', 'url',
-	 * 'listen' ], by name. A song is theirs if its page says so ({{Song
-	 * |composer=}}, which records Has composer), and it plays if its page
-	 * has a listen link. No Semantic MediaWiki, or nobody: none.
+	 * The songs a person wrote that are charted in Rabbithole: [ 'title',
+	 * 'url', 'listen' ], by name. A song is theirs if its page says so
+	 * ({{Song|composer=}}, which records Has composer); its track is the one
+	 * its page's listen link names; and the track is charted if its recording
+	 * metadata has a timeline (charted()), which is what Rabbithole's own song
+	 * selector lists. A track nobody has charted plays there too, but with
+	 * nobody lit up, and the rail promises that (re's QA, 13 Nov 2026: three
+	 * of Justin's eight were such). No Semantic MediaWiki, or nobody: none.
 	 *
 	 * @param string $person the person's page, e.g. "Justin Myles Holmes"
 	 */
@@ -246,7 +250,7 @@ class PostData {
 		}
 		$cache = MediaWikiServices::getInstance()->getMainWANObjectCache();
 		return $cache->getWithSetCallback(
-			$cache->makeKey( 'pp-posts', 'songs', sha1( $person ) ),
+			$cache->makeKey( 'pp-posts', 'charted-songs', sha1( $person ) ),
 			self::SONGS_TTL,
 			static fn () => self::readSongs( $person )
 		);
@@ -276,7 +280,7 @@ class PostData {
 		$songs = [];
 		foreach ( $pages as $page ) {
 			$cid = self::trackOf( $page );
-			if ( $cid !== '' ) {
+			if ( $cid !== '' && self::charted( $cid ) ) {
 				$songs[] = [
 					'title' => $page->getText(),
 					'url' => $page->getLocalURL(),
@@ -310,6 +314,38 @@ class PostData {
 					return Post::trackIn( Post::listenLinks( $status->getValue()->getRawText() ) );
 				} catch ( \Throwable $e ) {
 					return '';
+				}
+			}
+		);
+	}
+
+	/**
+	 * Whether a track is charted in Rabbithole (Post::charted), read from its
+	 * recording metadata, Release:<cid>/Metadata. Kept until that page changes;
+	 * a person's list of songs (songs()) is kept an hour, so a song charted
+	 * today joins their rail within the hour.
+	 */
+	public static function charted( string $cid ): bool {
+		if ( $cid === '' || !defined( 'NS_RELEASE' ) || !class_exists( \Symfony\Component\Yaml\Yaml::class ) ) {
+			return false;
+		}
+		$title = Title::makeTitleSafe( NS_RELEASE, $cid . '/Metadata' );
+		if ( !$title || !$title->exists() ) {
+			return false;
+		}
+		$services = MediaWikiServices::getInstance();
+		$cache = $services->getMainWANObjectCache();
+		// 1 or 0, never false: false is how a cache says it has nothing.
+		return (bool)$cache->getWithSetCallback(
+			$cache->makeKey( 'pp-posts', 'charted', sha1( $cid ), $title->getLatestRevID() ),
+			self::SHAPE_TTL,
+			static function () use ( $services, $title ) {
+				try {
+					$content = $services->getWikiPageFactory()->newFromTitle( $title )->getContent();
+					$text = $content && method_exists( $content, 'getText' ) ? (string)$content->getText() : '';
+					return Post::charted( \Symfony\Component\Yaml\Yaml::parse( $text ) ) ? 1 : 0;
+				} catch ( \Throwable $e ) {
+					return 0;
 				}
 			}
 		);
