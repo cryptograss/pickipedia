@@ -30,6 +30,10 @@ The atom is a credit:
 Several sources agreeing make several rows. Nothing here judges; each row is
 what one reader said about one source. Raw responses are kept under --raw so a
 build never refetches.
+
+A fetch can be given a budget of seconds (fetch --budget 20). Past it, the sources
+the cache still lacks wait for the next run, so a long list of new ones comes in
+over several builds and nothing queues behind it.
 """
 import argparse
 import glob
@@ -38,6 +42,7 @@ import os
 import re
 import sqlite3
 import sys
+import time
 
 import recording_credits as sideman
 import homeplace
@@ -172,9 +177,23 @@ def read_names(path):
     return [l.strip() for l in open(path) if l.strip() and not l.lstrip().startswith("#")]
 
 
-def fetch(raw, discogs=(), mb=(), lma=()):
-    """Fetch what the cache under raw lacks; a source that fails is reported and left for the next run."""
-    got, failed = 0, []
+def fetch(raw, discogs=(), mb=(), lma=(), budget=None, clock=time.monotonic):
+    """Fetch what the cache under raw lacks; a source that fails is reported and left for the next run.
+
+    budget is how many seconds this run may go on starting fetches; None is as long as it takes. Past it,
+    what the cache still lacks is counted as waiting and left for the next run, in the sources' own order.
+    The store is built from whatever the cache holds, so new sources reach the graph a run's worth at a time.
+
+    Why: the Jenkins stage that runs this is in the wiki's own build, one build at a time. archive.org took
+    0.4 to 4 seconds an item from blu's machine (13 Nov 2026), so 1,000 new sources fetched in one go keep
+    every pickipedia deploy waiting 8 to 18 minutes.
+
+    A fetch already started is not cut short: a run can go past its budget by one request's own timeout.
+
+    Returns (got, failed, waiting).
+    """
+    start = clock()
+    got, failed, waiting = 0, [], 0
     for kind, ids, get in (("discogs", discogs, lambda d: sideman.discogs_get(f"releases/{d}")),
                            ("mb", mb, lambda r: sideman.mb_get(f"release/{r}", inc=MB_INC)),
                            (os.path.join("lma", "items"), lma, lma_lineup.fetch)):
@@ -184,6 +203,9 @@ def fetch(raw, discogs=(), mb=(), lma=()):
                                               glob.glob(os.path.join(raw, "lma", "*", f"{glob.escape(ident)}.json"))):
                 continue
             if os.path.exists(path):
+                continue
+            if budget is not None and clock() - start >= budget:
+                waiting += 1
                 continue
             try:
                 doc = get(ident)
@@ -195,7 +217,7 @@ def fetch(raw, discogs=(), mb=(), lma=()):
                 json.dump(doc, out)
             os.replace(path + ".part", path)
             got += 1
-    return got, failed
+    return got, failed, waiting
 
 
 def build(raw, arthel=None, lma_names=()):
@@ -307,6 +329,8 @@ def main(argv):
     f.add_argument("--discogs", nargs="*", default=[])
     f.add_argument("--mb", nargs="*", default=[])
     f.add_argument("--sources", help="a sources file (connectome_sources.txt), fetched as well")
+    f.add_argument("--budget", type=float, metavar="SECONDS",
+                   help="stop starting fetches after this long; what's left waits for the next run")
     b = sub.add_parser("build")
     b.add_argument("--raw", required=True)
     b.add_argument("--arthel")
@@ -322,8 +346,10 @@ def main(argv):
     args = ap.parse_args(argv[1:])
     if args.cmd == "fetch":
         src = read_sources(args.sources) if args.sources else {"discogs": [], "mb": [], "lma": []}
-        got, failed = fetch(args.raw, args.discogs + src["discogs"], args.mb + src["mb"], src["lma"])
-        print(f"fetched {got}; {len(failed)} failed" + "".join("\n  " + f for f in failed[:20]))
+        got, failed, waiting = fetch(args.raw, args.discogs + src["discogs"], args.mb + src["mb"], src["lma"],
+                                     budget=args.budget)
+        print(f"fetched {got}; {len(failed)} failed" + (f"; {waiting} waiting for the next run" if waiting else "")
+              + "".join("\n  " + f for f in failed[:20]))
     elif args.cmd == "build":
         names = read_names(args.lma_names) if args.lma_names else []
         rows = build(args.raw, args.arthel, names)

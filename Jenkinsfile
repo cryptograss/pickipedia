@@ -318,7 +318,8 @@ pipeline {
             // The connectome store, the musician pages' cards, and graph.json for the big graph at
             // assets/connectome/ (Justin, #connectome, 13 Nov 2026).
             // tools/connectome_sources.txt says what the store reads, and the responses are kept on maybelle,
-            // so a build fetches only what's new (the first build, all ~1,450 of them). The store is built again
+            // so a build fetches only what's new, and for 20 seconds at most: a long list of new sources comes
+            // in over several builds, and no deploy waits behind it. The store is built again
             // only when its sources, names, readers or arthel's data change; the cards every build, because the
             // featured pickers and the wiki's pages change without a commit here. A failure marks the build
             // unstable and leaves the last cards in place: the wiki still deploys.
@@ -358,9 +359,20 @@ REQS
                         rm -rf "${CACHE}/arthel"
                         git clone -q --depth 1 --branch production file:///srv/git/arthel.git "${CACHE}/arthel"
 
-                        # The sources: only what the cache lacks. One that fails is fetched next time.
+                        # The sources: only what the cache lacks, for 20 seconds a build. What's left waits for the
+                        # next build, five minutes on, and the store is built from what the cache holds. This build is
+                        # the wiki's own, one at a time: archive.org answers in 0.4 to 4 seconds an item (blu's
+                        # machine, 13 Nov 2026), so 1,000 new sources in one go are 8 to 18 minutes of no deploys.
+                        # One that fails is fetched next time. `timeout` is for a server that hangs: the fetch is
+                        # stopped at 90 seconds and the build goes on. Any other failure fails the stage, as before.
                         cd "${WORKSPACE}/tools"
-                        "${PY}" connectome_store.py fetch --raw "${CACHE}/raw" --sources connectome_sources.txt
+                        FETCHED=0
+                        timeout 90 "${PY}" connectome_store.py fetch --raw "${CACHE}/raw" --sources connectome_sources.txt --budget 20 || FETCHED=$?
+                        if [ "${FETCHED}" -eq 124 ]; then
+                            echo "Connectome: the fetch ran past 90 seconds and was stopped"
+                        elif [ "${FETCHED}" -ne 0 ]; then
+                            exit "${FETCHED}"
+                        fi
 
                         # The store, built again only when something it's built from has changed.
                         KEY=$( { cat connectome_store.py recording_credits.py homeplace.py rambler.py lma_lineup.py connectome_sources.txt connectome_names.txt
