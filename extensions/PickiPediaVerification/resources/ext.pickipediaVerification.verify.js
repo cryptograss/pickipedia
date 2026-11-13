@@ -304,8 +304,32 @@
      * Strip wikitext formatting for comparison purposes.
      * Removes bold ('''), italic (''), and common markup.
      */
+    /*
+     * Entities as the page shows them: &mdash; in the source is a dash in
+     * the rendered claim, and the two have to compare equal. The named ones
+     * our pages use, and every numeric one.
+     */
+    var ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+        mdash: '\u2014', ndash: '\u2013', middot: '\u00b7', hellip: '\u2026',
+        rarr: '\u2192', larr: '\u2190', times: '\u00d7', bull: '\u2022' };
+    function decodeEntities(text) {
+        return String(text).replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, function(all, name) {
+            if (name[0] === '#') {
+                var code = name[1] === 'x' || name[1] === 'X'
+                    ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+                return code ? String.fromCodePoint(code) : all;
+            }
+            var named = ENTITIES[name.toLowerCase()];
+            return named === undefined ? all : named;
+        });
+    }
+
     function stripWikitext(text) {
-        return text
+        return decodeEntities(text)
+            // {{!}} first: [[Page{{!}}text]] is a piped link, and only reads
+            // as one once the pipe is back (Skyler, 13 Nov 2026: three
+            // claims on Song:August could not be found).
+            .replace(/\{\{!\}\}/g, '|')  // {{!}} -> |
             // External links and HTML render as their text alone: without
             // these, a claim with a link or <code> in its first 40 characters
             // could never be found ("Could not find the claim in page source").
@@ -313,7 +337,6 @@
             .replace(/<\/?[a-z][^>]*>/gi, '')  // <code>, <b>...: their contents stay
             .replace(/'{2,}/g, '')  // Remove '' and '''
             .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2')  // [[link|text]] -> text
-            .replace(/\{\{!\}\}/g, '|')  // {{!}} -> |
             .replace(/\s+/g, ' ')
             .trim()
             .toLowerCase();
