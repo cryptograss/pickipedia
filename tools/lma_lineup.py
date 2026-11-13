@@ -206,6 +206,37 @@ def classify(lines, i, name="", creator=""):
     return None
 
 
+def narrowed(names, texts):
+    """Which of names are worth asking mentions() about, for any one of texts: a function, text -> [names],
+    each list in names' own order.
+
+    read_item used to ask mentions() about every name on every line and on four fields of every file: 260
+    names, a few hundred strings an item, some hundred million regex searches over the store's 1,400 tapes,
+    and all but a few thousand of them for a name that is nowhere in the item. That was the whole of the
+    store's build: 4 minutes on blu's machine and 21 on Jenkins, with every pickipedia deploy waiting behind
+    it (13 Nov 2026).
+
+    So the item's strings are joined into two texts and each name is looked for once in each. A name found
+    in neither is in no one string, so nobody asks about it. Nothing else changes: mentions() still decides,
+    about the same names, in the same order.
+
+    Two texts, because lower() is the same test as the regex's re.I only where everything is ASCII (to a
+    regex, 'ſ' is an s and 'ı' an i; to lower() they are not). The ASCII strings are searched as one lowered
+    text, with `in`. The others, and any name that is not ASCII, are searched with the regex mentions() uses.
+    """
+    plain = "\n".join(t for t in texts if t.isascii())
+    fancy = "\n".join(t for t in texts if not t.isascii())
+    low = plain.lower()
+    in_plain, in_fancy = [], []
+    for n in names:
+        found = n.lower() in low if n.isascii() else re.search(re.escape(n), plain, re.I)
+        if found:
+            in_plain.append(n)
+        if fancy and re.search(re.escape(n), fancy, re.I):
+            in_fancy.append(n)
+    return lambda text: in_plain if text.isascii() else in_fancy
+
+
 def read_item(j, names):
     """{name: [(where, shape, scope, detail)]} for each known name in the item.
     A name with no shape is listed with shape None."""
@@ -213,23 +244,23 @@ def read_item(j, names):
     out = {}
     creator = m.get("creator"); creator = creator[0] if isinstance(creator, list) else (creator or "")
     fields = [("description", lines_of(m.get("description"))), ("notes", lines_of(m.get("notes")))]
+    files = [(f, key, str(f.get(key, ""))) for f in j.get("files", []) for key in ("comment", "artist", "creator", "title")]
+    tops = [(key, " / ".join(m[key]) if isinstance(m.get(key), list) else str(m.get(key) or ""))
+            for key in ("creator", "title", "subject")]
+    worth = narrowed(names, [l for _, lines in fields for l in lines] + [v for _, _, v in files] + [v for _, v in tops])
     for where, lines in fields:
         for i, l in enumerate(lines):
-            for n in names:
+            for n in worth(l):
                 if mentions(n, l, names):
                     out.setdefault(n, []).append((where, *(classify(lines, i, n, creator) or (None, None, l))))
-    for f in j.get("files", []):
-        for key in ("comment", "artist", "creator", "title"):
-            v = str(f.get(key, ""))
-            for n in names:
-                if mentions(n, v, names):
-                    shape = ("file comment", "song", f.get("title") or f["name"]) if key == "comment" else \
-                            ("file " + key, "song" if " ft. " in v or " feat" in v.lower() else "show", v)
-                    out.setdefault(n, []).append(("files", *shape))
-    for key in ("creator", "title", "subject"):
-        v = m.get(key)
-        v = " / ".join(v) if isinstance(v, list) else str(v or "")
-        for n in names:
+    for f, key, v in files:
+        for n in worth(v):
+            if mentions(n, v, names):
+                shape = ("file comment", "song", f.get("title") or f["name"]) if key == "comment" else \
+                        ("file " + key, "song" if " ft. " in v or " feat" in v.lower() else "show", v)
+                out.setdefault(n, []).append(("files", *shape))
+    for key, v in tops:
+        for n in worth(v):
             if mentions(n, v, names):
                 out.setdefault(n, []).append((key, "item " + key, "show", v))
     return out

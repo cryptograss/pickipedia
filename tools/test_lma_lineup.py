@@ -140,3 +140,104 @@ def test_read_item_skips_a_longer_name():
     item = {"metadata": {"creator": "King Gizzard & The Lizard Wizard",
                          "description": "Lineup:\nStu Mackenzie - guitar\nAmbrose Kenny Smith - harmonica, keyboards"}}
     assert "Kenny Smith" not in L.read_item(item, ["Kenny Smith"])
+
+
+# narrowed(): read_item asks mentions() only about the names that are somewhere in the item (13 Nov 2026).
+# The store's build went from minutes to seconds by it, and must read exactly what it read before.
+
+def every_name_on_every_string(j, names):
+    """read_item as it was before narrowed(): mentions() asked about every name, on every string."""
+    m = j.get("metadata", {})
+    out = {}
+    creator = m.get("creator"); creator = creator[0] if isinstance(creator, list) else (creator or "")
+    fields = [("description", L.lines_of(m.get("description"))), ("notes", L.lines_of(m.get("notes")))]
+    for where, lines in fields:
+        for i, l in enumerate(lines):
+            for n in names:
+                if L.mentions(n, l, names):
+                    out.setdefault(n, []).append((where, *(L.classify(lines, i, n, creator) or (None, None, l))))
+    for f in j.get("files", []):
+        for key in ("comment", "artist", "creator", "title"):
+            v = str(f.get(key, ""))
+            for n in names:
+                if L.mentions(n, v, names):
+                    shape = ("file comment", "song", f.get("title") or f["name"]) if key == "comment" else \
+                            ("file " + key, "song" if " ft. " in v or " feat" in v.lower() else "show", v)
+                    out.setdefault(n, []).append(("files", *shape))
+    for key in ("creator", "title", "subject"):
+        v = m.get(key)
+        v = " / ".join(v) if isinstance(v, list) else str(v or "")
+        for n in names:
+            if L.mentions(n, v, names):
+                out.setdefault(n, []).append((key, "item " + key, "show", v))
+    return out
+
+
+NAMES = ["Kyle Tuttle", "Sam Bush", "Kenny Smith", "Honza Špringl", "Christian Ward", "Kim Lee", "Jason Carter",
+         "Bronwyn Keith-Hynes", "Molly Tuttle", "Jerry Douglas"]
+
+ITEMS = [
+    # plain ASCII, in three cases, with a footnote and a file title
+    {"metadata": {"identifier": "a", "creator": "Billy Strings", "title": "Billy Strings Live with KYLE TUTTLE",
+                  "description": "06. Home Of The Red Fox > %<br>07. Hobo Song %<br>% w/ kyle tuttle<br>Lineup: Sam Bush, Jerry Douglas, Molly Tuttle",
+                  "subject": ["bluegrass", "Sam Bush"]},
+     "files": [{"name": "t01.flac", "title": "Hobo Song ft. Sam Bush"}, {"name": "t02.flac", "artist": "Billy Strings"},
+               {"name": "t03.flac", "comment": "with Jerry Douglas", "title": "Freeborn Man"}]},
+    # lines that are not ASCII: a curly quote, a long dash, a name in capitals with its háček
+    {"metadata": {"identifier": "b", "creator": ["Kyle Tuttle Band"], "title": "Kyle Tuttle Band — Station Inn",
+                  "notes": "9.Reuben’s Train>*\n*w/ Jeff Austin and Kyle Tuttle\nSpecial guest: HONZA ŠPRINGL on banjo\nwith Honza Špringl"},
+     "files": [{"name": "x.flac", "title": "Reuben’s Train (w/ Molly Tuttle)"}]},
+    # letters a regex's re.I takes for i, s and k, and lower() does not
+    {"metadata": {"identifier": "c", "creator": "Somebody",
+                  "description": "with Jaſon Carter on fiddle\nwith Kİm Lee\nwith Kim Lee and Kım Lee\nwith ſam Buſh"},
+     "files": []},
+    # glued by stripped markup; a longer name that is not the shorter one; nobody known at all
+    {"metadata": {"identifier": "d", "creator": "King Gizzard",
+                  "description": "<b>Vocals</b>Christian Ward - Fiddle<br>Ambrose Kenny Smith - harmonica<br>Kyle Tuttle Bronwyn Keith-Hynes"},
+     "files": [{"name": "y.flac", "title": "The River", "creator": "Ambrose Kenny Smith"}]},
+    {"metadata": {"identifier": "e", "creator": "Nobody Here", "description": "A fine night.\nTaped by a friend."}, "files": [{"name": "z.flac"}]},
+    {"metadata": {}},
+]
+
+
+def test_read_item_reads_what_asking_every_name_on_every_string_reads():
+    found = 0
+    for j in ITEMS:
+        was, now = every_name_on_every_string(j, NAMES), L.read_item(j, NAMES)
+        assert now == was
+        assert list(now) == list(was)                      # and the names in the same order
+        found += len(was)
+    assert found >= 12                                     # the items do name people: the test isn't empty
+
+
+def test_narrowed_never_drops_a_name_the_regex_finds():
+    import re
+    texts = [l for j in ITEMS for l in L.lines_of(j["metadata"].get("description")) + L.lines_of(j["metadata"].get("notes"))]
+    texts += ["KENNY SMITH", "kenny smith", "Kenny  Smith", "", "sam bush\nJerry Douglas"]
+    worth = L.narrowed(NAMES, texts)
+    hits = 0
+    for t in texts:
+        for n in NAMES:
+            if re.search(re.escape(n), t, re.I):
+                assert n in worth(t), (n, t)
+                hits += 1
+    assert hits >= 15
+    # the letters only a regex folds: these are found, so they are asked about
+    assert "Jason Carter" in worth("with Jaſon Carter on fiddle")
+    assert "Kim Lee" in worth("with Kİm Lee") and "Kim Lee" in worth("with Kim Lee and Kım Lee")
+    assert "Honza Špringl" in worth("Special guest: HONZA ŠPRINGL on banjo")
+
+
+def test_narrowed_asks_only_about_names_in_the_item():
+    texts = ["01. Tune", "02. Song", "% w/ Kyle Tuttle", "Taped by a friend"]
+    worth = L.narrowed(NAMES, texts)
+    assert worth("% w/ Kyle Tuttle") == ["Kyle Tuttle"] and worth("01. Tune") == ["Kyle Tuttle"]
+    asked = []
+    real = L.mentions
+    L.mentions = lambda n, t, known=(): asked.append(n) or real(n, t, known)
+    try:
+        L.read_item({"metadata": {"description": "<br>".join(texts)}, "files": [{"name": "a.flac", "title": "Tune"}] * 50}, NAMES)
+    finally:
+        L.mentions = real
+    assert set(asked) == {"Kyle Tuttle"}                   # not 10 names on 200-odd strings
+    assert len(asked) < 300
