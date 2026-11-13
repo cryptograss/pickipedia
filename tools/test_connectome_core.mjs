@@ -97,6 +97,41 @@ test( 'who both have played with: those who played with both first, a route as s
 	assert.equal( K.mutuals( G, JUSTIN, KYLE )[ 0 ].ta, tie( JUSTIN, MOLLY ) );
 } );
 
+// Two ends, and between them: Abe, who sat in once with each, on tape; Zeke, on tape with both and close to one;
+// Pressed, on tape with one and on four tracks of a CD with the other. Then two ways across three hops.
+const FREE = K.build( {
+	people: [ 'A', 'B', 'Abe', 'Zeke', 'Pressed', 'S', 'T', 'M1', 'N1', 'M2', 'N2' ].map( ( n ) => [ n, 0, '' ] ),
+	music: [ [ 'lma:1', 'show', 'Band', '2025-01-01', 'A tape', 2, '', '' ], [ 'discogs:1', 'record', 'X', '2024', 'A CD', 1, '', '' ] ],
+	ties: [
+		[ 0, 2, [ [ 0, 2, 0.2, [] ] ] ], [ 1, 2, [ [ 0, 2, 0.2, [] ] ] ],
+		[ 0, 3, [ [ 0, 2, 1, [] ] ] ], [ 1, 3, [ [ 0, 2, 0.2, [] ] ] ],
+		[ 0, 4, [ [ 0, 2, 1, [] ] ] ], [ 1, 4, [ [ 1, 3, 4, [ 'a', 'b', 'c', 'd' ] ] ] ],
+		[ 5, 7, [ [ 0, 2, 0.2, [] ] ] ], [ 7, 8, [ [ 0, 2, 0.2, [] ] ] ], [ 8, 6, [ [ 0, 2, 0.2, [] ] ] ],
+		[ 5, 9, [ [ 0, 2, 1, [] ] ] ], [ 9, 10, [ [ 1, 3, 4, [ 'a', 'b', 'c', 'd' ] ] ] ], [ 10, 6, [ [ 0, 2, 1, [] ] ] ]
+	]
+} );
+const free = ( list ) => list.map( ( x ) => FREE.people[ x.id === undefined ? x : x.id ].name );
+
+test( 'a route Permanent on both legs is named before one with a less free leg, however much that one played', () => {
+	const m = K.mutuals( FREE, 0, 1 );
+	assert.ok( m[ 2 ].eff > m[ 0 ].eff, 'the CD route is the stronger, and still comes last' );
+	assert.deepEqual( m.map( ( x ) => x.tier ), [ K.PERMANENT, K.PERMANENT, K.FULL ] );
+	assert.deepEqual( free( m ), [ 'Zeke', 'Abe', 'Pressed' ] );    // and of two as strong, the one closer on its other leg
+	assert.deepEqual( free( K.mutuals( FREE, 1, 0 ) ), [ 'Zeke', 'Abe', 'Pressed' ] );
+} );
+
+test( "in a picker's company, anyone on a Permanent Release with them comes before anyone who isn't", () => {
+	assert.deepEqual( free( K.company( FREE, 1 ) ), [ 'Abe', 'Zeke', 'Pressed' ] );
+	assert.ok( K.loudness( FREE.adj[ 1 ].get( 2 ) ) > K.loudness( FREE.adj[ 1 ].get( 4 ) ) );
+	assert.ok( K.loudness( tie( KYLE, SAM ) ) > K.loudness( tie( KYLE, CHOIR ) ), 'playing together before sharing a record' );
+} );
+
+test( 'across three hops, a chain of Permanent Releases comes before a stronger one with a CD in it', () => {
+	const r = K.routes( FREE, 5, 6 );
+	assert.equal( r.hops, 3 );
+	assert.deepEqual( r.chains.map( free ), [ [ 'S', 'M1', 'N1', 'T' ], [ 'S', 'M2', 'N2', 'T' ] ] );
+} );
+
 test( 'hops: a same-record tie is a hop; with no way, -1', () => {
 	assert.equal( K.hops( G, KYLE, JUSTIN ), 1 );
 	assert.equal( K.hops( G, KYLE, VICKIE ), 2 );

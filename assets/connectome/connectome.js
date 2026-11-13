@@ -17,6 +17,7 @@ const ICON = HOME + '/index.php?title=Special:Redirect/file/Instrument-icon-';
 const FONT = { named: '700 14px Georgia, "Times New Roman", serif', subject: '700 17px Georgia, "Times New Roman", serif',
 	pill: '600 12.5px system-ui, -apple-system, "Segoe UI", sans-serif' };
 const still = window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
+const FAINT = 0.22;              // between two pickers, a route through someone not named: behind the rest, still there
 
 const $ = ( id ) => document.getElementById( id );
 const svg = $( 'g' ), stage = $( 'stage' ), tip = $( 'tip' ), panel = $( 'panel' );
@@ -226,7 +227,7 @@ function pairScene( a, b ) {
 		const picked = sel.picker !== null;
 		addNode( sc, m.id, pos, named ? 'named' : 'dot', { r: dotRadius( m.w ), lit: on, delay: named ? 120 + i * 45 : 330,
 			o: !picked || on || !named ? 1 : 0.55, m } );
-		const o = on ? 1 : ( named ? ( picked ? 0.28 : 0.9 ) : 0 );
+		const o = on ? 1 : ( named ? ( picked ? 0.28 : 0.9 ) : ( picked ? FAINT / 2 : FAINT ) );
 		const leg = { via: 'p' + m.id, o, quiet: !named && !on, emph: on, delay: named ? 160 + i * 45 : 360, role: 'leg', c: m.id };
 		addLine( sc, a, m.id, m.ta, leg );
 		addLine( sc, m.id, b, m.tb, leg );

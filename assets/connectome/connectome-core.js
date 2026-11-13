@@ -13,7 +13,7 @@
 
 export const TRACK = 3, STAGE = 2, RECORD = 1;     // how two pickers are on one record or show
 export const PERMANENT = 2, FULL = 1, UNKNOWN = 0;  // PickiPedia:Release_Types
-const BOOST = [ 0.35, 0.7, 1 ];                     // who gets named: Permanent first, then Full
+const BOOST = [ 0.35, 0.7, 1 ];                     // how much music counts toward closeness, by how free it is
 const LOOSE = 0.1;                                  // a same-record tie, beside a played-with one
 
 export const TIER_NAME = [ 'not known to be DRM-free', 'Full Release', 'Permanent Release' ];
@@ -96,12 +96,21 @@ export function summarize( a, b, ev, music ) {
 	return t;
 }
 
+/**
+ * How loud a tie is, wherever it's decided who gets named. Playing together comes before only sharing a record;
+ * then the freest music the two share, because a Permanent Release is always more prominent than anything else
+ * (Justin, #connectome, 13 Nov 2026), however much there is of the rest; then how much of it, by eff.
+ */
+export function loudness( tie ) {
+	return ( tie.played ? 2e6 : 0 ) + tie.tier * 4e5 + Math.min( tie.eff, 3e5 );
+}
+
 export function find( G, name ) {
 	const id = G.byName.get( String( name || '' ).trim().toLowerCase() );
 	return id === undefined ? null : id;
 }
 
-/** The pickers someone has played with (or, with loose, also shared a record with), the closest first. */
+/** The pickers someone has played with (or, with loose, also shared a record with), the loudest first. */
 export function company( G, id, loose = false ) {
 	const out = [];
 	for ( const [ o, tie ] of G.adj[ id ] ) {
@@ -109,13 +118,15 @@ export function company( G, id, loose = false ) {
 			out.push( { id: o, tie } );
 		}
 	}
-	return out.sort( ( x, y ) => ( y.tie.played - x.tie.played ) || ( y.tie.eff - x.tie.eff ) || ( y.tie.w - x.tie.w ) ||
+	return out.sort( ( x, y ) => ( loudness( y.tie ) - loudness( x.tie ) ) || ( y.tie.w - x.tie.w ) ||
 		G.people[ x.id ].name.localeCompare( G.people[ y.id ].name ) );
 }
 
 /**
- * Who both have played with, other than each other: the two-hop routes between them. A route is as strong as
- * its weaker leg. Those who played with both come first; one who only shares a record with either comes after.
+ * Who both have played with, other than each other: the two-hop routes between them. A route is as free as its
+ * less free leg, and as strong as its weaker one. Those who played with both come first, and one who only shares
+ * a record with either comes after; then the freest routes, so one that's Permanent on both legs is never passed
+ * over for one with a CD in it; then the strongest; and of two as strong, the one closer on its other leg.
  */
 export function mutuals( G, a, b ) {
 	const out = [];
@@ -130,11 +141,11 @@ export function mutuals( G, a, b ) {
 		}
 		const [ ta, tb ] = small === a ? [ t1, t2 ] : [ t2, t1 ];
 		out.push( { id: c, ta, tb, played: ta.played && tb.played, legs: ( ta.played ? 1 : 0 ) + ( tb.played ? 1 : 0 ),
-			eff: Math.min( ta.eff, tb.eff ), w: Math.min( ta.w || LOOSE * ta.loose, tb.w || LOOSE * tb.loose ),
+			eff: Math.min( ta.eff, tb.eff ), both: ta.eff + tb.eff, w: Math.min( ta.w || LOOSE * ta.loose, tb.w || LOOSE * tb.loose ),
 			tier: Math.min( ta.tier, tb.tier ) } );
 	}
-	return out.sort( ( x, y ) => ( y.legs - x.legs ) || ( y.eff - x.eff ) || ( y.w - x.w ) ||
-		G.people[ x.id ].name.localeCompare( G.people[ y.id ].name ) );
+	return out.sort( ( x, y ) => ( y.legs - x.legs ) || ( y.tier - x.tier ) || ( y.eff - x.eff ) || ( y.both - x.both ) ||
+		( y.w - x.w ) || G.people[ x.id ].name.localeCompare( G.people[ y.id ].name ) );
 }
 
 /** Hops from one picker to every other; -1 where there's no way. A same-record tie counts as a hop. */
@@ -159,7 +170,8 @@ export function distances( G, src ) {
 
 /**
  * The shortest routes between two pickers who are three or more hops apart: up to `want` chains, each the
- * strongest left (a chain is as strong as its weakest hop), and the other pickers who sit on a shortest route.
+ * loudest left (a chain is as loud as its quietest hop: see loudness), and the other pickers who sit on a
+ * shortest route.
  * Returns { hops, chains: [[a, .., b]], others: [[ids at hop 1], .., [ids at hop L-1]] }, or null with no way.
  */
 export function routes( G, a, b, want = 3 ) {
@@ -181,7 +193,7 @@ export function routes( G, a, b, want = 3 ) {
 	const chains = [];
 	const used = new Set();
 	for ( let n = 0; n < want; n++ ) {
-		// The strongest chain through pickers not yet used: widest-path, level by level.
+		// The loudest chain through pickers not yet used: widest-path, level by level.
 		const best = new Map( [ [ a, { s: Infinity, prev: null } ] ] );
 		for ( let i = 1; i <= L; i++ ) {
 			for ( const v of on[ i ] ) {
@@ -195,7 +207,7 @@ export function routes( G, a, b, want = 3 ) {
 					if ( !from || !tie ) {
 						continue;
 					}
-					const s = Math.min( from.s, tie.eff );
+					const s = Math.min( from.s, loudness( tie ) );
 					if ( !pick || s > pick.s ) {
 						pick = { s, prev: u };
 					}
