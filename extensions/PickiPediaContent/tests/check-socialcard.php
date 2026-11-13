@@ -77,5 +77,12 @@ check( 'the words as verified, the button left out',
 	$checked['description'] === '11 Nov 2026 Kuba played with everyone. He toured with the band in 2024.', $checked['description'] );
 check( 'a picture in unverified words passed over', $checked['image'] === 'https://pickipedia.xyz/images/Real.jpg', (string)$checked['image'] );
 
+$marked = SocialCard::fromHtml( '<div class="mw-parser-output"><p>Customer of the Year at Tacos y Mariscos.'
+	. '<sup class="verified-marker" title="Verified: by JMyles">[✓]</sup> </p>'
+	. '<p><span class="bot-proposal">A claim nobody checked.</span><sup style="font-size: 75%;">&#91;unverified&#93;</sup> </p>'
+	. '<p>E = mc<sup>2</sup>, as ever.</p></div>', $server );
+check( "a verification's own mark isn't one of the words",
+	$marked['description'] === 'Customer of the Year at Tacos y Mariscos. E = mc2, as ever.', $marked['description'] );
+
 echo $failures ? "\ncheck-socialcard.php: $failures FAILED\n" : "\ncheck-socialcard.php: all ok\n";
 exit( $failures ? 1 : 0 );

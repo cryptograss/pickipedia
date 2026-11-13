@@ -18,7 +18,13 @@
 
 namespace MediaWiki\Extension\PickiPediaContent;
 
+use MediaWiki\Extension\PickiPediaContent\Posts\Post;
+use MediaWiki\Extension\PickiPediaContent\Posts\PostData;
 use MediaWiki\Hook\BeforePageDisplayHook;
+use MediaWiki\Hook\GetDoubleUnderscoreIDsHook;
+use MediaWiki\Hook\LinksUpdateCompleteHook;
+use MediaWiki\Hook\RequestContextCreateSkinHook;
+use MediaWiki\Page\Hook\PageDeleteCompleteHook;
 use MediaWiki\Hook\PageMoveCompleteHook;
 use MediaWiki\Hook\ParserFirstCallInitHook;
 use MediaWiki\Hook\UploadCompleteHook;
@@ -37,7 +43,49 @@ use Wikimedia\Rdbms\LikeValue;
 
 class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook,
 	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook, SaveUserOptionsHook,
-	PageSaveCompleteHook, PageMoveCompleteHook, UploadCompleteHook {
+	PageSaveCompleteHook, PageMoveCompleteHook, UploadCompleteHook, RequestContextCreateSkinHook,
+	GetDoubleUnderscoreIDsHook, LinksUpdateCompleteHook, PageDeleteCompleteHook {
+
+	/**
+	 * A post is read in its own skin, Broadside (Posts/SkinBroadside.php): chosen here, on the server, so the
+	 * page arrives as it will look. Only the post as it reads: its edit form, its history, a diff and an old
+	 * revision are the wiki's own pages. A skin asked for by name (?useskin=) is the one given, which is also
+	 * the way to see a post as a plain wiki page.
+	 */
+	public function onRequestContextCreateSkin( $context, &$skin ) {
+		$title = $context->getTitle();
+		$request = $context->getRequest();
+		if ( !$title || $request->getRawVal( 'useskin' ) !== null
+			|| $request->getRawVal( 'action', 'view' ) !== 'view' || $request->getRawVal( 'veaction' ) !== null
+			|| $request->getRawVal( 'diff' ) !== null || $request->getRawVal( 'oldid' ) !== null
+			|| $request->getRawVal( 'redirect' ) === 'no' || $request->getCheck( 'printable' )
+		) {
+			return;
+		}
+		if ( PostData::enabled() && PostData::isPost( $title ) ) {
+			$skin = 'broadside';
+		}
+	}
+
+	/** __NOTAPOST__: a user subpage that is read as an ordinary wiki page (PostData::isPost). */
+	public function onGetDoubleUnderscoreIDs( &$doubleUnderscoreIDs ) {
+		$doubleUnderscoreIDs[] = PostData::PROP_NOT;
+	}
+
+	/** A page under User:Name was saved and its links and properties written: what's kept of Name is read again. */
+	public function onLinksUpdateComplete( $linksUpdate, $ticket ) {
+		self::touchPosts( $linksUpdate->getTitle() );
+	}
+
+	public function onPageDeleteComplete( $page, $deleter, $reason, $pageID, $deletedRev, $logEntry, $archivedRevisionCount ) {
+		self::touchPosts( Title::newFromPageIdentity( $page ) );
+	}
+
+	private static function touchPosts( ?Title $title ): void {
+		if ( $title && $title->getNamespace() === NS_USER ) {
+			PostData::touch( explode( '/', $title->getText(), 2 )[0] );
+		}
+	}
 
 	/** A save, told to magenta at once (MagentaPush.php). */
 	public function onPageSaveComplete( $wikiPage, $user, $summary, $flags, $revisionRecord, $editResult ) {
@@ -50,6 +98,8 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	/** A move: both titles, so magenta forgets the old and reads the new. */
 	public function onPageMoveComplete( $old, $new, $user, $pageid, $redirid, $reason, $revision ) {
 		$from = Title::newFromLinkTarget( $old )->getPrefixedText();
+		self::touchPosts( Title::newFromLinkTarget( $old ) );
+		self::touchPosts( Title::newFromLinkTarget( $new ) );
 		MagentaPush::tell( MagentaPush::payload(
 			Title::newFromLinkTarget( $new )->getPrefixedText(), $revision ? $revision->getId() : null,
 			$user->getName(), 'move', $from
@@ -148,6 +198,32 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			$output->addModuleStyles( [ 'ext.pickipediaContent.connectome.styles' ] );
 			$output->addModules( [ 'ext.pickipediaContent.connectome' ] );
 			return [ $html, 'isHTML' => true, 'noparse' => true ];
+		} );
+		// {{#byline:name=|person=|picture=|says=}}, on a user's own page: who they are under what they write
+		// (Posts/PostData::author). name: as they sign; person: their page here, whose songs are theirs;
+		// picture: a file, in place of the page's first; says: a line about them. It draws nothing.
+		$parser->setFunctionHook( 'byline', static function ( $parser, ...$args ) {
+			$page = $parser->getPage();
+			if ( !$page || $page->getNamespace() !== NS_USER || str_contains( $page->getDBkey(), '/' ) ) {
+				return '';
+			}
+			$output = $parser->getOutput();
+			foreach ( $args as $arg ) {
+				[ $key, $value ] = array_pad( explode( '=', (string)$arg, 2 ), 2, '' );
+				$key = strtolower( trim( $key ) );
+				$value = trim( html_entity_decode( strip_tags( $value ), ENT_QUOTES | ENT_HTML5 ) );
+				if ( !isset( PostData::BYLINE[$key] ) || $value === '' ) {
+					continue;
+				}
+				if ( $key === 'person' || $key === 'picture' ) {
+					$value = trim( $value, "[] \t" );
+				}
+				if ( $key === 'picture' ) {
+					$value = preg_replace( '/^(File|Image)\s*:\s*/i', '', $value );
+				}
+				$output->setUnsortedPageProperty( PostData::BYLINE[$key], mb_substr( $value, 0, 255 ) );
+			}
+			return '';
 		} );
 		$parser->setHook( 'todo', static function ( $input, array $args, $parser, $frame ) {
 			$page = $parser->getPage();
@@ -307,7 +383,10 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			}
 		}
 		self::addCard( $out );
-		self::addTidingBanner( $out );
+		// A post's page carries its tiding itself, sent with the page (Posts/SkinBroadside.php).
+		if ( $skin->getSkinName() !== 'broadside' ) {
+			self::addTidingBanner( $out );
+		}
 		// "+ chartifact" on the edit toolbar, and beside a Chartifacts
 		// heading's "edit source" for whoever can edit (Skyler, #rabbithole,
 		// 13 Nov 2026).

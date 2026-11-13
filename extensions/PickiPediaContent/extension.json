@@ -23,15 +23,19 @@
 	"Hooks": {
 		"BeforePageDisplay": "main",
 		"ChangesListSpecialPageStructuredFilters": "main",
+		"GetDoubleUnderscoreIDs": "main",
 		"GetPreferences": "main",
+		"getUserPermissionsErrors": "main",
+		"LinksUpdateComplete": "main",
+		"PageDeleteComplete": "main",
 		"PageMoveComplete": "main",
 		"PageSaveComplete": "main",
 		"ParserFirstCallInit": "main",
+		"RequestContextCreateSkin": "main",
 		"SaveUserOptions": "main",
 		"ScribuntoExternalLibraryPaths": "main",
 		"SkinAfterContent": "main",
-		"UploadComplete": "main",
-		"getUserPermissionsErrors": "main"
+		"UploadComplete": "main"
 	},
 	"MessagesDirs": {
 		"PickiPediaContent": [
@@ -81,6 +85,47 @@
 			"styles": [
 				"ext.pickipediaContent.chartifactButton.css"
 			]
+		},
+		"skins.broadside.styles": {
+			"class": "MediaWiki\\ResourceLoader\\SkinModule",
+			"features": {
+				"accessibility": true,
+				"normalize": true,
+				"elements": true,
+				"content-media": true,
+				"content-links": true,
+				"content-tables": true,
+				"interface-core": true,
+				"interface-edit-section-links": true,
+				"interface-indicators": true,
+				"interface-subtitle": true,
+				"interface-user-message": true,
+				"interface-site-notice": true,
+				"interface-message-box": true,
+				"i18n-ordered-lists": true,
+				"i18n-headings": true
+			},
+			"styles": [
+				"skins.broadside/tokens.css",
+				"skins.broadside/frame.css",
+				"skins.broadside/prose.css",
+				"skins.broadside/parts.css"
+			]
+		},
+		"skins.broadside": {
+			"scripts": [
+				"skins.broadside/broadside.js"
+			],
+			"messages": [
+				"pickipediacontent-posts-card-missing",
+				"pickipediacontent-posts-card-leaves",
+				"pickipediacontent-posts-card-listen",
+				"pickipediacontent-posts-dock-back",
+				"pickipediacontent-posts-dock-close"
+			],
+			"dependencies": [
+				"mediawiki.util"
+			]
 		}
 	},
 	"ResourceFileModulePaths": {
@@ -109,7 +154,65 @@
 		"PickiPediaContentMagentaPublicUrl": {
 			"value": "https://magenta.cryptograss.live",
 			"description": "magenta as a reader's browser reaches it: a page that is a tiding there asks its /api/wiki/tiding/, and links to it, in a banner atop the page (ext.pickipediaContent.tidingBanner)"
+		},
+		"PickiPediaContentPosts": {
+			"value": true,
+			"description": "Whether a user's subpages are posts, read in the Broadside skin (src/Posts/). False: they are ordinary wiki pages again, at once, with nothing else to undo."
 		}
 	},
-	"manifest_version": 2
+	"manifest_version": 2,
+	"ValidSkinNames": {
+		"broadside": {
+			"displayname": "Broadside",
+			"class": "MediaWiki\\Extension\\PickiPediaContent\\Posts\\SkinBroadside",
+			"skippable": true,
+			"args": [
+				{
+					"name": "broadside",
+					"responsive": true,
+					"toc": true,
+					"supportsMwHeading": true,
+					"templateDirectory": "templates/broadside",
+					"styles": [
+						"skins.broadside.styles"
+					],
+					"scripts": [
+						"skins.broadside"
+					],
+					"messages": [
+						"pickipediacontent-posts-about",
+						"pickipediacontent-posts-begin",
+						"pickipediacontent-posts-beside",
+						"pickipediacontent-posts-block",
+						"pickipediacontent-posts-dock",
+						"pickipediacontent-posts-home",
+						"pickipediacontent-posts-listen",
+						"pickipediacontent-posts-mode",
+						"pickipediacontent-posts-more-tools",
+						"pickipediacontent-posts-more-writing",
+						"pickipediacontent-posts-on-magenta",
+						"pickipediacontent-posts-plain",
+						"pickipediacontent-posts-search",
+						"pickipediacontent-posts-series",
+						"pickipediacontent-posts-site",
+						"pickipediacontent-posts-skip",
+						"pickipediacontent-posts-songpage",
+						"pickipediacontent-posts-songs",
+						"pickipediacontent-posts-songs-note",
+						"pickipediacontent-posts-thread",
+						"pickipediacontent-posts-thread-empty",
+						"pickipediacontent-posts-thread-go",
+						"pickipediacontent-posts-tiding",
+						"pickipediacontent-posts-tiding-go",
+						"pickipediacontent-posts-toc",
+						"pickipediacontent-posts-tools",
+						"pickipediacontent-posts-you"
+					]
+				}
+			]
+		}
+	},
+	"APIModules": {
+		"pagecard": "MediaWiki\\Extension\\PickiPediaContent\\Posts\\ApiPageCard"
+	}
 }

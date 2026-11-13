@@ -1,0 +1,512 @@
+/*
+ * Broadside: the post itself. Its masthead, its words, its pictures.
+ */
+
+/* ---- The masthead ---- */
+
+.bs-hero {
+	padding: clamp( 1.5rem, 5vw, 3.5rem ) 0 0;
+}
+.bs-kicker {
+	margin: 0 0 0.9rem;
+	color: var( --bs-rust );
+	font: 600 0.6875rem/1.3 var( --bs-mono );
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+.bs-kicker a {
+	color: inherit;
+	text-decoration: none;
+	border-bottom: 1px dotted currentColor;
+}
+.bs-kicker a:hover { color: var( --bs-ink ); }
+
+.skin-broadside h1.bs-title {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	color: var( --bs-ink );
+	font: 700 clamp( 2.1rem, 1.45rem + 3vw, 3.5rem ) / 1.06 var( --bs-serif );
+	letter-spacing: -0.02em;
+	text-wrap: balance;
+	overflow-wrap: break-word;
+}
+.bs-dek {
+	margin: 0.9rem 0 0;
+	color: var( --bs-soft );
+	font: italic 400 clamp( 1.15rem, 1rem + 0.6vw, 1.4rem ) / 1.4 var( --bs-serif );
+	text-wrap: pretty;
+}
+.bs-dek a { color: inherit; }
+
+.bs-byline {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.6rem 0.75rem;
+	margin-top: 1.5rem;
+	padding: 0.9rem 0;
+	border-top: 1px solid var( --bs-line );
+	border-bottom: 1px solid var( --bs-line );
+}
+.bs-byline-words { flex: 1 1 12rem; min-width: 0; }
+.bs-author {
+	color: var( --bs-ink );
+	font-size: 0.9375rem;
+	font-weight: 650;
+	text-decoration: none;
+}
+.bs-author:hover { color: var( --bs-rust ); text-decoration: none; }
+.bs-meta {
+	color: var( --bs-muted );
+	font-size: 0.8125rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.bs-dot {
+	display: inline-block;
+	flex: none;
+	width: 0.55em;
+	height: 0.55em;
+	border-radius: 50%;
+	background: var( --bs-magenta );
+	box-shadow: 0 0 0 3px var( --bs-magenta-soft );
+}
+.bs-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-left: auto;
+	padding: 0.3rem 0.8rem 0.3rem 0.65rem;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	text-decoration: none;
+}
+.bs-chip--magenta {
+	background: var( --bs-magenta-soft );
+	color: var( --bs-magenta );
+}
+.bs-chip--magenta .bs-dot { box-shadow: none; }
+.bs-chip--magenta:hover { border-color: var( --bs-magenta ); color: var( --bs-magenta ); text-decoration: none; }
+
+.bs-sub {
+	margin: 0.75rem 0 0;
+	color: var( --bs-muted );
+	font-size: 0.8125rem;
+}
+/* "< User:Name": the byline says whose it is. */
+.bs-sub .subpages { display: none; }
+.bs-sub:not( :has( #mw-content-subtitle > :not( .subpages ) ) ) { display: none; }
+
+/* ---- The words ---- */
+
+.bs-body {
+	margin-top: 2rem;
+	color: var( --bs-ink );
+	font-family: var( --bs-serif );
+	font-size: var( --bs-size );
+	line-height: 1.68;
+}
+.bs-body::after {
+	content: "";
+	display: block;
+	clear: both;
+}
+/* A post's own lines for its masthead (Post::sourced): shown there, by the server. */
+.bs-body .pp-dek-source,
+.bs-body .pp-kicker-source {
+	display: none;
+}
+
+.bs-body .mw-parser-output > p {
+	margin: 0 0 1.25em;
+	text-wrap: pretty;
+}
+.bs-body .mw-parser-output > p:last-child { margin-bottom: 0; }
+
+/* The first letter, large, as a printer would set it: of the opening paragraph, or of the one after a
+   rule when the post opens with a note and a rule. A paragraph that opens with a link or a picture has
+   no such letter. */
+.bs-body .mw-parser-output > p:first-child:not( :has( + hr ) )::first-letter,
+.bs-body .mw-parser-output > p:first-child + hr + p::first-letter {
+	float: left;
+	margin: 0.08em 0.1em 0 0;
+	color: var( --bs-rust );
+	font-style: normal;
+	font-weight: 700;
+	font-size: 3.4em;
+	line-height: 0.82;
+}
+@supports ( initial-letter: 3 ) or ( -webkit-initial-letter: 3 ) {
+	.bs-body .mw-parser-output > p:first-child:not( :has( + hr ) )::first-letter,
+	.bs-body .mw-parser-output > p:first-child + hr + p::first-letter {
+		float: none;
+		margin: 0 0.1em 0 0;
+		font-size: inherit;
+		line-height: inherit;
+		-webkit-initial-letter: 3;
+		initial-letter: 3;
+	}
+}
+
+.bs-body .mw-heading,
+.bs-body h2,
+.bs-body h3,
+.bs-body h4,
+.bs-body h5,
+.bs-body h6 {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	color: var( --bs-ink );
+	font-family: var( --bs-serif );
+	font-weight: 700;
+	line-height: 1.2;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
+	overflow: visible;
+}
+.bs-body .mw-heading { margin: 2.1em 0 0.8em; font-size: inherit; }
+.bs-body .mw-heading2, .bs-body h2 { font-size: 1.55em; }
+.bs-body .mw-heading3, .bs-body h3 { font-size: 1.22em; }
+.bs-body .mw-heading4, .bs-body h4,
+.bs-body .mw-heading5, .bs-body h5,
+.bs-body .mw-heading6, .bs-body h6 { font-size: 1em; }
+.bs-body .mw-heading h2,
+.bs-body .mw-heading h3,
+.bs-body .mw-heading h4,
+.bs-body .mw-heading h5,
+.bs-body .mw-heading h6 {
+	display: inline;
+	font-size: inherit;
+}
+.bs-body .mw-heading:first-child { margin-top: 0; }
+.bs-body .mw-editsection {
+	margin-left: 0.6em;
+	font: 400 0.75rem/1 var( --bs-sans );
+	color: var( --bs-muted );
+	opacity: 0;
+	transition: opacity 0.15s;
+	user-select: none;
+}
+.bs-body .mw-heading:hover .mw-editsection,
+.bs-body .mw-editsection:focus-within { opacity: 1; }
+.bs-body .mw-editsection a { color: var( --bs-muted ); }
+
+/* Links, as the wiki draws them and as magenta draws them on a tiding: blue for a page, red for one
+   not written yet. An underline, faint until pointed at, so they are links without the colour too. */
+.bs-body a,
+.bs-end a {
+	color: var( --bs-link );
+	text-decoration: underline;
+	text-decoration-thickness: 0.06em;
+	text-underline-offset: 0.18em;
+	text-decoration-color: color-mix( in srgb, currentColor 32%, transparent );
+	transition: text-decoration-color 0.15s;
+}
+.bs-body a:visited { color: var( --bs-link ); }
+.bs-body a:hover,
+.bs-end a:hover { text-decoration-color: currentColor; }
+.bs-body a.new,
+.bs-body a.new:visited {
+	color: var( --bs-link-new );
+	text-decoration-style: dotted;
+}
+.bs-body a.mw-selflink { color: inherit; text-decoration: none; }
+/* One mark for a link that leaves, an arrow in the words' own colour; not the wiki skins' little box too. */
+.bs-body a.external,
+.bs-body a.extiw {
+	padding-right: 0;
+	background-image: none;
+}
+.bs-body a.external:not( .image ):not( :has( img ) )::after {
+	content: "↗";
+	display: inline-block;
+	margin-left: 0.12em;
+	font: 400 0.7em/1 var( --bs-sans );
+	text-decoration: none;
+	opacity: 0.7;
+}
+.bs-body .plainlinks a.external::after { content: none; }
+
+.bs-body ul,
+.bs-body ol {
+	margin: 0 0 1.25em;
+	padding-left: 1.4em;
+}
+.bs-body li { margin: 0 0 0.35em; }
+.bs-body li > ul,
+.bs-body li > ol { margin: 0.35em 0 0; }
+.bs-body dl { margin: 0 0 1.25em; }
+.bs-body dd { margin-left: 1.4em; }
+
+.bs-body blockquote {
+	margin: 1.8em 0;
+	padding: 0.1em 0 0.1em 1.2em;
+	border-left: 3px solid var( --bs-rust );
+	color: var( --bs-soft );
+	font-style: italic;
+	font-size: 1.08em;
+	line-height: 1.5;
+}
+.bs-body blockquote > :last-child { margin-bottom: 0; }
+
+/* A rule is a pause: a printer's flower, not a line. */
+.bs-body .mw-parser-output > hr {
+	height: auto;
+	margin: 2.2em 0;
+	border: 0;
+	background: none;
+	color: var( --bs-rust );
+	text-align: center;
+	overflow: visible;
+}
+.bs-body .mw-parser-output > hr::before {
+	/* The flower, as type: the selector after it keeps a phone from drawing it as a picture. */
+	content: "\2766\FE0E";
+	font: 400 1.5rem/1 var( --bs-serif );
+	opacity: 0.85;
+}
+
+.bs-body code,
+.bs-body kbd,
+.bs-body samp,
+.bs-body pre {
+	font-family: var( --bs-mono );
+	font-size: 0.82em;
+}
+.bs-body code {
+	padding: 0.1em 0.35em;
+	border: 0;
+	border-radius: 0.3em;
+	background: var( --bs-wash );
+	color: inherit;
+}
+.bs-body pre {
+	margin: 0 0 1.5em;
+	padding: 1em 1.1em;
+	border: 1px solid var( --bs-line );
+	border-radius: 0.6rem;
+	background: var( --bs-wash );
+	color: var( --bs-ink );
+	line-height: 1.55;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	tab-size: 4;
+}
+.bs-body pre code { padding: 0; background: none; font-size: inherit; }
+
+.bs-body sup,
+.bs-body sub { line-height: 1; }
+.bs-body .reference { font: 500 0.7em/1 var( --bs-sans ); }
+.bs-body .references { font-size: 0.85em; line-height: 1.5; color: var( --bs-soft ); }
+
+/* A table wider than the column scrolls on its own; the page never does sideways. */
+.bs-body .mw-parser-output > table {
+	display: block;
+	max-width: 100%;
+	overflow-x: auto;
+}
+.bs-body table.wikitable {
+	margin: 0 0 1.5em;
+	border: 1px solid var( --bs-line );
+	border-collapse: collapse;
+	background: var( --bs-panel );
+	color: var( --bs-ink );
+	font: 400 0.8125rem/1.45 var( --bs-sans );
+}
+.bs-body table.wikitable > * > tr > th,
+.bs-body table.wikitable > * > tr > td {
+	padding: 0.45em 0.7em;
+	border: 1px solid var( --bs-line );
+}
+.bs-body table.wikitable > * > tr > th {
+	background: var( --bs-wash );
+	color: var( --bs-ink );
+	font-weight: 650;
+	text-align: left;
+}
+
+/* A patch of colour a template brought with it keeps dark words on it by night (--bs-on-patch). */
+.bs-body [style*="background"]:not( [style*=" color:"] ):not( [style*=";color:"] ):not( [style^="color:"] ) {
+	color: var( --bs-on-patch );
+}
+.bs-body .pv-proposed,
+.bs-body .bot-proposal,
+.bs-body .claim-unverified {
+	color: var( --bs-on-patch );
+}
+
+/* ---- Pictures ---- */
+
+.bs-body figure,
+.bs-body .thumb {
+	max-width: 100%;
+}
+.bs-body figure[typeof~="mw:File/Thumb"],
+.bs-body figure[typeof~="mw:File/Frame"] {
+	display: table;
+	margin: 0.4em 0 1.2em;
+	border: 0;
+	background: none;
+}
+.bs-body figure[typeof~="mw:File/Thumb"] > :not( figcaption ),
+.bs-body figure[typeof~="mw:File/Frame"] > :not( figcaption ) {
+	display: block;
+	border: 0;
+	background: none;
+}
+.bs-body figure[typeof~="mw:File/Thumb"] img,
+.bs-body figure[typeof~="mw:File/Frame"] img,
+.bs-body figure[typeof~="mw:File"] img,
+.bs-body span[typeof~="mw:File"] img {
+	max-width: 100%;
+	height: auto;
+	border: 0;
+	border-radius: 0.5rem;
+	background: var( --bs-wash );
+}
+.bs-body figure[typeof~="mw:File/Thumb"] img,
+.bs-body figure[typeof~="mw:File/Frame"] img {
+	display: block;
+	box-shadow: 0 0 0 1px var( --bs-line ), var( --bs-shadow );
+}
+.bs-body figure[typeof~="mw:File/Thumb"] > figcaption,
+.bs-body figure[typeof~="mw:File/Frame"] > figcaption {
+	display: table-caption;
+	caption-side: bottom;
+	padding: 0.65em 0.1em 0;
+	border: 0;
+	background: none;
+	color: var( --bs-muted );
+	font: 400 0.8125rem/1.45 var( --bs-sans );
+	text-align: left;
+	text-wrap: pretty;
+}
+.bs-body figcaption a { color: inherit; text-decoration-color: currentColor; }
+/* No "enlarge" mark in the caption: the picture itself opens. */
+.bs-body figure[typeof~="mw:File/Thumb"] > figcaption::before { content: none; display: none; }
+
+/* Set in the middle, or alone on its line: the whole column is its. */
+.bs-body figure.mw-halign-center,
+.bs-body figure.mw-halign-none {
+	clear: both;
+	margin: 1.8em auto;
+}
+.bs-body figure.mw-halign-center > figcaption { text-align: center; }
+
+/* Beside the words where there's room; in line with them where there isn't. */
+.bs-body figure.mw-halign-right,
+.bs-body figure[typeof~="mw:File/Thumb"]:not( [class*="mw-halign-"] ),
+.bs-body figure[typeof~="mw:File/Frame"]:not( [class*="mw-halign-"] ) {
+	float: right;
+	clear: right;
+	max-width: 46%;
+	margin: 0.35em 0 1em 1.5em;
+}
+.bs-body figure.mw-halign-left {
+	float: left;
+	clear: left;
+	max-width: 46%;
+	margin: 0.35em 1.5em 1em 0;
+}
+@media ( max-width: 34rem ) {
+	.bs-body figure.mw-halign-right,
+	.bs-body figure.mw-halign-left,
+	.bs-body figure[typeof~="mw:File/Thumb"]:not( [class*="mw-halign-"] ),
+	.bs-body figure[typeof~="mw:File/Frame"]:not( [class*="mw-halign-"] ) {
+		float: none;
+		max-width: 100%;
+		margin: 1.5em auto;
+	}
+}
+
+.bs-body ul.gallery {
+	display: grid;
+	grid-template-columns: repeat( auto-fill, minmax( 9.5rem, 1fr ) );
+	gap: 0.9rem;
+	margin: 1.8em 0;
+	padding: 0;
+}
+.bs-body ul.gallery li.gallerybox {
+	width: auto !important;
+	margin: 0;
+}
+.bs-body ul.gallery li.gallerybox > div,
+.bs-body ul.gallery .thumb { width: auto !important; margin: 0 !important; }
+.bs-body ul.gallery img { width: 100%; height: auto; border-radius: 0.4rem; }
+.bs-body ul.gallery .gallerytext {
+	padding: 0.4em 0 0;
+	color: var( --bs-muted );
+	font: 400 0.75rem/1.4 var( --bs-sans );
+}
+
+.bs-body iframe,
+.bs-body video,
+.bs-body embed,
+.bs-body object { max-width: 100%; }
+.bs-body .embedvideo,
+.bs-body .embedvideo-wrapper { max-width: 100%; }
+
+/* ---- The end of the post ---- */
+
+.bs-end {
+	margin-top: 2.5rem;
+	font-family: var( --bs-sans );
+}
+.bs-turn {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: baseline;
+	gap: 1rem;
+	padding: 1rem 0;
+	border-top: 1px solid var( --bs-line );
+	border-bottom: 1px solid var( --bs-line );
+	font-size: 0.875rem;
+}
+.bs-turn-next { text-align: right; }
+.bs-turn-where {
+	color: var( --bs-muted );
+	font-size: 0.75rem;
+	text-align: center;
+}
+.bs-turn a { text-decoration: none; }
+.bs-turn a:hover { text-decoration: underline; }
+.bs-turn-where a { color: inherit; }
+
+.bs-cats { margin-top: 1.5rem; }
+.bs-cats .catlinks {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var( --bs-muted );
+	font-size: 0.75rem;
+}
+.bs-cats .catlinks ul { display: inline; margin: 0; padding: 0; list-style: none; }
+.bs-cats .catlinks li {
+	display: inline-block;
+	margin: 0 0.3rem 0.3rem 0;
+	padding: 0;
+	border: 0;
+}
+.bs-cats .catlinks li a {
+	display: inline-block;
+	padding: 0.15rem 0.65rem;
+	border: 1px solid var( --bs-line );
+	border-radius: 999px;
+	color: var( --bs-soft );
+	text-decoration: none;
+}
+.bs-cats .catlinks li a:hover { border-color: var( --bs-rust ); color: var( --bs-rust ); }
+.bs-cats .catlinks > div > a { color: var( --bs-muted ); text-decoration: none; }
+
+.bs-after {
+	margin-top: 2rem;
+	color: var( --bs-muted );
+	font-size: 0.8125rem;
+}
+.bs-after #pp-build-info { color: inherit !important; }
+.bs-after #pp-build-info a { color: inherit; }

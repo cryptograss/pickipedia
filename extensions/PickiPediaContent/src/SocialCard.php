@@ -126,6 +126,11 @@ class SocialCard {
 		if ( in_array( $tag, [ 'style', 'script' ], true ) || self::leftOut( $node->getAttribute( 'class' ) ) ) {
 			return '';
 		}
+		// A verification's own mark, "[✓]" or "[unverified]" ({{verified}}, {{Bot_proposes}}), is about the
+		// words, not one of them: Cory Walker's card ended "...Tacos y Mariscos.[✓]" (13 Nov 2026).
+		if ( $tag === 'sup' && preg_match( '/^\[\s*(✓|unverified)\s*\]$/u', trim( $node->textContent ) ) ) {
+			return '';
+		}
 		$out = '';
 		foreach ( $node->childNodes as $child ) {
 			$out .= self::textOf( $child, $bare, $inLink || $tag === 'a' );

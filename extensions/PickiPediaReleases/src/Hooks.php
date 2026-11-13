@@ -79,12 +79,8 @@ class Hooks implements
 		$out->addModules( 'ext.pickipediaReleases.blocksAgo' );
 		$out->addModules( 'ext.pickipediaReleases.instrumentForm' );
 
-		// The zine look for user subpages (User:Name/Post), sent by the server
-		// so the page arrives styled instead of flashing the default skin
-		// first. See Zine.php.
-		if ( Zine::applies( $out ) ) {
-			Zine::addTo( $out );
-		}
+		// A user's subpages (User:Name/Post) used to be dressed here as a "zine". They are posts now, read in
+		// a skin of their own: PickiPediaContent's src/Posts/SkinBroadside.php.
 
 		// Also inject tokens on Special:FormEdit pages and any page using
 		// the deliveryKidInput module (PageForms forms).
