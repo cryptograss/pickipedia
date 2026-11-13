@@ -65,13 +65,15 @@
 		"LoadExtensionSchemaUpdates": "main",
 		"BeforePageDisplay": "main",
 		"OutputPageParserOutput": "main",
-		"PageForms::FormPrinterSetup": "main"
+		"PageForms::FormPrinterSetup": "main",
+		"ParserFirstCallInit": "main"
 	},
 	"MessagesDirs": {
 		"PickiPediaReleases": ["i18n"]
 	},
 	"ExtensionMessagesFiles": {
-		"PickiPediaReleasesAlias": "PickiPediaReleases.alias.php"
+		"PickiPediaReleasesAlias": "PickiPediaReleases.alias.php",
+		"PickiPediaReleasesMagic": "PickiPediaReleases.i18n.magic.php"
 	},
 	"ResourceModules": {
 		"ext.pickipediaReleases.styles": {

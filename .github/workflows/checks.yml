@@ -48,6 +48,7 @@ jobs:
           php extensions/PickiPediaVerification/tests/check-verify-brackets.php
           php docker/check-extensions.php "$GITHUB_WORKSPACE"
           php extensions/PickiPediaReleases/tests/check-zine.php
+          php extensions/PickiPediaReleases/tests/check-on-the-record.php
           cd extensions/PickiPediaContent && php tests/check-classes.php && php tests/check-bundles.php && php tests/check-pronouns.php && php tests/check-magenta-push.php && php tests/check-timezone.php
 
   web:
