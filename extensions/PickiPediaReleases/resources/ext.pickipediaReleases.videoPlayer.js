@@ -115,10 +115,104 @@
             c.setAttribute('data-initialized', 'true');
         });
 
-        // Then load hls.js and initialize
-        loadHls().then(function() {
-            containers.forEach(initPlayer);
+        // Then load hls.js, and ask what each video warns of, and initialize:
+        // a video that warns starts behind a veil, and plays only once lifted.
+        Promise.all([loadHls(), warningsFor(containers)]).then(function(got) {
+            var warns = got[1];
+            containers.forEach(function(c) {
+                var said = (c.getAttribute('data-warning') || '').trim()
+                    || warns[normalizeCid(c.getAttribute('data-cid'))] || '';
+                if (said) {
+                    veil(c, said);
+                } else {
+                    initPlayer(c);
+                }
+            });
         });
+    }
+
+    /*
+     * A content warning, kept on the video's own Release page as a line of its
+     * YAML (content_warning: "Flashing lights"), so every place that shows the
+     * video masks it: here, a Mood, a tiding (Justin, #interfaces, 13 Nov
+     * 2026). A placement can add its own with data-warning ({{HLSVideo|warning=}}),
+     * and the Release page passes its line in that way too, asking nothing.
+     */
+    function warningOf(yaml) {
+        var m = /^content_warning:[ \t]*(.*)$/m.exec(String(yaml || ''));
+        if (!m) return '';
+        var said = m[1].trim();
+        if (/^[|>][-+]?$/.test(said)) {
+            // A block: the indented lines under it.
+            var rest = String(yaml).slice(m.index + m[0].length).split('\n').slice(1);
+            var lines = [];
+            for (var i = 0; i < rest.length && /^\s+\S|^\s*$/.test(rest[i]); i++) {
+                lines.push(rest[i].trim());
+            }
+            said = lines.join(' ').trim();
+        }
+        return said.replace(/^(["'])([\s\S]*)\1$/, '$2').trim();
+    }
+
+    function warningsFor(containers) {
+        var cids = [];
+        containers.forEach(function(c) {
+            var cid = normalizeCid(c.getAttribute('data-cid'));
+            if (cid && !(c.getAttribute('data-warning') || '').trim() && cids.indexOf(cid) < 0) cids.push(cid);
+        });
+        if (!cids.length) return Promise.resolve({});
+        var api = (typeof mw !== 'undefined' && mw.util && mw.util.wikiScript) ? mw.util.wikiScript('api') : '/api.php';
+        var asks = [];
+        for (var i = 0; i < cids.length; i += 50) {
+            var titles = cids.slice(i, i + 50).map(function(c) { return 'Release:' + c; }).join('|');
+            asks.push(fetch(api + '?action=query&prop=revisions&rvprop=content&rvslots=main&format=json'
+                + '&formatversion=2&titles=' + encodeURIComponent(titles))
+                .then(function(r) { return r.json(); })
+                .catch(function() { return {}; }));
+        }
+        return Promise.all(asks).then(function(answers) {
+            var warns = {};
+            answers.forEach(function(a) {
+                ((a.query || {}).pages || []).forEach(function(p) {
+                    var rev = (p.revisions || [])[0];
+                    var yaml = rev && rev.slots && rev.slots.main ? rev.slots.main.content : '';
+                    var said = warningOf(yaml);
+                    if (said) warns[normalizeCid(p.title.replace(/^Release:/, ''))] = said;
+                });
+            });
+            return warns;
+        });
+    }
+
+    function veil(container, said) {
+        var maxWidth = container.getAttribute('data-max-width') || '800px';
+        container.innerHTML = '';
+        var box = document.createElement('div');
+        box.className = 'hls-video-veil';
+        box.setAttribute('role', 'group');
+        box.setAttribute('aria-label', 'Content warning');
+        box.style.cssText = 'box-sizing:border-box; width:100%; max-width:' + maxWidth + '; aspect-ratio:16/9;'
+            + ' display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.8em;'
+            + ' padding:1.5em; background:#1b1b1f; color:#f3f3f3; border-radius:6px; text-align:center;';
+        var head = document.createElement('div');
+        head.style.cssText = 'font-size:0.85em; letter-spacing:0.12em; text-transform:uppercase; color:#f0b13f; font-weight:700;';
+        head.textContent = '⚠ Content warning';
+        var words = document.createElement('div');
+        words.style.cssText = 'font-size:1.1em; max-width:34em; line-height:1.4;';
+        words.textContent = said;
+        var lift = document.createElement('button');
+        lift.type = 'button';
+        lift.textContent = 'Show the video';
+        lift.style.cssText = 'cursor:pointer; padding:0.5em 1.4em; border-radius:999px; border:1px solid #f3f3f3;'
+            + ' background:transparent; color:#f3f3f3; font:inherit; font-weight:600;';
+        lift.addEventListener('click', function() {
+            container.innerHTML = '';
+            initPlayer(container);
+        });
+        box.appendChild(head);
+        box.appendChild(words);
+        box.appendChild(lift);
+        container.appendChild(box);
     }
 
     function createVideoElement(width, maxWidth) {

@@ -104,6 +104,8 @@ class ApiReleaseList extends ApiBase {
 				'bittorrent_infohash' => $data['bittorrent_infohash'] ?? null,
 				'file_type' => $data['file_type'] ?? null,
 				'file_size' => isset( $data['file_size'] ) ? (int)$data['file_size'] : null,
+				// Masks the video wherever it's shown: the wiki, a Mood, a tiding.
+				'content_warning' => ReleaseContentHandler::contentWarning( $data ) ?: null,
 			];
 
 			// Include trackers if present

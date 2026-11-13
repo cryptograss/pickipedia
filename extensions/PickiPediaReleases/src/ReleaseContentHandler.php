@@ -358,6 +358,17 @@ YAML;
 	}
 
 	/**
+	 * A release's content warning (its YAML's content_warning), or ''.
+	 *
+	 * @param array $data
+	 * @return string
+	 */
+	public static function contentWarning( array $data ): string {
+		$said = $data['content_warning'] ?? '';
+		return is_string( $said ) ? trim( $said ) : '';
+	}
+
+	/**
 	 * Render the main release info section
 	 *
 	 * @param string|null $cid
@@ -372,11 +383,14 @@ YAML;
 
 		// Render video player if this release is a video
 		if ( $cid && $isVideo ) {
+			// Its content warning, if its YAML has one, so the player starts veiled
+			// without asking (ext.pickipediaReleases.videoPlayer.js).
 			$html .= Html::element( 'div', [
 				'class' => 'hls-video-player',
 				'data-cid' => $cid,
 				'data-width' => '100%',
 				'data-max-width' => '800px',
+				'data-warning' => self::contentWarning( $data ) ?: null,
 			] );
 
 		}
@@ -390,6 +404,14 @@ YAML;
 		$html .= $afterPlayer;
 
 		$html .= Html::openElement( 'table', [ 'class' => 'release-metadata wikitable' ] );
+
+		// What it warns of: shown before it plays, wherever it plays (Justin, #interfaces, 13 Nov 2026).
+		if ( self::contentWarning( $data ) !== '' ) {
+			$html .= Html::openElement( 'tr' );
+			$html .= Html::element( 'th', [], 'Content warning' );
+			$html .= Html::element( 'td', [], self::contentWarning( $data ) );
+			$html .= Html::closeElement( 'tr' );
+		}
 
 		// CID from page title (primary identifier)
 		if ( $cid ) {
