@@ -1,0 +1,479 @@
+/*
+ * The connectome's big graph (index.html). One accent, and it means one thing: gold is a Permanent Release.
+ * Everything else is ink on paper. The same marks are on the musician pages' cards
+ * (ext.pickipediaContent.connectome.css) and in Rabbithole's "Your rabbithole".
+ */
+:root {
+	color-scheme: light;
+	--surface: #fcfcfb;
+	--plane: #f9f9f7;
+	--ink: #0b0b0b;
+	--ink2: #52514e;
+	--muted: #898781;
+	--hair: #e1e0d9;
+	--axis: #c3c2b7;
+	--gold: #eda100;
+	--gold-wash: #fdf1cf;
+	--link: #0645ad;
+	--ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+	--name: Georgia, "Times New Roman", serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	display: flex;
+	flex-direction: column;
+	background: var( --surface );
+	color: var( --ink );
+	font: 14px/1.4 var( --ui );
+}
+
+.vh {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset( 50% );
+}
+
+a { color: var( --link ); }
+
+/* A picker with no page yet: still a link (it's how a page gets started), but it doesn't shout. */
+a.new {
+	color: var( --ink );
+	text-decoration-style: dotted;
+}
+
+/* ---- the bar: who is on, and where you've been ---- */
+.bar {
+	display: flex;
+	flex: none;
+	gap: 8px;
+	align-items: center;
+	padding: 6px 12px;
+	border-bottom: 1px solid var( --hair );
+	background: var( --plane );
+}
+
+.bar input {
+	width: 13.5em;
+	max-width: 34vw;
+	padding: 4px 8px;
+	border: 1px solid var( --axis );
+	border-radius: 6px;
+	background: var( --surface );
+	color: var( --ink );
+	font: 600 14px var( --name );
+}
+
+.bar input:focus-visible,
+button:focus-visible,
+#g [tabindex]:focus-visible {
+	outline: 2px solid var( --link );
+	outline-offset: 2px;
+}
+
+.bar .join { color: var( --muted ); }
+
+#back {
+	padding: 2px 9px;
+	border: 1px solid var( --axis );
+	border-radius: 6px;
+	background: var( --surface );
+	color: var( --ink );
+	font: 16px var( --ui );
+	cursor: pointer;
+}
+
+#crumbs {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	color: var( --ink2 );
+	font-size: 12px;
+	text-align: right;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#crumbs button {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var( --ink2 );
+	font: inherit;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+/* ---- the stage ---- */
+main {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+#stage {
+	position: relative;
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-width: 0;
+	overflow: hidden;
+}
+
+#say {
+	flex: none;
+	padding: 12px 18px 0;
+}
+
+#say h1 {
+	margin: 0;
+	font: 700 22px/1.2 var( --name );
+}
+
+#say h1 a {
+	color: inherit;
+	text-decoration: none;
+}
+
+#say h1 a:hover,
+#say h1 a:focus {
+	color: var( --link );
+	text-decoration: underline;
+}
+
+#say p {
+	margin: 3px 0 0;
+	color: var( --ink2 );
+}
+
+#say p b {
+	color: var( --ink );
+	font-weight: 600;
+}
+
+#g {
+	display: block;
+	flex: 1 1 auto;
+	width: 100%;
+	min-height: 0;
+	user-select: none;
+}
+
+#wait {
+	position: absolute;
+	inset: 40% 0 auto;
+	color: var( --ink2 );
+	text-align: center;
+}
+
+#legend {
+	display: flex;
+	flex: none;
+	flex-wrap: wrap;
+	gap: 3px 18px;
+	padding: 6px 18px 8px;
+	border-top: 1px solid var( --hair );
+	color: var( --ink2 );
+	font-size: 12px;
+}
+
+#legend .lg { white-space: nowrap; }
+#legend svg { vertical-align: -1px; }
+#legend a { color: inherit; }
+
+/* ---- lines: music between pickers ---- */
+.glow {
+	fill: none;
+	stroke: var( --gold );
+	stroke-linecap: round;
+	stroke-width: 8;
+	opacity: 0.6;
+}
+
+.core {
+	fill: none;
+	stroke-linecap: round;
+	stroke-width: 2;
+}
+
+.core.t2 { stroke: var( --ink ); }
+.core.t1 { stroke: var( --ink2 ); }
+
+.core.t0 {
+	stroke: var( --muted );
+	stroke-dasharray: 1 5;
+}
+
+.thread {
+	fill: none;
+	stroke: var( --gold );
+	stroke-linecap: round;
+}
+
+.ln .hit {
+	fill: none;
+	stroke: transparent;
+	stroke-width: 16;
+	pointer-events: stroke;
+	cursor: pointer;
+}
+
+.ln { transition: opacity 0.12s; }
+.ln.quiet { pointer-events: none; }
+.ln.hot { opacity: 1; }
+
+/* ---- pickers ---- */
+.dot {
+	fill: var( --ink );
+	stroke: var( --surface );
+	stroke-width: 2;
+}
+
+.dot.hollow {
+	fill: var( --surface );
+	stroke: var( --ink );
+	stroke-width: 1.5;
+}
+
+.dot.big { stroke-width: 2; }
+
+.pk { cursor: pointer; }
+.pk .halo { fill: transparent; }
+
+.pk .ring {
+	fill: var( --surface );
+	stroke: var( --ink );
+	stroke-width: 2;
+}
+
+.pk.subject .ring { stroke-width: 2.5; }
+
+.pk.hot .ring,
+.pk.lit .ring {
+	stroke-width: 3.5;
+}
+
+.pk.hot .dot { stroke: var( --ink ); stroke-width: 1.5; }
+.pk.hot .dot.hollow { stroke-width: 2.5; }
+
+.pk text {
+	font: 700 14px var( --name );
+	fill: var( --link );
+	paint-order: stroke;
+	stroke: var( --surface );
+	stroke-width: 4px;
+	stroke-linejoin: round;
+}
+
+.pk.nopage text { fill: var( --ink ); }
+.pk.subject text { font-size: 17px; }
+.pk a:hover text,
+.pk a:focus text { text-decoration: underline; }
+
+.pk .rab { fill: var( --ink ); }
+.pk .rab .eye { fill: var( --surface ); }
+
+/* ---- music: a track, a record, a show ---- */
+.pill { cursor: pointer; }
+
+.pill rect {
+	fill: var( --surface );
+	stroke: var( --ink2 );
+	stroke-width: 1;
+}
+
+.pill.t2 rect {
+	fill: var( --gold-wash );
+	stroke: var( --gold );
+	stroke-width: 1.5;
+}
+
+.pill.t0 rect {
+	stroke: var( --muted );
+	stroke-dasharray: 2 3;
+}
+
+.pill text {
+	font: 600 12.5px var( --ui );
+	fill: var( --ink );
+}
+
+.pill.more text { font-weight: 400; fill: var( --ink2 ); }
+.pill.more rect { fill: var( --surface ); stroke: var( --axis ); stroke-width: 1; }
+.pill.hot rect, .pill.lit rect { stroke: var( --ink ); stroke-width: 2; }
+
+.gl { fill: none; stroke: var( --ink ); stroke-width: 1.3; }
+.gl .f { fill: var( --ink ); stroke: none; }
+
+/* ---- the note beside the pointer ---- */
+#tip {
+	position: absolute;
+	z-index: 5;
+	max-width: 290px;
+	padding: 6px 9px;
+	border: 1px solid var( --axis );
+	border-radius: 6px;
+	background: var( --surface );
+	box-shadow: 0 3px 12px rgba( 11, 11, 11, 0.14 );
+	color: var( --ink2 );
+	font-size: 12.5px;
+	pointer-events: none;
+}
+
+#tip b {
+	display: block;
+	color: var( --ink );
+	font: 700 14px var( --name );
+}
+
+#tip .do {
+	display: block;
+	margin-top: 3px;
+	color: var( --muted );
+}
+
+/* ---- the panel: the same, as a list a reader can check ---- */
+#panel {
+	flex: none;
+	width: 330px;
+	overflow-y: auto;
+	padding: 12px 14px 20px;
+	border-left: 1px solid var( --hair );
+	background: var( --plane );
+}
+
+#panel h2 {
+	margin: 0 0 2px;
+	font: 700 17px/1.25 var( --name );
+}
+
+#panel h3 {
+	margin: 16px 0 5px;
+	color: var( --ink2 );
+	font: 600 11.5px var( --ui );
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+#panel h3.row {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	justify-content: space-between;
+}
+
+#panel .mini {
+	flex: none;
+	padding: 1px 7px;
+	border: 1px solid var( --axis );
+	border-radius: 6px;
+	background: var( --surface );
+	color: var( --ink );
+	font: 12px var( --ui );
+	letter-spacing: 0;
+	text-transform: none;
+	cursor: pointer;
+}
+
+#panel p { margin: 4px 0; }
+#panel .sub { color: var( --ink2 ); }
+
+#panel ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+#panel li {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	padding: 6px 6px;
+	border-radius: 6px;
+}
+
+#panel li + li { border-top: 1px solid var( --hair ); }
+#panel li.go { cursor: pointer; }
+#panel li.go:hover, #panel li.hot { background: #f0efec; }
+#panel li .mark { flex: none; width: 18px; margin-top: 2px; }
+#panel li .body { flex: 1 1 auto; min-width: 0; }
+#panel li .t { font-weight: 600; }
+#panel li .s { color: var( --ink2 ); font-size: 12.5px; overflow-wrap: anywhere; }
+#panel li .n { flex: none; color: var( --ink2 ); font-size: 12.5px; text-align: right; white-space: nowrap; }
+#panel .who { font: 700 14px var( --name ); }
+
+.badge {
+	display: inline-block;
+	padding: 0 6px;
+	border: 1px solid var( --axis );
+	border-radius: 9px;
+	color: var( --ink2 );
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.badge.t2 {
+	border-color: var( --gold );
+	background: var( --gold-wash );
+	color: var( --ink );
+}
+
+.acts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 8px 0 2px;
+}
+
+.acts a, .acts button {
+	padding: 3px 9px;
+	border: 1px solid var( --axis );
+	border-radius: 6px;
+	background: var( --surface );
+	color: var( --ink );
+	font: 13px var( --ui );
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.acts a.page { border-color: var( --link ); color: var( --link ); }
+.acts a.page.new { border-color: var( --axis ); color: var( --ink ); }
+.acts a:hover, .acts button:hover { background: #f0efec; }
+
+#panel .foot {
+	margin-top: 18px;
+	color: var( --muted );
+	font-size: 12px;
+}
+
+#panel table { width: 100%; border-collapse: collapse; }
+#panel td { padding: 4px 6px; border-top: 1px solid var( --hair ); }
+#panel td.num { width: 3em; font-weight: 700; text-align: center; }
+#panel tr.go { cursor: pointer; }
+#panel tr.go:hover { background: #f0efec; }
+
+/* ---- narrow: the list under the graph ---- */
+@media ( max-width: 760px ) {
+	body { height: auto; min-height: 100%; }
+	main { flex-direction: column; }
+	#stage { flex: none; height: 72vh; min-height: 440px; }
+	#legend { gap: 2px 12px; padding: 5px 12px 6px; font-size: 11px; }
+	#legend .lg.more { display: none; }
+	#say { padding: 10px 12px 0; }
+	#panel { width: auto; border-top: 1px solid var( --hair ); border-left: 0; }
+	#say h1 { font-size: 18px; }
+	#crumbs { display: none; }
+	.bar input { width: 9.5em; }
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.ln { transition: none; }
+}

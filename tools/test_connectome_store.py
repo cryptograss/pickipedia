@@ -68,3 +68,18 @@ def test_pairs_track_record_show_apart():
     assert got[("Maddie Denton", "Vickie Vaughn", "discogs:34168519")]["kind"] == "record"
     assert got[("Kyle Tuttle", "Molly Tuttle", "lma:X")]["kind"] == "show"
     assert got[("Jamie Burks", "Kyle Tuttle", "lma:X")]["kind"] == "apart"
+
+
+def test_a_record_keeps_the_formats_its_source_lists(tmp_path):
+    julia = dict(JULIA, formats=[{"name": "Vinyl", "qty": "2", "descriptions": ["LP", "Album"]},
+                                 {"name": "CD", "qty": "1", "descriptions": ["Album", "Copy Protected"]}])
+    target = S.from_discogs(julia)[0]["target"]
+    assert target["formats"] == ["Vinyl (LP, Album)", "CD (Album, Copy Protected)"]
+    assert S.from_discogs(JULIA)[0]["target"]["formats"] == []          # the source lists none: none is kept
+    rel = {"id": "x", "title": "R", "date": "2020", "artist-credit": [{"name": "A", "joinphrase": ""}],
+           "relations": [{"type": "instrument", "attributes": ["guitar"], "artist": {"name": "G", "id": "g"}}],
+           "media": [{"position": 1, "format": "CD", "tracks": []}, {"position": 2, "format": "CD", "tracks": []},
+                     {"position": 3, "tracks": []}]}
+    assert S.from_mb(rel)[0]["target"]["formats"] == ["CD"]
+    db = S.to_sqlite(S.from_discogs(julia), str(tmp_path / "c.sqlite"))
+    assert db.execute("SELECT formats FROM targets").fetchall() == [("Vinyl (LP, Album); CD (Album, Copy Protected)",)]

@@ -47,7 +47,7 @@ svg.cc .cc-h:hover .cc-hi {
 }
 
 svg.cc .cc-h:hover circle {
-	stroke-width: 2.5;
+	stroke-width: 3;
 }
 
 svg.cc .cc-lab {
@@ -73,19 +73,24 @@ svg.cc a {
 	font-size: 85%;
 }
 
-.connectome-card .cc-sw {
+/* The legend's keys: the three lines, as the card and the big graph draw them. */
+.connectome-card .cc-key {
 	display: inline-block;
-	width: 9px;
-	height: 9px;
-	border-radius: 50%;
+	width: 18px;
 	vertical-align: middle;
 }
 
-.connectome-card .cc-dash {
-	display: inline-block;
-	width: 16px;
-	border-top: 2px dashed #a9a8a3;
-	vertical-align: middle;
+.connectome-card .cc-gold {
+	border-top: 4px solid #eda100;
+}
+
+.connectome-card .cc-ink {
+	border-top: 2px solid #52514e;
+}
+
+.connectome-card .cc-rest {
+	margin-left: 6px;
+	border-top: 2px dotted #898781;
 }
 
 .connectome-card table.cc-bacon {

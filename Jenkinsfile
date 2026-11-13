@@ -315,7 +315,8 @@ pipeline {
         }
 
         stage('Connectome') {
-            // The connectome store and the musician pages' cards (Justin, #connectome, 13 Nov 2026).
+            // The connectome store, the musician pages' cards, and graph.json for the big graph at
+            // assets/connectome/ (Justin, #connectome, 13 Nov 2026).
             // tools/connectome_sources.txt says what the store reads, and the responses are kept on maybelle,
             // so a build fetches only what's new (the first build, all ~1,450 of them). The store is built again
             // only when its sources, names, readers or arthel's data change; the cards every build, because the
@@ -327,27 +328,11 @@ pipeline {
                         set -e
                         CACHE="/var/jenkins_home/shared/connectome"
                         OUT="${MW_DIR}/assets/connectome"
-                        mkdir -p "${CACHE}/raw" "${CACHE}/lib" "${OUT}"
+                        mkdir -p "${CACHE}/raw" "${OUT}"
 
-                        # The big graph's libraries, pinned by hash (checked against npm's packages, 13 Nov 2026),
-                        # fetched once: no reader's browser asks another site for them.
-                        while read -r name sha url; do
-                            f="${CACHE}/lib/${name}"
-                            if [ ! -f "${f}" ] || ! echo "${sha}  ${f}" | sha256sum -c --status; then
-                                curl -fsSL --retry 3 -o "${f}.part" "${url}"
-                                if ! echo "${sha}  ${f}.part" | sha256sum -c --status; then
-                                    echo "ERROR: ${name} from ${url} does not match its pinned hash"
-                                    rm -f "${f}.part"
-                                    exit 1
-                                fi
-                                mv "${f}.part" "${f}"
-                            fi
-                            cp "${f}" "${OUT}/${name}"
-                        done <<'LIBS'
-d3.min.js f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539 https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js
-sql-wasm.js 558a72c3ab3415d0e6d243cfd23f9d61543600d59054b4b7b8da3cd65f6b9fd4 https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js
-sql-wasm.wasm d7e61b828523001f26ce0b3f88dabcf6c12e5e6edf80eb4f08b26ac7b946ff88 https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.wasm
-LIBS
+                        # The big graph draws with no library now (13 Nov 2026): what the old one fetched goes.
+                        rm -rf "${CACHE}/lib"
+                        rm -f "${OUT}/d3.min.js" "${OUT}/sql-wasm.js" "${OUT}/sql-wasm.wasm"
 
                         # PyYAML, for arthel's YAML: the Jenkins image has none. A venv in the cache, pinned by
                         # hash (PyPI's, 6.0.3, 13 Nov 2026), made once per Python version.
@@ -391,11 +376,11 @@ REQS
                             ls -dt "${CACHE}"/store-* | tail -n +4 | xargs -r rm -rf
                         fi
 
-                        # The cards, from the store and the wiki as it is now; swapped in whole.
+                        # The cards and the big graph's graph.json, from the store and the wiki as it is now; swapped in whole.
                         rm -rf "${CACHE}/cards.part"
                         "${PY}" connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part"
                         cp "${STORE}/connectome.sqlite" "${OUT}/connectome.sqlite"
-                        cp "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"
+                        cp "${CACHE}/cards.part/graph.json" "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"
                         rm -rf "${OUT}/cards"
                         mv "${CACHE}/cards.part/cards" "${OUT}/cards"
                         rm -rf "${CACHE}/cards.part"
