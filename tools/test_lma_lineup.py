@@ -103,3 +103,40 @@ def test_pairs_different_songs_is_show_not_song():
     found = {"A Person": [("description", "song-inline", "song", "05. Julius (w/ A Person)")],
              "B Person": [("description", "song-inline", "song", "09. Reuben's Train (w/ B Person)")]}
     assert L.pairs(found)[0]["kind"] == "show"
+
+
+# Names must be whole names, not strings inside longer ones. Each line is
+# copied from a real item (identifier in the comment).
+def test_mentions_not_inside_a_longer_name():
+    # kglw2018-08-22.amt: Ambrose Kenny-Smith of King Gizzard, not Kenny Smith
+    assert not L.mentions("Kenny Smith", "Ambrose Kenny Smith - harmonica, keyboards, synthesizer, organ, vocals")
+    # travelinmccourys2011-05-28
+    assert not L.mentions("Chris Davis", "+ Donnie Davisson, Chris Davisson")
+    assert not L.mentions("Kenny Smith", "Kenny Smith-Jones")
+
+
+def test_mentions_glued_by_stripped_markup():
+    # travelinmccourys2025-09-30: <br> lost, names run into the line before
+    line = "Rob McCoury - Banjo And VocalsChristian Ward - Fiddle And Vocals"
+    assert L.mentions("Christian Ward", line)
+    assert L.mentions("Mike Merenda", "Mike Merenda-Vocals,Guitars,Harmonica")
+    # SB_ws2014-09-27: a file title with the track number run on
+    assert L.mentions("Sam Bush", "STE-010Sam Bush ws01")
+    assert L.mentions("Chris Elliott", "Bill Browning-Mandolin, Chris Elliott-Banjo, Paul Murin-Guitar")
+
+
+def test_mentions_after_lead_in_words_and_known_names():
+    assert L.mentions("Sam Bush", "Enter Sam Bush")
+    assert L.mentions("Sam Grisman", "(with The Sam Grisman Project)")
+    assert L.mentions("Jerry Douglas", "JD\tJerry Douglas - dobro & vocals")  # SGP2025-01-09.sgp
+    assert L.mentions("Jackson Browne", "THESE DAYS Jackson Browne")
+    assert L.mentions("Bronwyn Keith-Hynes", "Kyle Tuttle Bronwyn Keith-Hynes and North Fork Crossing",
+                      ["Kyle Tuttle", "Bronwyn Keith-Hynes"])
+    assert L.mentions("Kenny Smith", "Sat in: Kenny Smith.")
+    assert L.mentions("Kenny Smith", "Kenny Smith’s band")
+
+
+def test_read_item_skips_a_longer_name():
+    item = {"metadata": {"creator": "King Gizzard & The Lizard Wizard",
+                         "description": "Lineup:\nStu Mackenzie - guitar\nAmbrose Kenny Smith - harmonica, keyboards"}}
+    assert "Kenny Smith" not in L.read_item(item, ["Kenny Smith"])

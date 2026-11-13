@@ -48,6 +48,44 @@ TRAP_BILL = re.compile(r"(?i)\b(opened|opening(?: set| act)?|openers?|support(?:
 STAGE = re.compile(r"(?i)\b(intro|introduction|banter|tuning|band intros?)\b")
 
 
+# Words a capitalised name can follow, or be hyphened to, without being part
+# of a longer name: "Special Guest Kenny Smith", "Enter Sam Bush",
+# "The Sam Grisman Project", "Chris Elliott-Banjo".
+LEAD_IN = re.compile(rf"(?i)^(?:{INSTR}|the|special|guests?|featuring|feat|ft|with|w|and|plus|also|by|on|"
+                     r"enter|welcome|introducing|vocals?|drums?|keys|keyboards?|piano|harmonica|sax|"
+                     r"saxophone|percussion|trumpet|organ|pedal|steel|lap|harp|flute|accordion|bassist|"
+                     r"guitarist|drummer|fiddler|mandolinist|banjoist|singer|lead|harmony|backing|speaks)$")
+
+
+def mentions(name, text, known=()):
+    """True when text names this person, not just contains the string.
+    Kenny Smith is not in "Ambrose Kenny Smith", "Kenny Smithson" or
+    "Kenny Smith-Jones". Names glued on by stripped markup still count
+    ("VocalsChristian Ward - Fiddle"), and so does a name right after
+    another known name ("Kyle Tuttle Bronwyn Keith-Hynes")."""
+    for m in re.finditer(re.escape(name), text, re.I):
+        s, e = m.span()
+        pre, post = text[s - 1:s], text[e:e + 1]
+        if pre.isalnum() and not ((pre.islower() or pre.isdigit()) and text[s].isupper()):
+            continue
+        if pre in "'’" and pre:
+            continue
+        if post.isalnum() and not (post.isupper() and text[e - 1].islower()):
+            continue
+        if post and post in "'’" and not re.match(r"['’]s\b", text[e:]):
+            continue
+        if post == "-" and re.match(r"-[A-Za-z]", text[e:]):
+            if not LEAD_IN.match(re.match(r"-([\w'’]+)", text[e:]).group(1)):
+                continue
+        before = re.search(r"([A-Z][a-z][\w'’.-]*) $", text[:s])
+        if before and not LEAD_IN.match(before.group(1).rstrip(".")):
+            head = text[:s].rstrip().lower()
+            if not any(head.endswith(k.lower()) for k in known if k.lower() != name.lower()):
+                continue
+        return True
+    return False
+
+
 def lines_of(value):
     s = value if isinstance(value, str) else "\n".join(value or [])
     s = re.sub(r"(?i)<br\s*/?>|</p>|</div>|<p[^>]*>|<div[^>]*>|</li>|<li[^>]*>|</tr>", "\n", s)
@@ -178,13 +216,13 @@ def read_item(j, names):
     for where, lines in fields:
         for i, l in enumerate(lines):
             for n in names:
-                if n.lower() in l.lower():
+                if mentions(n, l, names):
                     out.setdefault(n, []).append((where, *(classify(lines, i, n, creator) or (None, None, l))))
     for f in j.get("files", []):
         for key in ("comment", "artist", "creator", "title"):
             v = str(f.get(key, ""))
             for n in names:
-                if n.lower() in v.lower():
+                if mentions(n, v, names):
                     shape = ("file comment", "song", f.get("title") or f["name"]) if key == "comment" else \
                             ("file " + key, "song" if " ft. " in v or " feat" in v.lower() else "show", v)
                     out.setdefault(n, []).append(("files", *shape))
@@ -192,7 +230,7 @@ def read_item(j, names):
         v = m.get(key)
         v = " / ".join(v) if isinstance(v, list) else str(v or "")
         for n in names:
-            if n.lower() in v.lower():
+            if mentions(n, v, names):
                 out.setdefault(n, []).append((key, "item " + key, "show", v))
     return out
 
