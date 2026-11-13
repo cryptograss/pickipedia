@@ -198,6 +198,11 @@ $wgDBTableOptions = "ENGINE=InnoDB, DEFAULT CHARSET=binary";
 ## Shared memory / caching
 $wgMainCacheType = CACHE_ACCEL;
 $wgMemCachedServers = [];
+# Sessions in the database, not APCu (Justin, 12 Nov 2026, #interfaces). With no $wgSessionCacheType,
+# sessions followed $wgMainCacheType into APCu: the PHP process's own memory, emptied by every redeploy and
+# restart, which signed everyone out. Skyler lost an edit to it: signed out mid-edit by the 22:11Z redeploy,
+# the save was refused. In the objectcache table they outlive the process.
+$wgSessionCacheType = CACHE_DB;
 
 ## File uploads
 $wgEnableUploads = true;
