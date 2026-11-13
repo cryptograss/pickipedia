@@ -1,0 +1,161 @@
+/*
+ * The connectome card ({{#connectome:}}, src/Connectome.php): under the infobox, the same width as it.
+ * The card itself is drawn by tools/connectome_card.py; these are its looks, and its hover.
+ */
+.connectome-card {
+	float: right;
+	clear: right;
+	box-sizing: border-box;
+	width: 280px;
+	margin: 0 0 1em 1em;
+	padding: 6px;
+	border: 1px solid #a2a9b1;
+	background: #f8f9fa;
+	font-size: 88%;
+}
+
+.connectome-card .cc-head {
+	padding: 3px;
+	background: #eaecf0;
+	font-weight: bold;
+	text-align: center;
+}
+
+.connectome-card .cc-explore {
+	float: right;
+	font-weight: normal;
+}
+
+.connectome-card svg.cc {
+	display: block;
+	margin: 4px 0;
+}
+
+/* A dot's note, and its line lit, only while it's hovered. */
+svg.cc .cc-h .cc-tip,
+svg.cc .cc-h .cc-hi {
+	opacity: 0;
+	pointer-events: none;
+}
+
+svg.cc .cc-h:hover .cc-tip {
+	opacity: 1;
+}
+
+svg.cc .cc-h:hover .cc-hi {
+	opacity: 0.9;
+}
+
+svg.cc .cc-h:hover circle {
+	stroke-width: 2.5;
+}
+
+svg.cc .cc-lab {
+	paint-order: stroke;
+	stroke: #fcfcfb;
+	stroke-width: 4px;
+	stroke-linejoin: round;
+}
+
+/* A line is hard to hit; a wide invisible one over it isn't. */
+svg.cc .cc-hit {
+	stroke: transparent;
+	stroke-width: 9;
+	pointer-events: stroke;
+}
+
+svg.cc a {
+	text-decoration: none;
+}
+
+.connectome-card .cc-legend {
+	margin: 2px 0 4px;
+	font-size: 85%;
+}
+
+.connectome-card .cc-sw {
+	display: inline-block;
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	vertical-align: middle;
+}
+
+.connectome-card .cc-dash {
+	display: inline-block;
+	width: 16px;
+	border-top: 2px dashed #a9a8a3;
+	vertical-align: middle;
+}
+
+.connectome-card table.cc-bacon {
+	width: 100%;
+	margin: 0;
+	font-size: 95%;
+}
+
+.connectome-card .cc-n {
+	font-weight: bold;
+	text-align: center;
+}
+
+.connectome-card .cc-n[ title ] {
+	cursor: help;
+}
+
+.connectome-card .cc-foot {
+	margin-top: 3px;
+	color: #54595d;
+	font-size: 80%;
+}
+
+/* The big graph, over the page, when a dot or line is clicked (ext.pickipediaContent.connectome.js). */
+#cc-big {
+	display: none;
+	position: fixed;
+	top: 3vh;
+	right: 3vw;
+	bottom: 3vh;
+	left: 3vw;
+	z-index: 9999;
+	overflow: hidden;
+	border: 1px solid #a2a9b1;
+	border-radius: 8px;
+	background: #fcfcfb;
+	box-shadow: 0 8px 40px rgba( 0, 0, 0, 0.35 );
+}
+
+#cc-big .cc-bar {
+	height: 30px;
+	padding: 0 10px;
+	border-bottom: 1px solid #eaecf0;
+	background: #f8f9fa;
+	font-weight: bold;
+	line-height: 30px;
+}
+
+#cc-big .cc-close {
+	float: right;
+	border: 0;
+	background: none;
+	color: #0b0b0b;
+	font-size: 24px;
+	line-height: 30px;
+	cursor: pointer;
+}
+
+#cc-big iframe {
+	display: block;
+	width: 100%;
+	height: calc( 100% - 31px );
+	border: 0;
+}
+
+@media screen and ( max-width: 720px ) {
+	.connectome-card {
+		float: none;
+		width: auto;
+		max-width: 360px;
+		margin: 1em auto;
+	}
+}

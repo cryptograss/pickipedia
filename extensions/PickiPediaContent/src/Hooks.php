@@ -133,6 +133,22 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			$parser->getOutput()->updateCacheExpiry( 3600 );
 			return wfEscapeWikiText( self::timeZoneOf( trim( (string)$name ) ) );
 		} );
+		// {{#connectome:}}: the page's connectome card, or nothing (Connectome.php). The cards are rebuilt at each
+		// deploy, without an edit to the page, so a page takes its new card within a day.
+		$parser->setFunctionHook( 'connectome', static function ( $parser, $name = '' ) {
+			$output = $parser->getOutput();
+			$output->updateCacheExpiry( 86400 );
+			$name = trim( (string)$name );
+			$page = $parser->getPage();
+			$title = $name !== '' ? Title::newFromText( $name ) : ( $page ? Title::newFromPageReference( $page ) : null );
+			$html = $title ? Connectome::cardFor( Connectome::dir(), $title->getPrefixedText() ) : '';
+			if ( $html === '' ) {
+				return '';
+			}
+			$output->addModuleStyles( [ 'ext.pickipediaContent.connectome.styles' ] );
+			$output->addModules( [ 'ext.pickipediaContent.connectome' ] );
+			return [ $html, 'isHTML' => true, 'noparse' => true ];
+		} );
 		$parser->setHook( 'todo', static function ( $input, array $args, $parser, $frame ) {
 			$page = $parser->getPage();
 			$pageTitle = $page ? Title::newFromPageReference( $page )->getPrefixedText() : '';

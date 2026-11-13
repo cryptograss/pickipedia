@@ -55,6 +55,16 @@
 			"dependencies": [
 				"mediawiki.util"
 			]
+		},
+		"ext.pickipediaContent.connectome.styles": {
+			"styles": [
+				"ext.pickipediaContent.connectome.css"
+			]
+		},
+		"ext.pickipediaContent.connectome": {
+			"scripts": [
+				"ext.pickipediaContent.connectome.js"
+			]
 		}
 	},
 	"ResourceFileModulePaths": {
