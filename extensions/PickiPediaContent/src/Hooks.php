@@ -308,8 +308,12 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		}
 		self::addCard( $out );
 		self::addTidingBanner( $out );
-		// "+ chartifact" on the edit toolbar (Skyler, #rabbithole, 13 Nov 2026).
-		if ( in_array( $out->getRequest()->getVal( 'action', 'view' ), [ 'edit', 'submit' ], true ) ) {
+		// "+ chartifact" on the edit toolbar, and beside a Chartifacts
+		// heading's "edit source" for whoever can edit (Skyler, #rabbithole,
+		// 13 Nov 2026).
+		$action = $out->getRequest()->getVal( 'action', 'view' );
+		if ( in_array( $action, [ 'edit', 'submit' ], true )
+			|| ( $action === 'view' && $out->getUser()->isRegistered() ) ) {
 			$out->addModules( [ 'ext.pickipediaContent.chartifactButton' ] );
 		}
 	}

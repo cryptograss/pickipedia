@@ -8,6 +8,11 @@
  * over from the last chartifact in the box, since those rarely change
  * within a song; the section, the kind, the picker and the instrument are
  * left blank, to be filled in by ear rather than copied by mistake.
+ *
+ * And a "+ chartifact" beside the Chartifacts heading's "edit source"
+ * (Skyler, the same day: "right after edit source on the chartifacts
+ * line"). It opens that section's editor with a blank one already added at
+ * the end and the cursor in its section field.
  */
 ( function () {
 	'use strict';
@@ -44,6 +49,58 @@
 			return '|' + field + '=' + value;
 		} );
 		return '{{Chartifact\n' + lines.join( '\n' ) + '\n}}\n';
+	}
+
+	/** Put a blank chartifact at the end of the box, the cursor after "|section=". */
+	function appendChartifact( $textarea ) {
+		var text = $textarea.textSelection( 'getContents' ).replace( /\s+$/, '' );
+		var block = blankChartifact( text );
+		var joined = text + '\n\n' + block;
+		$textarea.textSelection( 'setContents', joined );
+		var at = text.length + 2 + block.indexOf( '|section=' ) + '|section='.length;
+		$textarea.trigger( 'focus' );
+		$textarea.textSelection( 'setSelection', { start: at, end: at } );
+		$textarea.textSelection( 'scrollToCaretPosition' );
+	}
+
+	/** On a page as read: "+ chartifact" after the Chartifacts heading's "edit source". */
+	function addHeadingLink() {
+		var anchor = document.getElementById( 'Chartifacts' );
+		var heading = anchor && anchor.closest( 'h2, h3, h4, .mw-heading' );
+		var section = heading && heading.querySelector( '.mw-editsection' );
+		if ( !section ) {
+			return; // Not signed in, or no Chartifacts section.
+		}
+		var links = Array.prototype.slice.call( section.querySelectorAll( 'a[href*="section="]' ) );
+		var source = links.filter( function ( a ) {
+			return /[?&]action=edit(&|$)/.test( a.getAttribute( 'href' ) );
+		} )[ 0 ];
+		if ( !source || section.querySelector( '.pp-chartifact-add' ) ) {
+			return;
+		}
+		var add = document.createElement( 'a' );
+		add.className = 'pp-chartifact-add';
+		add.href = source.getAttribute( 'href' ) + '&chartifact=new';
+		add.textContent = mw.msg( 'pickipediacontent-chartifact-button' );
+		add.title = mw.msg( 'pickipediacontent-chartifact-add-title' );
+		var bar = document.createElement( 'span' );
+		bar.className = 'mw-editsection-divider';
+		bar.textContent = ' | ';
+		source.parentNode.insertBefore( add, source.nextSibling );
+		source.parentNode.insertBefore( bar, add );
+	}
+
+	if ( mw.config.get( 'wgAction' ) === 'view' ) {
+		$( addHeadingLink );
+	} else if ( mw.util.getParamValue( 'chartifact' ) === 'new' ) {
+		// Once, when the editor first opens: a preview or a failed save
+		// comes back to this same address and must not add another.
+		$( function () {
+			var $textarea = $( '#wpTextbox1' );
+			if ( $textarea.length && mw.config.get( 'wgAction' ) === 'edit' && !$textarea.prop( 'readOnly' ) ) {
+				appendChartifact( $textarea );
+			}
+		} );
 	}
 
 	mw.hook( 'wikiEditor.toolbarReady' ).add( function ( $textarea ) {

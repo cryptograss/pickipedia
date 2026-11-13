@@ -71,10 +71,12 @@
 				"ext.pickipediaContent.chartifactButton.js"
 			],
 			"messages": [
-				"pickipediacontent-chartifact-button"
+				"pickipediacontent-chartifact-button",
+				"pickipediacontent-chartifact-add-title"
 			],
 			"dependencies": [
-				"jquery.textSelection"
+				"jquery.textSelection",
+				"mediawiki.util"
 			],
 			"styles": [
 				"ext.pickipediaContent.chartifactButton.css"
