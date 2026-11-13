@@ -11,12 +11,18 @@ namespace MediaWiki\Extension\PickiPediaReleases;
 use MediaWiki\Installer\Hook\LoadExtensionSchemaUpdatesHook;
 use MediaWiki\Installer\DatabaseUpdater;
 use MediaWiki\Hook\BeforePageDisplayHook;
+use MediaWiki\Hook\ParserFirstCallInitHook;
 use MediaWiki\Html\Html;
 use MediaWiki\Output\Hook\OutputPageParserOutputHook;
 use MediaWiki\Output\OutputPage;
 use Skin;
 
-class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook, OutputPageParserOutputHook {
+class Hooks implements
+	LoadExtensionSchemaUpdatesHook,
+	BeforePageDisplayHook,
+	OutputPageParserOutputHook,
+	ParserFirstCallInitHook
+{
 
 	/**
 	 * Handle schema updates
@@ -25,6 +31,19 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook, Ou
 	 */
 	public function onLoadExtensionSchemaUpdates( $updater ): void {
 		// No schema updates needed at this time
+	}
+
+	/**
+	 * {{#ontherecord:<track CID>|<record page>}}: the record a track is on, as
+	 * a row of its tracks (OnTheRecord.php). Its output is wikitext, so the
+	 * record's page and its Release page are real links.
+	 *
+	 * @param \Parser $parser
+	 */
+	public function onParserFirstCallInit( $parser ): void {
+		$parser->setFunctionHook( 'ontherecord', static function ( $parser, $track = '', $record = '' ) {
+			return OnTheRecord::forTrack( $parser, (string)$track, (string)$record );
+		} );
 	}
 
 	/**
