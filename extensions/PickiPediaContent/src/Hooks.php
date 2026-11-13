@@ -273,7 +273,7 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	}
 
 	/**
-	 * A page that is a tiding on magenta says so atop itself, linking to the
+	 * A page that is a tiding on magenta says so at its foot, linking to the
 	 * discussion there (Justin, #interfaces, 13 Nov 2026). Whether it is, and
 	 * the words (Magenta:Interface's wiki-tiding-banner), are magenta's to say:
 	 * the reader's browser asks it, so the page here stays cached as it is.
