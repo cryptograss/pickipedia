@@ -186,20 +186,39 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		$dbr = $services->getConnectionProvider()->getReplicaDatabase();
 		$links = $services->getLinksMigration();
 		$info = $links->getQueryInfo( 'pagelinks' );
-		$conds = $links->getLinksConditions( 'pagelinks', $title );
-		$ledgers = $dbr->newSelectQueryBuilder()
-			->select( [ 'page_id', 'page_title' ] )
-			->tables( $info['tables'] )
-			->joinConds( $info['joins'] )
-			->join( 'page', null, 'page_id = pl_from' )
-			->where( $conds )
-			->andWhere( [ 'pl_from_namespace' => Todo::NAMESPACE ] )
-			->andWhere( $dbr->expr( 'page_title', IExpression::LIKE,
-				new LikeValue( MoodLinks::PREFIX, $dbr->anyString(), MoodLinks::INFIX, $dbr->anyString() ) ) )
-			->orderBy( 'page_title', 'DESC' )
-			->limit( 48 )
+		// The page, and every title that redirects to it: a page moved for a better headline keeps the links
+		// said to its old title (Justin, #interfaces, 13 Nov 2026).
+		$targets = [ $title ];
+		$redirects = $dbr->newSelectQueryBuilder()
+			->select( [ 'page_namespace', 'page_title' ] )
+			->from( 'redirect' )
+			->join( 'page', null, 'page_id = rd_from' )
+			->where( [ 'rd_namespace' => $title->getNamespace(), 'rd_title' => $title->getDBkey(), 'rd_interwiki' => '' ] )
+			->limit( 20 )
 			->caller( __METHOD__ )
 			->fetchResultSet();
+		foreach ( $redirects as $redirect ) {
+			$targets[] = Title::makeTitle( (int)$redirect->page_namespace, $redirect->page_title );
+		}
+		$ledgers = [];
+		foreach ( $targets as $target ) {
+			$found = $dbr->newSelectQueryBuilder()
+				->select( [ 'page_id', 'page_title' ] )
+				->tables( $info['tables'] )
+				->joinConds( $info['joins'] )
+				->join( 'page', null, 'page_id = pl_from' )
+				->where( $links->getLinksConditions( 'pagelinks', $target ) )
+				->andWhere( [ 'pl_from_namespace' => Todo::NAMESPACE ] )
+				->andWhere( $dbr->expr( 'page_title', IExpression::LIKE,
+					new LikeValue( MoodLinks::PREFIX, $dbr->anyString(), MoodLinks::INFIX, $dbr->anyString() ) ) )
+				->orderBy( 'page_title', 'DESC' )
+				->limit( 48 )
+				->caller( __METHOD__ )
+				->fetchResultSet();
+			foreach ( $found as $ledger ) {
+				$ledgers[(int)$ledger->page_id] = $ledger;
+			}
+		}
 		$rows = [];
 		$revisions = $services->getRevisionLookup();
 		foreach ( $ledgers as $ledger ) {
@@ -211,8 +230,11 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			}
 			foreach ( MoodLinks::rows( MoodLinks::body( $content->getText() ) ) ?? [] as $row ) {
 				$named = Title::newFromText( $row['page'] );
-				if ( $named && $named->equals( $title ) ) {
-					$rows[] = $row + [ 'mood' => $mood ];
+				foreach ( $targets as $target ) {
+					if ( $named && $named->equals( $target ) ) {
+						$rows[] = $row + [ 'mood' => $mood ];
+						break;
+					}
 				}
 			}
 		}

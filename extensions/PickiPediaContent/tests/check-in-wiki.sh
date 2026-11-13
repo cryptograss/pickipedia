@@ -178,6 +178,11 @@ Messages in #magenta-interface that link pages here, October 2026.
   who: magent
   when: '2026-10-19T16:30:00Z'
   words: Peter Rowan has no page yet.
+- page: Old Earl
+  message: 6d6d6d6d-1111-4222-8333-444455556666
+  who: re
+  when: '2026-10-20T09:00:00Z'
+  words: Old Earl is up.
 </moodlinks>
 EOF
 cat > /tmp/ledger-september.txt <<'EOF'
@@ -193,6 +198,10 @@ php maintenance/edit.php -u Admin -s "links" "Cryptograss:Moods/magenta-interfac
 php maintenance/edit.php -u Admin -s "links" "Cryptograss:Moods/general/links/2026-09" < /tmp/ledger-september.txt >/dev/null
 echo 'The father of bluegrass.' | php maintenance/edit.php -u Admin -s "words" "Bill Monroe" >/dev/null
 echo 'A guitarist.' | php maintenance/edit.php -u Admin -s "words" "Tony Rice" >/dev/null
+# A page linked under one title, then moved to another, as a headline is bettered: its redirect stays.
+echo 'A banjo player.' | php maintenance/edit.php -u Admin -s "words" "Old Earl" >/dev/null
+echo 'Old Earl|Earl Scruggs' > /tmp/moves.txt
+php maintenance/run.php moveBatch --u Admin --r "a better title" /tmp/moves.txt >/dev/null 2>&1
 php maintenance/runJobs.php >/dev/null 2>&1 || true
 php -S 127.0.0.1:8080 -t /var/www/html >/tmp/php-server.log 2>&1 &
 sleep 2
@@ -207,7 +216,7 @@ echo 'FOOT ' . $argv[1] . ( isset( $argv[2] ) ? " ($argv[2])" : '' ) . ' rows=' 
 	. implode( ' | ', array_map( static fn ( $r ) => html_entity_decode( $r[2] ) . ' -> ' . $r[1], $rows ) )
 	. ( str_contains( $foot, '<script>' ) ? ' MARKUP' : '' ) . ( $html === '' ? ' NOPAGE' : '' ) . "\n";
 EOF
-for page in 'Bill_Monroe' 'Tony_Rice' 'Cryptograss:Banjo_setups' 'Cryptograss:Moods/magenta-interface/links/2026-10'; do
+for page in 'Bill_Monroe' 'Tony_Rice' 'Earl_Scruggs' 'Cryptograss:Banjo_setups' 'Cryptograss:Moods/magenta-interface/links/2026-10'; do
     php /tmp/foot.php "$page"
 done
 php /tmp/foot.php 'Bill_Monroe' history
@@ -295,6 +304,7 @@ echo "Pages list the magenta messages that link them (MoodLinks.php):"
 expect "a page shows its links from every Mood's ledger, newest first" \
     "FOOT Bill_Monroe rows=2 justin in #magenta-interface, 19 Oct 2026, 15:44 UTC -> https://magenta.cryptograss.live/moods/magenta-interface/#m-0f132ada-1111-4222-8333-444455556666 | skyler in #general, 2 Sep 2026, 10:00 UTC -> https://magenta.cryptograss.live/moods/general/#m-7a7a7a7a-1111-4222-8333-444455556666"
 expect "another page only its own" "FOOT Tony_Rice rows=1 justin in #magenta-interface"
+expect "a moved page keeps what was said of its old title" "FOOT Earl_Scruggs rows=1 re in #magenta-interface"
 expect "a page no message links shows nothing" "FOOT Cryptograss:Banjo_setups rows=0"
 expect "nor does the ledger itself" "FOOT Cryptograss:Moods/magenta-interface/links/2026-10 rows=0"
 expect "and on its history" "FOOT Bill_Monroe (history) rows=2"
