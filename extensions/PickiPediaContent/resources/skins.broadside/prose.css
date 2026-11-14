@@ -65,7 +65,7 @@ a.bs-author {
 	font-weight: 650;
 	text-decoration: none;
 }
-.bs-author:hover { color: var( --bs-rust ); text-decoration: none; }
+.bs-author[href]:hover { color: var( --bs-rust ); text-decoration: none; }
 .bs-meta {
 	color: var( --bs-muted );
 	font-size: 0.8125rem;

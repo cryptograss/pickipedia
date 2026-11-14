@@ -10,7 +10,17 @@
 
   The songs are sent twice (Songs.mustache): in the side column, and
   after the rail's other shelves, which is where they are read when there
-  is no room for a side column. frame.css shows one of the two.
+  is no room for a side column. frame.css shows one of the two. So are
+  the post's headings (Headings.mustache): in the side column, and folded
+  away over the post's first words.
+
+  A post has a side column for a video, headings or songs (Post::hasSide).
+  Its tiding's card stands under those and does not open one alone: the
+  tiding is beside the byline and at the post's foot either way.
+
+  The writer's name and face lead to their user page where they have one
+  (author.exists). Where they don't, they are a name and a face, and lead
+  nowhere.
 }}
 <script>
 /* Until MediaWiki:Common.js loses the old zine script: it marks the body of every user subpage for the
@@ -52,9 +62,9 @@ new MutationObserver( function () {
 			{{#html-dek}}<p class="bs-dek">{{{.}}}</p>{{/html-dek}}
 			{{#author}}
 			<div class="bs-byline">
-				<a class="bs-face" href="{{url}}" tabindex="-1" aria-hidden="true">{{#avatar}}<img src="{{src}}"{{#srcset}} srcset="{{.}}"{{/srcset}} width="{{width}}" height="{{height}}" alt="">{{/avatar}}{{^avatar}}<span class="bs-face-initial">{{initial}}</span>{{/avatar}}</a>
+				<a class="bs-face"{{#exists}} href="{{url}}"{{/exists}} tabindex="-1" aria-hidden="true">{{#avatar}}<img src="{{src}}"{{#srcset}} srcset="{{.}}"{{/srcset}} width="{{width}}" height="{{height}}" alt="">{{/avatar}}{{^avatar}}<span class="bs-face-initial">{{initial}}</span>{{/avatar}}</a>
 				<div class="bs-byline-words">
-					<a class="bs-author" rel="author" href="{{url}}">{{name}}</a>
+					<a class="bs-author"{{#exists}} rel="author" href="{{url}}"{{/exists}}>{{name}}</a>
 					<div class="bs-meta">{{#published}}<time datetime="{{iso}}">{{text}}</time> · {{/published}}{{minutes}}{{#edited}} · <time datetime="{{iso}}">{{label}}</time>{{/edited}}</div>
 				</div>
 				{{#tiding}}<a class="bs-chip bs-chip--magenta" href="#bs-thread"><span class="bs-dot" aria-hidden="true"></span>{{chip}}</a>{{/tiding}}
@@ -64,6 +74,12 @@ new MutationObserver( function () {
 		{{{html-user-message}}}
 		{{#html-subtitle}}<div id="contentSub" class="bs-sub">{{{.}}}</div>{{/html-subtitle}}
 		{{#html-undelete-link}}<div id="contentSub2" class="bs-sub">{{{.}}}</div>{{/html-undelete-link}}
+		{{#data-toc}}
+		<details class="bs-toc bs-toc--fold">
+			<summary>{{msg-pickipediacontent-posts-toc}}</summary>
+			<nav aria-label="{{msg-pickipediacontent-posts-toc}}">{{>Headings}}</nav>
+		</details>
+		{{/data-toc}}
 		<div id="bodyContent" class="bs-body">
 			{{{html-body-content}}}
 		</div>
@@ -104,11 +120,11 @@ new MutationObserver( function () {
 	<aside class="bs-rail" aria-label="{{msg-pickipediacontent-posts-about}}">
 		{{#author}}
 		<section class="bs-about">
-			<a class="bs-face bs-face--lg" href="{{url}}" tabindex="-1" aria-hidden="true">{{#avatar}}<img src="{{src}}"{{#srcset}} srcset="{{.}}"{{/srcset}} width="{{width}}" height="{{height}}" alt="" loading="lazy">{{/avatar}}{{^avatar}}<span class="bs-face-initial">{{initial}}</span>{{/avatar}}</a>
-			<h2 class="bs-about-name"><a href="{{url}}">{{name}}</a></h2>
+			<a class="bs-face bs-face--lg"{{#exists}} href="{{url}}"{{/exists}} tabindex="-1" aria-hidden="true">{{#avatar}}<img src="{{src}}"{{#srcset}} srcset="{{.}}"{{/srcset}} width="{{width}}" height="{{height}}" alt="" loading="lazy">{{/avatar}}{{^avatar}}<span class="bs-face-initial">{{initial}}</span>{{/avatar}}</a>
+			<h2 class="bs-about-name"><a{{#exists}} href="{{url}}"{{/exists}}>{{name}}</a></h2>
 			{{#pronouns}}<p class="bs-about-pronouns">{{.}}</p>{{/pronouns}}
 			{{#says}}<p class="bs-about-says">{{.}}</p>{{/says}}
-			<p class="bs-about-links"><a href="{{url}}">{{msg-pickipediacontent-posts-user-page}}</a>{{#person}}<a href="{{url}}">{{title}}</a>{{/person}}{{#magenta}}<a class="bs-link--magenta" href="{{.}}">{{msg-pickipediacontent-posts-on-magenta}}</a>{{/magenta}}</p>
+			{{#has-links}}<p class="bs-about-links">{{#exists}}<a href="{{url}}">{{msg-pickipediacontent-posts-user-page}}</a>{{/exists}}{{#person}}<a href="{{url}}">{{title}}</a>{{/person}}{{#magenta}}<a class="bs-link--magenta" href="{{.}}">{{msg-pickipediacontent-posts-on-magenta}}</a>{{/magenta}}</p>{{/has-links}}
 		</section>
 		{{/author}}
 		{{#series}}
@@ -143,7 +159,7 @@ new MutationObserver( function () {
 			{{#data-toc}}
 			<nav class="bs-toc" aria-labelledby="bs-toc-h">
 				<h2 id="bs-toc-h">{{msg-pickipediacontent-posts-toc}}</h2>
-				<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a>{{#is-parent-section}}<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a></li>{{/array-sections}}</ul>{{/is-parent-section}}</li>{{/array-sections}}</ul>
+				{{>Headings}}
 			</nav>
 			{{/data-toc}}
 			{{>Songs}}

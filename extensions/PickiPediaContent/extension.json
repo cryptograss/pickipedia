@@ -169,7 +169,7 @@
 				{
 					"name": "broadside",
 					"responsive": true,
-					"toc": true,
+					"toc": false,
 					"supportsMwHeading": true,
 					"templateDirectory": "templates/broadside",
 					"styles": [

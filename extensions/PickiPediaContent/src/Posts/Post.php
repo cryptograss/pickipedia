@@ -196,6 +196,24 @@ class Post {
 	}
 
 	/**
+	 * Whether a post has a side column. One is there for what plays or is
+	 * found in it: the place a video keeps playing, the post's headings, the
+	 * writer's songs. The tiding's card stands under those, and does not
+	 * open the column by itself: alone there it is a badge in an empty
+	 * column, on a page that already says it twice, beside the byline and
+	 * at the post's foot. So a writer with no songs, whose post has no
+	 * headings and no video, has nothing beside the post, tiding or not
+	 * (Justin, 14 Nov 2026: "the magenta link is an odd thing to be the only
+	 * thing", then "what if somebody has no songs?").
+	 *
+	 * @param array $post what the template is given of the post: 'has-video', 'songs', 'tiding'
+	 * @param bool $headings whether its headings are listed (it has two or more)
+	 */
+	public static function hasSide( array $post, bool $headings ): bool {
+		return $headings || !empty( $post['has-video'] ) || !empty( $post['songs'] );
+	}
+
+	/**
 	 * What a post hands to its masthead: the inside of its first element
 	 * of the given class (pp-dek-source: the line under the headline;
 	 * pp-kicker-source: the line over it). The element stays in the body,

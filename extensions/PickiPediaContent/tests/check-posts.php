@@ -351,5 +351,40 @@ check( "where it is shown, the rail's songs are put away, and nowhere else",
 	$block !== null && str_contains( $block, $putsAway ) && substr_count( $frame, '.bs-rail .bs-songs' ) === 1,
 	'the two rules are not in the same @media block of frame.css' );
 
+echo "\nWhen a post has a side column\n";
+same( 'for its headings', Post::hasSide( [], true ), true );
+same( 'for a video', Post::hasSide( [ 'has-video' => true ], false ), true );
+same( "for its writer's songs", Post::hasSide( [ 'songs' => [ 'array-items' => [ 1 ] ] ], false ), true );
+same( 'not for a tiding alone, which is beside the byline and at the foot already',
+	Post::hasSide( [ 'tiding' => [ 'url' => $tiding ] ], false ), false );
+same( 'nor for nothing', Post::hasSide( [], false ), false );
+
+echo "\nThe post's headings, beside it and folded over it\n";
+$ext = json_decode( (string)file_get_contents( $skin . '/extension.json' ), true );
+same( 'MediaWiki does not also set its own box of contents into the post',
+	$ext['ValidSkinNames']['broadside']['args'][0]['toc'] ?? null, false );
+$main = preg_match( '#<main\b.*?</main>#s', $page, $m ) ? $m[0] : '';
+same( 'the page has them twice: folded over the words, and in the side column',
+	[ substr_count( $page, '{{>Headings}}' ), substr_count( $main, '{{>Headings}}' ), substr_count( $within( 'bs-side' ), '{{>Headings}}' ) ],
+	[ 2, 1, 1 ] );
+check( 'and are written once', substr_count( $templates, 'href="#{{linkAnchor}}"' ) === 2
+	&& substr_count( (string)file_get_contents( $skin . '/templates/broadside/Headings.mustache' ), 'href="#{{linkAnchor}}"' ) === 2 );
+$putsFoldAway = '.bs-page--side .bs-toc--fold { display: none; }';
+check( 'where the side column is shown, the folded list is put away, and nowhere else',
+	$block !== null && str_contains( $block, $putsFoldAway ) && substr_count( $frame, '.bs-page--side .bs-toc--fold' ) === 1,
+	'the two rules are not in the same @media block of frame.css' );
+
+echo "\nA writer with no user page\n";
+$authorBlocks = [];
+preg_match_all( '~\{\{#author\}\}(.*?)\{\{/author\}\}~s', $page, $authorBlocks );
+$authorHtml = implode( "\n", $authorBlocks[1] );
+$withoutExists = (string)preg_replace( '~\{\{#exists\}\}.*?\{\{/exists\}\}~s', '', $authorHtml );
+check( 'with no user page, neither their face nor their name has an address or rel="author"',
+	!preg_match( '/<a\b[^>]*(?:bs-face|bs-author)[^>]*\b(?:href|rel)=/', $withoutExists )
+	&& str_contains( $withoutExists, '<h2 class="bs-about-name"><a>{{name}}</a></h2>' ), $withoutExists );
+check( 'and the user-page link itself is gone too',
+	str_contains( $authorHtml, '{{#exists}}<a href="{{url}}">{{msg-pickipediacontent-posts-user-page}}</a>{{/exists}}' )
+	&& !str_contains( $withoutExists, 'msg-pickipediacontent-posts-user-page' ) );
+
 echo $failures ? "\ncheck-posts.php: $failures FAILED\n" : "\ncheck-posts.php: all ok\n";
 exit( $failures ? 1 : 0 );
