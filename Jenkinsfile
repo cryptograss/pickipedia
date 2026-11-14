@@ -306,10 +306,10 @@ pipeline {
                         cp -r "${WORKSPACE}/assets/"* "${MW_DIR}/assets/"
                     fi
 
-                    # Copy diagnostic script if present (for debugging)
-                    if [ -f "${WORKSPACE}/diag.php" ]; then
-                        cp "${WORKSPACE}/diag.php" "${MW_DIR}/"
-                    fi
+                    # diag.php is gone from the repository (it printed $_SERVER unescaped, to anyone). The build
+                    # directory is kept between builds, so the copy an earlier build left there goes too; the
+                    # staging and deploy rsyncs both --delete, which takes it off the wiki.
+                    rm -f "${MW_DIR}/diag.php"
                 '''
             }
         }
