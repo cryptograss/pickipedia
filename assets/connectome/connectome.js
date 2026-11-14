@@ -20,6 +20,10 @@
  * The ways out to a wiki page are always said as that: "page ↗" by the headline, an arrow beside a name in a
  * list, a button on a finger's sheet. A name itself goes to that picker or that piece, here.
  *
+ * The web (Justin, #connectome, 14 Nov 2026): round one picker, or one piece, the lines among those around them
+ * are drawn too where the frame has room, thin and behind the rest: who of the company have played with each
+ * other, which of the pieces share pickers. Without room they wait for a pointer or a finger on one of them.
+ *
  * what() says what any mark stands for and the ways on from it; a pointer gets that as a note and a click, a
  * finger as a sheet of buttons. A thing that is in two views running keeps its place or slides to its new one,
  * whatever its shape in each: a pill that becomes a circle grows from where the pill was.
@@ -36,6 +40,7 @@ const FONT = { named: '700 14px Georgia, "Times New Roman", serif', subject: '70
 	piece: '600 13px system-ui, -apple-system, "Segoe UI", sans-serif', sub: '400 11.5px system-ui, -apple-system, "Segoe UI", sans-serif' };
 const still = window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
 const FAINT = 0.22;              // between two pickers, a route through someone not named: behind the rest, still there
+const STRAIGHT = { x: 0, y: 0 };
 const coarse = window.matchMedia && window.matchMedia( '(pointer: coarse)' ).matches;   // a finger: bigger beads, further apart
 const narrow = () => window.matchMedia( '(max-width: 760px)' ).matches;                 // the list is under the graph
 
@@ -112,6 +117,21 @@ function cut( name, font, room ) {
 function fitName( name, x, lo, hi, font ) {
 	const label = cut( name, font, hi - lo );
 	return { label, dx: Math.round( K.nudge( x, wide( label, font ) / 2, lo, hi ) ) };
+}
+
+/**
+ * A name by a place on the oval: centred on it, or leaning outward as far as the place says (K.ego: the web's
+ * lines leave a picker along the oval and inward, never outward), and kept in the frame.
+ */
+function nameAt( name, pos, W, font ) {
+	const lean = ( pos.lean || 0 ) * ( wide( K.clip( name, 26 ), font ) / 2 + 3 );
+	const fit = fitName( name, pos.x + lean, 4, W - 4, font );
+	return { label: fit.label, dx: Math.round( lean ) + fit.dx };
+}
+
+/** Where a name is, in the frame: `half` its width either side of its middle, from `top` to `bottom` off its place. */
+function nameBox( pos, dx, half, top, bottom ) {
+	return { x1: pos.x + dx - half, x2: pos.x + dx + half, y1: pos.y + top, y2: pos.y + bottom };
 }
 
 function pageUrl( title ) {
@@ -432,6 +452,14 @@ function wanted( is, pan ) {
 	return w ? { x: w.x + pan.x, y: w.y + pan.y } : null;
 }
 
+/**
+ * How plain a line of the web is, by how far apart round the oval its two ends sit: neighbours' lines run along
+ * the rim and cross nothing; the further apart, the more a line crosses, and the quieter it lies. All of them are
+ * there, and each is plain when either end is pointed at.
+ */
+const WEB = [ 0, 0.52, 0.34, 0.17 ];
+const webShade = ( bow, plain ) => ( plain ? 0.85 : WEB[ Math.min( bow.apart, WEB.length - 1 ) ] );
+
 function egoScene( v ) {
 	const a = v.a;
 	const { W, H } = frame();
@@ -446,18 +474,24 @@ function egoScene( v ) {
 	const came = new Set( ( v.keep || [] ).filter( ( k ) => G.adj[ a ].has( k ) ) );
 	const want = Math.min( ring.length, H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 ) );
 	const lay = K.ego( { W, H, named: want, dots: ring.length - want } );
-	const n = lay.named.length, shown = n + lay.dots.length;
+	const n = lay.named.length;
 	const pan = slide( 'p' + a, lay.C );
 	const seats = K.seat( lay.named, ring.slice( 0, n ).map( ( c ) => wanted( 'p' + c.id, pan ) ) );
-	const beads = K.seat( lay.dots, ring.slice( n, shown ).map( ( c ) => wanted( 'p' + c.id, pan ) ) );
+	// Each name as it will be written, so no bead is set down under one, however long it is or far it leans.
+	const names = ring.slice( 0, n ).map( ( c, i ) => nameAt( first( c.id ), lay.named[ seats[ i ] ], W, FONT.named ) );
+	const spots = K.clearOf( lay.dots, names.map( ( nm, i ) => {
+		const pos = lay.named[ seats[ i ] ];
+		return nameBox( pos, nm.dx, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -36, pos.below ? 36 : -18 );
+	} ), 10 );
+	const shown = n + spots.length;
+	const beads = K.seat( spots, ring.slice( n, shown ).map( ( c ) => wanted( 'p' + c.id, pan ) ) );
 	addNode( sc, a, lay.C, 'subject', { rabbit: true, bare: true } );
 	ring.slice( 0, shown ).forEach( ( c, i ) => {
 		const named = i < n;
-		const pos = named ? lay.named[ seats[ i ] ] : lay.dots[ beads[ i - n ] ];
+		const pos = named ? lay.named[ seats[ i ] ] : spots[ beads[ i - n ] ];
 		const by = named && came.has( c.id );
 		addNode( sc, c.id, pos, named ? 'named' : 'dot',
-			Object.assign( { r: dotRadius( c.tie.w ), delay: named ? 80 + i * 40 : 300, tie: c.tie },
-				named ? fitName( first( c.id ), pos.x, 4, W - 4, FONT.named ) : null ) );
+			Object.assign( { r: dotRadius( c.tie.w ), delay: named ? 80 + i * 40 : 300, tie: c.tie }, named ? names[ i ] : null ) );
 		addLine( sc, a, c.id, c.tie, { o: named ? ( by ? 1 : 0.9 ) : 0, quiet: !named, emph: by, delay: named ? 120 + i * 40 : 300, role: 'spoke', c: c.id } );
 		if ( by ) {                                                  // the line the reader came down: what it is, said on it
 			const len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y ), room = Math.max( 92, Math.min( 190, len - 64 ) );
@@ -465,6 +499,15 @@ function egoScene( v ) {
 			placePills( sc, a, c.id, c.tie, at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, v.by );
 		}
 	} );
+	// The web: who of the company have played with each other. Between two the reader came by, it is the way
+	// they came, and stays as plain as it was.
+	const seatOf = new Map( ring.slice( 0, n ).map( ( c, i ) => [ c.id, lay.named[ seats[ i ] ] ] ) );
+	for ( const t of K.among( G, [ ...seatOf.keys() ], looseOnly ) ) {
+		const bow = K.arc( lay, seatOf.get( t.u ), seatOf.get( t.v ) );
+		sc.lines.set( lineKey( t.u, t.v ), { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, stands: 'tie', role: 'web', quiet: true,
+			w: lineWidth( t.tie ), o: lay.web ? webShade( bow, came.has( t.u ) && came.has( t.v ) ) : 0, bow, delay: 300 } );
+	}
+	sc.web = lay.web;
 	sc.company = comp;
 	sc.shown = shown;
 	sc.head = [ first( a ), pageMark( a, true ) ];
@@ -485,11 +528,11 @@ function addPiece( sc, id, at, kind, more ) {
 }
 
 /** A piece's name and the line under it, kept in the frame; and where it plays, when it does. */
-function pieceLabel( id, x, W ) {
+function pieceLabel( id, pos, W ) {
 	const pc = M( id ), c = K.called( G, pc );
 	const play = pc.kind === 'track' ? K.playOf( G, G.music[ pc.m ], pc.song ) : '';
-	const name = fitName( K.clip( c.name, 24 ), x, 4, W - 4 - ( play ? 40 : 0 ), FONT.piece );
-	const sub = c.sub ? fitName( K.clip( c.sub, 24 ), x, 4, W - 4, FONT.sub ) : null;
+	const name = nameAt( K.clip( c.name, 24 ), pos, W - ( play ? 40 : 0 ), FONT.piece );
+	const sub = c.sub ? nameAt( K.clip( c.sub, 24 ), pos, W, FONT.sub ) : null;
 	return { label: name.label, dx: name.dx, sub: sub ? sub.label : '', sdx: sub ? sub.dx : 0, play };
 }
 
@@ -500,17 +543,24 @@ function pieceScene( v ) {
 	const L = K.leads( G, v.m, W > 700 && H > 520 ? 6 : ( W > 460 ? 5 : 4 ), v.hand || [], v.keep || [] );
 	const lay = K.ego( { W, H, named: L.named.length, dots: L.rest.length } );
 	const n = lay.named.length;
-	const all = L.named.concat( L.rest ).slice( 0, n + lay.dots.length );
 	const pan = slide( 'm' + v.m, lay.C );
-	const seats = K.seat( lay.named, all.slice( 0, n ).map( ( x ) => wanted( 'm' + x.id, pan ) ) );
-	const beads = K.seat( lay.dots, all.slice( n ).map( ( x ) => wanted( 'm' + x.id, pan ) ) );
+	const seats = K.seat( lay.named, L.named.slice( 0, n ).map( ( x ) => wanted( 'm' + x.id, pan ) ) );
+	// Each piece's name and the line under it, as they will be written, so no bead is set down under them.
+	const names = L.named.slice( 0, n ).map( ( x, i ) => pieceLabel( x.id, lay.named[ seats[ i ] ], W ) );
+	const spots = K.clearOf( lay.dots, names.map( ( nm, i ) => {
+		const pos = lay.named[ seats[ i ] ], half = wide( nm.label, FONT.piece ) / 2, under = nm.sub ? wide( nm.sub, FONT.sub ) / 2 : 0;
+		const x1 = Math.min( nm.dx - half, nm.sdx - under ), x2 = Math.max( nm.dx + half + ( nm.play ? 40 : 0 ), nm.sdx + under );
+		return nameBox( pos, ( x1 + x2 ) / 2, ( x2 - x1 ) / 2, pos.below ? 19 : ( nm.sub ? -49 : -36 ), pos.below ? ( nm.sub ? 50 : 36 ) : -19 );
+	} ), 10 );
+	const all = L.named.concat( L.rest ).slice( 0, n + spots.length );
+	const beads = K.seat( spots, all.slice( n ).map( ( x ) => wanted( 'm' + x.id, pan ) ) );
 	addPiece( sc, v.m, lay.C, 'subject', { bare: true } );
 	all.forEach( ( x, i ) => {
 		const named = i < n;
-		const pos = named ? lay.named[ seats[ i ] ] : lay.dots[ beads[ i - n ] ];
+		const pos = named ? lay.named[ seats[ i ] ] : spots[ beads[ i - n ] ];
 		const by = named && ( v.keep || [] ).includes( x.id );
 		addPiece( sc, x.id, pos, named ? 'named' : 'dot', Object.assign( { who: x.via, r: Math.max( coarse ? 4.6 : 3.4, Math.min( 7, 2.6 + 1.1 * x.via.length ) ),
-			delay: named ? 80 + i * 40 : 300 }, named ? pieceLabel( x.id, pos.x, W ) : null ) );
+			delay: named ? 80 + i * 40 : 300 }, named ? names[ i ] : null ) );
 		sc.lines.set( threadKey( v.m, x.id ), { a: 'q' + v.m, b: 'q' + x.id, px: v.m, py: x.id, who: x.via, stands: 'thread',
 			w: Math.min( 5.5, 1.5 + 0.8 * x.via.length ), o: named ? ( by ? 1 : 0.9 ) : 0, quiet: !named, emph: by, delay: named ? 120 + i * 40 : 300 } );
 		if ( named ) {
@@ -528,6 +578,18 @@ function pieceScene( v ) {
 				x: Math.round( at.x ), y: Math.round( at.y ), w: 28 + wide( label, FONT.tag ) + ew, label, extra, o: 1, delay: 160 + i * 40 } );
 		}
 	} );
+	// The same web, of pieces: which of those round the middle have pickers on both.
+	const kept = v.keep || [];
+	const round = all.slice( 0, n ).map( ( x, i ) => ( { id: x.id, at: lay.named[ seats[ i ] ] } ) );
+	round.forEach( ( x, i ) => round.slice( i + 1 ).forEach( ( y ) => {
+		const who = K.between( G, x.id, y.id );
+		if ( who.length ) {
+			const bow = K.arc( lay, x.at, y.at );
+			sc.lines.set( threadKey( x.id, y.id ), { a: 'q' + x.id, b: 'q' + y.id, px: x.id, py: y.id, who, stands: 'thread', role: 'web', quiet: true,
+				w: Math.min( 5.5, 1.5 + 0.8 * who.length ), o: lay.web ? webShade( bow, kept.includes( x.id ) && kept.includes( y.id ) ) : 0, bow, delay: 300 } );
+		}
+	} ) );
+	sc.web = lay.web;
 	sc.leads = L;
 	sc.tagged = [ ...new Set( L.named.flatMap( ( x ) => x.via ) ) ];
 	const kind = me.kind === 'track' ? 'A track on ' + nm.sub : ( me.kind === 'show' ? 'A show' : 'A record' ) + ( nm.sub ? ' · ' + nm.sub : '' );
@@ -665,9 +727,10 @@ const draw = {
 	line( g, d ) {
 		if ( d.stands === 'thread' ) {                               // pickers, between two pieces: ink, thicker the more of them
 			g.textContent = '';
-			g.setAttribute( 'class', 'ln th ' + ( d.quiet ? 'quiet' : '' ) );
+			g.setAttribute( 'class', 'ln th ' + ( d.role === 'web' ? 'web ' : '' ) + ( d.quiet ? 'quiet' : '' ) );
 			( d.quiet ? layers.faint : layers.lines ).appendChild( g );
-			g.appendChild( s( 'path', { class: 'core th' + ( d.emph ? ' on' : '' ), 'stroke-width': ( d.w + ( d.emph ? 1 : 0 ) ).toFixed( 1 ) } ) );
+			g.appendChild( s( 'path', { class: 'core th' + ( d.emph ? ' on' : '' ),
+				'stroke-width': ( d.role === 'web' ? Math.max( 1, d.w * 0.28 ) : d.w + ( d.emph ? 1 : 0 ) ).toFixed( 1 ) } ) );
 			if ( !d.quiet ) {
 				g.appendChild( s( 'path', { class: 'hit' } ) );
 			}
@@ -677,9 +740,11 @@ const draw = {
 		const gold = t.played && t.tier === K.PERMANENT;
 		const cls = !t.played ? 't0' : 't' + t.tier;
 		g.textContent = '';
-		g.setAttribute( 'class', 'ln ' + ( d.quiet ? 'quiet' : '' ) );
+		g.setAttribute( 'class', 'ln ' + ( d.role === 'web' ? 'web ' : '' ) + ( d.quiet ? 'quiet' : '' ) );
 		( d.quiet ? layers.faint : layers.lines ).appendChild( g );
-		if ( gold && d.emph ) {                                      // the one that's lit: gold, with ink down the middle
+		if ( d.role === 'web' ) {                                    // the web: the same marks, half as heavy
+			g.appendChild( s( 'path', { class: gold ? 'thread' : 'core ' + cls, 'stroke-width': ( cls === 't0' ? 1.3 : Math.max( 1.1, d.w * 0.32 ) ).toFixed( 1 ) } ) );
+		} else if ( gold && d.emph ) {                               // the one that's lit: gold, with ink down the middle
 			g.appendChild( s( 'path', { class: 'glow', 'stroke-width': ( d.w + 7 ).toFixed( 1 ) } ) );
 			g.appendChild( s( 'path', { class: 'core t2', 'stroke-width': Math.max( 1.8, d.w * 0.42 ).toFixed( 1 ) } ) );
 		} else if ( gold ) {                                         // a gold thread
@@ -733,7 +798,8 @@ function playButton( m, song ) {
 
 const sig = {
 	node: ( d ) => [ d.stands, d.kind, d.lit, d.below, d.rabbit, d.side, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) : '', d.label, d.dx, d.sub, d.sdx, d.play ].join( '|' ),
-	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph ] : [ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph ] ).join( '|' ),
+	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role === 'web' ] :
+		[ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role === 'web' ] ).join( '|' ),
 	pill: ( d ) => [ d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play ].join( '|' )
 };
 
@@ -754,26 +820,43 @@ function sync( kind, next, now ) {
 			draw[ kind ]( it.el, d );
 			it.sig = sg;
 		}
-		Object.assign( it, { d, fx: it.x, fy: it.y, fo: it.o, tx: d.x, ty: d.y, to: d.o === undefined ? 1 : d.o, t0: now,
+		Object.assign( it, { d, fx: it.x, fy: it.y, fo: it.o, fq: it.q || null, tx: d.x, ty: d.y, to: d.o === undefined ? 1 : d.o, t0: now,
 			delay: fresh && !it.born ? ( d.delay || 0 ) : 0, dead: false } );
 	}
 	for ( const [ key, it ] of have ) {
 		if ( !next.has( key ) && !it.dead ) {
-			Object.assign( it, { fx: it.x, fy: it.y, fo: it.o, tx: it.x, ty: it.y, to: 0, t0: now, delay: 0, dead: true } );
+			Object.assign( it, { fx: it.x, fy: it.y, fo: it.o, fq: it.q || null, tx: it.x, ty: it.y, to: 0, t0: now, delay: 0, dead: true } );
 		}
 	}
 }
 
-function pathOf( d ) {
-	const a = live.node.get( d.a ), b = live.node.get( d.b );
+/**
+ * Where a line's curve is drawn toward, from the middle of the straight line between its ends: nowhere for a
+ * straight one; up or down to the picker a way round goes by; for the web, as far as K.arc said.
+ */
+function pull( d, a, b ) {
+	if ( d.via ) {
+		const v = live.node.get( d.via );
+		return v ? { x: 0, y: v.y - ( a.y + b.y ) / 2 } : STRAIGHT;
+	}
+	return d.bow || STRAIGHT;
+}
+
+/**
+ * A line as it is now, e of the way through a change of view. Its ends are wherever the things at them are; its
+ * bow goes from what it was (fq) to what the view asks, so a line that was straight and is a curve now bends as
+ * its ends slide, and doesn't jump.
+ */
+function pathOf( it, e ) {
+	const d = it.d, a = live.node.get( d.a ), b = live.node.get( d.b );
 	if ( !a || !b ) {
 		return null;
 	}
-	if ( d.via ) {
-		const v = live.node.get( d.via );
-		return `M${ a.x.toFixed( 1 ) } ${ a.y.toFixed( 1 ) }Q${ ( ( a.x + b.x ) / 2 ).toFixed( 1 ) } ${ ( v ? v.y : ( a.y + b.y ) / 2 ).toFixed( 1 ) } ${ b.x.toFixed( 1 ) } ${ b.y.toFixed( 1 ) }`;
-	}
-	return `M${ a.x.toFixed( 1 ) } ${ a.y.toFixed( 1 ) }L${ b.x.toFixed( 1 ) } ${ b.y.toFixed( 1 ) }`;
+	const to = pull( d, a, b ), from = it.fq || to;
+	const q = it.q = { x: from.x + ( to.x - from.x ) * e, y: from.y + ( to.y - from.y ) * e };
+	const A = `M${ a.x.toFixed( 1 ) } ${ a.y.toFixed( 1 ) }`, B = `${ b.x.toFixed( 1 ) } ${ b.y.toFixed( 1 ) }`;
+	return Math.abs( q.x ) + Math.abs( q.y ) < 0.05 ? A + 'L' + B :
+		`${ A }Q${ ( ( a.x + b.x ) / 2 + q.x ).toFixed( 1 ) } ${ ( ( a.y + b.y ) / 2 + q.y ).toFixed( 1 ) } ${ B }`;
 }
 
 function put( next, quick ) {
@@ -802,7 +885,7 @@ function put( next, quick ) {
 				}
 				it.el.setAttribute( 'opacity', it.o.toFixed( 3 ) );
 				if ( kind === 'line' ) {
-					const p = pathOf( it.d );
+					const p = pathOf( it, e );
 					if ( p ) {
 						for ( const c of it.el.children ) {
 							c.setAttribute( 'd', p );
@@ -1090,6 +1173,7 @@ function show( quick, again ) {
 	}
 	scene = view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
 	stage.classList.toggle( 'dual', view.m !== undefined );
+	stage.classList.toggle( 'webbed', !!scene.web );
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
 	$( 'say' ).lastElementChild.replaceChildren( ...( lost && trail.length < 2 ? [ lost ] : scene.sub ) );
 	put( scene, quick );
@@ -1224,6 +1308,11 @@ function warm( key, on ) {
 	}
 }
 
+/** Where the web's lines lead from one of those round the middle: other( line ) says the far end, for a line that has this one at an end. */
+function webFrom( other ) {
+	return [ ...scene.lines.values() ].filter( ( l ) => l.role === 'web' ).map( other ).filter( ( x ) => x !== undefined );
+}
+
 function tieLines( u, v ) {
 	const t = G.adj[ u ].get( v );
 	if ( !t ) {
@@ -1259,7 +1348,9 @@ function aPicker( d ) {
 			w.hint = 'click anyone around them: go to them';
 		} else {
 			const top = K.naming( G, d.tie.ev[ 0 ] );
-			w.lines.push( K.together( d.tie ), K.clip( top.short, 44 ) + ( d.tie.ev.length > 1 ? `, and ${ d.tie.ev.length - 1 } more` : '' ) );
+			const web = webFrom( ( l ) => ( l.u === id ? l.v : ( l.v === id ? l.u : undefined ) ) );
+			w.lines.push( K.together( d.tie ), K.clip( top.short, 44 ) + ( d.tie.ev.length > 1 ? `, and ${ d.tie.ev.length - 1 } more` : '' ),
+				web.length ? `and with ${ K.plural( web.length, 'other' ) } here: ${ listNames( web ) }` : '' );
 			w.acts.push( goTo, act( `${ name } & ${ first( view.a ) }: what they share`, () => go( { a: view.a, b: id } ) ) );
 		}
 	} else if ( id === view.a || id === view.b ) {
@@ -1326,7 +1417,8 @@ function aPieceAmong( d ) {
 		w.lines.push( K.plural( pc.cast.length, 'picker' ) + ' on it, of those the sources here name' );
 		w.hint = 'click a picker on a line: go to them';
 	} else {
-		w.lines.push( 'by way of ' + listNames( d.who ) );
+		const web = webFrom( ( l ) => ( l.px === d.piece ? l.py : ( l.py === d.piece ? l.px : undefined ) ) );
+		w.lines.push( 'by way of ' + listNames( d.who ), web.length ? `shares pickers with ${ K.plural( web.length, 'other' ) } here` : '' );
 		w.acts.push( act( 'Go to ' + K.clip( c.name, 30 ), () => go( { m: d.piece, hand: d.who } ) ) );
 	}
 	w.lines.push( K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) );

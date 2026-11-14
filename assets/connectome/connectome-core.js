@@ -23,6 +23,11 @@
  * inside out: the music becomes the circles and the pickers the lines between them (Justin, #connectome,
  * 13 Nov 2026, 23:05Z). So the same store is read both ways: adj is who a picker has played with, by the
  * music they share; pieces and on are what a piece of music leads to, by the pickers on both.
+ *
+ * The web. Round one picker, their company is a star, and a star says one picker and their contacts. Where
+ * there's room, the lines among the company are drawn too, thin and behind: who of them have played with each
+ * other. Each is the far leg of a two-hop way round, and together they say that this is a community (Justin,
+ * #connectome, 14 Nov 2026, 00:59Z). Inside out it is the same web, of pieces: which of them share pickers.
  */
 
 export const TRACK = 3, STAGE = 2, RECORD = 1;     // how two pickers are on one record or show
@@ -224,6 +229,34 @@ export function mutuals( G, a, b ) {
 	}
 	return out.sort( ( x, y ) => ( y.legs - x.legs ) || ( y.tier - x.tier ) || ( y.eff - x.eff ) || ( y.both - x.both ) ||
 		( y.w - x.w ) || G.people[ x.id ].name.localeCompare( G.people[ y.id ].name ) );
+}
+
+/**
+ * The web among some pickers: every tie between two of them who have played together (or, with loose, who share
+ * a record), each once, in the order the pickers were given. Round one picker these are the far legs of the
+ * two-hop ways from them to their own company: who of the company have played with each other.
+ */
+export function among( G, ids, loose = false ) {
+	const out = [];
+	for ( let i = 0; i < ids.length; i++ ) {
+		for ( let j = i + 1; j < ids.length; j++ ) {
+			const tie = ids[ i ] === ids[ j ] ? null : G.adj[ ids[ i ] ].get( ids[ j ] );
+			if ( tie && ( tie.played || loose ) ) {
+				out.push( { u: ids[ i ], v: ids[ j ], tie } );
+			}
+		}
+	}
+	return out;
+}
+
+/**
+ * The pickers on both of two pieces: what a line between them stands for, inside out. Those on the most pieces
+ * first (they lead the furthest), then by name.
+ */
+export function between( G, x, y ) {
+	const there = new Set( G.pieces[ y ].cast );
+	return G.pieces[ x ].cast.filter( ( p ) => there.has( p ) ).sort( ( p, q ) => ( G.on[ q ].length - G.on[ p ].length ) ||
+		G.people[ p ].name.localeCompare( G.people[ q ].name ) );
 }
 
 /** Hops from one picker to every other; -1 where there's no way. A same-record tie counts as a hop. */
@@ -691,19 +724,37 @@ export function ladder( { W, H, hops: L, chains, la, lb } ) {
 /**
  * One picker and their company: the picker in the middle, the closest around them on an oval that starts a
  * quarter step past noon (nobody sits at twelve or at six, as on the cards), and the rest in two wider ovals.
- * Returns { C, named: [{x, y, below, angle}], dots: [{x, y}] }.
+ * Returns { C, rx, ry, web, named: [{x, y, below, angle, seat, of, lean}], dots: [{x, y}] }: seat, which place
+ * round the oval; of, how many places there are.
+ *
+ * web: the oval is big enough for the lines among those on it to be in sight (see arc). Those lines leave a
+ * picker along the oval and inward, so a name centred over or under a picker at the side would have them run
+ * through it. With the web in sight a name leans outward instead: lean (-1 at the far left, 1 at the far
+ * right, 0 at the top and the bottom) is how far, as a share of half the name's own width.
  */
+const LEAN = 56;                                    // about half a name's width: how far a name at the side leans out
+
+/**
+ * The places that are clear of some boxes ({x1, y1, x2, y2}) by `pad` all round. ego() keeps its beads clear of
+ * where a name of the usual length would be; what draws the names knows how long each one is, and asks this for
+ * the places that are clear of them as written.
+ */
+export function clearOf( places, boxes, pad = 0 ) {
+	return places.filter( ( p ) => !boxes.some( ( b ) => p.x > b.x1 - pad && p.x < b.x2 + pad && p.y > b.y1 - pad && p.y < b.y2 + pad ) );
+}
+
 export function ego( { W, H, named, dots } ) {
 	const C = { x: Math.round( W / 2 ), y: Math.round( H / 2 ) };
 	const ry = Math.max( 84, Math.min( H * 0.29, 230 ) );
 	const rx = Math.max( 110, Math.min( W * 0.3, ry * 1.9 ) );
-	const out = { C, named: [], dots: [], rx, ry };
 	const n = Math.max( 0, named );
+	const out = { C, named: [], dots: [], rx, ry, web: n > 1 && rx >= 170 && ry >= 130 };
 	for ( let i = 0; i < n; i++ ) {
 		const deg = -90 + 360 / n / 4 + ( 360 / n ) * i;
 		const rad = deg * Math.PI / 180;
 		const y = C.y + ry * Math.sin( rad );
-		out.named.push( { x: Math.round( C.x + rx * Math.cos( rad ) ), y: Math.round( y ), below: y > C.y + 1, angle: deg } );
+		out.named.push( { x: Math.round( C.x + rx * Math.cos( rad ) ), y: Math.round( y ), below: y > C.y + 1, angle: deg, seat: i, of: n,
+			lean: out.web ? Math.cos( rad ) : 0 } );
 	}
 	// The rest sit on two wider ovals, clear of the names above and below each named picker, spread evenly
 	// round the first before the second takes any.
@@ -714,7 +765,7 @@ export function ego( { W, H, named, dots } ) {
 		for ( let i = 0; i < per; i++ ) {
 			const rad = ( -90 + ( 360 / per ) * ( i + ( ring ? 1 : 0.5 ) ) ) * Math.PI / 180;
 			const x = C.x + Math.min( rx * fx, W / 2 - 16 ) * Math.cos( rad ), y = C.y + ry * fy * Math.sin( rad );
-			const crowded = out.named.some( ( p ) => Math.abs( x - p.x ) < 74 &&
+			const crowded = out.named.some( ( p ) => Math.abs( x - p.x - p.lean * LEAN ) < 74 &&
 				( p.below ? ( y > p.y && y < p.y + 64 ) : ( y < p.y && y > p.y - 64 ) ) );
 			if ( !crowded ) {
 				free.push( { x: Math.round( x ), y: Math.round( y ) } );
@@ -727,4 +778,39 @@ export function ego( { W, H, named, dots } ) {
 		left -= take;
 	} );
 	return out;
+}
+
+/**
+ * How the line between two of those seated round the middle bows: the web among a picker's company, or among
+ * the pieces round a piece. Every line bows away from the middle, as the ways round do between two pickers, so
+ * none of them is taken for a line to the one in the middle and none runs through them:
+ *
+ *   between neighbours, it follows the oval they sit on: the rim;
+ *   between two further apart, it is lifted part of the way from the straight line toward the rim, and never
+ *   comes nearer the middle than `clear`;
+ *   between two straight across from each other, it goes round the middle, by one side from one seat and by
+ *   the other from the next, so they don't all crowd one half.
+ *
+ * lay is ego()'s; pa and pb two of its named places. Returns how far the curve's control point is from the
+ * middle of the straight line between them, { x, y }; and apart, how many seats apart the two are, the short
+ * way round (1 for neighbours). The curve never leaves the oval, so it keeps clear of the beads outside it,
+ * and of the names, which lean outward (see ego).
+ */
+export function arc( lay, pa, pb, { clear = 46, lift = 0.38 } = {} ) {
+	const TAU = 2 * Math.PI, rad = ( deg ) => deg * Math.PI / 180;
+	const [ p, q ] = pa.seat <= pb.seat ? [ pa, pb ] : [ pb, pa ];
+	let gap = ( ( rad( q.angle ) - rad( p.angle ) ) % TAU + TAU ) % TAU;     // from p on round to q
+	let mid = rad( p.angle ) + gap / 2;
+	const across = Math.abs( gap - Math.PI ) < 1e-6;
+	if ( across ) {
+		mid = rad( p.angle ) + ( p.seat % 2 ? -1 : 1 ) * Math.PI / 2;
+	} else if ( gap > Math.PI ) {                                        // the shorter way round is the other way
+		gap = TAU - gap;
+		mid += Math.PI;
+	}
+	const ux = lay.rx * Math.cos( mid ), uy = lay.ry * Math.sin( mid );      // the rim, out along the middle of the gap
+	const chord = across ? 0 : Math.cos( gap / 2 );                      // the straight line's middle, as a share of that
+	const neighbours = gap <= TAU / Math.max( 4, p.of ) + 1e-6;
+	const peak = neighbours ? 1 : Math.min( 1, Math.max( chord + lift * ( 1 - chord ), clear / Math.hypot( ux, uy ) ) );
+	return { x: 2 * ( peak - chord ) * ux, y: 2 * ( peak - chord ) * uy, apart: Math.min( q.seat - p.seat, p.of - ( q.seat - p.seat ) ) };
 }

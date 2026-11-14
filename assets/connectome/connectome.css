@@ -238,6 +238,10 @@ main {
 .ln.quiet { pointer-events: none; }
 .ln.hot { opacity: 1; }
 
+/* The web among those round the middle: the same marks, thin and behind; plain when either end is pointed at. */
+.ln.web.hot .thread,
+.ln.web.hot .core { stroke-width: 2.6px; }
+
 /* ---- pickers ---- */
 .dot {
 	fill: var( --ink );
@@ -721,7 +725,8 @@ a.out:focus { text-decoration: underline; }
 
 /* The legend says what the marks mean in the view that's on. */
 #stage.dual #legend .pv,
-#stage:not( .dual ) #legend .dv { display: none; }
+#stage:not( .dual ) #legend .dv,
+#stage:not( .webbed ) #legend .wb { display: none; }
 
 /* ---- narrow: the list under the graph ---- */
 @media ( max-width: 760px ) {

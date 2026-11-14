@@ -394,3 +394,123 @@ test( 'a name tag sits on its line where there is room clear of both circles', (
 	assert.ok( short.room < 60 && short.x > 50 );                                                           // and what there is, nearer the smaller circle
 	assert.equal( K.tagAt( { x: 0, y: 0 }, { x: 30, y: 0 }, 24, 15 ).room, 0 );
 } );
+
+/* ---- the web: the lines among those round the middle ---- */
+
+test( 'the web among some pickers is every tie between two of them who have played together, each once', () => {
+	const web = K.among( G, [ JUSTIN, MOLLY, SAM, CHOIR, LONE ] );
+	assert.deepEqual( web.map( ( t ) => [ t.u, t.v ] ), [ [ JUSTIN, MOLLY ], [ JUSTIN, SAM ] ] );
+	assert.equal( web[ 0 ].tie, tie( JUSTIN, MOLLY ) );
+	assert.deepEqual( K.among( G, [ MOLLY, SAM ] ), [] );                // both played with Kyle, never with each other
+	assert.deepEqual( K.among( G, [ JUSTIN, JUSTIN ] ), [] );
+	// A shared record without a shared track is no line, unless that's all there is to show.
+	assert.deepEqual( K.among( G, [ JUSTIN, CHOIR, KYLE ] ).map( ( t ) => [ t.u, t.v ] ), [ [ JUSTIN, KYLE ] ] );
+	assert.deepEqual( K.among( G, [ JUSTIN, CHOIR, KYLE ], true ).map( ( t ) => [ t.u, t.v ] ), [ [ JUSTIN, CHOIR ], [ JUSTIN, KYLE ], [ CHOIR, KYLE ] ] );
+} );
+
+test( 'between two pieces: the pickers on both, those on the most pieces first', () => {
+	const sgp = K.findPiece( G, 'lma:sgp' ), old = K.findPiece( G, 'lma:old' ), duet = K.findPiece( G, 'discogs:7', 'A Duet' );
+	assert.deepEqual( K.between( G, sgp, old ).map( ( p ) => NAMES[ p ] ), [ 'Kyle', 'Molly' ] );
+	assert.deepEqual( K.between( G, old, sgp ).map( ( p ) => NAMES[ p ] ), [ 'Kyle', 'Molly' ] );
+	assert.deepEqual( K.between( G, SILVER, VICTORY ).map( ( p ) => NAMES[ p ] ), [ 'Kyle', 'Justin' ] );
+	assert.deepEqual( K.between( G, SILVER, duet ).map( ( p ) => NAMES[ p ] ), [ 'Justin' ] );
+	assert.deepEqual( K.between( G, SILVER, old ).map( ( p ) => NAMES[ p ] ), [ 'Kyle' ] );
+	assert.deepEqual( K.between( G, duet, old ).map( ( p ) => NAMES[ p ] ), [ 'Molly' ] );
+} );
+
+/** Points along the curve from pa to pb whose control point is `off` from the middle of the straight line. */
+function along( pa, pb, off, steps = 48 ) {
+	const qx = ( pa.x + pb.x ) / 2 + off.x, qy = ( pa.y + pb.y ) / 2 + off.y, out = [];
+	for ( let i = 0; i <= steps; i++ ) {
+		const t = i / steps;
+		out.push( { t, x: ( 1 - t ) * ( 1 - t ) * pa.x + 2 * t * ( 1 - t ) * qx + t * t * pb.x, y: ( 1 - t ) * ( 1 - t ) * pa.y + 2 * t * ( 1 - t ) * qy + t * t * pb.y } );
+	}
+	return out;
+}
+const FRAMES = [ [ 945, 600 ], [ 1500, 900 ], [ 700, 480 ], [ 620, 760 ], [ 844, 520 ] ];
+
+test( 'the web bows away from the middle: neighbours along the rim, nothing through the middle, nothing over a seat', () => {
+	for ( const [ W, H ] of FRAMES ) {
+		for ( let n = 2; n <= 8; n++ ) {
+			const lay = K.ego( { W, H, named: n, dots: 0 } );
+			const share = ( p ) => Math.hypot( ( p.x - lay.C.x ) / lay.rx, ( p.y - lay.C.y ) / lay.ry );   // 1 on the oval
+			for ( let i = 0; i < n; i++ ) {
+				for ( let j = i + 1; j < n; j++ ) {
+					const pa = lay.named[ i ], pb = lay.named[ j ], off = K.arc( lay, pa, pb ), say = `${ W }x${ H }, ${ i } to ${ j } of ${ n }`;
+					assert.deepEqual( K.arc( lay, pb, pa ), off, 'the same line either way: ' + say );
+					const pts = along( pa, pb, off );
+					const mid = pts[ ( pts.length - 1 ) / 2 ], step = Math.min( j - i, n - ( j - i ) );
+					// a place is set down on a whole pixel, so the oval is known to within one
+					assert.ok( pts.every( ( p ) => share( p ) <= 1 + 1.5 / lay.ry ), 'inside the oval: ' + say );
+					assert.ok( pts.every( ( p ) => Math.hypot( p.x - lay.C.x, p.y - lay.C.y ) >= 45 ), 'clear of the middle: ' + say );
+					if ( step === 1 && n >= 4 ) {
+						assert.ok( Math.abs( share( mid ) - 1 ) < 1.5 / lay.ry, 'neighbours: along the rim: ' + say );
+					} else {
+						// further apart: lifted off the straight line, toward the rim but short of it
+						const flat = Math.hypot( ( pa.x + pb.x ) / 2 - lay.C.x, ( pa.y + pb.y ) / 2 - lay.C.y );
+						assert.ok( Math.hypot( mid.x - lay.C.x, mid.y - lay.C.y ) > flat + 8, 'lifted: ' + say );
+						assert.ok( share( mid ) < 0.9, 'short of the rim: ' + say );
+					}
+					lay.named.forEach( ( seat, k ) => {
+						if ( k !== i && k !== j ) {
+							assert.ok( pts.every( ( p ) => Math.hypot( p.x - seat.x, p.y - seat.y ) >= 24 ), `clear of seat ${ k }: ` + say );
+						}
+					} );
+				}
+			}
+		}
+	}
+} );
+
+test( 'lines straight across go round the middle by either side in turn', () => {
+	const lay = K.ego( { W: 945, H: 600, named: 8, dots: 0 } );
+	const side = ( i ) => {
+		const off = K.arc( lay, lay.named[ i ], lay.named[ i + 4 ] );
+		const ax = lay.named[ i + 4 ].x - lay.named[ i ].x, ay = lay.named[ i + 4 ].y - lay.named[ i ].y;
+		return Math.sign( ax * off.y - ay * off.x );                     // which side of the line the bow is on
+	};
+	assert.deepEqual( [ 0, 1, 2, 3 ].map( side ), [ side( 0 ), -side( 0 ), side( 0 ), -side( 0 ) ] );
+	assert.notEqual( side( 0 ), 0 );
+} );
+
+test( 'with room for the web, a name leans outward from the oval; without, it stays centred and nothing changes', () => {
+	const big = K.ego( { W: 945, H: 600, named: 8, dots: 30 } ), small = K.ego( { W: 390, H: 550, named: 6, dots: 12 } );
+	assert.equal( big.web, true );
+	assert.equal( small.web, false );
+	assert.ok( small.named.every( ( p ) => p.lean === 0 ) );
+	assert.equal( K.ego( { W: 945, H: 600, named: 1, dots: 0 } ).web, false );             // one picker round the middle: no web to draw
+	for ( const p of big.named ) {
+		assert.equal( Math.sign( Math.round( p.lean * 100 ) ), Math.sign( Math.round( ( p.x - big.C.x ) / 3 ) ), 'outward: ' + p.seat );
+		assert.ok( Math.abs( p.lean ) <= 1 );
+	}
+	const side = big.named.reduce( ( a, b ) => ( Math.abs( b.lean ) > Math.abs( a.lean ) ? b : a ) );
+	const top = big.named.reduce( ( a, b ) => ( Math.abs( b.lean ) < Math.abs( a.lean ) ? b : a ) );
+	assert.ok( Math.abs( side.lean ) > 0.95 && Math.abs( side.y - big.C.y ) < big.ry * 0.25 );      // at the side: nearly its whole half-width
+	assert.ok( Math.abs( top.lean ) < 0.25 && Math.abs( top.y - big.C.y ) > big.ry * 0.9 );           // at the top or the bottom: hardly at all
+	// The beads keep clear of where a leaning name is: about 112 wide and 22 high, its middle 56 out from the picker,
+	// over or under them. (Six round the middle at this size is where a bead sat under a name before they did.)
+	for ( const lay of [ big, K.ego( { W: 945, H: 600, named: 6, dots: 30 } ), K.ego( { W: 1100, H: 560, named: 6, dots: 30 } ) ] ) {
+		for ( const p of lay.named ) {
+			for ( const d of lay.dots ) {
+				assert.ok( !( Math.abs( d.x - ( p.x + p.lean * 56 ) ) < 62 && Math.abs( d.y - ( p.y + ( p.below ? 26 : -22 ) ) ) < 16 ),
+					`a bead under the name at seat ${ p.seat } of ${ p.of }` );
+			}
+		}
+		assert.ok( lay.dots.length >= 12, 'and there are still beads: ' + lay.dots.length );
+	}
+} );
+
+test( 'a line of the web says how far apart round the oval its ends sit, the short way', () => {
+	const lay = K.ego( { W: 945, H: 600, named: 8, dots: 0 } );
+	assert.deepEqual( [ 1, 2, 3, 4, 5, 6, 7 ].map( ( j ) => K.arc( lay, lay.named[ 0 ], lay.named[ j ] ).apart ), [ 1, 2, 3, 4, 3, 2, 1 ] );
+	assert.equal( K.arc( lay, lay.named[ 6 ], lay.named[ 1 ] ).apart, 3 );
+} );
+
+test( 'the places clear of some boxes: none inside one, nor within the pad of its edge', () => {
+	const places = [ { x: 0, y: 0 }, { x: 50, y: 10 }, { x: 108, y: 10 }, { x: 112, y: 10 }, { x: 50, y: 31 }, { x: 50, y: 29 } ];
+	const box = { x1: 10, y1: 0, x2: 100, y2: 20 };
+	assert.deepEqual( K.clearOf( places, [ box ] ).map( ( p ) => p.x + ',' + p.y ), [ '0,0', '108,10', '112,10', '50,31', '50,29' ] );
+	assert.deepEqual( K.clearOf( places, [ box ], 10 ).map( ( p ) => p.x + ',' + p.y ), [ '0,0', '112,10', '50,31' ] );
+	assert.deepEqual( K.clearOf( places, [] ), places );
+	assert.deepEqual( K.clearOf( places, [ box, { x1: -5, y1: -5, x2: 5, y2: 5 } ] ).length, 4 );
+} );
