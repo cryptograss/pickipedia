@@ -74,8 +74,9 @@ class SkinBroadside extends \SkinMustache {
 
 		$post = $this->post( $title, $html );
 		$post['has-video'] = Post::videoCids( $html ) !== [];
-		// The side column: what plays and what is said. A post whose writer has songs always has one.
-		$post['has-side'] = $post['has-video'] || $hasToc || !empty( $post['tiding'] ) || !empty( $post['songs'] );
+		// The side column: what plays and what is said. A post whose writer has songs always has one; a
+		// tiding alone doesn't make one (Post::hasSide).
+		$post['has-side'] = !empty( $post['is-post'] ) && Post::hasSide( $post, $hasToc );
 		$data['data-post'] = $post;
 
 		$mode = $this->mode();
@@ -219,6 +220,9 @@ class SkinBroadside extends \SkinMustache {
 
 		$author = self::blanksGone( PostData::author( $user ) );
 		$author['initial'] = mb_strtoupper( mb_substr( $author['name'], 0, 1 ) );
+		// Somewhere to go from their name: their user page if they have made one, the person they are,
+		// their page on magenta. A writer with none of them has a name and nothing under it.
+		$author['has-links'] = $author['exists'] || $author['person'] || $author['magenta'];
 
 		// The rail: what else they have written, newest first; past the first few, behind a fold.
 		$shelf = Post::shelf( $writings, $mine, 200 );

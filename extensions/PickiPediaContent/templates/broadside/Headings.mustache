@@ -1,0 +1,10 @@
+{{!
+  The post's headings, each a way down to its part (data-toc: there when the
+  post has two or more, SkinBroadside::getTemplateData). skin.mustache has
+  this twice, and frame.css shows one of the two: beside the post where there
+  is a side column, folded away over its first words where there isn't.
+
+  The skin lists them itself ("toc": false, extension.json), so MediaWiki
+  does not also set its own box of contents into the post.
+}}
+<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a>{{#is-parent-section}}<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a></li>{{/array-sections}}</ul>{{/is-parent-section}}</li>{{/array-sections}}</ul>

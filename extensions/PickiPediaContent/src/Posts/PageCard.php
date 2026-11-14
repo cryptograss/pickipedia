@@ -109,7 +109,7 @@ class PageCard {
 				'dek' => $dek !== null ? trim( html_entity_decode( strip_tags( $dek ), ENT_QUOTES | ENT_HTML5 ) ) : '',
 				'author' => [
 					'name' => $author['name'],
-					'url' => $abs( $author['url'] ),
+					'url' => $author['exists'] ? $abs( $author['url'] ) : null,
 					'avatar' => $abs( $author['avatar']['src'] ?? null ),
 				],
 				'published' => $first && $first->getTimestamp() ? wfTimestamp( TS_ISO_8601, $first->getTimestamp() ) : '',
