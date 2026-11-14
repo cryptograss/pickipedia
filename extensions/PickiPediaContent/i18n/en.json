@@ -42,7 +42,7 @@
 	"pickipediacontent-posts-parts": "{{PLURAL:$1|one part|$1 parts}}",
 	"pickipediacontent-posts-more-writing": "More writing",
 	"pickipediacontent-posts-more": "{{PLURAL:$1|one more|$1 more}}",
-	"pickipediacontent-posts-songs": "Songs",
+	"pickipediacontent-posts-songs-by": "Songs by $1",
 	"pickipediacontent-posts-songs-note": "Each plays in Rabbithole, with who's picking lit up.",
 	"pickipediacontent-posts-listen": "Listen in Rabbithole",
 	"pickipediacontent-posts-songpage": "The song's page",

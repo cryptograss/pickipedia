@@ -1,11 +1,16 @@
 {{!
   Broadside: a post's page (src/Posts/SkinBroadside.php).
 
-  Three columns on a wide screen: who wrote it and what else they made;
-  the post; and a side column where a video keeps playing, the page's
-  tiding, and its headings. On a narrow one the post comes first and the
-  rest follows it. Everything here is sent by the server; no script moves
-  any of it.
+  Three columns on a wide screen: who wrote it and what else they wrote;
+  the post; and a side column for what plays and what is said: the place
+  a video keeps playing, the post's headings, the writer's songs, and the
+  page's tiding. On a narrow one the post comes first and the rest
+  follows it. Everything here is sent by the server; no script moves any
+  of it.
+
+  The songs are sent twice (Songs.mustache): in the side column, and
+  after the rail's other shelves, which is where they are read when there
+  is no room for a side column. frame.css shows one of the two.
 }}
 <script>
 /* Until MediaWiki:Common.js loses the old zine script: it marks the body of every user subpage for the
@@ -127,13 +132,7 @@ new MutationObserver( function () {
 			{{#rest}}<details class="bs-shelf-rest"><summary>{{label}}</summary><ul>{{#array-items}}<li><a href="{{url}}">{{title}}</a><span class="bs-shelf-note">{{note}}</span></li>{{/array-items}}</ul></details>{{/rest}}
 		</section>
 		{{/shelf}}
-		{{#songs}}
-		<section class="bs-shelf bs-songs">
-			<h2>{{msg-pickipediacontent-posts-songs}}</h2>
-			<ul>{{#array-items}}<li><a class="bs-play" href="{{listen}}" title="{{msg-pickipediacontent-posts-listen}}"><span class="bs-play-mark" aria-hidden="true">▶</span><span class="bs-play-title">{{title}}</span></a><a class="bs-songpage" href="{{url}}" title="{{msg-pickipediacontent-posts-songpage}}" aria-label="{{msg-pickipediacontent-posts-songpage}}: {{title}}">♪</a></li>{{/array-items}}</ul>
-			<p class="bs-shelf-note">{{msg-pickipediacontent-posts-songs-note}}</p>
-		</section>
-		{{/songs}}
+		{{>Songs}}
 	</aside>
 	{{/is-post}}
 
@@ -141,6 +140,13 @@ new MutationObserver( function () {
 	<aside class="bs-side" aria-label="{{msg-pickipediacontent-posts-beside}}">
 		<div class="bs-side-stick">
 			{{#has-video}}<div class="bs-dock" id="bs-dock"><p class="bs-dock-note">{{msg-pickipediacontent-posts-dock}}</p></div>{{/has-video}}
+			{{#data-toc}}
+			<nav class="bs-toc" aria-labelledby="bs-toc-h">
+				<h2 id="bs-toc-h">{{msg-pickipediacontent-posts-toc}}</h2>
+				<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a>{{#is-parent-section}}<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a></li>{{/array-sections}}</ul>{{/is-parent-section}}</li>{{/array-sections}}</ul>
+			</nav>
+			{{/data-toc}}
+			{{>Songs}}
 			{{#tiding}}
 			<a class="bs-tidingcard" href="{{url}}">
 				<span class="bs-tidingcard-head"><span class="bs-dot" aria-hidden="true"></span>{{msg-pickipediacontent-posts-tiding}}</span>
@@ -148,12 +154,6 @@ new MutationObserver( function () {
 				<span class="bs-tidingcard-go">{{msg-pickipediacontent-posts-tiding-go}}</span>
 			</a>
 			{{/tiding}}
-			{{#data-toc}}
-			<nav class="bs-toc" aria-labelledby="bs-toc-h">
-				<h2 id="bs-toc-h">{{msg-pickipediacontent-posts-toc}}</h2>
-				<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a>{{#is-parent-section}}<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a></li>{{/array-sections}}</ul>{{/is-parent-section}}</li>{{/array-sections}}</ul>
-			</nav>
-			{{/data-toc}}
 		</div>
 	</aside>
 	{{/has-side}}
