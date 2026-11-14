@@ -4,10 +4,12 @@
 -- Run from the extension root:  lua tests/check-studio.lua
 package.path = "./lua/?.lua;" .. package.path
 
-local recorded = { subobjects = {}, asks = {} }
+local recorded = { subobjects = {}, asks = {}, onTheRecord = {} }
 local answers = {}      -- query substring -> answer
 local licenceAnswer = "CC BY-SA 4.0"
 local artistAnswer = "Justin Myles Holmes"
+local artAnswer = ""
+local onTheRecordAnswer = ""
 
 mw = {
 	text = {
@@ -28,7 +30,22 @@ mw = {
 			return out
 		end,
 	},
-	title = { getCurrentTitle = function() return { fullText = "Song:Barlows" } end },
+	title = {
+		getCurrentTitle = function() return { fullText = "Song:Barlows" } end,
+		new = function( text )
+			return {
+				fullText = text,
+				fullUrl = function( _, query )
+					local q = ""
+					for key, value in pairs( query or {} ) do
+						q = q .. "?" .. key .. "=" .. value
+					end
+					return "https://pickipedia.xyz/index.php/" .. text .. q
+				end,
+			}
+		end,
+	},
+	site = { server = "https://pickipedia.xyz" },
 }
 
 local function lazyArgs( values )
@@ -62,7 +79,11 @@ local function makeFrame( args, parentArgs )
 				return ""
 			elseif name == "#show" then
 				if params[2] == "?Has record artist" then return artistAnswer end
+				if params[2] == "?Album art" then return artAnswer end
 				return licenceAnswer
+			elseif name == "#ontherecord" then
+				table.insert( recorded.onTheRecord, params )
+				return onTheRecordAnswer
 			end
 			return ""
 		end,
@@ -136,6 +157,50 @@ check( "the appearance names the record and track",
 	recorded.subobjects[3]:find( "Has record=4masks" )
 		and recorded.subobjects[3]:find( "Has track number=1" ),
 	recorded.subobjects[3] )
+
+print( "\nA cut that names its release:" )
+-- One parameter, `cid`, and the page needs no other copy of the CID: the
+-- listen button, the record's track row, the chart and both ways to edit it
+-- all come from it (Justin, #rabbithole, 14 Nov 2026).
+recorded.subobjects, recorded.onTheRecord = {}, {}
+artAnswer = "File:four-masks-temp.png"
+onTheRecordAnswer = '<div class="pp-on-record">the tracks</div>'
+out = studio.cut( makeFrame( {}, {
+	studio = "Tunesmith Studios",
+	record = "4masks",
+	number = "5",
+	cid = "QmS3QEZ",
+	["Maddie Denton"] = "fiddle",
+} ) )
+
+check( "the record's tracks are asked for, not typed out",
+	#recorded.onTheRecord == 1 and recorded.onTheRecord[1][1] == "QmS3QEZ"
+		and recorded.onTheRecord[1][2] == "4masks",
+	out )
+check( "and shown", out:find( "the tracks", 1, true ) ~= nil, out )
+check( "the release is linked", out:find( "%[%[Release:QmS3QEZ|the release%]%]" ) ~= nil, out )
+check( "its chart too", out:find( "%[%[Release:QmS3QEZ/Metadata|its chart%]%]" ) ~= nil, out )
+check( "with a way to edit the chart by hand",
+	out:find( "Release:QmS3QEZ/Metadata?action=edit edit the chart", 1, true ) ~= nil, out )
+check( "and a way to edit it in the player",
+	out:find( "/rabbithole/?track=QmS3QEZ&action=edit chart it in Rabbithole", 1, true ) ~= nil,
+	out )
+check( "the listen button is the template's, not written again",
+	out:find( "%[%[QmS3QEZ%]%]" ) ~= nil, out )
+check( "the record's art comes from the record",
+	out:find( "%[%[File:four%-masks%-temp.png|80px|link=4masks|alt=4masks%]%]" ) ~= nil, out )
+check( "and the appearance says which release holds the performance",
+	recorded.subobjects[2]:find( "Has release=Release:QmS3QEZ", 1, true ) ~= nil,
+	recorded.subobjects[2] )
+
+print( "\nA cut with no release named:" )
+artAnswer, onTheRecordAnswer = "", ""
+recorded.onTheRecord = {}
+out = studio.cut( makeFrame( {}, {
+	studio = "Tunesmith Studios", record = "4masks", ["Maddie Denton"] = "fiddle",
+} ) )
+check( "asks for no track row", #recorded.onTheRecord == 0 )
+check( "and offers no chart links", out:find( "pp-cut-links" ) == nil, out )
 
 print( "\nA cut that never made a record:" )
 recorded.subobjects = {}

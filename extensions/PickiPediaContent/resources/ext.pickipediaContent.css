@@ -158,6 +158,34 @@
 	color: #3d4a3e;
 }
 
+/* --- what a cut carries when it names its release --------------------- */
+
+/*
+ * The record's art, beside the cut that is on it. Per cut, not per page: two
+ * cuts of one tune are on two different records, and the song page used to
+ * type one of their covers in by hand at the top.
+ */
+.pp-cut-art {
+	float: right;
+	margin: 0 0 .4em .8em;
+}
+
+/* {{Listen in Rabbithole}}, in the cut's heading rather than floating. */
+.pp-cut-listen {
+	margin-left: .6em;
+	font-weight: 400;
+}
+
+/*
+ * The release, its chart, and the two ways to edit it. Quiet: they are for
+ * whoever came to fix something, and they are the last line of the box.
+ */
+.pp-cut-links {
+	margin-top: .2em;
+	font-size: .8em;
+	color: #6b7566;
+}
+
 /* The same cut, turning up on another record. */
 .pp-also {
 	padding: .3em .2em;

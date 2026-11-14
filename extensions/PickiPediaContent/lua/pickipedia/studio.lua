@@ -37,6 +37,7 @@ local NOT_A_PLAYER = {
 	engineer = true,
 	record = true,
 	number = true,
+	cid = true,
 }
 
 local function trim( s )
@@ -83,6 +84,82 @@ end
 
 local function subobject( frame, parts )
 	frame:preprocess( "{{#subobject:|" .. table.concat( parts, "|" ) .. "}}" )
+end
+
+-- One value of one page's, as SMW has it.
+local function property( frame, page, name )
+	return trim( plain( frame:callParserFunction( "#show", {
+		page, "?" .. name, "link=none", "default=",
+	} ) ) )
+end
+
+-- The wiki's own address, for a link to something served beside it rather
+-- than by it — Rabbithole, at /rabbithole/.
+local function server()
+	local host = ( mw.site and mw.site.server ) or ""
+	if host:sub( 1, 2 ) == "//" then
+		host = "https:" .. host
+	end
+	return ( host:gsub( "/$", "" ) )
+end
+
+local function fullUrl( page, query )
+	local title = mw.title.new( page )
+	if not title then
+		return ""
+	end
+	return title:fullUrl( query )
+end
+
+-- Everywhere this recording can be reached from the cut that made it.
+--
+-- A cut names its track's Release page in `cid`, and that one parameter is
+-- the page's only copy of the CID: the listen button, the record's track row,
+-- the chart and the two ways to edit it all come from here. Typed out by hand
+-- instead, as every song page did until 14 Nov 2026, it was four or five
+-- copies of one string per page and nobody's job to keep them in step
+-- (Justin, #rabbithole).
+--
+-- "the chart" is Release:<cid>/Metadata — the markers Rabbithole plays and
+-- the ensemble it lights up. A reader who wants to fix one needs to land on
+-- it; an editor who wants to fix it in the player needs ?action=edit. Both
+-- are one click from the cut now rather than a search.
+local function cutLinks( cid )
+	local metadata = "Release:" .. cid .. "/Metadata"
+	local editUrl = fullUrl( metadata, { action = "edit" } )
+	local items = {
+		"[[Release:" .. cid .. "|the release]]",
+		"[[" .. metadata .. "|its chart]]",
+	}
+	if editUrl ~= "" then
+		table.insert( items, "[" .. editUrl .. " edit the chart]" )
+	end
+	local host = server()
+	if host ~= "" then
+		table.insert( items, "[" .. host .. "/rabbithole/?track=" .. cid
+			.. "&action=edit chart it in Rabbithole]" )
+	end
+	return '<div class="pp-cut-links plainlinks">'
+		.. table.concat( items, " &middot; " ) .. "</div>"
+end
+
+-- The record's art, as the record page records it, small, beside the cut it
+-- belongs to.
+--
+-- Song pages each typed this file name in by hand, which is how eleven pages
+-- came to carry a 120px copy of one line. Two cuts of one tune are on two
+-- different records, and a line typed at the top of the page can only show
+-- one of them; here each cut shows its own.
+local function recordArt( frame, record )
+	local file = property( frame, record, "Album art" )
+	if file == "" then
+		return ""
+	end
+	if file:sub( 1, 5 ):lower() ~= "file:" then
+		file = "File:" .. file
+	end
+	return '<div class="pp-cut-art">[[' .. file .. "|80px|link=" .. record
+		.. "|alt=" .. record .. "]]</div>"
 end
 
 -- What identifies this cut.
@@ -134,6 +211,7 @@ function p.cut( frame )
 	end
 
 	local record, number = trim( args.record ), trim( args.number )
+	local cid = trim( args.cid )
 
 	local shown = {}
 	for _, player in ipairs( players( args ) ) do
@@ -162,6 +240,11 @@ function p.cut( frame )
 		if number ~= "" then
 			table.insert( parts, "Has track number=" .. escape( number ) )
 		end
+		-- Which Release holds this performance, so the recording can be
+		-- asked for rather than looked up: [[Has release::<cid>]].
+		if cid ~= "" then
+			table.insert( parts, "Has release=Release:" .. escape( cid ) )
+		end
 		subobject( frame, parts )
 	end
 
@@ -186,7 +269,24 @@ function p.cut( frame )
 		heading = '<span class="pp-unreleased">studio cut</span>'
 	end
 
+	-- The listen button is {{Listen in Rabbithole}}'s, expanded here rather
+	-- than written again: it knows the address the player answers to, and it
+	-- writes the hidden [[Release:<cid>]] link that lets the player find its
+	-- way back to this page. inline=yes, because in here it is part of the
+	-- cut's heading and not a thing floating at the top right of the page.
+	if cid ~= "" then
+		heading = heading .. '<span class="pp-cut-listen">'
+			.. frame:expandTemplate{
+				title = "Listen in Rabbithole",
+				args = { cid, inline = "yes" },
+			} .. "</span>"
+	end
+
 	local out = { '<div class="pp-row pp-row--cut">' }
+	local art = record ~= "" and recordArt( frame, record ) or ""
+	if art ~= "" then
+		table.insert( out, art )
+	end
 	table.insert( out, '<div class="pp-row-head">' .. heading .. "</div>" )
 	-- A lineup reads down, not across. On a composition's page the personnel
 	-- are the substance — who was in the room, on what — and a run-on line of
@@ -210,6 +310,19 @@ function p.cut( frame )
 		table.insert( out, '<div class="pp-row-note">'
 			.. table.concat( session, " &middot; " ) .. "</div>" )
 	end
+
+	-- The record this cut is on, as its tracks, every other one a way into
+	-- Rabbithole playing it ({{#ontherecord:}}, in PickiPediaReleases). It
+	-- reads the record's own Release page, so the list lives in one place
+	-- instead of being typed out once per song page.
+	if cid ~= "" then
+		local onRecord = trim( frame:callParserFunction( "#ontherecord", { cid, record } ) )
+		if onRecord ~= "" then
+			table.insert( out, onRecord )
+		end
+		table.insert( out, cutLinks( cid ) )
+	end
+
 	table.insert( out, "</div>" )
 	return table.concat( out, "\n" )
 end
@@ -232,12 +345,6 @@ function p.appearance( frame )
 	return '<div class="pp-also">also on [['
 		.. record .. "]]"
 		.. ( number ~= "" and ( ", track " .. number ) or "" ) .. "</div>"
-end
-
-local function property( frame, page, name )
-	return trim( plain( frame:callParserFunction( "#show", {
-		page, "?" .. name, "link=none", "default=",
-	} ) ) )
 end
 
 local function freelyLicensed( frame, record )
