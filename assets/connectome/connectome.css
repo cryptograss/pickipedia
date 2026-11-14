@@ -1,5 +1,6 @@
 /*
- * The connectome's big graph (index.html). One accent, and it means one thing: gold is a Permanent Release.
+ * The connectome's big graph (index.html). One accent, and it means one thing: gold is a Permanent Release,
+ * on a line between pickers or round a circle that is a piece of music.
  * Everything else is ink on paper. The same marks are on the musician pages' cards
  * (ext.pickipediaContent.connectome.css) and in Rabbithole's "Your rabbithole".
  *
@@ -237,6 +238,14 @@ main {
 .ln.quiet { pointer-events: none; }
 .ln.hot { opacity: 1; }
 
+/* The web among those round the middle, the ways on a step further, the thin lines to the rest of the company:
+   the same marks, thin and behind; plain when either end is pointed at. */
+.ln.fine.hot .thread,
+.ln.fine.hot .core { stroke-width: 2.6px; }
+
+/* A picker a step further out: a small dot, and a name in lighter type than the company's. */
+.pk.far text { font-weight: 400; font-size: 13px; }
+
 /* ---- pickers ---- */
 .dot {
 	fill: var( --ink );
@@ -468,24 +477,24 @@ main {
 #panel tr.go:hover { background: #f0efec; }
 
 /* ---- the way into Rabbithole: a rabbit and a play mark, green, beside a track's name ---- */
-.pill a.play rect {
+#g a.play rect {
 	fill: var( --play );
 	stroke: none;
 }
 
-.pill a.play:hover rect,
-.pill a.play:focus rect {
+#g a.play:hover rect,
+#g a.play:focus rect {
 	fill: var( --play-on );
 }
 
 .pm .rab,
-.pill a.play .rab,
+#g a.play .rab,
 .tri {
 	fill: #fff;
 }
 
 .pm .rab .eye,
-.pill a.play .rab .eye {
+#g a.play .rab .eye {
 	fill: var( --play );
 }
 
@@ -609,6 +618,124 @@ a.play:focus {
 	stroke: none;
 }
 
+/* ---- inside out: the music is the circles, the pickers are the lines ---- */
+/* A piece's ring is as free as the piece: gold for a Permanent Release, ink for a Full one, dotted for the rest. */
+.mu .ring {
+	fill: var( --surface );
+	stroke: var( --ink2 );
+	stroke-width: 2;
+}
+
+.mu.t2 .ring {
+	fill: var( --gold-wash );
+	stroke: var( --gold );
+	stroke-width: 3.5;
+}
+
+.mu.t0 .ring {
+	stroke: var( --muted );
+	stroke-dasharray: 2 4;
+}
+
+.mu.subject .ring { stroke-width: 3; }
+.mu.subject.t2 .ring { stroke-width: 5; }
+.mu.hot .ring { stroke-width: 3.5; }
+.mu.t2.hot .ring { stroke-width: 5.5; }
+
+.mu .bead {
+	fill: var( --ink2 );
+	stroke: var( --surface );
+	stroke-width: 1.5;
+}
+
+.mu.t2 .bead {
+	fill: var( --gold );
+	stroke: var( --ink2 );
+	stroke-width: 0.9;
+}
+
+.mu.t0 .bead {
+	fill: var( --surface );
+	stroke: var( --muted );
+	stroke-width: 1.2;
+	stroke-dasharray: 1.5 2;
+}
+
+.mu.hot .bead {
+	stroke: var( --ink );
+	stroke-width: 1.8;
+	stroke-dasharray: none;
+}
+
+/* A piece's name is set as music is on a pill, not as a picker's name is. */
+.mu text {
+	font: 600 13px var( --ui );
+	fill: var( --ink );
+}
+
+.mu text.sub {
+	font: 400 11.5px var( --ui );
+	fill: var( --ink2 );
+}
+
+/* Pickers between two pieces: a line of ink, and on it a tag with the name. */
+.core.th { stroke: var( --ink2 ); }
+.core.th.on { stroke: var( --ink ); }
+
+.pill.tag rect:not( .reach ) {
+	fill: var( --surface );
+	stroke: var( --axis );
+	stroke-width: 1;
+}
+
+.pill.tag text {
+	font: 700 12.5px var( --name );
+	fill: var( --link );
+}
+
+.pill.tag.nopage text { fill: var( --ink ); }
+
+.pill.tag tspan.n {
+	font: 400 11.5px var( --ui );
+	fill: var( --ink2 );
+}
+
+.pill.tag.hot rect,
+.pill.tag.held rect {
+	stroke: var( --ink );
+	stroke-width: 1.6;
+}
+
+.pill.tag a:hover text,
+.pill.tag a:focus text { text-decoration: underline; }
+
+/* The way out to a wiki page, said as one. */
+a.out {
+	margin-left: 5px;
+	font: 400 12px var( --ui );
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+#say h1 a.out {
+	margin-left: 10px;
+	color: var( --link );
+	font-size: 13px;
+	vertical-align: 2px;
+}
+
+a.out:hover,
+a.out:focus { text-decoration: underline; }
+
+/* The legend says what the marks mean in the view that's on. */
+#stage.dual #legend .pv,
+#stage:not( .dual ) #legend .dv,
+#stage:not( .webbed ) #legend .wb,
+#stage:not( .deep ) #legend .dp { display: none; }
+
+/* Its height is set from the script (steady()): as tall as it is with every entry a frame this wide could show. */
+#legend { box-sizing: border-box; }
+
 /* ---- narrow: the list under the graph ---- */
 @media ( max-width: 760px ) {
 	body { height: auto; min-height: 100%; }
@@ -644,6 +771,9 @@ a.play:focus {
 	#panel li { padding: 10px 6px; }
 	#panel td { padding: 10px 6px; }
 	#panel a.play { padding: 5px 7px; border-radius: 14px; }
+	/* The arrow out to a page is small to the eye, and no smaller than a fingertip to the touch. */
+	#panel a.out { display: inline-block; margin: -9px 0 -9px 2px; padding: 9px 12px; font-size: 14px; }
+	#say h1 a.out { display: inline-block; padding: 6px 4px; }
 	.ln .hit { stroke-width: 24; }
 }
 
