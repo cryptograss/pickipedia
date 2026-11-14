@@ -514,3 +514,183 @@ test( 'the places clear of some boxes: none inside one, nor within the pad of it
 	assert.deepEqual( K.clearOf( places, [] ), places );
 	assert.deepEqual( K.clearOf( places, [ box, { x1: -5, y1: -5, x2: 5, y2: 5 } ] ).length, 4 );
 } );
+
+/* ---- a step further: who the company leads on to, and where it all goes ---- */
+
+// C in the middle; A and B are C's company; X, Y, Z are A's, each less loudly than the last; Z is B's too, less loudly still.
+const STEP = K.build( { v: 1, people: [ 'C', 'A', 'B', 'X', 'Y', 'Z' ].map( ( n ) => [ n, 1, '' ] ),
+	music: [ [ 'lma:one', 'show', 'Band', '2025-01-01', 'One', 2, '', '' ] ], cast: [ [] ],
+	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ] ] ], [ 0, 2, [ [ 0, 2, 1, [] ] ] ], [ 1, 3, [ [ 0, 2, 3, [] ] ] ], [ 1, 4, [ [ 0, 2, 2, [] ] ] ],
+		[ 1, 5, [ [ 0, 2, 1, [] ] ] ], [ 2, 5, [ [ 0, 2, 0.5, [] ] ] ] ] } );
+const ids = ( far ) => far.map( ( list ) => list.map( ( f ) => f.id ) );
+
+test( 'a step further: who the company have played with that the one in the middle has no tie to at all', () => {
+	// Kyle's company: Justin, Molly, Sam. Only Molly leads anywhere new: Vickie. Choir shares a record with Kyle, so is not new.
+	const far = K.beyond( G, KYLE, [ JUSTIN, MOLLY, SAM ] );
+	assert.deepEqual( ids( far ), [ [], [ VICKIE ], [] ] );
+	assert.equal( far[ 1 ][ 0 ].by, MOLLY );
+	assert.equal( far[ 1 ][ 0 ].tie, tie( MOLLY, VICKIE ) );
+	// Vickie shares a record with Far, never a track: no way on by that, and Far is not new to her either.
+	assert.deepEqual( ids( K.beyond( G, VICKIE, [ MOLLY ] ) ), [ [ KYLE, JUSTIN ] ] );      // the taped shows before the CD
+	assert.deepEqual( ids( K.beyond( G, VICKIE, [ MOLLY ], 1 ) ), [ [ KYLE ] ] );
+	assert.deepEqual( ids( K.beyond( G, MOLLY, [ VICKIE ] ) ), [ [] ] );
+	assert.deepEqual( K.beyond( G, LONE, [] ), [] );
+} );
+
+test( 'each a step further is given once, under the one they have played with the most loudly; one left short takes who is left', () => {
+	// Molly is new to Sam, and both Kyle and Justin have played with her: Kyle on tape, Justin on a CD.
+	assert.deepEqual( ids( K.beyond( G, SAM, [ KYLE, JUSTIN ] ) ), [ [ MOLLY ], [] ] );
+	assert.deepEqual( ids( K.beyond( G, SAM, [ JUSTIN, KYLE ] ) ), [ [], [ MOLLY ] ] );
+	// A has three and room for two; Z, the least of them, is B's too, and B has room.
+	assert.deepEqual( ids( K.beyond( STEP, 0, [ 1, 2 ] ) ), [ [ 3, 4 ], [ 5 ] ] );
+	assert.equal( K.beyond( STEP, 0, [ 1, 2 ] )[ 1 ][ 0 ].by, 2 );
+	assert.deepEqual( ids( K.beyond( STEP, 0, [ 1, 2 ], 3 ) ), [ [ 3, 4, 5 ], [] ] );          // with room, Z is under A: the louder way in
+	assert.deepEqual( ids( K.beyond( STEP, 0, [ 1, 2 ], 1 ) ), [ [ 3 ], [ 5 ] ] );
+	const all = K.beyond( STEP, 0, [ 1, 2 ] ).flat().map( ( f ) => f.id );
+	assert.equal( new Set( all ).size, all.length );
+} );
+
+test( 'one the reader came by, a step further out now, comes first, and under the one they came by where those two have played', () => {
+	assert.deepEqual( ids( K.beyond( G, VICKIE, [ MOLLY ], 2, [ JUSTIN ] ) ), [ [ JUSTIN, KYLE ] ] );
+	assert.deepEqual( ids( K.beyond( G, VICKIE, [ MOLLY ], 1, [ MOLLY, JUSTIN ] ) ), [ [ JUSTIN ] ] );
+	// Came to Sam from Molly by Justin: Molly hangs from Justin, though she has played more loudly with Kyle.
+	assert.deepEqual( ids( K.beyond( G, SAM, [ KYLE, JUSTIN ], 2, [ JUSTIN, MOLLY ] ) ), [ [], [ MOLLY ] ] );
+	assert.deepEqual( ids( K.beyond( G, SAM, [ KYLE, JUSTIN ], 2, [ MOLLY ] ) ), [ [ MOLLY ], [] ] );   // Justin wasn't on the way: the loudest, as ever
+	assert.deepEqual( ids( K.beyond( STEP, 0, [ 1, 2 ], 2, [ 5 ] ) ), [ [ 5, 3 ], [] ] );
+} );
+
+test( 'with room for it, a second oval for those a step further: each straight on from the middle through one of the company', () => {
+	const lay = K.ego( { W: 950, H: 648, named: 8, dots: 12, far: true } ), plain = K.ego( { W: 950, H: 648, named: 8, dots: 12 } );
+	assert.equal( plain.far, null );
+	assert.equal( lay.far.length, 8 );
+	assert.equal( lay.web, true );
+	assert.ok( lay.rx < plain.rx && lay.ry < plain.ry && lay.rx >= 170 && lay.ry >= 130 );      // the first oval gives way, but keeps room for its web
+	const from = ( p ) => ( { x: p.x - lay.C.x, y: p.y - lay.C.y } ), cross = ( a, b ) => a.x * b.y - a.y * b.x, long = ( a ) => Math.hypot( a.x, a.y );
+	lay.named.forEach( ( seat, i ) => {
+		const s = from( seat ), m = from( lay.far[ i ].main ), [ before, after ] = lay.far[ i ].sides.map( from );
+		assert.ok( Math.abs( cross( s, m ) ) / ( long( s ) * long( m ) ) < 0.012, 'one straight line, middle to seat to the one beyond: ' + i );
+		assert.ok( Math.abs( long( m ) / long( s ) - 1.75 ) < 0.03, 'and that much further out: ' + i );
+		assert.ok( cross( m, before ) < 0 && cross( m, after ) > 0, 'a second to either side: ' + i );
+		assert.ok( long( before ) < long( m ) && long( after ) < long( m ) && long( before ) > long( s ) * 1.4, 'a little nearer in: ' + i );
+		assert.equal( seat.lean, 0 );
+		for ( const p of [ lay.far[ i ].main, ...lay.far[ i ].sides ] ) {
+			assert.ok( p.x >= 120 && p.x <= 950 - 120 && p.y >= 50 && p.y <= 648 - 50, 'with room outside it for a name: ' + i );
+		}
+	} );
+	// Every place a bead might go, on one oval between the two; the caller takes those clear of the names and the lines.
+	assert.equal( lay.dots.length, 48 );
+	assert.ok( lay.dots.every( ( p ) => Math.abs( Math.hypot( ( p.x - lay.C.x ) / lay.rx, ( p.y - lay.C.y ) / lay.ry ) - 1.36 ) < 0.02 ) );
+	// Without the room, asking changes nothing.
+	for ( const [ W, H, n ] of [ [ 694, 597, 6 ], [ 390, 550, 6 ], [ 950, 500, 6 ], [ 840, 648, 8 ] ] ) {
+		assert.deepEqual( K.ego( { W, H, named: n, dots: 9, far: true } ), K.ego( { W, H, named: n, dots: 9 } ), `${ W }x${ H }` );
+	}
+	assert.equal( K.ego( { W: 950, H: 648, named: 1, dots: 0, far: true } ).far, null );          // one in the company: nothing to set out
+	assert.equal( K.ego( { W: 1350, H: 898, named: 8, dots: 0, far: true } ).far.length, 8 );
+} );
+
+test( 'points along a line: both ends, no further apart than asked, and along the bow when it has one', () => {
+	const p = { x: 10, y: 20 }, q = { x: 110, y: 20 }, far = ( a, b ) => Math.hypot( a.x - b.x, a.y - b.y );
+	const flat = K.along( p, q );
+	assert.deepEqual( [ flat[ 0 ], flat[ flat.length - 1 ] ], [ p, q ] );
+	assert.ok( flat.every( ( a ) => Math.abs( a.y - 20 ) < 1e-9 && a.x >= 10 && a.x <= 110 ) );
+	assert.ok( flat.slice( 1 ).every( ( a, i ) => far( a, flat[ i ] ) <= 5 + 1e-9 ) );
+	assert.ok( K.along( p, q, null, 20 ).length < flat.length );
+	const bowed = K.along( p, q, { x: 0, y: -60 } );
+	assert.deepEqual( [ bowed[ 0 ], bowed[ bowed.length - 1 ] ], [ p, q ] );
+	assert.ok( bowed.slice( 1 ).every( ( a, i ) => far( a, bowed[ i ] ) <= 5 + 1e-9 ) );
+	assert.ok( bowed.some( ( a ) => far( a, { x: 60, y: -10 } ) < 2.6 ) );                         // the top of the bow: half as far as its control point
+	assert.ok( bowed.every( ( a ) => a.y <= 20 + 1e-9 && a.y >= -10 - 1e-9 ) );
+} );
+
+test( 'places away from the lines, and a few taken evenly', () => {
+	const pts = K.along( { x: 0, y: 0 }, { x: 100, y: 0 } );
+	const places = [ { x: 50, y: 5 }, { x: 50, y: 11 }, { x: 50, y: 12 }, { x: 108, y: 0 }, { x: 113, y: 0 }, { x: 50, y: -30 } ];
+	assert.deepEqual( K.away( places, pts, 12 ).map( ( p ) => p.x + ',' + p.y ), [ '50,12', '113,0', '50,-30' ] );
+	assert.deepEqual( K.away( places, [], 12 ), places );
+	const ten = [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 ];
+	assert.deepEqual( K.spread( ten, 5 ), [ 0, 2, 4, 6, 8 ] );
+	assert.deepEqual( K.spread( ten, 3 ), [ 0, 3, 6 ] );
+	assert.deepEqual( K.spread( ten, 20 ), ten );
+	assert.deepEqual( K.spread( ten, 0 ), [] );
+	assert.deepEqual( K.spread( [], 4 ), [] );
+} );
+
+const inBox = ( b, pts ) => pts.filter( ( q ) => q.x >= b.x1 && q.x <= b.x2 && q.y >= b.y1 && q.y <= b.y2 ).length;
+const discBox = ( p, r ) => ( { x1: p.x - r, y1: p.y - r, x2: p.x + r, y2: p.y + r } );
+
+test( 'round a full ring, with the web and every way on drawn, each name finds a place no line runs through', () => {
+	for ( const [ W, H ] of [ [ 950, 648 ], [ 1100, 700 ], [ 1350, 898 ], [ 1900, 1000 ] ] ) {
+		for ( let n = 2; n <= 8; n++ ) {
+			const lay = K.ego( { W, H, named: n, dots: 0, far: true } ), pts = [], boxes = [ discBox( lay.C, 26 ) ];
+			lay.named.forEach( ( seat, i ) => {
+				pts.push( ...K.along( lay.C, seat ), ...K.along( seat, lay.far[ i ].main ) );
+				boxes.push( discBox( seat, 15 ), discBox( lay.far[ i ].main, 8 ) );
+				lay.named.slice( i + 1 ).forEach( ( other ) => pts.push( ...K.along( seat, other, K.arc( lay, seat, other ) ) ) );
+			} );
+			lay.named.forEach( ( seat, i ) => {                       // the company's names, then those of the ones beyond
+				const b = K.beside( seat, 14, 118, 16, pts, boxes, { W, H }, { x: seat.x - lay.C.x, y: seat.y - lay.C.y } );
+				assert.ok( b && b.room >= 4, `${ W }x${ H }, seat ${ i } of ${ n }: room ${ b && b.room }` );
+				assert.equal( inBox( b.box, pts ), 0 );
+				boxes.push( b.box );
+			} );
+			lay.far.forEach( ( f, i ) => {
+				const b = K.beside( f.main, 6, 118, 15, pts, boxes, { W, H }, { x: f.main.x - lay.C.x, y: f.main.y - lay.C.y } );
+				assert.ok( b && b.room >= 4, `${ W }x${ H }, beyond seat ${ i } of ${ n }: room ${ b && b.room }` );
+				boxes.push( b.box );
+			} );
+			const names = boxes.slice( 1 + 2 * n );
+			names.forEach( ( x, i ) => names.slice( i + 1 ).forEach( ( y ) =>
+				assert.ok( x.x2 < y.x1 || y.x2 < x.x1 || x.y2 < y.y1 || y.y2 < x.y1, `${ W }x${ H }, ${ n }: two names on each other` ) ) );
+		}
+	}
+} );
+const FRAME = { W: 950, H: 648 }, AT = { x: 400, y: 300 };
+
+test( 'a name goes beside its circle where no line runs through it', () => {
+	const up = K.along( AT, { x: 410, y: 150 } ), down = K.along( AT, { x: 390, y: 450 } ), across = K.along( AT, { x: 560, y: 300 } );
+	// A line straight on up and one back down: over and under are out, and so is leaning over them.
+	const a = K.beside( AT, 14, 100, 16, up.concat( down ), [], FRAME, { x: 0, y: -1 } );
+	assert.equal( inBox( a.box, up.concat( down ) ), 0 );
+	assert.ok( a.room >= 8, 'room: ' + a.room );
+	assert.ok( a.box.y2 < AT.y, 'outward of the two sides that are clear: ' + JSON.stringify( a.box ) );
+	// (A box round the circle itself, as the caller keeps for every circle, is no bar to a place beside it.)
+	const own = { x1: AT.x - 22, y1: AT.y - 22, x2: AT.x + 22, y2: AT.y + 22 };
+	assert.deepEqual( K.beside( AT, 14, 100, 16, up.concat( down ), [ own ], FRAME, { x: 0, y: -1 } ), a );
+	// A line straight out to the right: not beside it on the right, however far out that is.
+	const b = K.beside( AT, 14, 100, 16, across, [], FRAME, { x: 1, y: 0 } );
+	assert.equal( inBox( b.box, across ), 0 );
+	assert.ok( b.room >= 8 && b.box.x2 > AT.x, JSON.stringify( b ) );
+	// Even when the only other place left is the way back in, with a line hard by it: near a line is better than on one.
+	const above = { x1: 200, y1: 200, x2: 700, y2: 284 }, below = { x1: 200, y1: 316, x2: 700, y2: 400 };
+	const near = K.along( { x: 279, y: 288 }, { x: 379, y: 288 } );
+	const c = K.beside( AT, 14, 100, 16, across.concat( near ), [ above, below ], FRAME, { x: 1, y: 0 } );
+	assert.equal( c.anchor, 'end' );
+	assert.equal( inBox( c.box, across.concat( near ) ), 0 );
+	assert.ok( Math.abs( c.room - 4 ) < 0.01 );
+	// The text starts where its anchor says, beside the circle and not on it.
+	for ( const r of [ a, b ] ) {
+		const start = r.anchor === 'start' ? r.box.x1 : ( r.anchor === 'end' ? r.box.x2 : ( r.box.x1 + r.box.x2 ) / 2 );
+		assert.ok( Math.abs( AT.x + r.x - start ) <= 0.5 && AT.y + r.y > r.box.y1 && AT.y + r.y < r.box.y2 );
+		assert.ok( Math.hypot( Math.max( r.box.x1 - AT.x, 0, AT.x - r.box.x2 ), Math.max( r.box.y1 - AT.y, 0, AT.y - r.box.y2 ) ) >= 14 );
+	}
+} );
+
+test( 'with nothing in the way a name sits straight out from the middle; a name or a circle already there, or the frame, moves it', () => {
+	const none = [];
+	const right = K.beside( AT, 14, 100, 16, none, [], FRAME, { x: 1, y: 0 } );
+	assert.equal( right.anchor, 'start' );
+	assert.deepEqual( [ right.box.x1, right.box.y1, right.box.y2 ], [ AT.x + 21, AT.y - 8, AT.y + 8 ] );   // hard by the circle: no further off than it must be
+	// A box round the circle itself, as the caller keeps for every circle, is no bar to the place beside it.
+	assert.deepEqual( K.beside( AT, 14, 100, 16, none, [ { x1: AT.x - 19, y1: AT.y - 19, x2: AT.x + 19, y2: AT.y + 19 } ], FRAME, { x: 1, y: 0 } ), right );
+	assert.equal( K.beside( AT, 14, 100, 16, none, [], FRAME, { x: -1, y: 0 } ).anchor, 'end' );
+	const over = K.beside( AT, 14, 100, 16, none, [], FRAME, { x: 0, y: -1 } ), under = K.beside( AT, 14, 100, 16, none, [], FRAME, { x: 0, y: 1 } );
+	assert.ok( over.anchor === 'middle' && over.box.y2 < AT.y - 14 && under.anchor === 'middle' && under.box.y1 > AT.y + 14 );
+	// Something already where it would go: somewhere else, and not touching it.
+	const taken = { x1: 410, y1: 285, x2: 600, y2: 315 };
+	const moved = K.beside( AT, 14, 100, 16, none, [ taken ], FRAME, { x: 1, y: 0 } );
+	assert.ok( moved.box.x1 > taken.x2 + 3 || moved.box.x2 < taken.x1 - 3 || moved.box.y1 > taken.y2 + 3 || moved.box.y2 < taken.y1 - 3 );
+	// At the frame's edge the name stays inside it.
+	const edge = K.beside( { x: 930, y: 300 }, 6, 100, 15, none, [], FRAME, { x: 1, y: 0 } );
+	assert.ok( edge.box.x2 <= 946 && edge.box.x1 >= 4 );
+	assert.equal( K.beside( { x: 10, y: 10 }, 6, 100, 15, none, [], { W: 60, H: 40 }, { x: 1, y: 0 } ), null );     // nowhere at all
+} );

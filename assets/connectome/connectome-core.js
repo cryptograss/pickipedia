@@ -28,6 +28,13 @@
  * there's room, the lines among the company are drawn too, thin and behind: who of them have played with each
  * other. Each is the far leg of a two-hop way round, and together they say that this is a community (Justin,
  * #connectome, 14 Nov 2026, 00:59Z). Inside out it is the same web, of pieces: which of them share pickers.
+ *
+ * A step further. With more room still, each of the company has their own way on drawn straight out from them,
+ * directly away from the picker in the middle: who they have played with that the one in the middle has not,
+ * a couple each, one of them named (Justin, #connectome, 14 Nov 2026, 02:18Z; the cards on the musicians' pages
+ * do the same toward the featured pickers). Then the rest of the company are small dots on thin lines from the
+ * middle, as on the cards, so every dot in sight says how it is reached: a line from the middle is one hop, a
+ * line from one of the company is two.
  */
 
 export const TRACK = 3, STAGE = 2, RECORD = 1;     // how two pickers are on one record or show
@@ -257,6 +264,60 @@ export function between( G, x, y ) {
 	const there = new Set( G.pieces[ y ].cast );
 	return G.pieces[ x ].cast.filter( ( p ) => there.has( p ) ).sort( ( p, q ) => ( G.on[ q ].length - G.on[ p ].length ) ||
 		G.people[ p ].name.localeCompare( G.people[ q ].name ) );
+}
+
+/**
+ * A step further out from a picker: for each of those round them (ring, in order), up to `per` pickers that one
+ * has played with and the picker in the middle has no tie to at all, not even a shared record. Each is two hops
+ * from the middle, and is given once, under the one of the ring they have played with the most loudly (see
+ * loudness); a ring picker left short takes, of those nobody has yet, the ones they have played with.
+ *
+ * `prefer` are the pickers the reader came by. One of them who is two hops out now comes first, and under the
+ * ring picker the reader came by too, where they have played together: the way walked stays the way drawn.
+ *
+ * Returns, for each of the ring in turn, [{ id, tie, by }]: tie, theirs with the ring picker `by`.
+ */
+export function beyond( G, id, ring, per = 2, prefer = [] ) {
+	const near = new Set( [ id, ...G.adj[ id ].keys() ] );
+	const first = new Map( prefer.map( ( p, i ) => [ p, i ] ) );
+	const rank = ( o ) => ( first.has( o ) ? first.get( o ) : Infinity );
+	const best = new Map();                              // each one two hops out: the way in
+	ring.forEach( ( s, i ) => {
+		for ( const [ o, tie ] of G.adj[ s ] ) {
+			if ( !tie.played || near.has( o ) ) {
+				continue;
+			}
+			const walked = first.has( o ) && first.has( s ) ? 1 : 0, was = best.get( o );
+			if ( !was || walked > was.walked || ( walked === was.walked && loudness( tie ) > loudness( was.tie ) ) ) {
+				best.set( o, { id: o, tie, by: s, i, walked } );
+			}
+		}
+	} );
+	const order = ( x, y ) => ( rank( x.id ) - rank( y.id ) || 0 ) || ( loudness( y.tie ) - loudness( x.tie ) ) || ( y.tie.w - x.tie.w ) ||
+		G.people[ x.id ].name.localeCompare( G.people[ y.id ].name );
+	const out = ring.map( () => [] ), shown = new Set();
+	for ( const f of [ ...best.values() ].sort( order ) ) {
+		if ( out[ f.i ].length < per ) {
+			out[ f.i ].push( { id: f.id, tie: f.tie, by: f.by } );
+			shown.add( f.id );
+		}
+	}
+	ring.forEach( ( s, i ) => {                           // left short: any they have played with whom nobody has yet
+		if ( out[ i ].length >= per ) {
+			return;
+		}
+		const spare = [];
+		for ( const [ o, tie ] of G.adj[ s ] ) {
+			if ( tie.played && !near.has( o ) && !shown.has( o ) ) {
+				spare.push( { id: o, tie, by: s } );
+			}
+		}
+		for ( const f of spare.sort( order ).slice( 0, per - out[ i ].length ) ) {
+			out[ i ].push( f );
+			shown.add( f.id );
+		}
+	} );
+	return out;
 }
 
 /** Hops from one picker to every other; -1 where there's no way. A same-record tie counts as a hop. */
@@ -721,18 +782,8 @@ export function ladder( { W, H, hops: L, chains, la, lb } ) {
 	return { A, B, at: ( c, level ) => ( { x: Math.round( A.x + ( B.x - A.x ) * level / L ), y: rowY( c ) } ) };
 }
 
-/**
- * One picker and their company: the picker in the middle, the closest around them on an oval that starts a
- * quarter step past noon (nobody sits at twelve or at six, as on the cards), and the rest in two wider ovals.
- * Returns { C, rx, ry, web, named: [{x, y, below, angle, seat, of, lean}], dots: [{x, y}] }: seat, which place
- * round the oval; of, how many places there are.
- *
- * web: the oval is big enough for the lines among those on it to be in sight (see arc). Those lines leave a
- * picker along the oval and inward, so a name centred over or under a picker at the side would have them run
- * through it. With the web in sight a name leans outward instead: lean (-1 at the far left, 1 at the far
- * right, 0 at the top and the bottom) is how far, as a share of half the name's own width.
- */
 const LEAN = 56;                                    // about half a name's width: how far a name at the side leans out
+const DEEP = 1.75;                                  // the outer oval, for those a step further out: this many times the inner
 
 /**
  * The places that are clear of some boxes ({x1, y1, x2, y2}) by `pad` all round. ego() keeps its beads clear of
@@ -743,35 +794,134 @@ export function clearOf( places, boxes, pad = 0 ) {
 	return places.filter( ( p ) => !boxes.some( ( b ) => p.x > b.x1 - pad && p.x < b.x2 + pad && p.y > b.y1 - pad && p.y < b.y2 + pad ) );
 }
 
-export function ego( { W, H, named, dots } ) {
+/** The places at least `far` from every one of some points (see along(): the points of the lines drawn). */
+export function away( places, pts, far ) {
+	return places.filter( ( p ) => !pts.some( ( q ) => Math.abs( q.x - p.x ) < far && Math.abs( q.y - p.y ) < far &&
+		Math.hypot( q.x - p.x, q.y - p.y ) < far ) );
+}
+
+/** n of a list, taken evenly through it: all of it when it has no more than n. */
+export function spread( list, n ) {
+	const take = Math.max( 0, Math.min( n, list.length ) );
+	return Array.from( { length: take }, ( _, i ) => list[ Math.floor( i * list.length / take ) ] );
+}
+
+/**
+ * Points along a line from p to q, about `step` pixels apart, both ends among them: straight, or bowed as far
+ * as `bow` says (what arc() returns: how far the curve's control point is from the middle of the straight line).
+ */
+export function along( p, q, bow, step = 5 ) {
+	const cx = ( p.x + q.x ) / 2 + ( bow ? bow.x : 0 ), cy = ( p.y + q.y ) / 2 + ( bow ? bow.y : 0 );
+	const n = Math.max( 1, Math.ceil( ( Math.hypot( cx - p.x, cy - p.y ) + Math.hypot( q.x - cx, q.y - cy ) ) / step ) ), out = [];
+	for ( let i = 0; i <= n; i++ ) {
+		const t = i / n, u = 1 - t;
+		out.push( { x: u * u * p.x + 2 * u * t * cx + t * t * q.x, y: u * u * p.y + 2 * u * t * cy + t * t * q.y } );
+	}
+	return out;
+}
+
+/**
+ * Where a name goes beside its circle so that no line runs through it. Places all round the circle are tried,
+ * every thirty degrees, hard by it and then a little and a little more away: beside it, over and under it, and
+ * at each corner between. A place is out when the name would lie on a box already taken (`boxes`: the other
+ * names, the other circles) or leave the frame. Of the rest, the one with the most room between it and the lines
+ * wins; once that room is `enough`, the one furthest `out` (the way away from the middle) does, and the nearer
+ * the circle the better, so names sit alike where they can and no further off than they must.
+ *
+ * at: the circle's middle; r: its radius; w, h: the name's width and height; pts: points along every line drawn
+ * (see along()); frame: { W, H }; out: { x, y }, a direction.
+ * Returns { x, y, anchor, box, room }: x, y, where the text starts, from the circle's middle; anchor, which end
+ * of the text that is (start, middle, end); box, where the name is, in the frame. null when no place is free.
+ */
+export function beside( at, r, w, h, pts, boxes, frame, out = { x: 0, y: -1 }, enough = 12 ) {
+	const base = h * 0.78, len = Math.hypot( out.x, out.y ) || 1;
+	const near = pts.filter( ( q ) => Math.abs( q.x - at.x ) < w + r + 60 && Math.abs( q.y - at.y ) < h + r + 60 );   // only what comes near can matter
+	let best = null;
+	for ( const gap of [ 7, 17, 29 ] ) {
+		for ( let deg = 0; deg < 360; deg += 30 ) {
+			const R = r + gap, cx = Math.cos( deg * Math.PI / 180 ), sy = Math.sin( deg * Math.PI / 180 );
+			const anchor = cx > 0.3 ? 'start' : ( cx < -0.3 ? 'end' : 'middle' );
+			const dx = R * cx - ( anchor === 'start' ? 0 : ( anchor === 'end' ? w : w / 2 ) );
+			const dy = R * sy - ( sy < -0.3 ? h : ( sy > 0.3 ? 0 : h / 2 ) );
+			const box = { x1: at.x + dx, y1: at.y + dy, x2: at.x + dx + w, y2: at.y + dy + h };
+			// A box round this circle itself is not in the way: every place here is set clear of the circle already.
+			if ( box.x1 < 4 || box.y1 < 2 || box.x2 > frame.W - 4 || box.y2 > frame.H - 2 ||
+				boxes.some( ( b ) => !( at.x > b.x1 && at.x < b.x2 && at.y > b.y1 && at.y < b.y2 ) &&
+					box.x1 < b.x2 + 3 && b.x1 < box.x2 + 3 && box.y1 < b.y2 + 3 && b.y1 < box.y2 + 3 ) ) {
+				continue;
+			}
+			let room = Infinity;
+			for ( const q of near ) {
+				const ex = Math.max( box.x1 - q.x, 0, q.x - box.x2 ), ey = Math.max( box.y1 - q.y, 0, q.y - box.y2 );
+				if ( ex < room && ey < room ) {
+					room = Math.min( room, Math.hypot( ex, ey ) );
+				}
+			}
+			const mx = dx + w / 2, my = dy + h / 2;
+			// How far out it is counts only as it gets clear of the lines: never a reason to lie on one.
+			const value = Math.min( room, enough ) * ( 1 + 0.2 * ( mx * out.x + my * out.y ) / ( ( Math.hypot( mx, my ) || 1 ) * len ) ) - 0.03 * gap;
+			if ( !best || value > best.value + 1e-9 ) {
+				best = { x: Math.round( R * cx ), y: Math.round( dy + base ), anchor, box, room, value };
+			}
+		}
+	}
+	return best;
+}
+
+/**
+ * One picker and their company: the picker in the middle, the closest around them on an oval that starts a
+ * quarter step past noon (nobody sits at twelve or at six, as on the cards), and the rest in two wider ovals.
+ * Returns { C, rx, ry, web, far, named: [{x, y, below, angle, seat, of, lean}], dots: [{x, y}] }: seat, which
+ * place round the oval; of, how many places there are.
+ *
+ * web: the oval is big enough for the lines among those on it to be in sight (see arc). Those lines leave a
+ * picker along the oval and inward, so a name centred over or under a picker at the side would have them run
+ * through it. With the web in sight a name leans outward instead: lean (-1 at the far left, 1 at the far
+ * right, 0 at the top and the bottom) is how far, as a share of half the name's own width.
+ *
+ * far: asked for (far: true), and given when the frame has room for it, a second oval DEEP times the first,
+ * for those a step further out: for each place round the first, { main, sides: [ before, after ] }. main is
+ * straight on from the middle through that place, so the way out to it is one straight line; the sides are a
+ * little nearer in and a few degrees round to either side, for a second. The first oval is smaller for it,
+ * never too small for its web. Then nothing here says where a name goes (lean is 0): there are lines out as well
+ * as in, and beside() finds each name its place; and dots are every place a bead might go, on one oval between
+ * the two, for the caller to take those that are clear of the names and the lines once they are known.
+ */
+export function ego( { W, H, named, dots, far = false } ) {
 	const C = { x: Math.round( W / 2 ), y: Math.round( H / 2 ) };
-	const ry = Math.max( 84, Math.min( H * 0.29, 230 ) );
-	const rx = Math.max( 110, Math.min( W * 0.3, ry * 1.9 ) );
 	const n = Math.max( 0, named );
-	const out = { C, named: [], dots: [], rx, ry, web: n > 1 && rx >= 170 && ry >= 130 };
+	const deep = !!far && n > 1 && ( W / 2 - 130 ) / DEEP >= 170 && ( H / 2 - 62 ) / DEEP >= 130;
+	const ry = deep ? Math.min( ( H / 2 - 62 ) / DEEP, 230 ) : Math.max( 84, Math.min( H * 0.29, 230 ) );
+	const rx = deep ? Math.min( ( W / 2 - 130 ) / DEEP, ry * 1.9 ) : Math.max( 110, Math.min( W * 0.3, ry * 1.9 ) );
+	const out = { C, named: [], dots: [], rx, ry, web: n > 1 && rx >= 170 && ry >= 130, far: deep ? [] : null };
+	const on = ( deg, f ) => ( { x: Math.round( C.x + rx * f * Math.cos( deg * Math.PI / 180 ) ), y: Math.round( C.y + ry * f * Math.sin( deg * Math.PI / 180 ) ) } );
 	for ( let i = 0; i < n; i++ ) {
 		const deg = -90 + 360 / n / 4 + ( 360 / n ) * i;
 		const rad = deg * Math.PI / 180;
 		const y = C.y + ry * Math.sin( rad );
 		out.named.push( { x: Math.round( C.x + rx * Math.cos( rad ) ), y: Math.round( y ), below: y > C.y + 1, angle: deg, seat: i, of: n,
-			lean: out.web ? Math.cos( rad ) : 0 } );
+			lean: out.web && !deep ? Math.cos( rad ) : 0 } );
+		if ( deep ) {
+			const fan = Math.min( 15, 360 / n / 3.2 );
+			out.far.push( { main: on( deg, DEEP ), sides: [ on( deg - fan, DEEP * 0.9 ), on( deg + fan, DEEP * 0.9 ) ] } );
+		}
 	}
 	// The rest sit on two wider ovals, clear of the names above and below each named picker, spread evenly
 	// round the first before the second takes any.
-	const per = n * 3 || 12;
+	const per = deep ? n * 6 : ( n * 3 || 12 );
 	let left = Math.max( 0, dots );
-	[ [ 1.36, 1.42 ], [ 1.58, 1.68 ] ].filter( ( [ , fy ] ) => ry * fy < H / 2 - 10 ).forEach( ( [ fx, fy ], ring ) => {
+	( deep ? [ [ 1.36, 1.36 ] ] : [ [ 1.36, 1.42 ], [ 1.58, 1.68 ] ] ).filter( ( [ , fy ] ) => ry * fy < H / 2 - 10 ).forEach( ( [ fx, fy ], ring ) => {
 		const free = [];
 		for ( let i = 0; i < per; i++ ) {
 			const rad = ( -90 + ( 360 / per ) * ( i + ( ring ? 1 : 0.5 ) ) ) * Math.PI / 180;
 			const x = C.x + Math.min( rx * fx, W / 2 - 16 ) * Math.cos( rad ), y = C.y + ry * fy * Math.sin( rad );
-			const crowded = out.named.some( ( p ) => Math.abs( x - p.x - p.lean * LEAN ) < 74 &&
+			const crowded = !deep && out.named.some( ( p ) => Math.abs( x - p.x - p.lean * LEAN ) < 74 &&
 				( p.below ? ( y > p.y && y < p.y + 64 ) : ( y < p.y && y > p.y - 64 ) ) );
 			if ( !crowded ) {
 				free.push( { x: Math.round( x ), y: Math.round( y ) } );
 			}
 		}
-		const take = Math.min( left, free.length );
+		const take = deep ? free.length : Math.min( left, free.length );
 		for ( let i = 0; i < take; i++ ) {
 			out.dots.push( free[ Math.floor( i * free.length / take ) ] );
 		}

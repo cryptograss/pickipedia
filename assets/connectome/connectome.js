@@ -24,6 +24,11 @@
  * are drawn too where the frame has room, thin and behind the rest: who of the company have played with each
  * other, which of the pieces share pickers. Without room they wait for a pointer or a finger on one of them.
  *
+ * A step further (Justin, #connectome, 14 Nov 2026, 02:18Z): with more room still, each of a picker's company has
+ * their own way on drawn straight out from them, directly away from the picker in the middle, to a couple of
+ * pickers they have played with and the one in the middle hasn't, one of them named: as the cards on the
+ * musicians' pages do toward the featured pickers. A click on one goes to them, and the way there stays drawn.
+ *
  * what() says what any mark stands for and the ways on from it; a pointer gets that as a note and a click, a
  * finger as a sheet of buttons. A thing that is in two views running keeps its place or slides to its new one,
  * whatever its shape in each: a pill that becomes a circle grows from where the pill was.
@@ -36,6 +41,7 @@ const NS = 'http://www.w3.org/2000/svg';
 const HOME = /(^|\.)pickipedia\.xyz$/.test( location.hostname ) ? '' : 'https://pickipedia.xyz';
 const ICON = HOME + '/index.php?title=Special:Redirect/file/Instrument-icon-';
 const FONT = { named: '700 14px Georgia, "Times New Roman", serif', subject: '700 17px Georgia, "Times New Roman", serif',
+	far: '400 13px Georgia, "Times New Roman", serif',
 	pill: '600 12.5px system-ui, -apple-system, "Segoe UI", sans-serif', tag: '700 12.5px Georgia, "Times New Roman", serif',
 	piece: '600 13px system-ui, -apple-system, "Segoe UI", sans-serif', sub: '400 11.5px system-ui, -apple-system, "Segoe UI", sans-serif' };
 const still = window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
@@ -460,6 +466,65 @@ function wanted( is, pan ) {
 const WEB = [ 0, 0.52, 0.34, 0.17 ];
 const webShade = ( bow, plain ) => ( plain ? 0.85 : WEB[ Math.min( bow.apart, WEB.length - 1 ) ] );
 
+/**
+ * A step further out, where the frame has room for it (K.ego's far): who each of the company leads on to, set
+ * straight out from them, and with that where everything else in the view goes. The lines are set down first;
+ * then each name where no line runs through it (K.beside); then, of the places a bead might go, those still clear.
+ *
+ * mine: the company round the middle; seatOf: where each sits; seats: which of lay's places that is; web: the
+ * lines among them. Returns { names: for each of mine, { label, at } (at: where the text goes, from the circle);
+ * fars: [{ id, tie, by, at, named, name }], those a step further; open: the places left for the rest of the company }.
+ */
+function further( v, lay, mine, seats, seatOf, web, W, H ) {
+	const pts = [], discs = [], labels = [];
+	const line = ( p, q, bow ) => pts.push( ...K.along( p, q, bow ) );
+	const disc = ( p, r ) => discs.push( { x1: p.x - r, y1: p.y - r, x2: p.x + r, y2: p.y + r } );
+	const place = ( name, at, r, font, high, most ) => {
+		const label = cut( name, font, most );
+		const b = K.beside( at, r, wide( label, font ), high, pts, discs.concat( labels ), { W, H }, { x: at.x - lay.C.x, y: at.y - lay.C.y } );
+		if ( b ) {
+			labels.push( b.box );
+		}
+		return b ? { label, at: { x: b.x, y: b.y, anchor: b.anchor } } : null;
+	};
+	const clear = ( l, of, pad ) => K.clearOf( l, of, pad ).length === l.length;
+	const on = K.beyond( G, v.a, mine.map( ( c ) => c.id ), 2, v.keep || [] ), fars = [];
+	disc( lay.C, 26 );
+	mine.forEach( ( c, i ) => {
+		const from = seatOf.get( c.id );
+		line( lay.C, from );
+		disc( from, 15 );
+		if ( on[ i ][ 0 ] ) {                                        // the first of theirs: straight on, and named
+			const at = lay.far[ seats[ i ] ].main;
+			fars.push( Object.assign( { at, named: true }, on[ i ][ 0 ] ) );
+			line( from, at );
+			disc( at, 8 );
+		}
+	} );
+	web.forEach( ( t ) => line( seatOf.get( t.u ), seatOf.get( t.v ), t.bow ) );
+	const names = mine.map( ( c ) => place( first( c.id ), seatOf.get( c.id ), 14, FONT.named, 16, 150 ) ||
+		nameAt( first( c.id ), seatOf.get( c.id ), W, FONT.named ) );
+	mine.forEach( ( c, i ) => {                                      // the second: a bead, to whichever side its line keeps clear of the names
+		if ( !on[ i ][ 1 ] ) {
+			return;
+		}
+		const from = seatOf.get( c.id ), sides = lay.far[ seats[ i ] ].sides;
+		const at = ( seats[ i ] % 2 ? [ sides[ 1 ], sides[ 0 ] ] : sides ).find( ( p ) => clear( K.along( from, p ).slice( 6 ), discs.concat( labels ), 5 ) );
+		if ( at ) {
+			fars.push( Object.assign( { at, named: false }, on[ i ][ 1 ] ) );
+			line( from, at );
+			disc( at, 6 );
+		}
+	} );
+	for ( const f of fars ) {
+		f.name = f.named ? place( first( f.id ), f.at, 6, FONT.far, 15, 132 ) : null;
+		f.named = !!f.name;                                          // no room for the name: a bead, and the note says who
+	}
+	// The rest of the company: where nothing else is, and where the thin line to it from the middle crosses no name.
+	const open = K.away( K.clearOf( lay.dots, discs.concat( labels ), 9 ), pts, 11 ).filter( ( p ) => clear( K.along( lay.C, p ), labels, 4 ) );
+	return { names, fars, open };
+}
+
 function egoScene( v ) {
 	const a = v.a;
 	const { W, H } = frame();
@@ -473,13 +538,18 @@ function egoScene( v ) {
 	const ring = K.keeping( G, a, comp, v.keep );
 	const came = new Set( ( v.keep || [] ).filter( ( k ) => G.adj[ a ].has( k ) ) );
 	const want = Math.min( ring.length, H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 ) );
-	const lay = K.ego( { W, H, named: want, dots: ring.length - want } );
-	const n = lay.named.length;
+	const lay = K.ego( { W, H, named: want, dots: ring.length - want, far: true } );
+	const n = lay.named.length, mine = ring.slice( 0, n );
 	const pan = slide( 'p' + a, lay.C );
-	const seats = K.seat( lay.named, ring.slice( 0, n ).map( ( c ) => wanted( 'p' + c.id, pan ) ) );
+	const seats = K.seat( lay.named, mine.map( ( c ) => wanted( 'p' + c.id, pan ) ) );
+	const seatOf = new Map( mine.map( ( c, i ) => [ c.id, lay.named[ seats[ i ] ] ] ) );
+	// The web: who of the company have played with each other.
+	const web = K.among( G, [ ...seatOf.keys() ], looseOnly ).map( ( t ) => Object.assign( t, { bow: K.arc( lay, seatOf.get( t.u ), seatOf.get( t.v ) ) } ) );
+	// A step further, where there's room: then it says where the names and the beads go, since there are lines out as well as in.
+	const out = lay.far ? further( v, lay, mine, seats, seatOf, web, W, H ) : null;
 	// Each name as it will be written, so no bead is set down under one, however long it is or far it leans.
-	const names = ring.slice( 0, n ).map( ( c, i ) => nameAt( first( c.id ), lay.named[ seats[ i ] ], W, FONT.named ) );
-	const spots = K.clearOf( lay.dots, names.map( ( nm, i ) => {
+	const names = out ? out.names : mine.map( ( c, i ) => nameAt( first( c.id ), lay.named[ seats[ i ] ], W, FONT.named ) );
+	const spots = out ? K.spread( out.open, ring.length - n ) : K.clearOf( lay.dots, names.map( ( nm, i ) => {
 		const pos = lay.named[ seats[ i ] ];
 		return nameBox( pos, nm.dx, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -36, pos.below ? 36 : -18 );
 	} ), 10 );
@@ -492,22 +562,31 @@ function egoScene( v ) {
 		const by = named && came.has( c.id );
 		addNode( sc, c.id, pos, named ? 'named' : 'dot',
 			Object.assign( { r: dotRadius( c.tie.w ), delay: named ? 80 + i * 40 : 300, tie: c.tie }, named ? names[ i ] : null ) );
-		addLine( sc, a, c.id, c.tie, { o: named ? ( by ? 1 : 0.9 ) : 0, quiet: !named, emph: by, delay: named ? 120 + i * 40 : 300, role: 'spoke', c: c.id } );
+		// With a step further in sight, the rest of the company are on thin lines from the middle, as on the cards:
+		// then every dot says how it is reached. Without, their lines wait for a pointer.
+		addLine( sc, a, c.id, c.tie, { o: named ? ( by ? 1 : 0.9 ) : ( out ? FAINT : 0 ), quiet: !named, fine: !named && !!out, emph: by,
+			delay: named ? 120 + i * 40 : 300, role: 'spoke', c: c.id } );
 		if ( by ) {                                                  // the line the reader came down: what it is, said on it
 			const len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y ), room = Math.max( 92, Math.min( 190, len - 64 ) );
 			const at = { x: lay.C.x + ( pos.x - lay.C.x ) * 0.54, y: lay.C.y + ( pos.y - lay.C.y ) * 0.54 };
 			placePills( sc, a, c.id, c.tie, at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, v.by );
 		}
 	} );
-	// The web: who of the company have played with each other. Between two the reader came by, it is the way
-	// they came, and stays as plain as it was.
-	const seatOf = new Map( ring.slice( 0, n ).map( ( c, i ) => [ c.id, lay.named[ seats[ i ] ] ] ) );
-	for ( const t of K.among( G, [ ...seatOf.keys() ], looseOnly ) ) {
-		const bow = K.arc( lay, seatOf.get( t.u ), seatOf.get( t.v ) );
+	// Between two the reader came by, a line of the web is the way they came, and stays as plain as it was.
+	for ( const t of web ) {
 		sc.lines.set( lineKey( t.u, t.v ), { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, stands: 'tie', role: 'web', quiet: true,
-			w: lineWidth( t.tie ), o: lay.web ? webShade( bow, came.has( t.u ) && came.has( t.v ) ) : 0, bow, delay: 300 } );
+			w: lineWidth( t.tie ), o: lay.web ? webShade( t.bow, came.has( t.u ) && came.has( t.v ) ) : 0, bow: t.bow, delay: 300 } );
+	}
+	// A step further: each on a line straight out from the one they're reached by. The way the reader came, on
+	// out past the one they came by, is as plain as it was.
+	for ( const f of out ? out.fars : [] ) {
+		const walked = came.has( f.by ) && ( v.keep || [] ).includes( f.id );
+		addNode( sc, f.id, f.at, f.named ? 'far' : 'dot', Object.assign( { r: 3.8, by: f.by, tie: f.tie, delay: 360 }, f.name ) );
+		addLine( sc, f.by, f.id, f.tie, { o: walked ? 0.95 : ( f.named ? 0.78 : 0.45 ), quiet: true, role: 'far', c: f.id, delay: 360 } );
 	}
 	sc.web = lay.web;
+	sc.deep = !!out;
+	sc.far = out ? out.fars : [];
 	sc.company = comp;
 	sc.shown = shown;
 	sc.head = [ first( a ), pageMark( a, true ) ];
@@ -696,8 +775,8 @@ const draw = {
 			g.appendChild( s( 'circle', { class: 'dot' + ( p.page ? '' : ' hollow' ), r: d.r } ) );
 			return;
 		}
-		const marked = d.rabbit || p.inst;                           // a ring with something in it, or a plain dot
-		const R = d.kind === 'subject' ? ( marked ? 22 : 13 ) : ( marked ? 14 : 9 );
+		const marked = d.kind !== 'far' && ( d.rabbit || p.inst );   // a ring with something in it, or a plain dot
+		const R = d.kind === 'subject' ? ( marked ? 22 : 13 ) : ( d.kind === 'far' ? 5.5 : ( marked ? 14 : 9 ) );
 		g.appendChild( s( 'circle', { class: 'halo', r: R + 8 } ) );
 		if ( d.rabbit ) {
 			g.appendChild( s( 'circle', { class: 'ring', r: R } ) );
@@ -719,9 +798,10 @@ const draw = {
 		}
 		const big = d.kind === 'subject';
 		const label = d.label || K.clip( p.name, 26 );
-		const at = d.side === 'left' ? { x: -R - 12, y: 6, 'text-anchor': 'end' } :
-			d.side === 'right' ? { x: R + 12, y: 6, 'text-anchor': 'start' } :
-				{ x: d.dx || 0, y: d.below ? R + ( big ? 21 : 18 ) : -R - 8, 'text-anchor': 'middle' };
+		const at = d.at ? { x: d.at.x, y: d.at.y, 'text-anchor': d.at.anchor } :   // where the scene found it room (K.beside)
+			d.side === 'left' ? { x: -R - 12, y: 6, 'text-anchor': 'end' } :
+				d.side === 'right' ? { x: R + 12, y: 6, 'text-anchor': 'start' } :
+					{ x: d.dx || 0, y: d.below ? R + ( big ? 21 : 18 ) : -R - 8, 'text-anchor': 'middle' };
 		g.appendChild( s( 'a', { href: address( { a: d.id } ), 'aria-label': 'Go to ' + p.name }, s( 'text', at, label ) ) );
 	},
 	line( g, d ) {
@@ -740,10 +820,12 @@ const draw = {
 		const gold = t.played && t.tier === K.PERMANENT;
 		const cls = !t.played ? 't0' : 't' + t.tier;
 		g.textContent = '';
-		g.setAttribute( 'class', 'ln ' + ( d.role === 'web' ? 'web ' : '' ) + ( d.quiet ? 'quiet' : '' ) );
+		const far = d.role === 'far', fine = d.role === 'web' || far || d.fine;
+		g.setAttribute( 'class', 'ln ' + ( fine ? 'fine ' : '' ) + ( d.role === 'web' ? 'web ' : '' ) + ( far ? 'far ' : '' ) + ( d.quiet ? 'quiet' : '' ) );
 		( d.quiet ? layers.faint : layers.lines ).appendChild( g );
-		if ( d.role === 'web' ) {                                    // the web: the same marks, half as heavy
-			g.appendChild( s( 'path', { class: gold ? 'thread' : 'core ' + cls, 'stroke-width': ( cls === 't0' ? 1.3 : Math.max( 1.1, d.w * 0.32 ) ).toFixed( 1 ) } ) );
+		if ( fine ) {                                                // the web, the ways on, the rest of the company: the same marks, half as heavy
+			g.appendChild( s( 'path', { class: gold ? 'thread' : 'core ' + cls,
+				'stroke-width': ( cls === 't0' ? 1.3 : Math.max( far ? 1.5 : 1.1, d.w * ( far ? 0.42 : 0.32 ) ) ).toFixed( 1 ) } ) );
 		} else if ( gold && d.emph ) {                               // the one that's lit: gold, with ink down the middle
 			g.appendChild( s( 'path', { class: 'glow', 'stroke-width': ( d.w + 7 ).toFixed( 1 ) } ) );
 			g.appendChild( s( 'path', { class: 'core t2', 'stroke-width': Math.max( 1.8, d.w * 0.42 ).toFixed( 1 ) } ) );
@@ -797,9 +879,10 @@ function playButton( m, song ) {
 }
 
 const sig = {
-	node: ( d ) => [ d.stands, d.kind, d.lit, d.below, d.rabbit, d.side, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) : '', d.label, d.dx, d.sub, d.sdx, d.play ].join( '|' ),
+	node: ( d ) => [ d.stands, d.kind, d.lit, d.below, d.rabbit, d.side, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) : '', d.label, d.dx, d.sub, d.sdx, d.play,
+		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '' ].join( '|' ),
 	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role === 'web' ] :
-		[ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role === 'web' ] ).join( '|' ),
+		[ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
 	pill: ( d ) => [ d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play ].join( '|' )
 };
 
@@ -1083,6 +1166,10 @@ function fillPanel() {
 				out.push( h( 'p', { class: 'sub' }, `and ${ scene.company.length - 80 } more: find one in the box up top` ) );
 			}
 		}
+		if ( scene.far && scene.far.length ) {
+			out.push( h( 'h3', null, `A step further · ${ scene.far.length }` ),
+				h( 'ul', null, scene.far.map( ( f ) => personRow( f.id, K.times( f.tie ), () => go( { a, b: f.id } ), 'by way of ' + first( f.by ) ) ) ) );
+		}
 		out.push( ...baconTable( a ) );
 	} else {
 		const { a, b } = view;
@@ -1165,15 +1252,35 @@ function settled( sc ) {
 let turned = 0;                  // when the view last changed
 let lost = '';                   // an address that named nothing the graph knows: said under the headline until the reader moves on
 
+/**
+ * The legend says what's in sight, and what's in sight goes by the room there is: the web wants so much, the step
+ * further more. Were an entry coming in to wrap the legend onto another line, the frame would lose that line, the
+ * view might no longer have the room, the entry would go, the frame would get its line back, and round again for
+ * ever (seen at 1280 by 734 to 746, 14 Nov 2026, before this). So the legend is always as tall as it would be
+ * with everything in it that a frame this wide could ever show.
+ */
+function steady() {
+	const legend = $( 'legend' );
+	const most = K.ego( { W: svg.clientWidth, H: 4000, named: 8, dots: 0, far: true } );
+	legend.style.minHeight = '';
+	stage.classList.remove( 'webbed', 'deep' );
+	stage.classList.add( ...[ most.web && 'webbed', most.far && 'deep' ].filter( Boolean ) );
+	const tall = legend.offsetHeight;
+	stage.classList.remove( 'webbed', 'deep' );                      // show() says which of them the view has, once it knows
+	legend.style.minHeight = tall + 'px';
+}
+
 /** Show the view. again: the same view, laid out afresh because the frame changed; everyone keeps the seat they had. */
 function show( quick, again ) {
 	was = again && scene ? settled( scene ) : whereabouts();
 	if ( !again ) {
 		turned = performance.now();
 	}
-	scene = view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
 	stage.classList.toggle( 'dual', view.m !== undefined );
+	steady();
+	scene = view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
 	stage.classList.toggle( 'webbed', !!scene.web );
+	stage.classList.toggle( 'deep', !!scene.deep );
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
 	$( 'say' ).lastElementChild.replaceChildren( ...( lost && trail.length < 2 ? [ lost ] : scene.sub ) );
 	put( scene, quick );
@@ -1313,6 +1420,11 @@ function webFrom( other ) {
 	return [ ...scene.lines.values() ].filter( ( l ) => l.role === 'web' ).map( other ).filter( ( x ) => x !== undefined );
 }
 
+/** Who one of the company leads on to, of those in sight a step further out. */
+function onward( id ) {
+	return ( scene.far || [] ).filter( ( f ) => f.by === id ).map( ( f ) => f.id );
+}
+
 function tieLines( u, v ) {
 	const t = G.adj[ u ].get( v );
 	if ( !t ) {
@@ -1338,7 +1450,21 @@ const act = ( label, run ) => ( { label, run, kind: 'in' } );
 const link = ( label, href, kind ) => ( { label, href, kind } );
 const pageAct = ( id ) => link( P( id ).page ? first( id ) + "'s page" : 'Start ' + first( id ) + "'s page", pageUrl( first( id ) ), 'page' );
 
+/** A picker a step further out: nobody the one in the middle has a tie to, but one of their company has played with them. */
+function aFar( d ) {
+	const id = d.id, name = first( id ), by = d.by;
+	const also = K.company( G, id ).filter( ( c ) => c.id !== by && G.adj[ view.a ].has( c.id ) ).length;
+	return { kind: 'a picker' + instOf( id ) + ' · two hops out', title: name, tipTitle: name + instOf( id ),
+		lines: [ `two hops from ${ first( view.a ) }, by way of ${ first( by ) }` + ( also ? ` and ${ K.plural( also, 'other' ) }` : '' ), ...tieLines( by, id ) ],
+		hint: 'click: go to ' + name,
+		acts: [ act( 'Go to ' + name, () => go( { a: id, keep: [ by ] } ) ),
+			act( `${ first( view.a ) } & ${ name }: the ways between`, () => go( { a: view.a, b: id } ) ), pageAct( id ) ] };
+}
+
 function aPicker( d ) {
+	if ( d.by !== undefined ) {
+		return aFar( d );
+	}
 	const id = d.id, name = first( id );
 	const w = { kind: 'a picker' + instOf( id ), title: name, tipTitle: name + instOf( id ), lines: [], hint: 'click: go to ' + name, acts: [] };
 	const goTo = act( 'Go to ' + name, () => go( { a: id } ) );
@@ -1350,7 +1476,8 @@ function aPicker( d ) {
 			const top = K.naming( G, d.tie.ev[ 0 ] );
 			const web = webFrom( ( l ) => ( l.u === id ? l.v : ( l.v === id ? l.u : undefined ) ) );
 			w.lines.push( K.together( d.tie ), K.clip( top.short, 44 ) + ( d.tie.ev.length > 1 ? `, and ${ d.tie.ev.length - 1 } more` : '' ),
-				web.length ? `and with ${ K.plural( web.length, 'other' ) } here: ${ listNames( web ) }` : '' );
+				web.length ? `and with ${ K.plural( web.length, 'other' ) } here: ${ listNames( web ) }` : '',
+				onward( id ).length ? 'and on to ' + listNames( onward( id ) ) : '' );
 			w.acts.push( goTo, act( `${ name } & ${ first( view.a ) }: what they share`, () => go( { a: view.a, b: id } ) ) );
 		}
 	} else if ( id === view.a || id === view.b ) {

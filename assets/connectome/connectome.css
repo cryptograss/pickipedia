@@ -238,9 +238,13 @@ main {
 .ln.quiet { pointer-events: none; }
 .ln.hot { opacity: 1; }
 
-/* The web among those round the middle: the same marks, thin and behind; plain when either end is pointed at. */
-.ln.web.hot .thread,
-.ln.web.hot .core { stroke-width: 2.6px; }
+/* The web among those round the middle, the ways on a step further, the thin lines to the rest of the company:
+   the same marks, thin and behind; plain when either end is pointed at. */
+.ln.fine.hot .thread,
+.ln.fine.hot .core { stroke-width: 2.6px; }
+
+/* A picker a step further out: a small dot, and a name in lighter type than the company's. */
+.pk.far text { font-weight: 400; font-size: 13px; }
 
 /* ---- pickers ---- */
 .dot {
@@ -726,7 +730,11 @@ a.out:focus { text-decoration: underline; }
 /* The legend says what the marks mean in the view that's on. */
 #stage.dual #legend .pv,
 #stage:not( .dual ) #legend .dv,
-#stage:not( .webbed ) #legend .wb { display: none; }
+#stage:not( .webbed ) #legend .wb,
+#stage:not( .deep ) #legend .dp { display: none; }
+
+/* Its height is set from the script (steady()): as tall as it is with every entry a frame this wide could show. */
+#legend { box-sizing: border-box; }
 
 /* ---- narrow: the list under the graph ---- */
 @media ( max-width: 760px ) {
