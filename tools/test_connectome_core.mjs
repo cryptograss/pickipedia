@@ -36,7 +36,8 @@ const GRAPH = {
 		[ MOLLY, VICKIE, [ [ 2, 3, 1, [ 'Girl, Have Money When You\'re Old' ] ] ] ],
 		[ VICKIE, FAR, [ [ 3, 1, 0.5, [] ] ] ]
 	],
-	songs: { 'Silver 44': '/wiki/Song:Silver_44' }
+	songs: { 'Silver 44': '/wiki/Song:Silver_44' },
+	plays: { 'Silver 44': 'QmSilver44/x y', 'A Duet': 'QmSomeoneElses' }
 };
 const G = K.build( GRAPH );
 const tie = ( a, b ) => G.adj[ a ].get( b );
@@ -236,4 +237,55 @@ test( 'chains of three hops: each chain a row, the first along the middle', () =
 	assert.ok( lay.at( 1, 1 ).y < lay.A.y && lay.at( 2, 1 ).y > lay.A.y );
 	assert.ok( lay.A.x < lay.at( 0, 1 ).x && lay.at( 0, 1 ).x < lay.at( 0, 2 ).x && lay.at( 0, 2 ).x < lay.B.x );
 	assert.deepEqual( lay.at( 0, 3 ), lay.B );
+} );
+
+test( "a track plays in Rabbithole only from a record cryptograss cut itself", () => {
+	const G = K.build( GRAPH );
+	assert.equal( K.playOf( G, G.music[ 0 ], 'Silver 44' ), '/rabbithole/?track=QmSilver44%2Fx%20y' );   // the CID, safe in an address
+	assert.equal( K.playOf( G, G.music[ 0 ], 'Victory' ), '' );                // its song page names no track
+	assert.equal( K.playOf( G, G.music[ 2 ], 'A Duet' ), '' );                 // another label's record: not the same recording
+	assert.equal( K.playOf( G, G.music[ 5 ], 'Silver 44' ), '' );              // cryptograss's own show: a tape, not the cut
+	assert.equal( K.playOf( G, G.music[ 1 ], 'Silver 44' ), '' );              // a taper's tape
+	const bare = K.build( Object.assign( {}, GRAPH, { plays: undefined } ) );  // a graph.json from before there were any
+	assert.equal( K.playOf( bare, bare.music[ 0 ], 'Silver 44' ), '' );
+} );
+
+test( 'a name is moved only as far as keeps it in its room', () => {
+	assert.equal( K.nudge( 100, 40, 6, 384 ), 0 );                             // it fits where it is
+	assert.equal( K.nudge( 30, 40, 6, 384 ), 16 );                             // off the left edge: in by what it lacks
+	assert.equal( K.nudge( 370, 40, 6, 384 ), -26 );                           // off the right
+	assert.equal( K.nudge( 76, 85, 6, 175 ), 14.5 );                           // an end's long name, kept to its own half
+	assert.equal( K.nudge( 76, 120, 6, 175 ), 14.5 );                          // wider than its room: the middle of the room
+} );
+
+test( 'beads sit further apart, and fewer to a row, where a finger has to tell them apart', () => {
+	const rows = ( lay ) => {
+		const by = new Map();
+		lay.dots.forEach( ( d ) => by.set( d.y, ( by.get( d.y ) || [] ).concat( d.x ).sort( ( a, b ) => a - b ) ) );
+		return [ ...by.values() ];
+	};
+	const gaps = ( xs ) => xs.slice( 1 ).map( ( x, i ) => x - xs[ i ] );
+	const mouse = K.bridge( { W: 390, H: 540, direct: true, named: 6, dots: 30, la: 40, lb: 40 } );
+	const finger = K.bridge( { W: 390, H: 540, direct: true, named: 6, dots: 30, la: 40, lb: 40, gap: 27, perRow: 5 } );
+	assert.ok( rows( mouse ).some( ( r ) => r.length === 7 ) && rows( mouse ).every( ( r ) => gaps( r ).every( ( g ) => g === 18 ) ) );
+	assert.ok( rows( finger ).every( ( r ) => r.length <= 5 && gaps( r ).every( ( g ) => g === 27 ) ) );
+	assert.ok( finger.dots.length < mouse.dots.length );                        // fewer fit: the rest are in the list
+	assert.deepEqual( finger.named, mouse.named );                              // the names don't move
+} );
+
+test( 'in a narrow upright frame the ladder stands up: a at the top, b at the bottom, the other chains beside', () => {
+	const lay = K.ladder( { W: 390, H: 540, hops: 3, chains: 3, la: 40, lb: 40 } );
+	assert.equal( lay.upright, true );
+	assert.ok( lay.A.x === lay.B.x && lay.A.y < 80 && lay.B.y > 460 );
+	const lit = [ 1, 2 ].map( ( level ) => lay.at( 0, level ) );
+	assert.ok( lit.every( ( p ) => p.x === lay.A.x ) );                         // the first chain: straight down between them
+	assert.ok( lay.A.y < lit[ 0 ].y && lit[ 0 ].y < lit[ 1 ].y && lit[ 1 ].y < lay.B.y );
+	assert.ok( Math.abs( ( lit[ 1 ].y - lit[ 0 ].y ) - ( lit[ 0 ].y - lay.A.y ) ) <= 1 );   // a hop a rung, evenly (to the pixel)
+	assert.ok( 390 - lay.A.x >= 190 );                                          // room beside it for a name
+	for ( const c of [ 1, 2 ] ) {
+		const p = lay.at( c, 1 );
+		assert.ok( p.x < lay.at( c - 1, 1 ).x && p.x >= 22 && p.y === lit[ 0 ].y, `chain ${ c } at ${ p.x }` );
+	}
+	assert.equal( K.ladder( { W: 844, H: 390, hops: 3, chains: 2, la: 40, lb: 40 } ).upright, undefined );   // a phone on its side
+	assert.equal( K.ladder( { W: 1100, H: 700, hops: 3, chains: 3, la: 40, lb: 40 } ).upright, undefined );
 } );

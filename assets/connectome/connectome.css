@@ -2,6 +2,9 @@
  * The connectome's big graph (index.html). One accent, and it means one thing: gold is a Permanent Release.
  * Everything else is ink on paper. The same marks are on the musician pages' cards
  * (ext.pickipediaContent.connectome.css) and in Rabbithole's "Your rabbithole".
+ *
+ * One more colour, and it's a button, not a mark: green is the way into Rabbithole to play a track (the
+ * wiki's own green for it, as on a song page's "On the record" row).
  */
 :root {
 	color-scheme: light;
@@ -15,6 +18,8 @@
 	--gold: #eda100;
 	--gold-wash: #fdf1cf;
 	--link: #0645ad;
+	--play: #4a7c59;
+	--play-on: #3c6749;
 	--ui: system-ui, -apple-system, "Segoe UI", sans-serif;
 	--name: Georgia, "Times New Roman", serif;
 }
@@ -165,6 +170,8 @@ main {
 	width: 100%;
 	min-height: 0;
 	user-select: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
 }
 
 #wait {
@@ -460,18 +467,184 @@ main {
 #panel tr.go { cursor: pointer; }
 #panel tr.go:hover { background: #f0efec; }
 
+/* ---- the way into Rabbithole: a rabbit and a play mark, green, beside a track's name ---- */
+.pill a.play rect {
+	fill: var( --play );
+	stroke: none;
+}
+
+.pill a.play:hover rect,
+.pill a.play:focus rect {
+	fill: var( --play-on );
+}
+
+.pm .rab,
+.pill a.play .rab,
+.tri {
+	fill: #fff;
+}
+
+.pm .rab .eye,
+.pill a.play .rab .eye {
+	fill: var( --play );
+}
+
+a.play {
+	display: inline-flex;
+	align-items: center;
+	margin-left: 6px;
+	padding: 1px 3px;
+	border-radius: 11px;
+	background: var( --play );
+	line-height: 0;
+	vertical-align: middle;
+}
+
+a.play:hover,
+a.play:focus {
+	background: var( --play-on );
+}
+
+/* ---- the sheet: what a finger touched, and the ways on from it ---- */
+#sheet {
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	left: 8px;
+	z-index: 6;
+	max-width: 440px;
+	margin: 0 auto;
+	padding: 10px 12px 12px;
+	border: 1px solid var( --axis );
+	border-radius: 12px;
+	background: var( --surface );
+	box-shadow: 0 6px 24px rgba( 11, 11, 11, 0.22 );
+	color: var( --ink2 );
+	font-size: 14px;
+}
+
+#sheet[ hidden ] { display: none; }
+
+#sheet.up {
+	top: 8px;
+	bottom: auto;
+}
+
+#sheet .x {
+	float: right;
+	width: 42px;
+	height: 42px;
+	margin: -7px -9px 0 6px;
+	border: 0;
+	background: none;
+	color: var( --ink );
+	font: 28px/1 var( --ui );
+	cursor: pointer;
+}
+
+#sheet .k {
+	color: var( --muted );
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+#sheet b {
+	display: block;
+	color: var( --ink );
+	font: 700 18px/1.25 var( --name );
+}
+
+#sheet .l {
+	margin-top: 2px;
+	overflow-wrap: anywhere;
+}
+
+#sheet .acts {
+	gap: 8px;
+	margin: 10px 0 0;
+}
+
+#sheet .acts a,
+#sheet .acts button {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	min-height: 42px;
+	padding: 8px 13px;
+	border-radius: 9px;
+	font-size: 15px;
+}
+
+#sheet .acts .first {
+	border-color: var( --ink );
+	background: var( --ink );
+	color: var( --surface );
+}
+
+#sheet .acts a.play {
+	margin: 0;
+	border-color: var( --play );
+	background: var( --play );
+	color: #fff;
+	line-height: inherit;
+}
+
+#sheet .again {
+	margin-top: 6px;
+	color: var( --muted );
+	font-size: 12px;
+}
+
+/* The mark the sheet is about. */
+.held .halo {
+	fill: rgba( 11, 11, 11, 0.07 );
+	stroke: var( --ink );
+	stroke-width: 1.5;
+}
+
+/* More to land on than can be seen: under a pill, for a finger. */
+.pill rect.reach {
+	fill: transparent;
+	stroke: none;
+}
+
 /* ---- narrow: the list under the graph ---- */
 @media ( max-width: 760px ) {
 	body { height: auto; min-height: 100%; }
 	main { flex-direction: column; }
-	#stage { flex: none; height: 72vh; min-height: 440px; }
-	#legend { gap: 2px 12px; padding: 5px 12px 6px; font-size: 11px; }
+	#stage { flex: none; height: 78vh; height: 78svh; min-height: 460px; }
+	#legend { gap: 2px 12px; padding: 5px 12px 6px; font-size: 12px; }
 	#legend .lg.more { display: none; }
 	#say { padding: 10px 12px 0; }
 	#panel { width: auto; border-top: 1px solid var( --hair ); border-left: 0; }
 	#say h1 { font-size: 18px; }
 	#crumbs { display: none; }
-	.bar input { width: 9.5em; }
+	.bar { gap: 6px; padding: 6px 8px; }
+	.bar label { flex: 1 1 0; min-width: 0; }
+	/* 16px: a phone zooms the whole page in when a smaller box is typed in. */
+	.bar input { width: 100%; max-width: none; padding: 7px 8px; font-size: 16px; }
+	#back { padding: 6px 12px; }
+	#panel h3 { font-size: 12px; }
+	.badge { font-size: 12px; }
+}
+
+/* ---- short: a phone on its side. The graph gets what height there is ---- */
+@media ( max-height: 480px ) {
+	#legend { gap: 2px 12px; padding: 4px 12px 5px; }
+	#legend .lg.more { display: none; }
+	#say { padding-top: 6px; }
+	#say h1 { font-size: 17px; }
+}
+
+/* ---- a finger wants more to land on than a pointer does ---- */
+@media ( pointer: coarse ) {
+	.acts a, .acts button { padding: 8px 12px; font-size: 14px; }
+	#panel .mini { padding: 6px 10px; font-size: 13px; }
+	#panel li { padding: 10px 6px; }
+	#panel td { padding: 10px 6px; }
+	#panel a.play { padding: 5px 7px; border-radius: 14px; }
+	.ln .hit { stroke-width: 24; }
 }
 
 @media ( prefers-reduced-motion: reduce ) {

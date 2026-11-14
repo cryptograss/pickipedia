@@ -17,6 +17,9 @@ graph.json:
             one record or show; one entry per record or show, the closest way the
             sources put them together
   songs     song title -> its wiki page, for the songs that have one
+  plays     song title -> the track its Song: page says to play in Rabbithole (the CID in
+            its {{Listen in Rabbithole}}), for songs on cryptograss's own records. A taped
+            show's song of the same name is another recording, and gets none
   featured  this month's featured pickers (Cryptograss:Connectome/Featured), and month
 
 how:    3 the same track, 2 the same stage, 1 the same record (no source puts them
@@ -103,7 +106,7 @@ def weight(p, track, stage, record, show=False):
     return one(len(record[p['target']]))
 
 
-def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built):
+def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None):
     """
     pairs     the store's pairs, each name already as the wiki knows it
     targets   id -> {kind, title, date, artist, grp, formats: [..]}
@@ -111,6 +114,7 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
     has_page  name -> bool;  inst: name -> instrument (the wiki's)
     song_title(target, track) -> the song's name, as the cards name it
     pages     title -> the wiki page's URL, for record and Song: pages that exist
+    plays     song title -> the CID of the track its Song: page plays in Rabbithole
     """
     track, stage, record = casts(pairs)
 
@@ -150,7 +154,7 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         music.append([t, d.get('kind', ''), d.get('artist', ''), d.get('date', ''), d.get('title', ''),
                       tier(t, d.get('formats')), source_url(t, sources[t]), page or ''])
 
-    songs = {}
+    songs, played = {}, {}
     ties = defaultdict(list)
     for (a, b, _), (cand, p) in sorted(best.items()):
         titles = []
@@ -160,6 +164,8 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                 titles.append(s)
                 if pages.get('Song:' + s):
                     songs[s] = pages['Song:' + s]
+                if plays and plays.get(s) and p['target'].startswith('arthel:'):
+                    played[s] = plays[s]
         ties[(pid[a], pid[b])].append([mid[p['target']], cand[0], round(cand[2], 4), titles])
 
     return {
@@ -169,6 +175,7 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         'cast': [[[pid[n], '; '.join(r)] for n, r in sorted(cast[t].items())] for t in used],
         'ties': [[a, b, sorted(ev, key=lambda e: (-e[1], -e[2], e[0]))] for (a, b), ev in sorted(ties.items())],
         'songs': dict(sorted(songs.items())),
+        'plays': dict(sorted(played.items())),
     }
 
 

@@ -9,6 +9,15 @@
  * worked out from the size of the frame.
  *
  * graph.json is tools/connectome_graph.py's; its notes say what each field means.
+ *
+ * Marks and what they stand for. A view draws marks: dots, pills, lines. A reader asks about what a mark
+ * stands for, whatever its shape, and that is one of three things: a picker, a piece of music (a track, a
+ * record, a show), or a tie (all that two pickers share). In this graph and on the cards a dot is a picker,
+ * a pill is music and a line is a tie. In Rabbithole's "Your rabbithole" it is the other way about: a dot is
+ * a track and a line is the picker followed from one track to the next. So nothing here, and nothing in
+ * connectome.js's what(), is decided by a mark's shape: each is asked what it stands for, and the answer has
+ * the same parts for all three (what it is, what the sources say, the ways further in, where to find out
+ * more), which a pointer gets as a note and a finger as a sheet (Justin, #connectome, 13 Nov 2026).
  */
 
 export const TRACK = 3, STAGE = 2, RECORD = 1;     // how two pickers are on one record or show
@@ -34,7 +43,7 @@ export function build( g ) {
 	}
 	const byName = new Map( people.map( ( p ) => [ p.name.toLowerCase(), p.id ] ) );
 	return { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
-		built: g.built || '' };
+		plays: g.plays || {}, built: g.built || '' };
 }
 
 /**
@@ -317,6 +326,26 @@ export function naming( G, e ) {
 	return { glyph: 'record', short: m.title || m.key, brief: m.title || m.key, long: record, songs: e.songs };
 }
 
+/**
+ * Where a song on a record plays in Rabbithole, as a path on the wiki; '' when it doesn't. Only a record
+ * cryptograss cut itself has its tracks there: the same song on a taper's tape is another recording.
+ */
+export function playOf( G, m, song ) {
+	const cid = G.plays[ song ];
+	return cid && m && m.kind === 'record' && m.key.indexOf( 'arthel:' ) === 0 ? '/rabbithole/?track=' + encodeURIComponent( cid ) : '';
+}
+
+/**
+ * How far to move something `half` wide either side of x so it stays between lo and hi: 0 when it fits where
+ * it is, and to the middle of the room when the room is too small for it.
+ */
+export function nudge( x, half, lo, hi ) {
+	if ( 2 * half >= hi - lo ) {
+		return ( lo + hi ) / 2 - x;
+	}
+	return Math.max( lo + half, Math.min( hi - half, x ) ) - x;
+}
+
 export function clip( s, n ) {
 	s = String( s );
 	return s.length <= n ? s : s.slice( 0, Math.max( 1, n - 1 ) ).trimEnd() + '…';
@@ -331,7 +360,8 @@ export function clip( s, n ) {
  * and whoever both have played with in a column between, the closest nearest the middle.
  *
  * opts: W, H, direct (is there a tie along the middle), named, dots (how many of each are wanted),
- * la, lb (half the width of each end's name, so neither runs off the frame).
+ * la, lb (half the width of each end's name, so neither runs off the frame); gap and perRow, how far apart
+ * the beads sit and how many to a row (18 and 7; wider and fewer where a finger has to tell them apart).
  * Returns { A, B, named: [{x, y, below}], dots: [{x, y}], band: {x1, x2, y} }; fewer places than asked
  * when the frame is too small for them.
  */
@@ -342,7 +372,7 @@ function ends( W, H, la, lb ) {
 		B: { x: Math.round( W - Math.max( inset, ( lb || 0 ) + 12 ) ), y: cy }, cy };
 }
 
-export function bridge( { W, H, direct, named, dots, la, lb } ) {
+export function bridge( { W, H, direct, named, dots, la, lb, gap = 18, perRow = 7 } ) {
 	const { A, B, cy } = ends( W, H, la, lb );
 	const mid = Math.round( W / 2 );
 	const room = cy - 34;                                // above the middle line, and below it
@@ -368,7 +398,7 @@ export function bridge( { W, H, direct, named, dots, la, lb } ) {
 			rows.push( cy - ( k + 0.5 ) * step - 10, cy + ( k + 0.5 ) * step + 10 );
 		}
 	}
-	const PER_ROW = 7;
+	const PER_ROW = Math.max( 1, perRow );
 	const count = rows.map( () => 0 );
 	let left = Math.max( 0, Math.min( dots, rows.length * PER_ROW ) );
 	for ( let pair = 0; pair < rows.length && left > 0; pair += 2 ) {
@@ -381,7 +411,7 @@ export function bridge( { W, H, direct, named, dots, la, lb } ) {
 	for ( let i = 0; i < PER_ROW; i++ ) {                 // across the rows, so the closest sit nearest the middle
 		rows.forEach( ( y, r ) => {
 			if ( i < count[ r ] ) {
-				dotPlaces.push( { x: Math.round( mid + ( i - ( count[ r ] - 1 ) / 2 ) * 18 ), y: Math.round( y ), row: r } );
+				dotPlaces.push( { x: Math.round( mid + ( i - ( count[ r ] - 1 ) / 2 ) * gap ), y: Math.round( y ), row: r } );
 			}
 		} );
 	}
@@ -392,8 +422,18 @@ export function bridge( { W, H, direct, named, dots, la, lb } ) {
 /**
  * Chains of three hops or more: a on the left, b on the right, each chain a row, the strongest in the middle.
  * levels is how many hops; chains how many rows. Returns { A, B, at( chain, level ) -> {x, y} }.
+ *
+ * In a narrow upright frame (a phone) a hop across is too short to say anything in, so the ladder stands up
+ * (upright: true): a at the top, b at the bottom, the first chain straight down between them with room beside
+ * it for names, and the others in columns to its left.
  */
 export function ladder( { W, H, hops: L, chains, la, lb } ) {
+	if ( W < 560 && H > W ) {
+		const x0 = Math.round( Math.min( W / 2, Math.max( 150, W * 0.42 ) ) ), top = 52, bottom = H - 52;
+		const colX = ( c ) => Math.round( Math.max( 22, x0 - c * Math.min( 64, ( x0 - 22 ) / Math.max( 1, chains - 1 ) ) ) );
+		return { upright: true, A: { x: x0, y: top }, B: { x: x0, y: bottom },
+			at: ( c, level ) => ( { x: colX( c ), y: Math.round( top + ( bottom - top ) * level / L ) } ) };
+	}
 	const { A, B, cy } = ends( W, H, la, lb );
 	const step = Math.max( 70, Math.min( 120, ( H - 120 ) / Math.max( 1, chains ) ) );
 	const rowY = ( c ) => Math.round( cy + ( c === 0 ? 0 : ( c % 2 ? -1 : 1 ) * Math.ceil( c / 2 ) * step ) );

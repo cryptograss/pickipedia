@@ -57,6 +57,8 @@ TEMPLATE = 'Template:MusicianInfo'
 VIEWER = '/assets/connectome/'          # the big graph, served beside the wiki
 ICON = '/index.php?title=Special:Redirect/file/Instrument-icon-{}.png'
 UA = 'PickiPedia-connectome-card/1.0'
+# The track a song page plays in Rabbithole: the first parameter of its {{Listen in Rabbithole}}.
+LISTEN = re.compile(r'\{\{\s*Listen[ _]in[ _]Rabbithole\s*\|\s*([A-Za-z0-9]{20,})\s*[|}]')
 
 GOLD = '#eda100'                        # a Permanent Release, and nothing else
 INK2 = '#52514e'                        # a Full Release
@@ -112,6 +114,20 @@ class Wiki:
                 t = norm.get(n, n)
                 t = red.get(t, t)
                 out[n] = (t, t not in missing)
+        return out
+
+    def listens(self, titles):
+        """title -> the track that page says to play in Rabbithole, for the pages that say one."""
+        out = {}
+        titles = sorted(set(titles))
+        for i in range(0, len(titles), 50):
+            q = self.api(action='query', titles='|'.join(titles[i:i + 50]), prop='revisions', rvprop='content',
+                         rvslots='main', formatversion=2)['query']
+            for page in q.get('pages', []):
+                revs = page.get('revisions') or []
+                m = LISTEN.search(revs[0]['slots']['main'].get('content', '') if revs else '')
+                if m:
+                    out[page['title']] = m.group(1)
         return out
 
     def musician_pages(self):
@@ -491,7 +507,9 @@ def card(center, store, featured, has_page, inst):
             rows.append(f'<tr><td>{name}</td><td class="cc-n">–</td></tr>')
             continue
         why = [f'{a} → {b}: {hop_ev(a, b)["text"]}' for a, b in p]
-        rows.append(f'<tr><td>{name}</td><td class="cc-n" title="{attr(chr(10).join(why))}">{len(p)}</td></tr>')
+        # The number is the way to the path itself, in the big graph: a finger has no hover to read the title by.
+        rows.append(f'<tr><td>{name}</td><td class="cc-n" title="{attr(chr(10).join(why))}">'
+                    f'<a href="{attr(viewer(a=center, b=f))}">{len(p)}</a></td></tr>')
     legend = ('<div class="cc-legend">'
               '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
               'a taper\'s tape or Creative Commons<br>'
@@ -504,7 +522,7 @@ def card(center, store, featured, has_page, inst):
             f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(viewer(p=center))}">⤢ explore</a></div>'
             + ''.join(out) + legend + table +
             f'<div class="cc-foot"><a href="{attr(page_url(FEATURED_PAGE))}">Featured</a> this month. '
-            'Hover a number for the path.</div></div>')
+            'A number opens the path.</div></div>')
 
 
 def card_file(title):
@@ -567,9 +585,12 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         asked = connectome_graph.arthel_pages(store.pairs, whole, song)
         found = wiki.resolve(asked) if asked else {}
         pages = {n: page_url(t) for n, (t, ok) in found.items() if ok}
+        song_page = {t: n[len('Song:'):] for n, (t, ok) in found.items() if ok and n.startswith('Song:')}
+        heard = wiki.listens(song_page) if song_page else {}
+        plays = {song_page[t]: cid for t, cid in heard.items() if t in song_page}
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
-            has_page, inst, featured, month, song, pages, today.isoformat())
+            has_page, inst, featured, month, song, pages, today.isoformat(), plays)
     return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,
             'pairs': store.pairs, 'names': {k: sorted(v) for k, v in sorted(store.raw.items())}}
 

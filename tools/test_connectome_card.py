@@ -35,8 +35,8 @@ GROUPS = {t: t for t in TARGETS}
 
 
 class FakeWiki:
-    def __init__(self, redirects=None, pages=(), musicians=(), inst=None, featured=FEATURED):
-        self.redirects, self.pages = redirects or {}, set(pages)
+    def __init__(self, redirects=None, pages=(), musicians=(), inst=None, featured=FEATURED, listens=None):
+        self.redirects, self.pages, self.heard = redirects or {}, set(pages), listens or {}
         self.musicians, self.inst, self.featured = list(musicians), inst or {}, featured
 
     def resolve(self, names):
@@ -49,6 +49,9 @@ class FakeWiki:
     def raw(self, title):
         assert title == cc.FEATURED_PAGE
         return self.featured
+
+    def listens(self, titles):
+        return {t: self.heard[t] for t in titles if t in self.heard}
 
     def musician_pages(self):
         return self.musicians
@@ -124,8 +127,9 @@ def test_a_card_draws_the_featured_paths_and_escapes_every_name():
     assert '>Justin Myles Holmes</a>' in html                            # the featured picker, linked
     assert 'Instrument-icon-guitar.png' in html
     # the table: one hop to Justin, two to Gaven through Molly; the picker isn't listed against themselves
-    assert 'title="Kyle Tuttle → Justin Myles Holmes: “Silver 44”, 4masks">1<' in html
-    assert 'Molly Tuttle → Gaven Largent: Some Record, 2015">2<' in html
+    assert ('title="Kyle Tuttle → Justin Myles Holmes: “Silver 44”, 4masks">'
+            '<a href="/assets/connectome/?a=Kyle+Tuttle&amp;b=Justin+Myles+Holmes">1</a></td>') in html   # the number opens the path
+    assert 'Molly Tuttle → Gaven Largent: Some Record, 2015"><a href="/assets/connectome/?a=Kyle+Tuttle&amp;b=Gaven+Largent">2</a></td>' in html
     assert html.count('<tr>') == 3
     # a click opens the big graph on the connection, or on the path
     assert '/assets/connectome/?a=Kyle+Tuttle&amp;b=Justin+Myles+Holmes' in html
@@ -172,6 +176,7 @@ def test_build_writes_the_big_graphs_file_beside_the_cards(tmp_path):
     names = [p[0] for p in g['people']]
     assert 'Justin Myles Holmes' in names and 'Justin Holmes' not in names   # the wiki's name, as on the cards
     assert g['songs'] == {'Silver 44': '/wiki/Song%3ASilver_44'}
+    assert g['plays'] == {}                                    # the song's page names no track to play
     assert [names[i] for i, _ in g['cast'][[m[0] for m in g['music']].index('arthel:4masks')]] == ['Justin Myles Holmes']
     cc.write(result, str(tmp_path), {})
     assert (tmp_path / 'graph.json').exists()
@@ -201,3 +206,29 @@ def test_build_makes_cards_only_for_musician_pages_the_store_knows(tmp_path):
     cc.write(result, str(tmp_path), {'db': 'x'})
     assert (tmp_path / 'cards' / cc.card_file('Kyle Tuttle')).read_text().startswith('<div class="connectome-card"')
     assert {p['a'] for p in __import__('json').load(open(tmp_path / 'pairs.json'))} <= {'Kyle Tuttle', 'Justin Myles Holmes'}
+
+
+def test_a_song_plays_in_rabbithole_where_its_page_says_which_track(tmp_path):
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:4masks', [('u', '', 'silver-44'), ('u', '', 'august')])]
+    whole = {'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []}}
+    wiki = FakeWiki(pages={'Kyle Tuttle', '4masks', 'Song:Silver 44', 'Song:August'}, musicians=['Kyle Tuttle'],
+                    listens={'Song:August': 'QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a', 'Song:Elsewhere': 'QmNotAsked'})
+    g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 13), None, whole, [])['graph']
+    assert g['plays'] == {'August': 'QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a'}        # Silver 44's page names none
+    assert sorted(g['songs']) == ['August', 'Silver 44']
+
+
+def test_the_track_a_page_plays_is_read_from_its_listen_template():
+    cid = 'QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a'
+
+    class Api(cc.Wiki):
+        def api(self, **q):
+            assert q['prop'] == 'revisions' and q['titles'] == 'Song:August|Song:Plain|Song:Silver 44'
+            text = {'Song:August': '{{Listen in Rabbithole|%s}}\n\n{{Song}}' % cid,
+                    'Song:Silver 44': '<proposed by="Magent">\n{{ Listen_in_Rabbithole | %s |label=Hear it}} Nobody has charted it.' % cid[::-1],
+                    'Song:Plain': 'A song. [https://pickipedia.xyz/rabbithole/?track=%s]' % cid}
+            return {'query': {'pages': [{'title': t, 'revisions': [{'slots': {'main': {'content': x}}}]} for t, x in text.items()]
+                              + [{'title': 'Song:Gone', 'missing': True}]}}
+
+    heard = Api('https://example.test/').listens(['Song:Silver 44', 'Song:August', 'Song:Plain', 'Song:August'])
+    assert heard == {'Song:August': cid, 'Song:Silver 44': cid[::-1]}       # a bare link in prose is not the template
