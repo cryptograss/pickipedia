@@ -61,10 +61,10 @@ class SkinBroadside extends \SkinMustache {
 		$title = $this->getTitle();
 		$html = $out->getHTML();
 
-		$data['html-body-content'] = Post::shapeVideos(
+		$data['html-body-content'] = Post::capped( Post::shapeVideos(
 			$data['html-body-content'],
 			PostData::videoShapes( Post::videoCids( $html ) )
-		);
+		) );
 
 		$toc = $data['data-toc'] ?? [];
 		$hasToc = ( $toc['number-section-count'] ?? 0 ) >= 2;
@@ -236,9 +236,9 @@ class SkinBroadside extends \SkinMustache {
 		$songs = $author['person'] ? PostData::songs( $author['person']['title'] ) : [];
 
 		$kicker = null;
-		$sourced = Post::sourced( $html, 'pp-kicker-source' );
-		if ( $sourced !== null ) {
-			$kicker = [ 'text' => html_entity_decode( strip_tags( $sourced ), ENT_QUOTES | ENT_HTML5 ), 'has-url' => false ];
+		$own = Post::ownKicker( $html );
+		if ( $own !== null ) {
+			$kicker = [ 'text' => $own, 'has-url' => false ];
 		} elseif ( $series ) {
 			$kicker = [ 'text' => $series['name'], 'url' => $series['url'], 'has-url' => $series['has-url'] ];
 		}

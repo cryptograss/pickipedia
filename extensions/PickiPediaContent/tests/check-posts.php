@@ -103,6 +103,37 @@ same( 'the line over it, among other classes',
 same( 'a longer class is another class', Post::sourced( '<p class="pp-dek-source-old">No.</p>', 'pp-dek-source' ), null );
 same( 'an empty one is none', Post::sourced( '<p class="pp-dek-source"> </p>', 'pp-dek-source' ), null );
 same( 'and most posts have none', Post::sourced( '<p>Just words.</p>', 'pp-dek-source' ), null );
+echo "\nWhere the large first letter stands\n";
+$long = str_repeat( 'Words enough to be a paragraph and not a line. ', 3 );
+$wrap = static fn ( string $inside ) => '<div class="mw-content-ltr mw-parser-output" lang="en" dir="ltr">' . $inside . '</div>';
+$capOf = static function ( string $inside ) use ( $wrap ) {
+	$html = Post::capped( $wrap( $inside ) );
+	return preg_match( '#<p class="(?:[^"]* )?bs-cap"[^>]*>(.{0,12})#s', $html, $m ) ? $m[1] : null;
+};
+same( 'on the paragraph a post opens with', $capOf( "<p>A $long</p><p>B $long</p>" ), 'A Words enou' );
+same( 'not on a line above it', $capOf( "<p>Work-in-progress</p><p>B $long</p>" ), 'B Words enou' );
+same( 'nor on a note set off by a rule, however long', $capOf( "<p><i>N $long</i></p><hr><p>B $long</p>" ), 'B Words enou' );
+same( 'nor on what the masthead says', $capOf( "<div class=\"pp-kicker-source\">K</div><p class=\"pp-dek-source\">D $long</p><p>B $long</p>" ), 'B Words enou' );
+same( 'a post of one line has none', $capOf( '<p>or: in defense of something</p>' ), null );
+same( 'nor one that opens with a video and a heading',
+	$capOf( "<div class=\"hls-video-player\"></div><div class=\"mw-heading mw-heading2\"><h2>One</h2></div><p>B $long</p>" ), null );
+same( 'a list or a picture between is no heading', $capOf( "<p>A line.</p><ul><li>$long</li></ul><figure><img src=\"x\"></figure><p>B $long</p>" ), 'B Words enou' );
+same( 'a paragraph inside something else is not the post\'s own', $capOf( "<blockquote><p>Q $long</p></blockquote><p>B $long</p>" ), 'B Words enou' );
+same( 'what is in a comment or a style is not markup',
+	$capOf( "<!-- <p>C $long</p> --><style>p > a { color: red }</style><p>B $long</p>" ), 'B Words enou' );
+same( 'the last paragraph can be it', $capOf( "<p>A line.</p><p>B $long</p>" ), 'B Words enou' );
+same( 'its other classes are kept', Post::capped( $wrap( "<p class=\"lede\" id=\"x\">A $long</p>" ) ),
+	$wrap( "<p class=\"lede bs-cap\" id=\"x\">A $long</p>" ) );
+same( 'and a page with no post in it is left as it is', Post::capped( "<p>A $long</p>" ), "<p>A $long</p>" );
+check( 'the stylesheet sets the letter there and nowhere else',
+	substr_count( file_get_contents( __DIR__ . '/../resources/skins.broadside/prose.css' ), '::first-letter' ) === 2
+	&& substr_count( file_get_contents( __DIR__ . '/../resources/skins.broadside/prose.css' ), 'p.bs-cap::first-letter' ) === 2 );
+
+echo "\nWhat the masthead is given\n";
+same( 'the line a post writes over its headline, as words',
+	Post::ownKicker( "<div class=\"pp-kicker-source\"> Field <i>notes</i> &amp;\n more </div><p>Words.</p>" ), 'Field notes & more' );
+same( 'one with nothing to say is none, so its series is named', Post::ownKicker( '<div class="pp-kicker-source"><br></div>' ), null );
+same( 'and a post that writes none has none', Post::ownKicker( '<p>Just words.</p>' ), null );
 
 echo "\nIts videos\n";
 $wide = 'QmXet6QwZ7qdtDn89Kn4fzdm7LugpcmQoSzchdij4V3DLB';

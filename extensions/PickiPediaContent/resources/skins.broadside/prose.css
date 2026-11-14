@@ -149,11 +149,11 @@ a.bs-chip--magenta {
 }
 .bs-body .mw-parser-output > p:last-child { margin-bottom: 0; }
 
-/* The first letter, large, as a printer would set it: of the opening paragraph, or of the one after a
-   rule when the post opens with a note and a rule. A paragraph that opens with a link or a picture has
-   no such letter. */
-.bs-body .mw-parser-output > p:first-child:not( :has( + hr ) )::first-letter,
-.bs-body .mw-parser-output > p:first-child + hr + p::first-letter {
+/* The first letter, large, as a printer would set it, on the paragraph the post opens with. The server
+   says which that is (Post::capAt marks it bs-cap): the first paragraph that is one, not a line above
+   it ("Work in progress", a note over a rule). A paragraph that opens with a link or a picture has no
+   such letter. */
+.bs-body .mw-parser-output > p.bs-cap::first-letter {
 	float: left;
 	margin: 0.08em 0.1em 0 0;
 	color: var( --bs-rust );
@@ -163,8 +163,7 @@ a.bs-chip--magenta {
 	line-height: 0.82;
 }
 @supports ( initial-letter: 3 ) or ( -webkit-initial-letter: 3 ) {
-	.bs-body .mw-parser-output > p:first-child:not( :has( + hr ) )::first-letter,
-	.bs-body .mw-parser-output > p:first-child + hr + p::first-letter {
+	.bs-body .mw-parser-output > p.bs-cap::first-letter {
 		float: none;
 		margin: 0 0.1em 0 0;
 		font-size: inherit;

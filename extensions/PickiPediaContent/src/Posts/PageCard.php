@@ -104,7 +104,8 @@ class PageCard {
 			$card['title'] = Post::headline( $parts, $inSeries );
 			$card['post'] = [
 				'headline' => $card['title'],
-				'kicker' => $inSeries ? Post::seriesName( $parts ) : '',
+				// As its page's masthead has it (SkinBroadside): its own line, else its series' name.
+				'kicker' => Post::ownKicker( $html ) ?? ( $inSeries ? Post::seriesName( $parts ) : '' ),
 				'dek' => $dek !== null ? trim( html_entity_decode( strip_tags( $dek ), ENT_QUOTES | ENT_HTML5 ) ) : '',
 				'author' => [
 					'name' => $author['name'],

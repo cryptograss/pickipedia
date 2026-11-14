@@ -32,6 +32,12 @@ class Post {
 	/** How much of a message from the thread is shown under a post. */
 	public const SAID_CHARS = 420;
 
+	/** A paragraph of fewer characters than this is a line, not the paragraph a post opens with (capAt). */
+	public const CAP_CHARS = 80;
+
+	/** Elements that have no end tag. */
+	private const VOID = [ 'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr' ];
+
 	/**
 	 * Whether a title in a post namespace (without its namespace) names a
 	 * post: somebody's subpage, and not one of the kinds that never are.
@@ -203,6 +209,112 @@ class Post {
 		}
 		$inner = trim( $m[2] );
 		return $inner === '' ? null : $inner;
+	}
+
+	/**
+	 * The line a post writes over its own headline (pp-kicker-source), as
+	 * words; null if it writes none. The masthead says it in place of the
+	 * series' name. One reading, for the page and for its card, which is
+	 * what magenta draws the same masthead from on the post's tiding.
+	 */
+	public static function ownKicker( string $html ): ?string {
+		$sourced = self::sourced( $html, 'pp-kicker-source' );
+		if ( $sourced === null ) {
+			return null;
+		}
+		$text = trim( preg_replace( '/\s+/u', ' ', html_entity_decode( strip_tags( $sourced ), ENT_QUOTES | ENT_HTML5 ) ) ?? '' );
+		return $text === '' ? null : $text;
+	}
+
+	/**
+	 * Mark the paragraph a post's large first letter stands on (class
+	 * bs-cap), so the stylesheet sets it there and nowhere else. See capAt.
+	 */
+	public static function capped( string $html ): string {
+		$at = self::capAt( $html );
+		if ( $at === null ) {
+			return $html;
+		}
+		$tag = substr( $html, $at[0], $at[1] );
+		if ( preg_match( '/\bclass="([^"]*)"/', $tag, $m, PREG_OFFSET_CAPTURE ) ) {
+			$tag = substr_replace( $tag, 'class="' . trim( $m[1][0] . ' bs-cap' ) . '"', $m[0][1], strlen( $m[0][0] ) );
+		} else {
+			$tag = '<p class="bs-cap"' . substr( $tag, 2 );
+		}
+		return substr_replace( $html, $tag, $at[0], $at[1] );
+	}
+
+	/**
+	 * Where the opening tag of that paragraph is: [offset, length], or null
+	 * if the post has no such paragraph. It is the first of the post's own
+	 * paragraphs that is one: not a line (a note, a date, "Work in
+	 * progress": fewer than CAP_CHARS characters), not a note set off by a
+	 * rule under it, not what the masthead says, and not past the first
+	 * heading, which opens its own part. A letter three lines tall beside
+	 * one line of words reads as a mistake. magenta draws the same letter
+	 * on a post's tiding by the same rule (its services/wiki_lead.py, _Lead):
+	 * change one, change the other.
+	 */
+	public static function capAt( string $html ): ?array {
+		if ( !preg_match( '#<div\b[^>]*\bclass="[^"]*(?<![\w-])mw-parser-output(?![\w-])[^"]*"[^>]*>#', $html, $m, PREG_OFFSET_CAPTURE ) ) {
+			return null;
+		}
+		$from = $m[0][1];
+		// What is in a comment, a style or a script is not markup: blanked, at the same length, so offsets hold.
+		$masked = preg_replace_callback(
+			'#<!--.*?-->|<(style|script)\b[^>]*>.*?</\1>#is',
+			static fn ( $found ) => str_repeat( ' ', strlen( $found[0] ) ),
+			$html
+		) ?? $html;
+		if ( !preg_match_all( '#<(/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>#', $masked, $tags, PREG_SET_ORDER | PREG_OFFSET_CAPTURE, $from ) ) {
+			return null;
+		}
+		$depth = 0;
+		$open = null;
+		$waiting = null;
+		foreach ( $tags as $tag ) {
+			[ $whole, $offset ] = $tag[0];
+			$name = strtolower( $tag[2][0] );
+			if ( in_array( $name, self::VOID, true ) ) {
+				if ( $depth === 1 && $waiting !== null ) {
+					if ( $name !== 'hr' ) {
+						return $waiting;
+					}
+					$waiting = null;
+				}
+				continue;
+			}
+			if ( $tag[1][0] === '' ) {
+				$depth++;
+				if ( $depth !== 2 ) {
+					continue;
+				}
+				if ( $waiting !== null ) {
+					return $waiting;
+				}
+				$classes = preg_match( '/\bclass="([^"]*)"/', $whole, $c ) ? preg_split( '/\s+/', trim( $c[1] ) ) : [];
+				if ( preg_match( '/^h[1-6]$/', $name ) || in_array( 'mw-heading', $classes, true ) ) {
+					return null;
+				}
+				if ( $name === 'p' && !array_intersect( $classes, [ 'pp-dek-source', 'pp-kicker-source' ] ) ) {
+					$open = [ $offset, strlen( $whole ) ];
+				}
+				continue;
+			}
+			if ( $depth === 2 && $open !== null && $name === 'p' ) {
+				$inner = substr( $masked, $open[0] + $open[1], $offset - $open[0] - $open[1] );
+				$words = trim( preg_replace( '/\s+/u', ' ', html_entity_decode( strip_tags( $inner ), ENT_QUOTES | ENT_HTML5 ) ) ?? '' );
+				if ( mb_strlen( $words ) >= self::CAP_CHARS ) {
+					$waiting = $open;
+				}
+				$open = null;
+			}
+			$depth--;
+			if ( $depth < 1 ) {
+				break;
+			}
+		}
+		return $waiting;
 	}
 
 	/** The CIDs of the videos a parsed page plays ({{HLSVideo}}), in order, each once. */
