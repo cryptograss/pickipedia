@@ -1,0 +1,558 @@
+/*
+ * Broadside: the frame around a post. The bar over it, the three columns,
+ * what stands beside the words, and the foot.
+ */
+
+html.bs-root {
+	font-size: 100%;
+	scroll-padding-top: 1.5rem;
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+.skin-broadside {
+	margin: 0;
+	background: var( --bs-paper );
+	color: var( --bs-ink );
+	font-family: var( --bs-sans );
+	font-size: 0.9375rem;
+	line-height: 1.45;
+	overflow-wrap: break-word;
+}
+
+.skin-broadside *,
+.skin-broadside *::before,
+.skin-broadside *::after {
+	box-sizing: border-box;
+}
+
+/* Core colours a heading and a link for white paper: a heading black, a link blue, navy once visited,
+   orange while pressed. Here a heading is the colour of the words around it, and a link is the
+   wiki-page blue in every state, unless its part of the page says otherwise further down.
+
+   A rule that colours a link names the element too (a.bs-author, not .bs-author). Core's a:visited
+   outranks a class alone, so a link coloured by its class alone turns navy once the reader has been
+   where it leads, which on the dark paper is near-black on black. No measurement shows it: a browser
+   never tells a script a visited link's colour. tests/check-posts.php looks for such a rule instead. */
+.skin-broadside :where( h1, h2, h3, h4, h5, h6, .mw-heading ) { color: inherit; }
+.skin-broadside a,
+.skin-broadside a:where( :visited, :active ) { color: var( --bs-link ); }
+.skin-broadside a.new,
+.skin-broadside a.new:where( :visited, :active ) { color: var( --bs-link-new ); }
+
+/* What the old zine script still puts on a user subpage, until MediaWiki:Common.js loses it. */
+.skin-broadside .pp-corner-logo,
+.skin-broadside .pickipedia-topbar,
+.skin-broadside .pickipedia-hero,
+.skin-broadside .pickipedia-mode {
+	display: none !important;
+}
+
+.skin-broadside :focus-visible {
+	outline: 2px solid var( --bs-magenta );
+	outline-offset: 2px;
+	border-radius: 3px;
+}
+
+.bs-skip {
+	position: absolute;
+	left: -200vw;
+}
+.bs-skip:focus {
+	left: 0.75rem;
+	top: 0.75rem;
+	z-index: 10;
+	padding: 0.5rem 0.9rem;
+	background: var( --bs-panel );
+	color: var( --bs-ink );
+	border-radius: 0.5rem;
+	box-shadow: var( --bs-shadow );
+}
+
+/* How far down the post the reader is: a line across the top, rust to magenta, drawn by the scroll
+   itself. Where a browser can't, there is no line. */
+.bs-progress {
+	display: none;
+}
+@supports ( animation-timeline: scroll() ) {
+	.bs-progress {
+		display: block;
+		position: fixed;
+		inset: 0 0 auto 0;
+		height: 3px;
+		z-index: 6;
+		background: linear-gradient( 90deg, var( --bs-rust ), var( --bs-magenta ) );
+		transform-origin: 0 50%;
+		transform: scaleX( 0 );
+		animation: bs-progress linear both;
+		animation-timeline: scroll( root block );
+	}
+	@keyframes bs-progress {
+		to { transform: scaleX( 1 ); }
+	}
+}
+
+/* ---- The bar ---- */
+
+.bs-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	min-height: var( --bs-top );
+	padding: 0.5rem clamp( 0.75rem, 3vw, 1.75rem );
+}
+
+a.bs-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.55rem;
+	color: var( --bs-ink );
+	font-family: var( --bs-serif );
+	font-size: 1.15rem;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	text-decoration: none;
+}
+.bs-brand:hover { color: var( --bs-rust ); text-decoration: none; }
+.bs-brand img {
+	width: 2.25rem;
+	height: 2.25rem;
+	object-fit: contain;
+	/* The mark is drawn for paper: by night it keeps a disc of it. */
+	border-radius: 50%;
+	background: #f8f3ea;
+}
+
+.bs-tools {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	position: relative;
+}
+.bs-tools-list {
+	display: flex;
+	gap: 1rem;
+	margin: 0 0.6rem 0 0;
+	padding: 0;
+	list-style: none;
+	font-family: var( --bs-mono );
+	font-size: 0.6875rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+.bs-tools-list li { margin: 0; }
+/* The same links, in the bar's menu, where the bar is too narrow for them. */
+.bs-menu-narrow { display: none; }
+@media ( max-width: 44rem ) {
+	.bs-tools-list { display: none; }
+	.bs-menu li.bs-menu-narrow { display: block; }
+}
+.bs-tools-list a {
+	color: var( --bs-muted );
+	text-decoration: none;
+	padding: 0.35rem 0;
+	border-bottom: 1px dotted currentColor;
+}
+.bs-tools-list a:hover { color: var( --bs-rust ); }
+/* A page nobody has started (the talk page, most often): as quiet as the rest, and without the line
+   under it. Not dimmer: these words are small, and any dimmer they can't be read (they were, at 3 to 1). */
+.bs-tools-list a.new { color: var( --bs-muted ); border-bottom-color: transparent; }
+
+.bs-btn {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 2rem;
+	padding: 0.25rem 0.8rem;
+	border: 1px solid var( --bs-line );
+	border-radius: 999px;
+	background: var( --bs-panel );
+	color: var( --bs-soft );
+	font: 500 0.8125rem/1 var( --bs-sans );
+	cursor: pointer;
+}
+.bs-btn[popovertarget="bs-more"] { anchor-name: --bs-more-btn; }
+.bs-btn[popovertarget="bs-user"] { anchor-name: --bs-user-btn; }
+.bs-btn:hover { border-color: var( --bs-magenta ); color: var( --bs-ink ); }
+.bs-btn--icon {
+	width: 2rem;
+	padding: 0;
+	font-size: 1rem;
+}
+.bs-userbtn {
+	max-width: 11rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Light or dark: the button shows the one it would turn to. */
+.bs-mode .bs-mode-sun { display: none; }
+@media ( prefers-color-scheme: dark ) {
+	.bs-root:not( .bs-light ) .bs-mode .bs-mode-sun { display: inline; }
+	.bs-root:not( .bs-light ) .bs-mode .bs-mode-moon { display: none; }
+}
+.bs-root.bs-dark .bs-mode .bs-mode-sun { display: inline; }
+.bs-root.bs-dark .bs-mode .bs-mode-moon { display: none; }
+
+/* A menu: a popover, hung from the button that opens it. A browser that can't hang it shows it
+   under the bar, at the right. */
+.bs-menu {
+	position: fixed;
+	inset: auto;
+	top: calc( var( --bs-top ) - 0.25rem );
+	right: clamp( 0.75rem, 3vw, 1.75rem );
+	margin: 0;
+	min-width: 12rem;
+	max-width: min( 20rem, calc( 100vw - 1.5rem ) );
+	padding: 0.35rem;
+	border: 1px solid var( --bs-line );
+	border-radius: 0.75rem;
+	background: var( --bs-panel );
+	color: var( --bs-ink );
+	box-shadow: var( --bs-shadow );
+	font-size: 0.875rem;
+}
+@supports ( position-area: bottom ) {
+	.bs-menu {
+		top: auto;
+		right: auto;
+		position-area: bottom span-left;
+		position-try-fallbacks: flip-inline, flip-block;
+		margin-top: 0.35rem;
+	}
+	/* Each named for its own button: not every browser hangs a popover from what opened it unasked. */
+	#bs-more { position-anchor: --bs-more-btn; }
+	#bs-user { position-anchor: --bs-user-btn; }
+}
+.bs-menu ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.bs-menu li { margin: 0; }
+.bs-menu a {
+	display: block;
+	padding: 0.45rem 0.7rem;
+	border-radius: 0.5rem;
+	color: var( --bs-ink );
+	text-decoration: none;
+}
+.bs-menu a:hover,
+.bs-menu a:focus-visible { background: var( --bs-wash ); text-decoration: none; }
+.bs-menu a::first-letter { text-transform: uppercase; }
+.bs-menu .mw-echo-notifications-badge { text-indent: 0; }
+
+.bs-notice {
+	max-width: 60rem;
+	margin: 0 auto 0.5rem;
+	padding: 0 1rem;
+}
+
+/* ---- The columns ---- */
+
+.bs-page {
+	display: grid;
+	grid-template-columns: minmax( 0, var( --bs-measure ) );
+	grid-template-areas: "main" "rail";
+	justify-content: center;
+	column-gap: clamp( 1.75rem, 3.4vw, 4rem );
+	padding: 0 clamp( 1rem, 4vw, 2rem );
+	margin: 0 auto;
+}
+.bs-main {
+	grid-area: main;
+	min-width: 0;
+	/* What a wiki skin gives its content; not here. */
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+}
+.bs-rail { grid-area: rail; min-width: 0; }
+.bs-side { grid-area: side; min-width: 0; display: none; }
+
+/* Narrow: the post, then who wrote it and what else they made, side by side where there's room. */
+.bs-rail {
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 15rem, 1fr ) );
+	gap: 1.75rem 2rem;
+	align-items: start;
+	margin-top: 3rem;
+	padding-top: 2rem;
+	border-top: 1px solid var( --bs-line );
+}
+
+/* Middling: the post with its side column; the rail below both. */
+@media ( min-width: 62rem ) {
+	.bs-page--side {
+		grid-template-columns: minmax( 0, var( --bs-measure ) ) minmax( 0, var( --bs-side ) );
+		grid-template-areas: "main side" "rail rail";
+	}
+	.bs-page--side .bs-side { display: block; }
+}
+
+/* Wide: who wrote it, the post, and what stands beside it. */
+@media ( min-width: 80rem ) {
+	.bs-page {
+		grid-template-columns: minmax( 0, var( --bs-rail ) ) minmax( 0, var( --bs-measure ) ) minmax( 0, var( --bs-rail ) );
+		grid-template-areas: "rail main .";
+	}
+	.bs-page--side {
+		grid-template-columns: minmax( 0, var( --bs-rail ) ) minmax( 0, var( --bs-measure ) ) minmax( 0, var( --bs-side ) );
+		grid-template-areas: "rail main side";
+	}
+	.bs-page--plain {
+		grid-template-columns: minmax( 0, 56rem );
+		grid-template-areas: "main";
+	}
+	.bs-rail {
+		display: block;
+		margin-top: 0;
+		padding: clamp( 1.5rem, 5vw, 3.5rem ) 0 2rem;
+		border-top: 0;
+		position: sticky;
+		top: 0;
+		align-self: start;
+		max-height: 100dvh;
+		overflow-y: auto;
+		scrollbar-width: thin;
+		scrollbar-color: var( --bs-line ) transparent;
+	}
+	.bs-rail > * + * { margin-top: 2rem; }
+}
+
+.bs-side-stick {
+	position: sticky;
+	top: 1.25rem;
+	display: grid;
+	gap: 1.5rem;
+	padding: clamp( 1.5rem, 5vw, 3.5rem ) 0 2rem;
+	max-height: 100dvh;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var( --bs-line ) transparent;
+}
+
+/* ---- Who wrote it ---- */
+
+.bs-face {
+	display: block;
+	flex: none;
+	width: 2.75rem;
+	height: 2.75rem;
+	border-radius: 50%;
+	overflow: hidden;
+	background: var( --bs-wash );
+	box-shadow: 0 0 0 1px var( --bs-line );
+	text-decoration: none;
+}
+.bs-face img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: 50% 22%;
+}
+.bs-face-initial {
+	display: grid;
+	place-items: center;
+	width: 100%;
+	height: 100%;
+	color: var( --bs-rust );
+	font: 700 1.2rem/1 var( --bs-serif );
+}
+.bs-face--lg {
+	width: 4.5rem;
+	height: 4.5rem;
+}
+.bs-face--lg .bs-face-initial { font-size: 2rem; }
+
+.bs-about-name {
+	margin: 0.8rem 0 0;
+	padding: 0;
+	border: 0;
+	font: 700 1.2rem/1.2 var( --bs-serif );
+	color: var( --bs-ink );
+}
+.bs-about-name a { color: inherit; text-decoration: none; }
+.bs-about-name a:hover { color: var( --bs-rust ); }
+.bs-about-pronouns,
+.bs-about-says {
+	margin: 0.25rem 0 0;
+	color: var( --bs-muted );
+	font-size: 0.8125rem;
+}
+.bs-about-says {
+	color: var( --bs-soft );
+	font: italic 0.95rem/1.45 var( --bs-serif );
+	margin-top: 0.5rem;
+}
+.bs-about-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem 0.9rem;
+	margin: 0.7rem 0 0;
+	font-size: 0.8125rem;
+}
+.bs-about-links a { color: var( --bs-link ); text-decoration: none; }
+.bs-about-links a:hover { text-decoration: underline; }
+.bs-about-links a.bs-link--magenta { color: var( --bs-magenta ); }
+
+/* ---- What else they made ---- */
+
+.bs-shelf h2 {
+	margin: 0 0 0.6rem;
+	padding: 0;
+	border: 0;
+	color: var( --bs-rust );
+	font: 600 0.6875rem/1.3 var( --bs-mono );
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+.bs-shelf h2 a { color: inherit; text-decoration: none; border-bottom: 1px dotted currentColor; }
+.bs-shelf ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.bs-shelf li {
+	margin: 0;
+	padding: 0.5rem 0;
+	border-top: 1px solid var( --bs-line );
+}
+.bs-shelf li:first-child { border-top: 0; padding-top: 0; }
+.bs-shelf li > a {
+	display: block;
+	color: var( --bs-ink );
+	font: 600 1rem/1.3 var( --bs-serif );
+	text-decoration: none;
+	text-wrap: balance;
+}
+.bs-shelf li > a:hover { color: var( --bs-link ); }
+.bs-shelf-note {
+	display: block;
+	margin: 0.15rem 0 0;
+	color: var( --bs-muted );
+	font-size: 0.75rem;
+}
+p.bs-shelf-note { margin: 0; }
+.bs-shelf-turn {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	margin: 0.5rem 0 0;
+	font-size: 0.875rem;
+}
+.bs-shelf-turn a { color: var( --bs-link ); text-decoration: none; }
+.bs-shelf-turn a:hover { text-decoration: underline; }
+.bs-shelf-turn a[rel="next"]:only-child { margin-left: auto; }
+.bs-shelf-rest { margin-top: 0.5rem; border-top: 1px solid var( --bs-line ); }
+.bs-shelf-rest summary {
+	padding: 0.5rem 0;
+	color: var( --bs-muted );
+	font-size: 0.8125rem;
+	cursor: pointer;
+}
+.bs-shelf-rest summary:hover { color: var( --bs-ink ); }
+.bs-shelf-rest[open] summary { margin-bottom: 0.25rem; }
+
+/* Their songs: each a way into Rabbithole, in Rabbithole's green. */
+.bs-songs li {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.3rem 0;
+	border-top: 0;
+}
+.bs-songs li > a.bs-play {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+	min-width: 0;
+	padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+	border: 1px solid var( --bs-green-line );
+	border-radius: 999px;
+	background: var( --bs-green );
+	color: #fff;
+	font: 600 0.8125rem/1.25 var( --bs-sans );
+	text-decoration: none;
+	transition: filter 0.15s, transform 0.15s;
+}
+.bs-songs li > a.bs-play:hover { color: #fff; filter: brightness( 1.1 ); transform: translateY( -1px ); }
+.bs-play-mark { font-size: 0.65rem; }
+.bs-play-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bs-songs li > a.bs-songpage {
+	display: inline-grid;
+	place-items: center;
+	flex: none;
+	width: 1.6rem;
+	height: 1.6rem;
+	border-radius: 50%;
+	color: var( --bs-green-ink );
+	font: 400 0.9rem/1 var( --bs-sans );
+	text-decoration: none;
+}
+.bs-songs li > a.bs-songpage:hover { background: var( --bs-green-soft ); color: var( --bs-green-ink ); }
+.bs-songs .bs-shelf-note { margin-top: 0.5rem; }
+
+/* The post's headings, beside it. */
+.bs-toc h2 {
+	margin: 0 0 0.6rem;
+	padding: 0;
+	border: 0;
+	color: var( --bs-rust );
+	font: 600 0.6875rem/1.3 var( --bs-mono );
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+}
+.bs-toc ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.bs-toc li {
+	margin: 0;
+	padding: 0;
+}
+.bs-toc a {
+	display: block;
+	padding: 0.3rem 0 0.3rem 0.8rem;
+	border-left: 2px solid var( --bs-line );
+	color: var( --bs-soft );
+	font-size: 0.8125rem;
+	line-height: 1.35;
+	text-decoration: none;
+}
+.bs-toc a:hover { border-left-color: var( --bs-rust ); color: var( --bs-ink ); }
+.bs-toc ul ul a { padding-left: 1.6rem; color: var( --bs-muted ); }
+
+/* ---- The foot ---- */
+
+.bs-foot {
+	max-width: calc( var( --bs-rail ) + var( --bs-measure ) + var( --bs-side ) + 8rem );
+	margin: 4rem auto 0;
+	padding: 1.5rem clamp( 1rem, 4vw, 2rem ) 2.5rem;
+	border-top: 1px solid var( --bs-line );
+	color: var( --bs-muted );
+	font-size: 0.75rem;
+}
+.bs-foot ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem 1.25rem;
+	margin: 0 0 0.5rem;
+	padding: 0;
+	list-style: none;
+}
+.bs-foot li { margin: 0; }
+.bs-foot a { color: var( --bs-muted ); }
+.bs-foot a:hover { color: var( --bs-ink ); }
+
+@media print {
+	.bs-top, .bs-rail, .bs-side, .bs-progress, .bs-foot, .bs-thread, .bs-after { display: none !important; }
+	.skin-broadside { background: #fff; color: #000; }
+}

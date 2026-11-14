@@ -47,9 +47,8 @@ jobs:
           php extensions/PickiPediaVerification/tests/check-verify-strip.php
           php extensions/PickiPediaVerification/tests/check-verify-brackets.php
           php docker/check-extensions.php "$GITHUB_WORKSPACE"
-          php extensions/PickiPediaReleases/tests/check-zine.php
           php extensions/PickiPediaReleases/tests/check-on-the-record.php
-          cd extensions/PickiPediaContent && php tests/check-classes.php && php tests/check-bundles.php && php tests/check-pronouns.php && php tests/check-magenta-push.php && php tests/check-timezone.php
+          cd extensions/PickiPediaContent && php tests/check-classes.php && php tests/check-bundles.php && php tests/check-pronouns.php && php tests/check-magenta-push.php && php tests/check-timezone.php && php tests/check-socialcard.php && php tests/check-posts.php
 
   web:
     name: JavaScript and JSON

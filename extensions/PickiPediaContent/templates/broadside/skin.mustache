@@ -1,0 +1,168 @@
+{{!
+  Broadside: a post's page (src/Posts/SkinBroadside.php).
+
+  Three columns on a wide screen: who wrote it and what else they made;
+  the post; and a side column where a video keeps playing, the page's
+  tiding, and its headings. On a narrow one the post comes first and the
+  rest follows it. Everything here is sent by the server; no script moves
+  any of it.
+}}
+<script>
+/* Until MediaWiki:Common.js loses the old zine script: it marks the body of every user subpage for the
+   old zine stylesheet in MediaWiki:Common.css, which would restyle this page after it had painted. This
+   takes its marks off again before the next paint. It goes when that script does
+   (Cryptograss:Moods/pickipedia-style-and-main-page/todo). */
+new MutationObserver( function () {
+	var c = document.body.classList;
+	if ( c.contains( 'pickipedia-userpost' ) ) {
+		c.remove( 'pickipedia-userpost', 'pickipedia-variant-letter', 'pickipedia-variant-masthead', 'pickipedia-dark' );
+	}
+} ).observe( document.body, { attributes: true, attributeFilter: [ 'class' ] } );
+</script>
+<div class="bs-progress" aria-hidden="true"></div>
+<a class="mw-jump-link bs-skip" href="#bs-post">{{msg-pickipediacontent-posts-skip}}</a>
+<header class="bs-top">
+	<a class="bs-brand" href="{{link-mainpage}}" title="{{msg-pickipediacontent-posts-home}}">{{#logo}}<img src="{{src}}"{{#srcset}} srcset="{{.}}"{{/srcset}} width="{{width}}" height="{{height}}" alt="">{{/logo}}<span>{{msg-pickipediacontent-posts-site}}</span></a>
+	<nav class="bs-tools" aria-label="{{msg-pickipediacontent-posts-tools}}">
+		<ul class="bs-tools-list">{{#array-tools}}<li><a href="{{href}}"{{#title}} title="{{.}}"{{/title}}{{#is-new}} class="new"{{/is-new}}>{{text}}</a></li>{{/array-tools}}</ul>
+		<button type="button" class="bs-btn bs-btn--icon" popovertarget="bs-more" title="{{msg-pickipediacontent-posts-more-tools}}" aria-label="{{msg-pickipediacontent-posts-more-tools}}">⋯</button>
+		<div id="bs-more" class="bs-menu" popover>
+			<ul id="p-cactions">{{#array-tools}}<li class="bs-menu-narrow"><a href="{{href}}">{{text}}</a></li>{{/array-tools}}{{#data-portlets}}{{#data-actions}}{{{html-items}}}{{/data-actions}}{{/data-portlets}}<li><a href="{{link-search}}">{{msg-pickipediacontent-posts-search}}</a></li><li><a href="{{link-plain}}" rel="nofollow">{{msg-pickipediacontent-posts-plain}}</a></li></ul>
+		</div>
+		<button type="button" class="bs-btn bs-btn--icon bs-mode" aria-pressed="{{#mode-is-dark}}true{{/mode-is-dark}}{{^mode-is-dark}}false{{/mode-is-dark}}" title="{{msg-pickipediacontent-posts-mode}}" aria-label="{{msg-pickipediacontent-posts-mode}}"><span class="bs-mode-moon" aria-hidden="true">☾</span><span class="bs-mode-sun" aria-hidden="true">☼</span></button>
+		<button type="button" class="bs-btn bs-userbtn" popovertarget="bs-user">{{#user-label}}{{.}}{{/user-label}}{{^user-label}}{{msg-pickipediacontent-posts-you}}{{/user-label}}</button>
+		<div id="bs-user" class="bs-menu" popover>
+			<ul id="p-personal">{{#data-portlets}}{{#data-personal}}{{{html-items}}}{{/data-personal}}{{/data-portlets}}</ul>
+		</div>
+	</nav>
+</header>
+{{#html-site-notice}}<div class="bs-notice" id="siteNotice">{{{.}}}</div>{{/html-site-notice}}
+{{#data-post}}
+<div class="bs-page{{#has-side}} bs-page--side{{/has-side}}{{^is-post}} bs-page--plain{{/is-post}}">
+
+	<main id="bs-post" class="bs-main mw-body">
+		<header class="bs-hero">
+			{{#kicker}}<p class="bs-kicker">{{#has-url}}<a href="{{url}}">{{text}}</a>{{/has-url}}{{^has-url}}{{text}}{{/has-url}}</p>{{/kicker}}
+			<h1 class="bs-title" id="firstHeading">{{headline}}</h1>
+			{{#html-dek}}<p class="bs-dek">{{{.}}}</p>{{/html-dek}}
+			{{#author}}
+			<div class="bs-byline">
+				<a class="bs-face" href="{{url}}" tabindex="-1" aria-hidden="true">{{#avatar}}<img src="{{src}}"{{#srcset}} srcset="{{.}}"{{/srcset}} width="{{width}}" height="{{height}}" alt="">{{/avatar}}{{^avatar}}<span class="bs-face-initial">{{initial}}</span>{{/avatar}}</a>
+				<div class="bs-byline-words">
+					<a class="bs-author" rel="author" href="{{url}}">{{name}}</a>
+					<div class="bs-meta">{{#published}}<time datetime="{{iso}}">{{text}}</time> · {{/published}}{{minutes}}{{#edited}} · <time datetime="{{iso}}">{{label}}</time>{{/edited}}</div>
+				</div>
+				{{#tiding}}<a class="bs-chip bs-chip--magenta" href="#bs-thread"><span class="bs-dot" aria-hidden="true"></span>{{chip}}</a>{{/tiding}}
+			</div>
+			{{/author}}
+		</header>
+		{{{html-user-message}}}
+		{{#html-subtitle}}<div id="contentSub" class="bs-sub">{{{.}}}</div>{{/html-subtitle}}
+		{{#html-undelete-link}}<div id="contentSub2" class="bs-sub">{{{.}}}</div>{{/html-undelete-link}}
+		<div id="bodyContent" class="bs-body">
+			{{{html-body-content}}}
+		</div>
+		<footer class="bs-end">
+			{{#series}}{{#has-neighbours}}
+			<nav class="bs-turn" aria-label="{{name}}">
+				<span class="bs-turn-prev">{{#prev}}<a href="{{url}}" rel="prev"><span aria-hidden="true">←</span> {{label}}</a>{{/prev}}</span>
+				<span class="bs-turn-where">{{#has-url}}<a href="{{url}}">{{name}}</a>{{/has-url}}{{^has-url}}{{name}}{{/has-url}} · {{position}}</span>
+				<span class="bs-turn-next">{{#next}}<a href="{{url}}" rel="next">{{label}} <span aria-hidden="true">→</span></a>{{/next}}</span>
+			</nav>
+			{{/has-neighbours}}{{/series}}
+			{{#html-categories}}<div class="bs-cats">{{{.}}}</div>{{/html-categories}}
+			{{#tiding}}
+			<section class="bs-thread" id="bs-thread" aria-labelledby="bs-thread-h">
+				<header class="bs-thread-head">
+					<h2 id="bs-thread-h"><span class="bs-dot" aria-hidden="true"></span>{{msg-pickipediacontent-posts-thread}}</h2>
+					<span class="bs-thread-count">{{summary}}</span>
+				</header>
+				{{#has-said}}
+				<ol class="bs-said">
+					{{#array-said}}
+					<li class="bs-said-item{{#is-emergent}} is-emergent{{/is-emergent}}"{{#colour}} style="--bs-who:{{.}}"{{/colour}}>
+						<div class="bs-said-who"><b>{{who}}</b>{{#has-when}} <a href="{{href}}"><time datetime="{{iso}}">{{when}}</time></a>{{/has-when}}{{#block}} <span class="bs-block">{{msg-pickipediacontent-posts-block}} {{.}}</span>{{/block}}</div>
+						<div class="bs-said-words">{{#array-paragraphs}}<p>{{.}}</p>{{/array-paragraphs}}</div>
+					</li>
+					{{/array-said}}
+				</ol>
+				{{/has-said}}
+				{{^has-said}}<p class="bs-thread-empty">{{msg-pickipediacontent-posts-thread-empty}}</p>{{/has-said}}
+				<a class="bs-thread-go" href="{{url}}">{{msg-pickipediacontent-posts-thread-go}}</a>
+			</section>
+			{{/tiding}}
+			{{#html-after-content}}<div class="bs-after">{{{.}}}</div>{{/html-after-content}}
+		</footer>
+	</main>
+
+	{{#is-post}}
+	<aside class="bs-rail" aria-label="{{msg-pickipediacontent-posts-about}}">
+		{{#author}}
+		<section class="bs-about">
+			<a class="bs-face bs-face--lg" href="{{url}}" tabindex="-1" aria-hidden="true">{{#avatar}}<img src="{{src}}"{{#srcset}} srcset="{{.}}"{{/srcset}} width="{{width}}" height="{{height}}" alt="" loading="lazy">{{/avatar}}{{^avatar}}<span class="bs-face-initial">{{initial}}</span>{{/avatar}}</a>
+			<h2 class="bs-about-name"><a href="{{url}}">{{name}}</a></h2>
+			{{#pronouns}}<p class="bs-about-pronouns">{{.}}</p>{{/pronouns}}
+			{{#says}}<p class="bs-about-says">{{.}}</p>{{/says}}
+			<p class="bs-about-links"><a href="{{url}}">{{msg-pickipediacontent-posts-user-page}}</a>{{#person}}<a href="{{url}}">{{title}}</a>{{/person}}{{#magenta}}<a class="bs-link--magenta" href="{{.}}">{{msg-pickipediacontent-posts-on-magenta}}</a>{{/magenta}}</p>
+		</section>
+		{{/author}}
+		{{#series}}
+		<section class="bs-shelf bs-shelf--series">
+			<h2>{{#has-url}}<a href="{{url}}">{{name}}</a>{{/has-url}}{{^has-url}}{{name}}{{/has-url}}</h2>
+			<p class="bs-shelf-note">{{position}}</p>
+			{{#has-neighbours}}<p class="bs-shelf-turn">{{#prev}}<a href="{{url}}" rel="prev">← {{label}}</a>{{/prev}}{{#next}}<a href="{{url}}" rel="next">{{label}} →</a>{{/next}}</p>{{/has-neighbours}}
+		</section>
+		{{/series}}
+		{{#opens}}
+		<section class="bs-shelf bs-shelf--series">
+			<h2>{{msg-pickipediacontent-posts-series}}</h2>
+			<p class="bs-shelf-note">{{count}}</p>
+			{{#first}}<p class="bs-shelf-turn"><a href="{{url}}" rel="next">{{msg-pickipediacontent-posts-begin}} {{label}} →</a></p>{{/first}}
+		</section>
+		{{/opens}}
+		{{#shelf}}
+		<section class="bs-shelf">
+			<h2>{{msg-pickipediacontent-posts-more-writing}}</h2>
+			<ul>{{#array-items}}<li><a href="{{url}}">{{title}}</a><span class="bs-shelf-note">{{note}}</span></li>{{/array-items}}</ul>
+			{{#rest}}<details class="bs-shelf-rest"><summary>{{label}}</summary><ul>{{#array-items}}<li><a href="{{url}}">{{title}}</a><span class="bs-shelf-note">{{note}}</span></li>{{/array-items}}</ul></details>{{/rest}}
+		</section>
+		{{/shelf}}
+		{{#songs}}
+		<section class="bs-shelf bs-songs">
+			<h2>{{msg-pickipediacontent-posts-songs}}</h2>
+			<ul>{{#array-items}}<li><a class="bs-play" href="{{listen}}" title="{{msg-pickipediacontent-posts-listen}}"><span class="bs-play-mark" aria-hidden="true">▶</span><span class="bs-play-title">{{title}}</span></a><a class="bs-songpage" href="{{url}}" title="{{msg-pickipediacontent-posts-songpage}}" aria-label="{{msg-pickipediacontent-posts-songpage}}: {{title}}">♪</a></li>{{/array-items}}</ul>
+			<p class="bs-shelf-note">{{msg-pickipediacontent-posts-songs-note}}</p>
+		</section>
+		{{/songs}}
+	</aside>
+	{{/is-post}}
+
+	{{#has-side}}
+	<aside class="bs-side" aria-label="{{msg-pickipediacontent-posts-beside}}">
+		<div class="bs-side-stick">
+			{{#has-video}}<div class="bs-dock" id="bs-dock"><p class="bs-dock-note">{{msg-pickipediacontent-posts-dock}}</p></div>{{/has-video}}
+			{{#tiding}}
+			<a class="bs-tidingcard" href="{{url}}">
+				<span class="bs-tidingcard-head"><span class="bs-dot" aria-hidden="true"></span>{{msg-pickipediacontent-posts-tiding}}</span>
+				<span class="bs-tidingcard-count">{{summary}}</span>
+				<span class="bs-tidingcard-go">{{msg-pickipediacontent-posts-tiding-go}}</span>
+			</a>
+			{{/tiding}}
+			{{#data-toc}}
+			<nav class="bs-toc" aria-labelledby="bs-toc-h">
+				<h2 id="bs-toc-h">{{msg-pickipediacontent-posts-toc}}</h2>
+				<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a>{{#is-parent-section}}<ul>{{#array-sections}}<li><a href="#{{linkAnchor}}">{{{line}}}</a></li>{{/array-sections}}</ul>{{/is-parent-section}}</li>{{/array-sections}}</ul>
+			</nav>
+			{{/data-toc}}
+		</div>
+	</aside>
+	{{/has-side}}
+</div>
+{{/data-post}}
+<footer class="bs-foot">
+	{{#data-footer}}
+	{{#data-info}}<ul class="bs-foot-info">{{#array-items}}<li id="{{id}}">{{{html}}}</li>{{/array-items}}</ul>{{/data-info}}
+	{{#data-places}}<ul class="bs-foot-places">{{#array-items}}<li id="{{id}}">{{{html}}}</li>{{/array-items}}</ul>{{/data-places}}
+	{{/data-footer}}
+</footer>
+<div id="bs-card" class="bs-card" popover="manual" role="tooltip"></div>
