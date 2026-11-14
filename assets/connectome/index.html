@@ -5,7 +5,12 @@
 
     ?a=Kyle+Tuttle&b=Bronwyn    two pickers: what they've played together, and who both have played with
     ?p=Kyle+Tuttle              one picker and their company
+    ?m=arthel:4masks&s=Victory  one piece of music (a record or a show by its key; s, a track of a record),
+                                with the graph inside out: the music as the circles, the pickers as the lines
     (?from= and ?to= are read as a and b)
+
+  A click never leaves the graph: a picker's click goes to that picker, a piece of music's turns the graph
+  inside out around it. The ways out to a wiki page are said as that ("page ↗").
 
   A pointer that hovers gets a note beside what it's over, and its click goes further in. A finger can't
   hover: its touch opens a sheet saying what it touched, with the ways further in, the page, and the way back
@@ -38,16 +43,24 @@
 		<div id="sheet" role="dialog" aria-label="What you touched" hidden></div>
 		<div id="wait">Loading the connectome…</div>
 		<footer id="legend">
-			<span class="lg"><svg width="30" height="12" aria-hidden="true"><line class="glow" x1="2" y1="6" x2="28" y2="6"/><line class="core t2" x1="2" y1="6" x2="28" y2="6"/></svg>
+			<span class="lg pv"><svg width="30" height="12" aria-hidden="true"><line class="glow" x1="2" y1="6" x2="28" y2="6"/><line class="core t2" x1="2" y1="6" x2="28" y2="6"/></svg>
 				<a href="/wiki/PickiPedia:Release_Types" target="_top">Permanent Release</a>: a taper's tape or Creative Commons</span>
-			<span class="lg"><svg width="30" height="12" aria-hidden="true"><line class="core t1" x1="2" y1="6" x2="28" y2="6"/></svg>
+			<span class="lg pv"><svg width="30" height="12" aria-hidden="true"><line class="core t1" x1="2" y1="6" x2="28" y2="6"/></svg>
 				<a href="/wiki/PickiPedia:Release_Types" target="_top">Full Release</a>: no DRM</span>
-			<span class="lg"><svg width="30" height="12" aria-hidden="true"><line class="core t0" x1="2" y1="6" x2="28" y2="6"/></svg>
+			<span class="lg pv"><svg width="30" height="12" aria-hidden="true"><line class="core t0" x1="2" y1="6" x2="28" y2="6"/></svg>
 				the rest: counted, not named</span>
+			<span class="lg dv"><svg width="16" height="14" aria-hidden="true"><g class="mu t2"><circle class="ring" cx="8" cy="7" r="5"/></g></svg>
+				<a href="/wiki/PickiPedia:Release_Types" target="_top">Permanent Release</a>: a taper's tape or Creative Commons</span>
+			<span class="lg dv"><svg width="16" height="14" aria-hidden="true"><g class="mu t1"><circle class="ring" cx="8" cy="7" r="5"/></g></svg>
+				<a href="/wiki/PickiPedia:Release_Types" target="_top">Full Release</a>: no DRM</span>
+			<span class="lg dv"><svg width="16" height="14" aria-hidden="true"><g class="mu t0"><circle class="ring" cx="8" cy="7" r="5"/></g></svg>
+				the rest</span>
+			<span class="lg dv"><svg width="30" height="12" aria-hidden="true"><line class="core th on" x1="2" y1="6" x2="28" y2="6" stroke-width="2.4"/></svg>
+				a line: the pickers on both</span>
 			<span class="lg more"><svg width="16" height="12" aria-hidden="true"><g class="gl" transform="translate(8 6)"><rect x="-6.8" y="-4.6" width="13.6" height="9.2" rx="1.8"/><circle cx="-2.9" r="1.5"/><circle cx="2.9" r="1.5"/></g></svg> a show
 				<svg width="14" height="12" aria-hidden="true"><g class="gl" transform="translate(7 6)"><circle r="5.2"/><circle class="f" r="1.4"/></g></svg> a record
 				<svg width="12" height="12" aria-hidden="true"><g class="gl" transform="translate(6 6.5) scale(0.9)"><circle class="f" cx="-2" cy="3.6" r="2.7"/><path d="M0.4 3.6V-5.2L4.6 -3.4"/></g></svg> a track</span>
-			<span class="lg more"><svg width="14" height="12" aria-hidden="true"><circle class="dot" cx="7" cy="6" r="4"/></svg> a picker
+			<span class="lg more pv"><svg width="14" height="12" aria-hidden="true"><circle class="dot" cx="7" cy="6" r="4"/></svg> a picker
 				<svg width="14" height="12" aria-hidden="true"><circle class="dot hollow" cx="7" cy="6" r="4"/></svg> no page yet</span>
 			<span class="lg more">thicker, bigger = more together</span>
 		</footer>

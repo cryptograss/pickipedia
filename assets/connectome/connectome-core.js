@@ -18,6 +18,11 @@
  * connectome.js's what(), is decided by a mark's shape: each is asked what it stands for, and the answer has
  * the same parts for all three (what it is, what the sources say, the ways further in, where to find out
  * more), which a pointer gets as a note and a finger as a sheet (Justin, #connectome, 13 Nov 2026).
+ *
+ * Inside out. A click on a picker goes to that picker, here, and a click on a piece of music turns the graph
+ * inside out: the music becomes the circles and the pickers the lines between them (Justin, #connectome,
+ * 13 Nov 2026, 23:05Z). So the same store is read both ways: adj is who a picker has played with, by the
+ * music they share; pieces and on are what a piece of music leads to, by the pickers on both.
  */
 
 export const TRACK = 3, STAGE = 2, RECORD = 1;     // how two pickers are on one record or show
@@ -42,8 +47,72 @@ export function build( g ) {
 		adj[ b ].set( a, tie );
 	}
 	const byName = new Map( people.map( ( p ) => [ p.name.toLowerCase(), p.id ] ) );
-	return { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
-		plays: g.plays || {}, built: g.built || '' };
+	return Object.assign( { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
+		plays: g.plays || {}, built: g.built || '' }, pieces( g, people, music ) );
+}
+
+/**
+ * The pieces: what a circle is when the graph is turned inside out. A show; a record; and, where the sources
+ * say who is on which track of a record, each such track. A record or a show is its own number in music; the
+ * tracks come after. A picker's pieces (on) are the shows they're on, the tracks they're on, and a record whole
+ * only where no source says which of its tracks they're on.
+ *
+ * One night is one piece, however many tapers taped it: two tapes of the same band on the same date are folded
+ * into the first (whole says which piece a record or a show is; also, the other tapes of a night).
+ */
+function pieces( g, people, music ) {
+	const all = music.map( ( m ) => ( { id: m.id, kind: m.kind === 'show' ? 'show' : 'record', m: m.id, song: '', also: [],
+		cast: new Set( m.cast.map( ( c ) => c[ 0 ] ) ) } ) );
+	const whole = music.map( ( m ) => m.id ), nights = new Map();
+	for ( const m of music ) {
+		const night = m.kind === 'show' && m.artist && m.date ? m.artist + '\n' + m.date : '';
+		if ( night && nights.has( night ) ) {
+			whole[ m.id ] = nights.get( night );
+			all[ whole[ m.id ] ].also.push( m.id );
+			all[ m.id ].cast.forEach( ( who ) => all[ whole[ m.id ] ].cast.add( who ) );
+			all[ m.id ].cast = new Set();
+		} else if ( night ) {
+			nights.set( night, m.id );
+		}
+	}
+	const trackOf = new Map();
+	for ( const [ a, b, evs ] of g.ties ) {
+		for ( const [ m, how, , songs ] of evs ) {
+			all[ whole[ m ] ].cast.add( a ).add( b );
+			if ( how !== TRACK || music[ m ].kind === 'show' ) {
+				continue;                                      // a show is one piece, whoever sat in on which song
+			}
+			for ( const song of songs || [] ) {
+				const key = m + '\n' + song;
+				if ( !trackOf.has( key ) ) {
+					trackOf.set( key, all.length );
+					all.push( { id: all.length, kind: 'track', m, song, cast: new Set() } );
+				}
+				all[ trackOf.get( key ) ].cast.add( a ).add( b );
+			}
+		}
+	}
+	const on = people.map( () => [] );
+	const tracked = new Set();
+	for ( const p of all ) {
+		p.cast = [ ...p.cast ].sort( ( x, y ) => x - y );
+		if ( p.kind === 'track' ) {
+			for ( const who of p.cast ) {
+				on[ who ].push( p.id );
+				tracked.add( who + ':' + p.m );
+			}
+		}
+	}
+	for ( const p of all ) {
+		if ( p.kind !== 'track' ) {
+			for ( const who of p.cast ) {
+				if ( !tracked.has( who + ':' + p.m ) ) {
+					on[ who ].push( p.id );
+				}
+			}
+		}
+	}
+	return { pieces: all, trackOf, whole, on };
 }
 
 /**
@@ -312,10 +381,13 @@ export function times( tie ) {
 export function naming( G, e ) {
 	const m = G.music[ e.m ];
 	if ( m.kind === 'show' ) {
-		const who = m.artist || m.title;
+		// A taper's tape is known by the band and the night. Any other show has a name of its own, and what its
+		// source calls the artist is where it was.
+		const tape = m.key.indexOf( 'lma:' ) === 0 && !!m.artist;
+		const who = tape ? m.artist : ( m.title || m.artist );
 		const day = when( m.date );
-		const short = m.artist ? [ who, day ].filter( Boolean ).join( ' · ' ) : who;
-		return { glyph: 'show', short, brief: who, long: [ m.title && m.title !== who ? m.title : who, m.artist ? '' : day ].filter( Boolean ).join( ', ' ),
+		return { glyph: 'show', short: tape ? [ who, day ].filter( Boolean ).join( ' · ' ) : who, brief: who,
+			long: tape ? ( m.title && m.title !== who ? m.title : who ) : [ m.artist !== who ? m.artist : '', day ].filter( Boolean ).join( ', ' ),
 			songs: e.songs };
 	}
 	const record = [ m.artist, m.title ].filter( Boolean ).join( ' – ' ) + ( m.date ? ` (${ when( m.date ) })` : '' );
@@ -333,6 +405,182 @@ export function naming( G, e ) {
 export function playOf( G, m, song ) {
 	const cid = G.plays[ song ];
 	return cid && m && m.kind === 'record' && m.key.indexOf( 'arthel:' ) === 0 ? '/rabbithole/?track=' + encodeURIComponent( cid ) : '';
+}
+
+/* ------------------------------------------------------------------------------------------------------------
+ * Inside out: the music as the circles, the pickers as the lines
+ * --------------------------------------------------------------------------------------------------------- */
+
+/** The piece one entry of a tie stands for: the track, where the sources name one (the first of several); else the record or the show. */
+export function pieceFor( G, e ) {
+	const t = e.how === TRACK && e.songs.length ? trackOn( G, e.m, e.songs[ 0 ] ) : undefined;
+	return t === undefined ? G.whole[ e.m ] : t;
+}
+
+/** A record's track by its song, as a piece; undefined where no source says who's on it. */
+export function trackOn( G, m, song ) {
+	return G.trackOf.get( m + '\n' + song );
+}
+
+/** A piece by what an address calls it: its record's or show's key, and for a track the song. null when there's none. */
+export function findPiece( G, key, song ) {
+	const m = G.music.findIndex( ( x ) => x.key === key );
+	if ( m < 0 ) {
+		return null;
+	}
+	const t = song ? trackOn( G, m, song ) : undefined;
+	return t === undefined ? G.whole[ m ] : t;
+}
+
+/** What to call a piece: its name, a line to go under it, and the whole of it. */
+export function called( G, piece ) {
+	const m = G.music[ piece.m ];
+	const n = naming( G, { m: piece.m, how: piece.kind === 'show' ? STAGE : RECORD, songs: [] } );
+	if ( piece.kind === 'track' ) {
+		return { glyph: 'track', name: piece.song, sub: m.title || m.key, long: n.long };
+	}
+	if ( piece.kind === 'show' ) {
+		return { glyph: 'show', name: n.brief, sub: when( m.date ), long: n.long };
+	}
+	return { glyph: 'record', name: n.brief, sub: [ m.artist, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
+}
+
+/**
+ * Where a piece's pickers lead: the other pieces they're on. Inside out, a line is the pickers two pieces share,
+ * and the nearest piece is the least worth naming: the same band the next night shares everyone and says
+ * nothing. What's named is the different ways on, so each named piece is reached by a different set of this
+ * one's pickers. Each picker in turn (those in `hand` first: the ones the reader came by) takes the loudest
+ * piece they lead to that says something new: the freest first, as everywhere; then the one the fewest others
+ * here are on; then the newest. Once round, for those no line has named yet; then round again until `want` are
+ * named or nothing new is left. `keep` are pieces that stay whatever their rank: where the reader came from.
+ *
+ * A record's own tracks aren't somewhere it leads; another track of the same record is somewhere a track leads.
+ *
+ * Returns { cast, named: [{ id, via }], rest: [{ id, via }] }: cast, this piece's pickers in the order they were
+ * asked; via, the pickers on both, the one who chose it first.
+ */
+export function leads( G, id, want = 6, hand = [], keep = [] ) {
+	const me = G.pieces[ id ];
+	const first = new Map( hand.map( ( p, i ) => [ p, i ] ) );
+	const cast = me.cast.slice().sort( ( x, y ) => ( first.has( y ) - first.has( x ) ) || ( first.get( x ) - first.get( y ) || 0 ) ||
+		( G.on[ y ].length - G.on[ x ].length ) || G.people[ x ].name.localeCompare( G.people[ y ].name ) );
+	const via = new Map();
+	for ( const p of cast ) {
+		for ( const x of G.on[ p ] ) {
+			if ( x === id || ( me.kind !== 'track' && G.pieces[ x ].m === me.m ) ) {
+				continue;
+			}
+			if ( !via.has( x ) ) {
+				via.set( x, [] );
+			}
+			via.get( x ).push( p );
+		}
+	}
+	const tier = ( x ) => G.music[ G.pieces[ x ].m ].tier, day = ( x ) => roughly( G.music[ G.pieces[ x ].m ].date );
+	const newest = ( x, y ) => ( day( y ) - day( x ) || 0 ) || ( x - y );
+	const ways = new Map( cast.map( ( p ) => [ p, [] ] ) );
+	for ( const [ x, ps ] of via ) {
+		ps.forEach( ( p ) => ways.get( p ).push( x ) );
+	}
+	for ( const list of ways.values() ) {
+		list.sort( ( x, y ) => ( tier( y ) - tier( x ) ) || ( via.get( x ).length - via.get( y ).length ) || newest( x, y ) );
+	}
+	const named = [], taken = new Set(), said = new Set(), covered = new Set();
+	const take = ( x, p ) => {
+		const ps = via.get( x );
+		named.push( { id: x, via: p === undefined ? ps.slice() : [ p, ...ps.filter( ( q ) => q !== p ) ] } );
+		taken.add( x );
+		said.add( ps.join() );
+		ps.forEach( ( q ) => covered.add( q ) );
+	};
+	for ( const x of keep ) {
+		if ( via.has( x ) && !taken.has( x ) ) {
+			take( x, hand.find( ( p ) => via.get( x ).includes( p ) ) );
+		}
+	}
+	for ( let round = 0; named.length < want; round++ ) {
+		let any = false;
+		for ( const p of cast ) {
+			if ( named.length >= want ) {
+				break;
+			}
+			if ( round === 0 && covered.has( p ) ) {
+				continue;
+			}
+			const x = ways.get( p ).find( ( y ) => !taken.has( y ) && !said.has( via.get( y ).join() ) );
+			if ( x !== undefined ) {
+				take( x, p );
+				any = true;
+			}
+		}
+		if ( !any && round > 0 ) {
+			break;
+		}
+	}
+	const rest = [ ...via.keys() ].filter( ( x ) => !taken.has( x ) )
+		.sort( ( x, y ) => ( tier( y ) - tier( x ) ) || ( via.get( y ).length - via.get( x ).length ) || newest( x, y ) )
+		.map( ( x ) => ( { id: x, via: via.get( x ) } ) );
+	return { cast, named, rest };
+}
+
+/**
+ * A picker's company with those the reader came by first, whatever their rank: the connections that were in
+ * sight stay in sight (Justin, #connectome, 13 Nov 2026). One of them who only shares a record with this picker
+ * stays too. comp is company()'s; returns the same shape.
+ */
+export function keeping( G, id, comp, keep = [] ) {
+	const first = [];
+	for ( const k of keep ) {
+		const tie = G.adj[ id ].get( k );
+		if ( tie && k !== id && !first.some( ( c ) => c.id === k ) ) {
+			first.push( comp.find( ( c ) => c.id === k ) || { id: k, tie } );
+		}
+	}
+	return first.concat( comp.filter( ( c ) => !first.some( ( f ) => f.id === c.id ) ) );
+}
+
+/**
+ * Who sits where when the view changes. wants[i] is where the i-th would be had the whole picture only slid
+ * (null for one who wasn't in it). Each of those takes the free place nearest that, the first in line choosing
+ * first; the newcomers fill what's left, in order. Returns each one's place, as a number in places (-1 past
+ * the last place).
+ */
+export function seat( places, wants ) {
+	const free = places.map( ( _, i ) => i );
+	const out = wants.map( () => -1 );
+	const far = ( p, w ) => ( p.x - w.x ) * ( p.x - w.x ) + ( p.y - w.y ) * ( p.y - w.y );
+	wants.forEach( ( w, i ) => {
+		if ( !w || !free.length ) {
+			return;
+		}
+		let best = 0;
+		for ( let k = 1; k < free.length; k++ ) {
+			if ( far( places[ free[ k ] ], w ) < far( places[ free[ best ] ], w ) ) {
+				best = k;
+			}
+		}
+		out[ i ] = free.splice( best, 1 )[ 0 ];
+	} );
+	return out.map( ( at ) => ( at < 0 && free.length ? free.shift() : at ) );
+}
+
+/**
+ * Where a name tag sits on the line from one circle (a, of radius ra) to another, and how wide it may be there
+ * without lying over either: as near the middle of the line as leaves it the most room. A line that runs up
+ * and down has room for any name; a short one that runs across may have none, and the caller puts the tag
+ * elsewhere. Returns { x, y, room }.
+ */
+export function tagAt( a, b, ra, rb, most = 150, high = 23 ) {
+	let best = null;
+	for ( const f of [ 0.5, 0.55, 0.45, 0.6, 0.4, 0.65, 0.35 ] ) {
+		const x = a.x + ( b.x - a.x ) * f, y = a.y + ( b.y - a.y ) * f;
+		const clear = ( c, r ) => ( Math.abs( y - c.y ) >= r + high / 2 + 2 ? Infinity : Math.abs( x - c.x ) - r - 3 );
+		const room = Math.max( 0, Math.min( most, 2 * Math.min( clear( a, ra ), clear( b, rb ) ) ) );
+		if ( !best || room > best.room + 0.5 ) {
+			best = { x, y, room };
+		}
+	}
+	return best;
 }
 
 /**

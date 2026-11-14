@@ -289,3 +289,108 @@ test( 'in a narrow upright frame the ladder stands up: a at the top, b at the bo
 	assert.equal( K.ladder( { W: 844, H: 390, hops: 3, chains: 2, la: 40, lb: 40 } ).upright, undefined );   // a phone on its side
 	assert.equal( K.ladder( { W: 1100, H: 700, hops: 3, chains: 3, la: 40, lb: 40 } ).upright, undefined );
 } );
+
+/* ---- inside out: the music as the circles, the pickers as the lines ---- */
+
+const SILVER = K.findPiece( G, 'arthel:4masks', 'Silver 44' ), VICTORY = K.findPiece( G, 'arthel:4masks', 'Victory' );
+const called = ( id ) => K.called( G, G.pieces[ id ] ).name;
+
+test( 'a piece is a show, a record, or a track where the sources say who is on it', () => {
+	assert.equal( G.pieces.length, MUSIC.length + 5 );
+	assert.deepEqual( G.pieces.slice( 0, MUSIC.length ).map( ( p ) => p.kind ), [ 'record', 'show', 'record', 'record', 'show', 'show' ] );
+	assert.deepEqual( [ G.pieces[ SILVER ].kind, G.pieces[ SILVER ].song, G.pieces[ SILVER ].cast ], [ 'track', 'Silver 44', [ KYLE, JUSTIN ] ] );
+	const [ show, record ] = tie( KYLE, JUSTIN ).ev;
+	assert.equal( K.pieceFor( G, record ), SILVER );                 // the first track named, of the two they share
+	assert.equal( K.pieceFor( G, show ), 5 );
+	assert.equal( K.pieceFor( G, tie( KYLE, CHOIR ).ev[ 0 ] ), 2 );  // no source says which track: the record whole
+} );
+
+test( "a picker's pieces: the tracks they're on, and a record whole only where no source says which track", () => {
+	assert.deepEqual( G.on[ KYLE ].slice().sort( ( x, y ) => x - y ), [ 1, 2, 4, 5, SILVER, VICTORY ] );   // 4masks by its tracks; Alison Brown's record whole
+	assert.ok( !G.on[ JUSTIN ].includes( 0 ) && !G.on[ JUSTIN ].includes( 2 ) );
+	assert.deepEqual( G.on[ LONE ], [] );
+} );
+
+test( 'a piece is found by its key, and a track by its song; a song nobody is named on finds the record', () => {
+	assert.equal( K.findPiece( G, 'arthel:4masks' ), 0 );
+	assert.equal( G.pieces[ K.findPiece( G, 'arthel:4masks', 'Victory' ) ].song, 'Victory' );
+	assert.equal( K.findPiece( G, 'arthel:4masks', 'Not On It' ), 0 );
+	assert.equal( K.findPiece( G, 'nope' ), null );
+} );
+
+test( 'a piece is called what a reader would call it', () => {
+	assert.deepEqual( K.called( G, G.pieces[ SILVER ] ), { glyph: 'track', name: 'Silver 44', sub: '4masks', long: '4masks' } );
+	assert.deepEqual( [ K.called( G, G.pieces[ 1 ] ).name, K.called( G, G.pieces[ 1 ] ).sub ], [ 'Sam Grisman Project', '5 Jul 2025' ] );
+	assert.deepEqual( [ K.called( G, G.pieces[ 5 ] ).name, K.called( G, G.pieces[ 5 ] ).sub ], [ 'Hello Decentralization', 'block 11,908,068' ] );
+	assert.deepEqual( [ K.called( G, G.pieces[ 2 ] ).name, K.called( G, G.pieces[ 2 ] ).sub ], [ 'Safe, Sensible And Sane', 'Alison Brown · 2025' ] );
+} );
+
+test( 'where a piece leads: each named piece by a different set of its pickers, the freest first', () => {
+	const L = K.leads( G, SILVER );
+	assert.deepEqual( L.cast, [ KYLE, JUSTIN ] );                    // whoever is on the most comes first
+	// Kyle alone leads to the newest tape; Justin's freest way on has Kyle on it too; then Justin alone, to a Full Release.
+	assert.deepEqual( L.named.map( ( n ) => [ called( n.id ), n.via ] ),
+		[ [ 'Sam Grisman Project', [ KYLE ] ], [ 'Hello Decentralization', [ JUSTIN, KYLE ] ], [ 'A Duet', [ JUSTIN ] ] ] );
+	const sets = L.named.map( ( n ) => n.via.slice().sort().join() );
+	assert.equal( new Set( sets ).size, sets.length );
+	// The rest are counted behind them: the other track of the same record, an older tape, a record, a stream.
+	assert.deepEqual( L.rest.map( ( r ) => called( r.id ) ), [ 'Victory', 'Sam Bush Band', 'Safe, Sensible And Sane', 'Unknown' ] );
+	assert.deepEqual( L.rest[ 0 ].via, [ KYLE, JUSTIN ] );
+} );
+
+test( 'the pickers the reader came by are asked first, and the piece they came from stays', () => {
+	const L = K.leads( G, SILVER, 6, [ JUSTIN ] );
+	assert.deepEqual( L.cast, [ JUSTIN, KYLE ] );
+	assert.equal( L.named[ 0 ].via[ 0 ], JUSTIN );
+	const kept = K.leads( G, SILVER, 6, [ JUSTIN ], [ VICTORY ] );
+	assert.deepEqual( [ kept.named[ 0 ].id, kept.named[ 0 ].via ], [ VICTORY, [ JUSTIN, KYLE ] ] );
+	assert.equal( K.leads( G, SILVER, 2 ).named.length, 2 );
+} );
+
+test( "a record's own tracks aren't somewhere it leads; another track of the same record is where a track leads", () => {
+	const whole = K.leads( G, 0 );
+	assert.ok( !whole.named.concat( whole.rest ).some( ( x ) => G.pieces[ x.id ].m === 0 ) );
+	assert.ok( K.leads( G, SILVER ).rest.some( ( x ) => x.id === VICTORY ) );
+	assert.deepEqual( K.leads( G, K.findPiece( G, 'arthel:show:0-1' ) ).cast, [ KYLE, JUSTIN ] );
+} );
+
+test( 'one night is one piece, however many tapers taped it; a show with a name is called by it', () => {
+	const g = K.build( { people: [ [ 'A', 1, '' ], [ 'B', 1, '' ], [ 'C', 0, '' ] ], music: [
+		[ 'lma:band2025-06-14.akg', 'show', 'The Band', '2025-06-14', 'The Band Live at The Hall on 2025-06-14', 2, 'https://archive.org/details/akg', '' ],
+		[ 'lma:band2025-06-14.mv88', 'show', 'The Band', '2025-06-14', 'The Band Live at The Hall on 2025-06-14', 2, 'https://archive.org/details/mv88', '' ],
+		[ 'arthel:show:0-9', 'show', 'chiva lounge', 'block 15735471', 'devcon VI night 1', 2, 'gh/show.yaml', '' ] ],
+	cast: [ [ [ 0, 'guitar' ], [ 1, '' ] ], [ [ 1, 'banjo' ], [ 2, '' ] ], [ [ 0, '' ], [ 2, '' ] ] ],
+	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ] ] ], [ 1, 2, [ [ 1, 2, 1, [] ] ] ], [ 0, 2, [ [ 2, 2, 1, [] ] ] ] ] } );
+	assert.deepEqual( g.whole, [ 0, 0, 2 ] );
+	assert.deepEqual( [ g.pieces[ 0 ].cast, g.pieces[ 0 ].also, g.pieces[ 1 ].cast ], [ [ 0, 1, 2 ], [ 1 ], [] ] );
+	assert.equal( K.pieceFor( g, g.adj[ 1 ].get( 2 ).ev[ 0 ] ), 0 );
+	assert.equal( K.findPiece( g, 'lma:band2025-06-14.mv88' ), 0 );
+	assert.deepEqual( K.leads( g, 0 ).named.map( ( n ) => n.id ), [ 2 ] );    // the other tape of the night isn't somewhere else
+	const own = K.naming( g, g.adj[ 0 ].get( 2 ).ev[ 0 ] );
+	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1', 'devcon VI night 1', 'chiva lounge, block 15,735,471' ] );
+} );
+
+test( 'those the reader came by stay in the company, first, whatever their rank; a stranger does not join it', () => {
+	const comp = K.company( G, KYLE );
+	const ring = K.keeping( G, KYLE, comp, [ CHOIR, JUSTIN, LONE, KYLE ] );
+	assert.deepEqual( ring.slice( 0, 2 ).map( ( c ) => c.id ), [ CHOIR, JUSTIN ] );   // Choir only shares a record with Kyle, and stays
+	assert.equal( ring.length, comp.length + 1 );
+	assert.equal( new Set( ring.map( ( c ) => c.id ) ).size, ring.length );
+	assert.deepEqual( K.keeping( G, KYLE, comp ), comp );
+} );
+
+test( 'when the view changes, whoever was in sight takes the free place nearest where they would have slid to', () => {
+	const places = [ { x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 } ];
+	assert.deepEqual( K.seat( places, [ null, { x: 19, y: 0 }, { x: 1, y: 1 } ] ), [ 1, 2, 0 ] );
+	assert.deepEqual( K.seat( places, [ { x: 9, y: 0 }, { x: 9, y: 0 } ] ), [ 1, 0 ] );          // the first in line chooses first
+	assert.deepEqual( K.seat( places.slice( 0, 1 ), [ null, { x: 0, y: 0 } ] ), [ -1, 0 ] );       // no place left: -1
+	assert.deepEqual( K.seat( places, [ null, null, null ] ), [ 0, 1, 2 ] );
+} );
+
+test( 'a name tag sits on its line where there is room clear of both circles', () => {
+	assert.deepEqual( K.tagAt( { x: 0, y: 0 }, { x: 300, y: 0 }, 24, 15 ), { x: 150, y: 0, room: 150 } );   // a long line: the middle, and all the room
+	assert.deepEqual( K.tagAt( { x: 0, y: 0 }, { x: 0, y: 120 }, 24, 15 ), { x: 0, y: 60, room: 150 } );     // up and down: clear above and below
+	const short = K.tagAt( { x: 0, y: 0 }, { x: 100, y: 0 }, 24, 15 );                                      // short, across: hardly any
+	assert.ok( short.room < 60 && short.x > 50 );                                                           // and what there is, nearer the smaller circle
+	assert.equal( K.tagAt( { x: 0, y: 0 }, { x: 30, y: 0 }, 24, 15 ).room, 0 );
+} );
