@@ -74,7 +74,8 @@ class SkinBroadside extends \SkinMustache {
 
 		$post = $this->post( $title, $html );
 		$post['has-video'] = Post::videoCids( $html ) !== [];
-		$post['has-side'] = $post['has-video'] || $hasToc || !empty( $post['tiding'] );
+		// The side column: what plays and what is said. A post whose writer has songs always has one.
+		$post['has-side'] = $post['has-video'] || $hasToc || !empty( $post['tiding'] ) || !empty( $post['songs'] );
 		$data['data-post'] = $post;
 
 		$mode = $this->mode();
@@ -271,7 +272,9 @@ class SkinBroadside extends \SkinMustache {
 					'label' => $this->msg( 'pickipediacontent-posts-more' )->numParams( count( $rest ) )->text(),
 				] : null,
 			] : null,
+			// Named for who wrote them: beside the post they stand apart from the writer's name.
 			'songs' => $songs ? [
+				'heading' => $this->msg( 'pickipediacontent-posts-songs-by', $author['name'] )->text(),
 				'array-items' => array_slice( $songs, 0, PostData::SONGS ),
 				'person' => $author['person'],
 			] : null,

@@ -293,6 +293,12 @@ a.bs-brand {
 		grid-template-areas: "main side" "rail rail";
 	}
 	.bs-page--side .bs-side { display: block; }
+	/* The writer's songs are in the page twice (templates/broadside/Songs.mustache): among the rail's
+	   shelves, and in the side column. Where the side column shows, it has them and the rail's are put
+	   away; anywhere narrower it is not shown, and the rail has them. They are beside the post because
+	   the rail was taller than a laptop's window with them at its foot (at 1440 by 900 they began 922px
+	   down a rail 900px tall), while most posts had nothing beside them at all (Justin, 14 Nov 2026). */
+	.bs-page--side .bs-rail .bs-songs { display: none; }
 }
 
 /* Wide: who wrote it, the post, and what stands beside it. */

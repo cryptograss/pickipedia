@@ -270,7 +270,12 @@ function bareLinkColours( string $css, array $classes ): array {
 }
 $skin = dirname( __DIR__ );
 $onLinks = [];
-preg_match_all( '/<a\b[^>]*?\bclass="([^"]+)"/', (string)file_get_contents( $skin . '/templates/broadside/skin.mustache' ), $inTemplate );
+// Every template of the skin: what skin.mustache includes ({{>Songs}}) has links of its own.
+$templates = '';
+foreach ( glob( $skin . '/templates/broadside/*.mustache' ) as $template ) {
+	$templates .= (string)file_get_contents( $template );
+}
+preg_match_all( '/<a\b[^>]*?\bclass="([^"]+)"/', $templates, $inTemplate );
 preg_match_all( "/\\bel\\( 'a', '([^']+)'/", (string)file_get_contents( $skin . '/resources/skins.broadside/broadside.js' ), $inScript );
 foreach ( array_merge( $inTemplate[1], $inScript[1] ) as $list ) {
 	foreach ( preg_split( '/\s+/', trim( $list ) ) as $class ) {
@@ -280,8 +285,8 @@ foreach ( array_merge( $inTemplate[1], $inScript[1] ) as $list ) {
 	}
 }
 $onLinks = array_keys( $onLinks );
-check( 'the classes on links are found, in the template and in the script',
-	!array_diff( [ 'bs-brand', 'bs-author', 'bs-tidingcard', 'bs-card-in' ], $onLinks ), json_encode( $onLinks ) );
+check( 'the classes on links are found, in the templates and in the script',
+	!array_diff( [ 'bs-brand', 'bs-author', 'bs-tidingcard', 'bs-play', 'bs-songpage', 'bs-card-in' ], $onLinks ), json_encode( $onLinks ) );
 same( 'a rule that colours a link by its class alone is seen',
 	bareLinkColours( "/* x */ .bs-brand { font: 1rem serif; color: red }\n@media ( min-width: 1px ) { .bs-other, .bs-author { color: blue; } }",
 		[ 'bs-brand', 'bs-author' ] ), [ '.bs-brand', '.bs-author' ] );
@@ -295,6 +300,56 @@ foreach ( glob( $skin . '/resources/skins.broadside/*.css' ) as $sheet ) {
 	}
 }
 same( "none of Broadside's stylesheets has one", $atFault, [] );
+
+echo "\nThe writer's songs, beside the post and after it\n";
+/**
+ * What is inside the first { … } that follows $opening in a stylesheet, its comments taken out; null if
+ * there is none.
+ */
+function blockAfter( string $css, string $opening ): ?string {
+	$css = preg_replace( '#/\*.*?\*/#s', '', $css );
+	$at = strpos( $css, $opening );
+	$from = $at === false ? false : strpos( $css, '{', $at );
+	if ( $from === false ) {
+		return null;
+	}
+	for ( $i = $from, $depth = 0; $i < strlen( $css ); $i++ ) {
+		$depth += $css[$i] === '{' ? 1 : ( $css[$i] === '}' ? -1 : 0 );
+		if ( $depth === 0 ) {
+			return substr( $css, $from + 1, $i - $from - 1 );
+		}
+	}
+	return null;
+}
+same( 'a block is read to its own closing brace', blockAfter( "/* { */ @media ( x ) { .a { b: c } .d { e: f } } .g { h: i }", '@media ( x )' ),
+	' .a { b: c } .d { e: f } ' );
+same( 'and what is not there is none', blockAfter( '.a { b: c }', '@media' ), null );
+$page = (string)file_get_contents( $skin . '/templates/broadside/skin.mustache' );
+$within = static function ( string $class ) use ( $page ): string {
+	return preg_match( '#<aside class="' . $class . '".*?</aside>#s', $page, $m ) ? $m[0] : '';
+};
+// Songs are read in the side column where there is one and in the rail where there isn't, so the page
+// has them in both. Taken out of the rail as a doubling, they would be gone from every phone.
+same( 'the page has them twice: among the rail\'s shelves, and in the side column',
+	[ substr_count( $page, '{{>Songs}}' ), substr_count( $within( 'bs-rail' ), '{{>Songs}}' ), substr_count( $within( 'bs-side' ), '{{>Songs}}' ) ],
+	[ 2, 1, 1 ] );
+check( 'and are written once', substr_count( $templates, 'class="bs-shelf bs-songs"' ) === 1 );
+// One of the two is shown: the rail's are put away by the same rule of width that shows the side column.
+$frame = (string)file_get_contents( $skin . '/resources/skins.broadside/frame.css' );
+$shows = '.bs-page--side .bs-side { display: block; }';
+$putsAway = '.bs-page--side .bs-rail .bs-songs { display: none; }';
+check( 'the side column is hidden until the stylesheet shows it',
+	(bool)preg_match( '/^\.bs-side \{[^}]*\bdisplay: none;/m', $frame ) && substr_count( $frame, $shows ) === 1 );
+$block = null;
+foreach ( [ '62rem', '80rem' ] as $width ) {
+	$found = blockAfter( $frame, "@media ( min-width: $width )" );
+	if ( $found !== null && str_contains( $found, $shows ) ) {
+		$block = $found;
+	}
+}
+check( "where it is shown, the rail's songs are put away, and nowhere else",
+	$block !== null && str_contains( $block, $putsAway ) && substr_count( $frame, '.bs-rail .bs-songs' ) === 1,
+	'the two rules are not in the same @media block of frame.css' );
 
 echo $failures ? "\ncheck-posts.php: $failures FAILED\n" : "\ncheck-posts.php: all ok\n";
 exit( $failures ? 1 : 0 );
