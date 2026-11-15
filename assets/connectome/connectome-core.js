@@ -256,6 +256,55 @@ export function landing( G ) {
 }
 
 /**
+ * A picker's company in the order a view names them, a few to a record or a show (Justin, #connectome, 15 Nov 2026:
+ * "Priority list as described above, but only at most two 1-hop connections from any given record or show, unless
+ * there are no other connecting objects available"). Down the company by what comes first (standing()), each goes by
+ * the best thing they share with the middle that hasn't already brought in `cap` others; one whose every shared
+ * record and show is full waits, and those waiting come after everyone else, in their own order, so they're named
+ * only when nobody else is left to name. The first `fixed` (those the reader came by) stay first, as they are, and
+ * count toward the cap. Each is returned with `by`: the entry they're named by (none, for those who waited).
+ */
+export function fewPer( G, comp, cap = 2, fixed = 0 ) {
+	const used = new Map(), out = [];
+	const take = ( c, e ) => {
+		if ( e ) {
+			used.set( e.m, ( used.get( e.m ) || 0 ) + 1 );
+		}
+		out.push( Object.assign( {}, c, { by: e } ) );
+	};
+	const best = ( c ) => {                                       // the first by standing of what they share that has room
+		let at = null, high = -1;
+		for ( const e of c.tie.ev ) {
+			const s = ( used.get( e.m ) || 0 ) < cap ? standing( G.music[ e.m ], e.how ) : -1;
+			if ( s > high ) {
+				at = e;
+				high = s;
+			}
+		}
+		return { at, high };
+	};
+	comp.slice( 0, fixed ).forEach( ( c ) => take( c, c.tie.ev.reduce( ( x, e ) => ( standing( G.music[ e.m ], e.how ) >
+		standing( G.music[ x.m ], x.how ) ? e : x ), c.tie.ev[ 0 ] ) ) );
+	const left = comp.slice( fixed );
+	for ( ;; ) {
+		let pick = -1, by = null, high = -1;
+		left.forEach( ( c, i ) => {
+			const b = best( c );
+			if ( b.high > high ) {                                   // of equals, the first in the company's own order
+				pick = i;
+				by = b.at;
+				high = b.high;
+			}
+		} );
+		if ( pick < 0 ) {
+			break;
+		}
+		take( left.splice( pick, 1 )[ 0 ], by );
+	}
+	return out.concat( left.map( ( c ) => Object.assign( {}, c, { by: undefined } ) ) );
+}
+
+/**
  * Another turn of a picker's company (Justin, #connectome, 15 Nov 2026: "a button to cycle connections"): those
  * the reader came by stay first (`kept` of them), and the rest come round `per` at a time, so turn 1 names the
  * next `per` of them, and so on round to the start. Returns the ring in its new order.
