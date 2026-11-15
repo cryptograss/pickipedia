@@ -140,7 +140,8 @@ def icon_for(roles, icons):
     return ''
 
 
-def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None, songcuts=None, icons=()):
+def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None, songcuts=None, icons=(),
+           pics=None):
     """
     pairs     the store's pairs, each name already as the wiki knows it
     targets   id -> {kind, title, date, artist, grp, formats: [..]}
@@ -256,7 +257,8 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
 
     return {
         'v': 1, 'built': built, 'month': month, 'featured': [pid[f] for f in featured if f in pid],
-        'people': [[n, 1 if has_page(n) else 0, inst.get(n, '')] for n in names],
+        # name, has a page, instrument; and, only where their page gives one, the file that is their picture
+        'people': [[n, 1 if has_page(n) else 0, inst.get(n, '')] + ([pics[n]] if pics and pics.get(n) else []) for n in names],
         'music': music,
         'cast': [[[pid[n], '; '.join(r)] for n, r in sorted(cast[t].items())] for t in used],
         'ties': [[a, b, sorted(ev, key=lambda e: (-e[1], -e[2], e[0]))] for (a, b), ev in sorted(ties.items())],

@@ -168,7 +168,7 @@ test( 'a date is read only where its shape is certain', () => {
 } );
 
 test( 'music is named by what a reader would call it', () => {
-	const [ show, record ] = tie( KYLE, JUSTIN ).ev;               // the record gives no date, so it comes after
+	const [ record, show ] = tie( KYLE, JUSTIN ).ev;               // a Permanent studio track comes before a Permanent show
 	assert.deepEqual( K.naming( G, record ), { glyph: 'track', short: 'Silver 44 +1', brief: 'Silver 44', long: '4masks', songs: [ 'Silver 44', 'Victory' ] } );
 	assert.equal( K.naming( G, show ).short, 'Hello Decentralization' );     // cryptograss's own show: its title
 	const tape = K.naming( G, tie( KYLE, MOLLY ).ev[ 0 ] );
@@ -299,7 +299,7 @@ test( 'a piece is a show, a record, or a track where the sources say who is on i
 	assert.equal( G.pieces.length, MUSIC.length + 5 );
 	assert.deepEqual( G.pieces.slice( 0, MUSIC.length ).map( ( p ) => p.kind ), [ 'record', 'show', 'record', 'record', 'show', 'show' ] );
 	assert.deepEqual( [ G.pieces[ SILVER ].kind, G.pieces[ SILVER ].song, G.pieces[ SILVER ].cast ], [ 'track', 'Silver 44', [ KYLE, JUSTIN ] ] );
-	const [ show, record ] = tie( KYLE, JUSTIN ).ev;
+	const [ record, show ] = tie( KYLE, JUSTIN ).ev;
 	assert.equal( K.pieceFor( G, record ), SILVER );                 // the first track named, of the two they share
 	assert.equal( K.pieceFor( G, show ), 5 );
 	assert.equal( K.pieceFor( G, tie( KYLE, CHOIR ).ev[ 0 ] ), 2 );  // no source says which track: the record whole
@@ -320,21 +320,22 @@ test( 'a piece is found by its key, and a track by its song; a song nobody is na
 
 test( 'a piece is called what a reader would call it', () => {
 	assert.deepEqual( K.called( G, G.pieces[ SILVER ] ), { glyph: 'track', name: 'Silver 44', sub: '4masks', long: '4masks' } );
-	assert.deepEqual( [ K.called( G, G.pieces[ 1 ] ).name, K.called( G, G.pieces[ 1 ] ).sub ], [ 'Sam Grisman Project', '5 Jul 2025' ] );
-	assert.deepEqual( [ K.called( G, G.pieces[ 5 ] ).name, K.called( G, G.pieces[ 5 ] ).sub ], [ 'Hello Decentralization', 'block 11,908,068' ] );
+	assert.deepEqual( [ K.called( G, G.pieces[ 1 ] ).name, K.called( G, G.pieces[ 1 ] ).sub ], [ 'Sam Grisman Project', 'live · 5 Jul 2025' ] );    // a show always says it is one
+	assert.deepEqual( [ K.called( G, G.pieces[ 5 ] ).name, K.called( G, G.pieces[ 5 ] ).sub ], [ 'Hello Decentralization', 'live · block 11,908,068' ] );
 	assert.deepEqual( [ K.called( G, G.pieces[ 2 ] ).name, K.called( G, G.pieces[ 2 ] ).sub ], [ 'Safe, Sensible And Sane', 'Alison Brown · 2025' ] );
 } );
 
 test( 'where a piece leads: each named piece by a different set of its pickers, the freest first', () => {
 	const L = K.leads( G, SILVER );
 	assert.deepEqual( L.cast, [ KYLE, JUSTIN ] );                    // whoever is on the most comes first
-	// Kyle alone leads to the newest tape; Justin's freest way on has Kyle on it too; then Justin alone, to a Full Release.
+	// A Permanent studio track first: the other one of the same record, which both are on. Then Kyle alone, to the
+	// newest tape; then Justin alone, to a Full Release. Their show together says nothing the track hasn't.
 	assert.deepEqual( L.named.map( ( n ) => [ called( n.id ), n.via ] ),
-		[ [ 'Sam Grisman Project', [ KYLE ] ], [ 'Hello Decentralization', [ JUSTIN, KYLE ] ], [ 'A Duet', [ JUSTIN ] ] ] );
+		[ [ 'Victory', [ KYLE, JUSTIN ] ], [ 'Sam Grisman Project', [ KYLE ] ], [ 'A Duet', [ JUSTIN ] ] ] );
 	const sets = L.named.map( ( n ) => n.via.slice().sort().join() );
 	assert.equal( new Set( sets ).size, sets.length );
-	// The rest are counted behind them: the other track of the same record, an older tape, a record, a stream.
-	assert.deepEqual( L.rest.map( ( r ) => called( r.id ) ), [ 'Victory', 'Sam Bush Band', 'Safe, Sensible And Sane', 'Unknown' ] );
+	// The rest are counted behind them: their show together, an older tape, a stream's track, a record whole.
+	assert.deepEqual( L.rest.map( ( r ) => called( r.id ) ), [ 'Hello Decentralization', 'Sam Bush Band', 'Unknown', 'Safe, Sensible And Sane' ] );
 	assert.deepEqual( L.rest[ 0 ].via, [ KYLE, JUSTIN ] );
 } );
 
@@ -350,7 +351,7 @@ test( 'the pickers the reader came by are asked first, and the piece they came f
 test( "a record's own tracks aren't somewhere it leads; another track of the same record is where a track leads", () => {
 	const whole = K.leads( G, 0 );
 	assert.ok( !whole.named.concat( whole.rest ).some( ( x ) => G.pieces[ x.id ].m === 0 ) );
-	assert.ok( K.leads( G, SILVER ).rest.some( ( x ) => x.id === VICTORY ) );
+	assert.ok( K.leads( G, SILVER ).named.concat( K.leads( G, SILVER ).rest ).some( ( x ) => x.id === VICTORY ) );
 	assert.deepEqual( K.leads( G, K.findPiece( G, 'arthel:show:0-1' ) ).cast, [ KYLE, JUSTIN ] );
 } );
 
@@ -693,4 +694,68 @@ test( 'with nothing in the way a name sits straight out from the middle; a name 
 	const edge = K.beside( { x: 930, y: 300 }, 6, 100, 15, none, [], FRAME, { x: 1, y: 0 } );
 	assert.ok( edge.box.x2 <= 946 && edge.box.x1 >= 4 );
 	assert.equal( K.beside( { x: 10, y: 10 }, 6, 100, 15, none, [], { W: 60, H: 40 }, { x: 1, y: 0 } ), null );     // nowhere at all
+} );
+
+/* ---- what comes first (Justin, #connectome, 15 Nov 2026) ---- */
+
+test( 'what comes first: a Permanent studio track, a Permanent show, a Full studio track, another show; then the rest', () => {
+	const rec = ( tier ) => ( { kind: 'record', tier } ), show = ( tier ) => ( { kind: 'show', tier } );
+	const order = [ [ rec( 2 ), K.TRACK ], [ show( 2 ), K.STAGE ], [ rec( 1 ), K.TRACK ], [ show( 1 ), K.STAGE ], [ rec( 0 ), K.TRACK ], [ rec( 2 ), K.RECORD ] ];
+	const ranks = order.map( ( [ m, how ] ) => K.standing( m, how ) );
+	assert.deepEqual( ranks.slice().sort( ( x, y ) => y - x ), ranks );
+	assert.equal( new Set( ranks ).size, ranks.length );
+	assert.equal( K.standing( show( 0 ), K.STAGE ), K.standing( show( 1 ), K.STAGE ) );         // "other shows": one kind
+	assert.equal( K.standing( show( 2 ), K.TRACK ), K.standing( show( 2 ), K.STAGE ) );         // a show is a show, whoever sat in on which song
+	// A tie stands as high as the best thing in it, and that comes before how much there is of anything lesser.
+	const music = [ rec( 2 ), show( 2 ), rec( 1 ), show( 0 ) ].map( ( m, id ) => Object.assign( m, { id, date: '', key: 'k' + id } ) );
+	const tieOf = ( ...ev ) => K.summarize( 0, 1, ev.map( ( [ m, how, w ] ) => ( { m, how, w, songs: how === K.TRACK ? [ 'A Song' ] : [] } ) ), music );
+	const oneTrack = tieOf( [ 0, K.TRACK, 0.5 ] ), manyShows = tieOf( [ 1, K.STAGE, 40 ] ), fullTrack = tieOf( [ 2, K.TRACK, 30 ] ), otherShow = tieOf( [ 3, K.STAGE, 90 ] );
+	assert.deepEqual( [ oneTrack.rank, manyShows.rank, fullTrack.rank, otherShow.rank ], [ 5, 4, 3, 2 ] );
+	assert.equal( tieOf( [ 3, K.STAGE, 1 ], [ 0, K.TRACK, 1 ], [ 2, K.TRACK, 1 ] ).rank, 5 );        // the best of what's in it, wherever it comes
+	assert.ok( K.loudness( oneTrack ) > K.loudness( manyShows ) && K.loudness( manyShows ) > K.loudness( fullTrack ) && K.loudness( fullTrack ) > K.loudness( otherShow ) );
+	assert.ok( K.loudness( otherShow ) > K.loudness( tieOf( [ 0, K.RECORD, 99 ] ) ) );             // only a record shared: after all who played together
+	assert.ok( K.loudness( tieOf( [ 1, K.STAGE, 3 ] ) ) > K.loudness( tieOf( [ 1, K.STAGE, 2 ] ) ) );   // alike in standing: the more, the louder
+	assert.ok( K.loudness( tieOf( [ 0, K.RECORD, 1 ] ) ) > K.loudness( tieOf( [ 2, K.RECORD, 50 ] ) ) );  // only sharing a record: the freest record first
+	// And within a tie, its music is listed in that order.
+	assert.deepEqual( tieOf( [ 3, K.STAGE, 1 ], [ 2, K.TRACK, 1 ], [ 1, K.STAGE, 1 ], [ 0, K.TRACK, 1 ] ).ev.map( ( e ) => e.m ), [ 0, 1, 2, 3 ] );
+} );
+
+test( 'a piece stands as its kind does; a record whole, where no source says who is on which track, after them', () => {
+	assert.equal( K.pieceStanding( G, G.pieces[ SILVER ] ), 5 );
+	assert.equal( K.pieceStanding( G, G.pieces[ 1 ] ), 4 );                                       // a taper's tape
+	assert.equal( K.pieceStanding( G, G.pieces[ K.findPiece( G, 'discogs:7', 'A Duet' ) ] ), 3 ); // a track on a Full Release
+	assert.ok( K.pieceStanding( G, G.pieces[ 0 ] ) < 1 && K.pieceStanding( G, G.pieces[ 0 ] ) > K.pieceStanding( G, G.pieces[ 3 ] ) );
+} );
+
+test( 'the boxes find anything: a picker by name; a cut, a show, a record or a track by a name that says which it is', () => {
+	const all = K.catalogue( G ), by = new Map( all.map( ( x ) => [ x.label, x.view ] ) );
+	assert.equal( new Set( all.map( ( x ) => x.label.toLowerCase() ) ).size, all.length );
+	NAMES.forEach( ( n, id ) => assert.deepEqual( by.get( n ), { a: id } ) );
+	assert.deepEqual( by.get( 'Sam Grisman Project · live · 5 Jul 2025' ), { m: 1 } );             // never taken for the band of that name
+	assert.deepEqual( by.get( 'Hello Decentralization · live · block 11,908,068' ), { m: 5 } );
+	assert.deepEqual( by.get( 'Safe, Sensible And Sane · record, Alison Brown · 2025' ), { m: 2 } );
+	assert.deepEqual( by.get( 'Silver 44 · track on 4masks' ), { m: SILVER } );
+	assert.ok( all.every( ( x ) => x.view.a !== undefined || / · (song|live|record|track)/.test( x.label ) ) );
+	// A song the pages state a cut of is found as that cut, and not again as a track.
+	const cuts = K.catalogue( K.build( Object.assign( {}, GRAPH, { songcast: { QmCut: { song: 'Silver 44', on: [ 0 ] } } } ) ) );
+	assert.deepEqual( cuts.find( ( x ) => x.label === 'Silver 44 · song on 4masks' ).view, { s: 'Silver 44', cut: 'QmCut' } );
+	assert.ok( !cuts.some( ( x ) => x.label === 'Silver 44 · track on 4masks' ) && cuts.some( ( x ) => x.label === 'Victory · track on 4masks' ) );
+	// Two tapes of one night are one piece, found once.
+	const NIGHT = K.build( { v: 1, people: [ [ 'A', 1, '' ], [ 'B', 1, '' ] ], cast: [ [], [] ], ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ] ],
+		music: [ [ 'lma:t1', 'show', 'Band', '2025-06-14', 'Band Live', 2, '', '' ], [ 'lma:t2', 'show', 'Band', '2025-06-14', 'Band Live (another taper)', 2, '', '' ] ] } );
+	assert.deepEqual( K.catalogue( NIGHT ).map( ( x ) => x.label ), [ 'A', 'B', 'Band · live · 14 Jun 2025' ] );
+	// A record nobody here is on has nothing to show, and isn't offered; two pressings of one record are offered once.
+	const SHELF = K.build( { v: 1, people: [ [ 'A', 1, '' ], [ 'B', 1, '' ] ], cast: [ [], [], [] ],
+		ties: [ [ 0, 1, [ [ 0, 1, 1, [] ], [ 1, 1, 1, [] ] ] ] ],
+		music: [ [ 'discogs:1', 'record', 'Someone', '2026', 'A Single', 1, '', '' ], [ 'discogs:2', 'record', 'Someone', '2026', 'A Single', 1, '', '' ],
+			[ 'arthel:empty', 'record', '', '', 'Nobody On It', 2, '', '' ] ] } );
+	assert.deepEqual( K.catalogue( SHELF ).map( ( x ) => [ x.label, x.view ] ), [ [ 'A', { a: 0 } ], [ 'B', { a: 1 } ], [ 'A Single · record, Someone · 2026', { m: 0 } ] ] );
+} );
+
+test( 'between two pickers, a way round by studio tracks comes before one by shows as free, however many the shows', () => {
+	const WAYS = K.build( { v: 1, people: [ 'A', 'B', 'X', 'Y' ].map( ( n ) => [ n, 1, '' ] ), cast: [ [], [] ],
+		music: [ [ 'arthel:rec', 'record', '', '', 'A Record', 2, '', '' ], [ 'lma:show', 'show', 'Band', '2025-01-01', 'A Show', 2, '', '' ] ],
+		ties: [ [ 0, 2, [ [ 1, 2, 9, [] ] ] ], [ 1, 2, [ [ 1, 2, 9, [] ] ] ], [ 0, 3, [ [ 0, 3, 1, [ 'A Song' ] ] ] ], [ 1, 3, [ [ 0, 3, 1, [ 'A Song' ] ] ] ] ] } );
+	const ways = K.mutuals( WAYS, 0, 1 );
+	assert.deepEqual( ways.map( ( m ) => [ WAYS.people[ m.id ].name, m.rank, m.tier ] ), [ [ 'Y', 5, 2 ], [ 'X', 4, 2 ] ] );
 } );

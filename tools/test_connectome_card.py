@@ -62,6 +62,9 @@ class FakeWiki:
     def instruments(self):
         return self.inst
 
+    def portraits(self, titles):
+        return {t: self.pics[t] for t in titles if t in getattr(self, 'pics', {})}
+
     def studio_cuts(self):
         return self.cuts
 
@@ -332,8 +335,8 @@ def test_build_builds_a_song_card_for_a_song_page_and_names_it_like_the_wiki_doe
     assert 'Song:August' in result['song_cards']                            # keyed as the page names itself
     card = result['song_cards']['Song:August']
     assert 'August' in card
-    # the CID goes in the links (data-cut, the explore href, the centre's link, the play chip), not the text
-    assert card.count('QmSongCid') == 4 and card.count('href="/rabbithole/?track=QmSongCid"') == 1
+    # the CID goes in the links (data-cut, the explore href, the paper, the centre's link, the play chip), not the text
+    assert card.count('QmSongCid') == 5 and card.count('href="/rabbithole/?track=QmSongCid"') == 1
     assert '?cut=QmSongCid' in card                                          # the explore link opens this cut's graph
     assert 'Justin Myles Holmes' in card and 'guitar; vocals' in card
     cc.write(result, str(tmp_path), {})
@@ -480,3 +483,43 @@ def test_a_cut_with_no_artist_said_carries_none():
                   songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': 'QmAugCut', 'recorded': '',
                                         'artist': '', 'cast': {'Kyle Tuttle': 'banjo'}}]})
     assert g['songcast']['QmAugCut']['artist'] is None
+
+
+def test_the_cards_paper_is_a_way_in_and_lies_under_everything_else():
+    # Justin, #connectome, 15 Nov 2026: a click on whitespace opens the big graph on the picker, or the cut.
+    html = cc.card('Kyle Tuttle', _store(), ['Justin Myles Holmes', 'Kyle Tuttle'], lambda n: True, {})
+    svg = html[html.index('<svg'):]
+    first = svg[svg.index('>') + 1:]
+    assert first.startswith('<a class="cc-bg" href="/assets/connectome/?p=Kyle+Tuttle" aria-label="Explore Kyle Tuttle in the connectome"><rect ')
+    assert svg.count('class="cc-bg"') == 1 and svg.index('cc-bg') < svg.index('<line')        # under every line and dot
+    cut = cc.song_cut(song_whole(), {}, {'4masks': '/wiki/4masks'}, 'arthel:4masks')
+    song = cc.song_card('<b>Silver 44</b>', cut, [('Kyle Tuttle', 'banjo'), ('Molly Tuttle', '')], _store(), lambda n: True, {})
+    svg = song[song.index('<svg'):]
+    assert svg[svg.index('>') + 1:].startswith('<a class="cc-bg" href="/assets/connectome/?')
+    assert 'aria-label="Explore &lt;b&gt;Silver 44&lt;/b&gt; in the connectome"' in svg and '<b>' not in song
+
+
+def test_a_pickers_picture_is_the_one_their_page_gives():
+    # Justin, #connectome, 15 Nov 2026: a profile pic in the graph instead of the icon, where the object has one.
+    find = lambda text: (cc.PORTRAIT.search(text) or [None, None])[1]
+    assert find('{{MusicianInfo\n|image=Kyle Tuttle under the lights.jpg\n|does1=Has a band.\n}}').strip() == 'Kyle Tuttle under the lights.jpg'
+    assert find('{{ musicianInfo | does1=x | image = File:A B.png }}').strip() == 'A B.png'
+    assert find('{{MusicianInfo|does1=no picture given}}') is None
+    assert find('{{MusicianInfo|image=|does1=x}}') is None                    # given empty: none
+    assert find('[[File:Loose thumb.jpg|thumb]] {{MusicianInfo|does1=x}}') is None      # a loose thumb is not the page's say
+    assert find('{{Other|image=Not theirs.jpg}} {{MusicianInfo|does1=x}}') is None
+
+
+def test_the_graph_carries_a_picture_only_for_those_whose_page_gives_one(tmp_path):
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:4masks', [('u', '', 'silver-44')]),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:show1')]
+    whole = {'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []},
+             'lma:show1': {'kind': 'show', 'title': 'Kyle Live', 'date': '2025-07-05', 'artist': 'Sam Grisman Project',
+                           'grp': 'lma:show1', 'formats': []}}
+    wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'}, pages={'Justin Myles Holmes', 'Kyle Tuttle'},
+                    musicians=['Kyle Tuttle', 'Justin Myles Holmes'], inst={'Kyle Tuttle': 'banjo'})
+    wiki.pics = {'Kyle Tuttle': 'Kyle <b>.jpg'}
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, whole, [])
+    people = {p[0]: p for p in result['graph']['people']}
+    assert people['Kyle Tuttle'] == ['Kyle Tuttle', 1, 'banjo', 'Kyle <b>.jpg']     # as the page wrote it: the page escapes it
+    assert len(people) > 2 and all(len(p) == 3 for n, p in people.items() if n != 'Kyle Tuttle')    # nobody else gets one

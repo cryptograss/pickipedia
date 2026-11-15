@@ -49,7 +49,7 @@ export const TIER_NAME = [ 'not known to be DRM-free', 'Full Release', 'Permanen
  * --------------------------------------------------------------------------------------------------------- */
 
 export function build( g ) {
-	const people = g.people.map( ( [ name, page, inst ], id ) => ( { id, name, page: !!page, inst: inst || '' } ) );
+	const people = g.people.map( ( [ name, page, inst, img ], id ) => ( { id, name, page: !!page, inst: inst || '', img: img || '' } ) );
 	const music = g.music.map( ( [ key, kind, artist, date, title, tier, source, page ], id ) =>
 		( { id, key, kind, artist, date, title, tier, source, page: page || '', cast: ( g.cast && g.cast[ id ] ) || [] } ) );
 	const adj = people.map( () => new Map() );
@@ -146,8 +146,33 @@ export function roughly( date ) {
 	return m ? Date.parse( m[ 0 ] + '-01-01' ) / 1000 : -Infinity;
 }
 
+/**
+ * Which kind of connection comes first, wherever it is decided what to show (Justin, #connectome, 15 Nov 2026):
+ * first the studio tracks that are Permanent Releases (Creative Commons, deadhead-compatible); then the shows
+ * that are; then the studio tracks that are Full Releases (DRM-free); then the other shows. After those, what he
+ * didn't name: a studio track not known to be DRM-free, and last a record two only share, never a track of it.
+ *
+ * m: a record or a show; how: TRACK, STAGE or RECORD. The higher, the sooner.
+ */
+export function standing( m, how ) {
+	if ( how < STAGE ) {
+		return 0;
+	}
+	const show = m.kind === 'show';
+	if ( m.tier === PERMANENT ) {
+		return show ? 4 : 5;
+	}
+	return show ? 2 : ( m.tier === FULL ? 3 : 1 );
+}
+
+/** A piece's standing: a track's or a show's own; a record whole, where no source says who is on which track, after them all. */
+export function pieceStanding( G, piece ) {
+	const m = G.music[ piece.m ];
+	return piece.kind === 'record' ? 0.2 * m.tier : standing( m, piece.kind === 'show' ? STAGE : TRACK );
+}
+
 function byProminence( music ) {
-	return ( x, y ) => ( ( y.how >= STAGE ) - ( x.how >= STAGE ) ) ||
+	return ( x, y ) => ( standing( music[ y.m ], y.how ) - standing( music[ x.m ], x.how ) ) ||
 		( music[ y.m ].tier - music[ x.m ].tier ) ||
 		( roughly( music[ y.m ].date ) - roughly( music[ x.m ].date ) || 0 ) ||
 		( x.m - y.m );
@@ -157,7 +182,7 @@ function byProminence( music ) {
 export function summarize( a, b, ev, music ) {
 	ev.sort( byProminence( music ) );
 	const t = { a, b, ev, w: 0, loose: 0, eff: 0, times: 0, shows: 0, records: 0, tracks: 0, looseRecords: 0, tier: UNKNOWN,
-		played: false };
+		rank: 0, played: false };
 	let bestLoose = UNKNOWN;
 	for ( const e of ev ) {
 		const m = music[ e.m ];
@@ -172,6 +197,7 @@ export function summarize( a, b, ev, music ) {
 				t.tracks += e.songs.length;
 			}
 			t.tier = Math.max( t.tier, m.tier );
+			t.rank = Math.max( t.rank, standing( m, e.how ) );
 		} else {
 			t.loose += e.w;
 			t.eff += LOOSE * e.w * BOOST[ m.tier ];
@@ -188,11 +214,12 @@ export function summarize( a, b, ev, music ) {
 
 /**
  * How loud a tie is, wherever it's decided who gets named. Playing together comes before only sharing a record;
- * then the freest music the two share, because a Permanent Release is always more prominent than anything else
- * (Justin, #connectome, 13 Nov 2026), however much there is of the rest; then how much of it, by eff.
+ * then the best standing of anything the two share (see standing: a Permanent studio track, a Permanent show, a
+ * Full studio track, another show, in that order: Justin, #connectome, 15 Nov 2026), however much there is of
+ * the rest; then how much of it, by eff. Two who only share a record: the freest such record first.
  */
 export function loudness( tie ) {
-	return ( tie.played ? 2e6 : 0 ) + tie.tier * 4e5 + Math.min( tie.eff, 3e5 );
+	return tie.rank * 1e6 + ( tie.played ? 0 : tie.tier * 1e5 ) + Math.min( tie.eff, 9e4 );
 }
 
 export function find( G, name ) {
@@ -232,9 +259,9 @@ export function mutuals( G, a, b ) {
 		const [ ta, tb ] = small === a ? [ t1, t2 ] : [ t2, t1 ];
 		out.push( { id: c, ta, tb, played: ta.played && tb.played, legs: ( ta.played ? 1 : 0 ) + ( tb.played ? 1 : 0 ),
 			eff: Math.min( ta.eff, tb.eff ), both: ta.eff + tb.eff, w: Math.min( ta.w || LOOSE * ta.loose, tb.w || LOOSE * tb.loose ),
-			tier: Math.min( ta.tier, tb.tier ) } );
+			tier: Math.min( ta.tier, tb.tier ), rank: Math.min( ta.rank, tb.rank ) } );
 	}
-	return out.sort( ( x, y ) => ( y.legs - x.legs ) || ( y.tier - x.tier ) || ( y.eff - x.eff ) || ( y.both - x.both ) ||
+	return out.sort( ( x, y ) => ( y.legs - x.legs ) || ( y.rank - x.rank ) || ( y.tier - x.tier ) || ( y.eff - x.eff ) || ( y.both - x.both ) ||
 		( y.w - x.w ) || G.people[ x.id ].name.localeCompare( G.people[ y.id ].name ) );
 }
 
@@ -534,9 +561,43 @@ export function called( G, piece ) {
 		return { glyph: 'track', name: piece.song, sub: m.title || m.key, long: n.long };
 	}
 	if ( piece.kind === 'show' ) {
-		return { glyph: 'show', name: n.brief, sub: when( m.date ), long: n.long };
+		// A band and a night of theirs often have one name. A show always says it is one (Justin, #connectome, 15 Nov 2026).
+		return { glyph: 'show', name: n.brief, sub: [ 'live', when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 	}
 	return { glyph: 'record', name: n.brief, sub: [ m.artist, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
+}
+
+/**
+ * Everything the boxes up top can find (Justin, #connectome, 15 Nov 2026: not only pickers): every picker by
+ * name; every cut of a song the pages state; and every show, record and track that has pickers on it. A name
+ * here says what kind of thing it is unless it is a picker, since a band, its record and a night of theirs can
+ * all be called the same. A track with a cut of its own is found as the cut. The first to take a name keeps it.
+ * Returns [{ label, view }]: view, what go() takes ({ a }, { s, cut } or { m }).
+ */
+export function catalogue( G ) {
+	const out = [], taken = new Set();
+	const put = ( label, view ) => {
+		if ( label && !taken.has( label.toLowerCase() ) ) {
+			taken.add( label.toLowerCase() );
+			out.push( { label, view } );
+		}
+	};
+	G.people.forEach( ( p ) => put( p.name, { a: p.id } ) );
+	const cut = new Set();
+	for ( const [ key, c ] of Object.entries( G.songcast || {} ) ) {
+		const on = c.on && c.on.length ? G.music[ c.on[ 0 ] ].title : '';
+		cut.add( c.song );
+		put( c.song + ' · song' + ( on ? ' on ' + on : '' ), { s: c.song, cut: key } );
+	}
+	for ( const pc of G.pieces ) {
+		const c = called( G, pc );
+		if ( !pc.cast.length || ( pc.kind === 'track' && cut.has( pc.song ) ) ) {
+			continue;                                        // folded into another tape of its night; or found as its cut
+		}
+		put( pc.kind === 'show' ? [ c.name, c.sub ].filter( Boolean ).join( ' · ' ) :
+			( pc.kind === 'track' ? c.name + ' · track on ' + c.sub : c.name + ' · record' + ( c.sub ? ', ' + c.sub : '' ) ), { m: pc.id } );
+	}
+	return out;
 }
 
 /**
@@ -570,7 +631,7 @@ export function leads( G, id, want = 6, hand = [], keep = [] ) {
 			via.get( x ).push( p );
 		}
 	}
-	const tier = ( x ) => G.music[ G.pieces[ x ].m ].tier, day = ( x ) => roughly( G.music[ G.pieces[ x ].m ].date );
+	const tier = ( x ) => pieceStanding( G, G.pieces[ x ] ), day = ( x ) => roughly( G.music[ G.pieces[ x ].m ].date );
 	const newest = ( x, y ) => ( day( y ) - day( x ) || 0 ) || ( x - y );
 	const ways = new Map( cast.map( ( p ) => [ p, [] ] ) );
 	for ( const [ x, ps ] of via ) {

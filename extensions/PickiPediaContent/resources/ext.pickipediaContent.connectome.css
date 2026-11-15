@@ -64,6 +64,13 @@ svg.cc .cc-hit {
 	pointer-events: stroke;
 }
 
+/* A click that lands on nothing opens the big graph on whoever the card is about: the paper is a link (.cc-bg),
+   and a line that is no link of its own lets the click through to it. */
+svg.cc > line,
+svg.cc .cc-h .cc-hi,
+svg.cc .cc-h .cc-tip { pointer-events: none; }
+svg.cc .cc-bg { cursor: pointer; }
+
 svg.cc a {
 	text-decoration: none;
 }
