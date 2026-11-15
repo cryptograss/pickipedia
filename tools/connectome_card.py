@@ -212,6 +212,20 @@ class Wiki:
                     out[page['title']] = m.group(1).strip()
         return out
 
+    def record_art(self, titles):
+        """The file a record page's {{Record|art=}} names: title -> file name (no File: prefix)."""
+        out = {}
+        for i in range(0, len(titles), 50):
+            q = self.api(action='query', titles='|'.join(titles[i:i + 50]), prop='revisions', rvprop='content',
+                         rvslots='main', formatversion=2)['query']
+            for page in q.get('pages', []):
+                revs = page.get('revisions') or []
+                text = revs[0]['slots']['main'].get('content', '') if revs else ''
+                m = re.search(r'\{\{\s*Record\b[^{}]*?\|\s*art\s*=\s*([^\n|}]+)', text)
+                if m and m.group(1).strip():
+                    out[page['title']] = re.sub(r'^(?:File|Image):', '', m.group(1).strip())
+        return out
+
     def instrument_icons(self):
         """The instruments the wiki keeps an icon for: the names after Instrument-icon-."""
         q = self.api(action='query', list='allimages', aiprefix='Instrument-icon-', ailimit=100)
@@ -277,7 +291,7 @@ def song(target, t):
 def describe(p, targets):
     """What two played together, in a few words: the songs, then the record or the show."""
     title, when, artist = targets.get(p['target'], (p['target'], '', ''))
-    where = f"{artist}, {when}" if p['target'].startswith('lma:') and artist else \
+    where = f"{artist}, {when}" if p['target'].startswith(('lma:', 'arthel:show:')) and artist else \
         (title or p['target']) + (f", {when}" if when else '')
     songs = [s for s in (song(p['target'], t) for t in p.get('tracks', [])[:2]) if s]
     return ('“' + '”, “'.join(songs) + '”, ' if songs else '') + where
@@ -884,6 +898,18 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         song_page = {t: n[len('Song:'):] for n, (t, ok) in found.items() if ok and n.startswith('Song:')}
         heard = wiki.listens(song_page) if song_page else {}
         plays = {song_page[t]: cid for t, cid in heard.items() if t in song_page}
+        # cryptograss's own records, as their Record pages give them (Justin, #connectome, 15 Nov 2026): the
+        # artist, so a cut says whose it is; and the art, drawn in the record's circle and its cuts'.
+        own = sorted({d['title'] for t, d in whole.items() if t.startswith('arthel:') and d.get('kind') == 'record'
+                      and d.get('title')})
+        who = wiki.record_artists(own) if own and hasattr(wiki, 'record_artists') else {}
+        art = wiki.record_art(own) if own and hasattr(wiki, 'record_art') else {}
+        for t, d in whole.items():
+            if t.startswith('arthel:') and d.get('kind') == 'record':
+                if who.get(d.get('title')) and not d.get('artist'):
+                    d['artist'] = alias.get(who[d['title']], who[d['title']])
+                if art.get(d.get('title')):
+                    d['art'] = art[d['title']]
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
             has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons,

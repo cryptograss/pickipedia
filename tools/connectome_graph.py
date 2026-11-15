@@ -13,6 +13,8 @@ graph.json:
   music     [id, kind, artist, date, title, tier, source, page]: a record or a show.
             source is where a reader can check it; page is its wiki page, "" without one
   cast      beside each music: [picker, roles as the source wrote them], who is on it
+  music     [key, kind, artist, date, title, tier, source, page, art]: art, the file its Record page's
+            {{Record|art=}} names, for cryptograss's own records ('' where none is said)
   ties      [a, b, [[music, how, weight, songs], ...]]: each time two pickers are on
             one record or show; one entry per record or show, the closest way the
             sources put them together
@@ -248,7 +250,7 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         d = targets.get(t, {})
         page = pages.get(d.get('title', '')) if t.startswith('arthel:') and d.get('kind') == 'record' else ''
         music.append([t, d.get('kind', ''), d.get('artist', ''), d.get('date', ''), d.get('title', ''),
-                      tier(t, d.get('formats')), source_url(t, sources[t]), page or ''])
+                      tier(t, d.get('formats')), source_url(t, sources[t]), page or '', d.get('art', '')])
 
     songs, played = {}, {}
     ties = defaultdict(list)

@@ -50,8 +50,8 @@ export const TIER_NAME = [ 'not known to be DRM-free', 'Full Release', 'Permanen
 
 export function build( g ) {
 	const people = g.people.map( ( [ name, page, inst, img ], id ) => ( { id, name, page: !!page, inst: inst || '', img: img || '' } ) );
-	const music = g.music.map( ( [ key, kind, artist, date, title, tier, source, page ], id ) =>
-		( { id, key, kind, artist, date, title, tier, source, page: page || '', cast: ( g.cast && g.cast[ id ] ) || [] } ) );
+	const music = g.music.map( ( [ key, kind, artist, date, title, tier, source, page, art ], id ) =>
+		( { id, key, kind, artist, date, title, tier, source, page: page || '', art: art || '', cast: ( g.cast && g.cast[ id ] ) || [] } ) );
 	const adj = people.map( () => new Map() );
 	for ( const [ a, b, evs ] of g.ties ) {
 		const tie = summarize( a, b, evs.map( ( [ m, how, w, songs ] ) => ( { m, how, w, songs: songs || [] } ) ), music );
@@ -502,9 +502,10 @@ export function times( tie ) {
 export function naming( G, e ) {
 	const m = G.music[ e.m ];
 	if ( m.kind === 'show' ) {
-		// A taper's tape is known by the band and the night. Any other show has a name of its own, and what its
-		// source calls the artist is where it was.
-		const tape = m.key.indexOf( 'lma:' ) === 0 && !!m.artist;
+		// A show is known by the band and the night, where its source names the band: a taper's tape, and
+		// cryptograss's own shows (Justin, #connectome, 15 Nov 2026: by the band, not the show's title).
+		// Any other goes by its own name.
+		const tape = !!m.artist;
 		const who = tape ? m.artist : ( m.title || m.artist );
 		const day = when( m.date );
 		return { glyph: 'show', short: tape ? [ who, day ].filter( Boolean ).join( ' · ' ) : who, brief: who,
@@ -558,7 +559,9 @@ export function called( G, piece ) {
 	const m = G.music[ piece.m ];
 	const n = naming( G, { m: piece.m, how: piece.kind === 'show' ? STAGE : RECORD, songs: [] } );
 	if ( piece.kind === 'track' ) {
-		return { glyph: 'track', name: piece.song, sub: m.title || m.key, long: n.long };
+		// A cut says whose it is, under its name; the record it's on is in its long name and the headline
+		// (Justin, #connectome, 15 Nov 2026). No artist said: the record.
+		return { glyph: 'track', name: piece.song, sub: m.artist || m.title || m.key, on: m.title || m.key, long: n.long };
 	}
 	if ( piece.kind === 'show' ) {
 		// A band and a night of theirs often have one name. A show always says it is one (Justin, #connectome, 15 Nov 2026).
@@ -595,7 +598,7 @@ export function catalogue( G ) {
 			continue;                                        // folded into another tape of its night; or found as its cut
 		}
 		put( pc.kind === 'show' ? [ c.name, c.sub ].filter( Boolean ).join( ' · ' ) :
-			( pc.kind === 'track' ? c.name + ' · track on ' + c.sub : c.name + ' · record' + ( c.sub ? ', ' + c.sub : '' ) ), { m: pc.id } );
+			( pc.kind === 'track' ? c.name + ' · track on ' + c.on : c.name + ' · record' + ( c.sub ? ', ' + c.sub : '' ) ), { m: pc.id } );
 	}
 	return out;
 }
@@ -746,12 +749,17 @@ export function seat( places, wants ) {
  * and down has room for any name; a short one that runs across may have none, and the caller puts the tag
  * elsewhere. Returns { x, y, room }.
  */
-export function tagAt( a, b, ra, rb, most = 150, high = 23 ) {
+export function tagAt( a, b, ra, rb, most = 150, high = 23, avoid = [], want = 0 ) {
 	let best = null;
-	for ( const f of [ 0.5, 0.55, 0.45, 0.6, 0.4, 0.65, 0.35 ] ) {
+	for ( const f of [ 0.5, 0.55, 0.45, 0.6, 0.4, 0.65, 0.35, 0.7 ] ) {
 		const x = a.x + ( b.x - a.x ) * f, y = a.y + ( b.y - a.y ) * f;
 		const clear = ( c, r ) => ( Math.abs( y - c.y ) >= r + high / 2 + 2 ? Infinity : Math.abs( x - c.x ) - r - 3 );
-		const room = Math.max( 0, Math.min( most, 2 * Math.min( clear( a, ra ), clear( b, rb ) ) ) );
+		let room = Math.max( 0, Math.min( most, 2 * Math.min( clear( a, ra ), clear( b, rb ) ) ) );
+		// nor on a name: a tag `want` wide here (or as wide as there is room) over one of `avoid` has no room at all
+		const half = Math.min( room, want || room ) / 2;
+		if ( avoid.some( ( o ) => x + half > o.x1 && x - half < o.x2 && y + high / 2 > o.y1 && y - high / 2 < o.y2 ) ) {
+			room = 0;
+		}
 		if ( !best || room > best.room + 0.5 ) {
 			best = { x, y, room };
 		}

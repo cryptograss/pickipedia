@@ -709,6 +709,8 @@ a.play:focus {
 .mu.subject.t2 .ring { stroke-width: 5; }
 .mu.hot .ring { stroke-width: 3.5; }
 .mu.t2.hot .ring { stroke-width: 5.5; }
+/* A record's own art inside its ring: the rim over it is a line only, however free the piece. */
+.pk.mu .ring.rim, .pk.mu.t2 .ring.rim, .pk.song .ring.rim, .pk.song.t2 .ring.rim { fill: none; }
 
 .mu .bead {
 	fill: var( --ink2 );

@@ -71,6 +71,9 @@ class FakeWiki:
     def record_artists(self, titles):
         return {t: self._ra[t] for t in titles if t in self._ra}
 
+    def record_art(self, titles):
+        return {t: self.art[t] for t in titles if t in getattr(self, 'art', {})}
+
 
 def test_featured_is_the_newest_month_begun():
     month, names = cc.featured_from(FEATURED, date(2026, 11, 13))
@@ -484,6 +487,21 @@ def test_a_cut_with_no_artist_said_carries_none():
                   songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': 'QmAugCut', 'recorded': '',
                                         'artist': '', 'cast': {'Kyle Tuttle': 'banjo'}}]})
     assert g['songcast']['QmAugCut']['artist'] is None
+
+
+def test_cryptograss_records_carry_their_pages_artist_and_art():
+    # Justin, #connectome, 15 Nov 2026: a cut says whose it is; where there's an image, use it
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:vowel sounds', [(AUG, '', 'barlow')]),
+             pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:4masks', [(AUG, '', 'august')])]
+    wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
+                    pages={'Justin Myles Holmes', 'Kyle Tuttle', 'Vowel Sounds', '4masks'}, musicians=['Kyle Tuttle'],
+                    record_artists={'Vowel Sounds': 'Justin Holmes', '4masks': 'Justin Myles Holmes'})
+    wiki.art = {'4masks': 'Four-masks-temp.png'}
+    g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, song_whole(), [])['graph']
+    music = {m[0]: m for m in g['music']}
+    assert music['arthel:vowel sounds'][2] == 'Justin Myles Holmes'          # the page's artist, by the wiki's own name
+    assert music['arthel:vowel sounds'][8] == ''                             # no art said
+    assert music['arthel:4masks'][8] == 'Four-masks-temp.png'
 
 
 def test_the_cards_paper_is_a_way_in_and_lies_under_everything_else():

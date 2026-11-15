@@ -109,7 +109,7 @@ def test_export_says_each_records_tier_and_where_to_check_it():
     music = {m[0]: m for m in g['music']}
     assert music['discogs:7'][5] == 1 and music['discogs:7'][6] == 'https://www.discogs.com/release/7'
     assert music['discogs:8'][5] == 0                                           # a file, of a kind nobody says
-    assert music['arthel:4masks'][5:] == [2, 'gh/silver-44.yaml', '/wiki/4masks']
+    assert music['arthel:4masks'][5:] == [2, 'gh/silver-44.yaml', '/wiki/4masks', '']        # no art said
     assert g['songs'] == {'Silver 44': '/wiki/Song:Silver_44'}
     names = [p[0] for p in g['people']]
     cast = dict(zip([m[0] for m in g['music']], g['cast']))
