@@ -1,3 +1,4 @@
+	const fresh = ( tie ) => K.unsaid( G, tie, heard );
 /*
  * The connectome's big graph, drawn (index.html). connectome-core.js says what a view holds and where each
  * thing sits; this puts it on the page, moves it when the view changes, and answers the pointer.
@@ -303,14 +304,15 @@ function addLine( sc, u, v, tie, more ) {
 }
 
 /** The best of what a tie holds, as pills that fit in `room` pixels; and how many more there are. */
-function pillsFor( tie, room, most, prefer ) {
+function pillsFor( tie, room, most, prefer, entry ) {
 	const shown = [];
 	let used = 0;
 	const worth = tie.ev.filter( ( e ) => e.how >= K.STAGE && G.music[ e.m ].tier >= K.FULL );
 	let pool = worth.length ? worth : tie.ev.slice( 0, 1 );        // nothing named up front: still say the one thing
-	const came = prefer === undefined ? null : ( tie.ev.find( ( e ) => K.pieceFor( G, e ) === prefer ) || tie.ev.find( ( e ) => e.m === M( prefer ).m ) );
+	// `entry`: the one to say, as fresh() chose it, its song first
+	const came = entry || ( prefer === undefined ? null : ( tie.ev.find( ( e ) => K.pieceFor( G, e ) === prefer ) || tie.ev.find( ( e ) => e.m === M( prefer ).m ) ) );
 	if ( came ) {                                                 // the piece the reader came by is the one to say
-		pool = [ came ].concat( pool.filter( ( e ) => e !== came ) );
+		pool = [ came ].concat( pool.filter( ( e ) => e.m !== came.m ) );
 	}
 	for ( const e of pool ) {
 		if ( shown.length >= most ) {
@@ -323,8 +325,10 @@ function pillsFor( tie, room, most, prefer ) {
 		let w = pad + wide( label, FONT.pill );
 		if ( used + w > room && !shown.length ) {                     // the first one always goes in: briefer, then cut to fit
 			label = n.brief;
-			for ( let most = label.length; pad + wide( label, FONT.pill ) > room && most > 6; most-- ) {
-				label = K.clip( n.brief, most );
+			// a show keeps its night and gives up some of its name
+			const cutTo = ( k ) => ( n.day ? K.clip( n.who, k ) + ' · ' + n.day : K.clip( n.brief, k ) );
+			for ( let most = n.day ? n.who.length : label.length; pad + wide( label, FONT.pill ) > room && most > 6; most-- ) {
+				label = cutTo( most );
 			}
 			w = pad + wide( label, FONT.pill );
 		}
@@ -337,9 +341,9 @@ function pillsFor( tie, room, most, prefer ) {
 	return { shown, more: tie.ev.length - shown.length, used: Math.max( 0, used - 8 ) };
 }
 
-function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more ) {
+function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, entry ) {
 	const room = Math.abs( x2 - x1 );
-	const fit = pillsFor( tie, room - ( most > 1 ? 52 : 0 ), most, prefer );
+	const fit = pillsFor( tie, room - ( most > 1 ? 52 : 0 ), most, prefer, entry );
 	const moreW = fit.more > 0 && most > 1 ? 16 + wide( '+' + fit.more + ' more', FONT.pill ) : 0;
 	let x = ( x1 + x2 ) / 2 - ( fit.used + ( moreW ? moreW + 8 : 0 ) ) / 2;
 	for ( const p of fit.shown ) {
@@ -676,11 +680,23 @@ function egoScene( v ) {
 	};
 	// Of the things two share that come first alike, a line says one no other line here has said yet: eight
 	// lines that all say "August" say less than eight that say what else there is.
+	// Each song or show is said on one line only (Justin, #connectome, 15 Nov 2026): of two who share ten songs of
+	// a record, the line says one no other line has, not the first by the alphabet; a line with nothing left
+	// unsaid says it only when its far end is pointed at.
 	const heard = new Set( [ ...sc.pills.values() ].map( ( p ) => p.piece ) );
 	const fresh = ( tie ) => {
-		const top = tie.ev.length ? K.standing( G.music[ tie.ev[ 0 ].m ], tie.ev[ 0 ].how ) : 0;
-		const e = tie.ev.find( ( x ) => K.standing( G.music[ x.m ], x.how ) === top && !heard.has( K.pieceFor( G, x ) ) );
-		return e ? K.pieceFor( G, e ) : undefined;
+		const ev = tie.ev.filter( ( e ) => e.how >= K.STAGE && G.music[ e.m ].tier >= K.FULL );
+		for ( const e of ( ev.length ? ev : tie.ev.slice( 0, 1 ) ) ) {
+			const songs = e.how === K.TRACK && e.songs.length ? e.songs : [ null ];
+			for ( const song of songs ) {
+				const one = song === null ? e : Object.assign( {}, e, { songs: [ song, ...e.songs.filter( ( x ) => x !== song ) ] } );
+				const piece = K.pieceFor( G, one );
+				if ( !heard.has( piece ) ) {
+					return { piece, e: one };
+				}
+			}
+		}
+		return undefined;
 	};
 	ring.slice( 0, shown ).forEach( ( c, i ) => {
 		const pos = i < n ? seatOf.get( c.id ) : spots[ beads[ i - n ] ], len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y );
@@ -688,8 +704,9 @@ function egoScene( v ) {
 			return;
 		}
 		// A label lies across its line, not along it: it may be wider than the line is long, if nothing else is there.
-		const room = Math.min( out ? 150 : 190, W * 0.3 ), say = fresh( c.tie ), fit = pillsFor( c.tie, room, 1, say ), w = fit.shown.length ? fit.shown[ 0 ].w : 0;
-		const f = i < n && w && W >= 560 && len >= 120 ? [ 0.56, 0.47, 0.65, 0.4, 0.72, 0.34 ].find( ( t ) => {
+		const room = Math.min( out ? 150 : 190, W * 0.3 ), say = fresh( c.tie ), fit = say ? pillsFor( c.tie, room, 1, say.piece, say.e ) : { shown: [] };
+		const w = fit.shown.length ? fit.shown[ 0 ].w : 0;
+		const f = say && i < n && w && W >= 560 && len >= 120 ? [ 0.56, 0.47, 0.65, 0.4, 0.72, 0.34 ].find( ( t ) => {
 			const x = lay.C.x + ( pos.x - lay.C.x ) * t, y = lay.C.y + ( pos.y - lay.C.y ) * t;
 			return !taken.some( ( b ) => x - w / 2 < b.x2 + 2 && b.x1 < x + w / 2 + 2 && y - 12 < b.y2 + 2 && b.y1 < y + 12 + 2 );
 		} ) : undefined;
@@ -698,8 +715,8 @@ function egoScene( v ) {
 			return;
 		}
 		const at = onLine( lay.C, pos, f, room );
-		placePills( sc, a, c.id, c.tie, at.x1, at.x2, at.y, 1, 1, 200 + i * 40, say );
-		heard.add( K.pieceFor( G, fit.shown[ 0 ].e ) );
+		placePills( sc, a, c.id, c.tie, at.x1, at.x2, at.y, 1, 1, 200 + i * 40, say.piece, undefined, say.e );
+		heard.add( say.piece );
 		taken.push( { x1: ( at.x1 + at.x2 ) / 2 - w / 2, y1: at.y - 12, x2: ( at.x1 + at.x2 ) / 2 + w / 2, y2: at.y + 12 } );
 	} );
 	for ( const f of out ? out.fars : [] ) {

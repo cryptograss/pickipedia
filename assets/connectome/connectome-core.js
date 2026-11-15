@@ -508,7 +508,10 @@ export function naming( G, e ) {
 		const tape = !!m.artist;
 		const who = tape ? m.artist : ( m.title || m.artist );
 		const day = when( m.date );
-		return { glyph: 'show', short: tape ? [ who, day ].filter( Boolean ).join( ' · ' ) : who, brief: who,
+		// A show says its night wherever it is named, so it is never taken for a band or a picker (Justin,
+		// #connectome, 15 Nov 2026); `day` is kept apart, so a tight spot cuts the name and keeps the night.
+		const dated = [ who, day ].filter( Boolean ).join( ' · ' );
+		return { glyph: 'show', short: dated, brief: dated, who, day,
 			long: tape ? ( m.title && m.title !== who ? m.title : who ) : [ m.artist !== who ? m.artist : '', day ].filter( Boolean ).join( ', ' ),
 			songs: e.songs };
 	}
@@ -532,6 +535,27 @@ export function playOf( G, m, song ) {
 /* ------------------------------------------------------------------------------------------------------------
  * Inside out: the music as the circles, the pickers as the lines
  * --------------------------------------------------------------------------------------------------------- */
+
+/**
+ * What a line between two pickers says, of what they share that no other line in sight has said (`heard`, the
+ * pieces said so far): Justin, #connectome, 15 Nov 2026, "try not to use the same connecting show/song more than
+ * once". Their entries in the order they come (see standing), the ones named up front where there are any; within
+ * a record, each song they share on it in turn, so two who share ten songs need not say the alphabet's first.
+ * Returns { piece, e }, e with the song to say first; undefined when everything has been said.
+ */
+export function unsaid( G, tie, heard ) {
+	const ev = tie.ev.filter( ( e ) => e.how >= STAGE && G.music[ e.m ].tier >= FULL );
+	for ( const e of ( ev.length ? ev : tie.ev.slice( 0, 1 ) ) ) {
+		for ( const song of ( e.how === TRACK && e.songs.length ? e.songs : [ null ] ) ) {
+			const one = song === null ? e : Object.assign( {}, e, { songs: [ song, ...e.songs.filter( ( x ) => x !== song ) ] } );
+			const piece = pieceFor( G, one );
+			if ( !heard.has( piece ) ) {
+				return { piece, e: one };
+			}
+		}
+	}
+	return undefined;
+}
 
 /** The piece one entry of a tie stands for: the track, where the sources name one (the first of several); else the record or the show. */
 export function pieceFor( G, e ) {
@@ -565,7 +589,7 @@ export function called( G, piece ) {
 	}
 	if ( piece.kind === 'show' ) {
 		// A band and a night of theirs often have one name. A show always says it is one (Justin, #connectome, 15 Nov 2026).
-		return { glyph: 'show', name: n.brief, sub: [ 'live', when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
+		return { glyph: 'show', name: n.who, sub: [ 'live', when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 	}
 	return { glyph: 'record', name: n.brief, sub: [ m.artist, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 }

@@ -170,9 +170,11 @@ test( 'a date is read only where its shape is certain', () => {
 test( 'music is named by what a reader would call it', () => {
 	const [ record, show ] = tie( KYLE, JUSTIN ).ev;               // a Permanent studio track comes before a Permanent show
 	assert.deepEqual( K.naming( G, record ), { glyph: 'track', short: 'Silver 44 +1', brief: 'Silver 44', long: '4masks', songs: [ 'Silver 44', 'Victory' ] } );
-	assert.equal( K.naming( G, show ).short, 'Hello Decentralization' );     // cryptograss's own show: its title
+	assert.equal( K.naming( G, show ).short, 'Hello Decentralization · block 11,908,068' );     // its title, and its night
 	const tape = K.naming( G, tie( KYLE, MOLLY ).ev[ 0 ] );
-	assert.deepEqual( [ tape.glyph, tape.short, tape.brief ], [ 'show', 'Sam Grisman Project · 5 Jul 2025', 'Sam Grisman Project' ] );
+	// a show says its night wherever it's named, so it is never taken for a band (Justin, #connectome, 15 Nov 2026)
+	assert.deepEqual( [ tape.glyph, tape.short, tape.brief, tape.who, tape.day ],
+		[ 'show', 'Sam Grisman Project · 5 Jul 2025', 'Sam Grisman Project · 5 Jul 2025', 'Sam Grisman Project', '5 Jul 2025' ] );
 	assert.equal( K.naming( G, tie( KYLE, CHOIR ).ev[ 0 ] ).glyph, 'record' );
 	assert.equal( K.naming( G, tie( KYLE, CHOIR ).ev[ 0 ] ).long, 'Alison Brown – Safe, Sensible And Sane (2025)' );
 	assert.equal( K.clip( 'Leftover Salmon', 9 ), 'Leftover…' );
@@ -369,7 +371,21 @@ test( 'one night is one piece, however many tapers taped it; a show with a name 
 	assert.equal( K.findPiece( g, 'lma:band2025-06-14.mv88' ), 0 );
 	assert.deepEqual( K.leads( g, 0 ).named.map( ( n ) => n.id ), [ 2 ] );    // the other tape of the night isn't somewhere else
 	const own = K.naming( g, g.adj[ 0 ].get( 2 ).ev[ 0 ] );
-	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1', 'devcon VI night 1', 'block 15,735,471' ] );   // no band said
+	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1 · block 15,735,471', 'devcon VI night 1 · block 15,735,471', 'block 15,735,471' ] );   // no band said; its night
+} );
+
+test( 'a line says a song or a show no other line here has said; with none left, nothing', () => {
+	// Justin, #connectome, 15 Nov 2026: not the same song on every line, and not the first by the alphabet
+	const t = tie( KYLE, JUSTIN );                                    // Silver 44 and Victory on 4masks, and a show
+	const first = K.unsaid( G, t, new Set() );
+	assert.equal( first.e.songs[ 0 ], 'Silver 44' );
+	const next = K.unsaid( G, t, new Set( [ first.piece ] ) );
+	assert.equal( next.e.songs[ 0 ], 'Victory' );                     // the other song of the same record
+	assert.deepEqual( next.e.songs, [ 'Victory', 'Silver 44' ] );
+	const heard = new Set( [ first.piece, next.piece ] );
+	assert.equal( G.music[ K.unsaid( G, t, heard ).e.m ].kind, 'show' );   // then the show they played
+	heard.add( K.unsaid( G, t, heard ).piece );
+	assert.equal( K.unsaid( G, t, heard ), undefined );                 // nothing left unsaid: no label
 } );
 
 test( 'a show whose source names the band goes by the band; a cut says whose it is', () => {
@@ -381,7 +397,7 @@ test( 'a show whose source names the band goes by the band; a cut says whose it 
 	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 3, 1, [ 'Victory' ] ] ] ] ] } );
 	const show = K.naming( g, { m: 0, how: K.STAGE, songs: [] } );
 	assert.deepEqual( [ show.short, show.brief, show.long ], [ 'Justin Holmes and the Immutable String Band · block 15,735,471',
-		'Justin Holmes and the Immutable String Band', 'devcon VI night 1' ] );
+		'Justin Holmes and the Immutable String Band · block 15,735,471', 'devcon VI night 1' ] );
 	const cut = K.called( g, g.pieces[ K.trackOn( g, 1, 'Victory' ) ] );
 	assert.deepEqual( [ cut.name, cut.sub, cut.on ], [ 'Victory', 'Justin Myles Holmes', '4masks' ] );
 	assert.equal( g.music[ 1 ].art, 'Four-masks.png' );
