@@ -35,10 +35,12 @@ GROUPS = {t: t for t in TARGETS}
 
 
 class FakeWiki:
-    def __init__(self, redirects=None, pages=(), musicians=(), inst=None, featured=FEATURED, listens=None, cuts=None):
+    def __init__(self, redirects=None, pages=(), musicians=(), inst=None, featured=FEATURED, listens=None, cuts=None,
+                 record_artists=None):
         self.redirects, self.pages, self.heard = redirects or {}, set(pages), listens or {}
         self.musicians, self.inst, self.featured = list(musicians), inst or {}, featured
         self.cuts = cuts or {}
+        self._ra = record_artists or {}
 
     def resolve(self, names):
         out = {}
@@ -62,6 +64,9 @@ class FakeWiki:
 
     def studio_cuts(self):
         return self.cuts
+
+    def record_artists(self, titles):
+        return {t: self._ra[t] for t in titles if t in self._ra}
 
 
 def test_featured_is_the_newest_month_begun():
@@ -452,3 +457,26 @@ def test_a_cut_with_no_cid_keys_itself_by_its_record_and_track():
                                         'cast': {'Kyle Tuttle': 'banjo'}}]})
     assert 'QmAugCut' not in g and [k for k in g['songcast']] == ['arthel:4masks|August']  # record and song, since no cid
     assert g['songcast']['arthel:4masks|August']['song'] == 'August'
+
+
+def test_a_cuts_entry_says_who_the_record_names_as_the_artist():
+    import connectome_graph as cg
+    whole = song_whole()
+    wiki = FakeWiki(pages={'Kyle Tuttle', 'Song:August', '4masks'}, musicians=['Kyle Tuttle'],
+                    record_artists={'4masks': 'Justin Myles Holmes'},
+                    cuts={'Song:August': [{'record': '4masks', 'number': '5', 'cid': 'QmAugCut', 'recorded': '',
+                                           'cast': {'Kyle Tuttle': 'banjo'}}]})
+    g = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
+                  songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': 'QmAugCut', 'recorded': '',
+                                        'artist': 'Justin Myles Holmes', 'cast': {'Kyle Tuttle': 'banjo'}}]})
+    names = [p[0] for p in g['people']]
+    assert 'Justin Myles Holmes' in names                        # the record's artist is a node even off the cast
+    assert g['songcast']['QmAugCut']['artist'] == names.index('Justin Myles Holmes')
+
+
+def test_a_cut_with_no_artist_said_carries_none():
+    import connectome_graph as cg
+    g = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
+                  songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': 'QmAugCut', 'recorded': '',
+                                        'artist': '', 'cast': {'Kyle Tuttle': 'banjo'}}]})
+    assert g['songcast']['QmAugCut']['artist'] is None
