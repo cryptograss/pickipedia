@@ -388,6 +388,94 @@ test( 'a line says a song or a show no other line here has said; with none left,
 	assert.equal( K.unsaid( G, t, heard ), undefined );                 // nothing left unsaid: no label
 } );
 
+/* ---- whose a song is: at the other end of its line, its recording artist, then its writer, then the rest ---- */
+
+// Justin, #connectome, 15 Nov 2026, 07:29Z: "When examining who to show at the other end of a link, in the case of a
+// Song, prioritize in this order: 1. the recording artist who made it, 2. the song writer if they're on the track,
+// 3. another person from the ensemble if 1 and 2 already exist in the constellation in the current view." And 20:15Z:
+// "someone has a permanent release on the periphery of their constellation, but the edge node is not the recording
+// artist or author of that song, nor displayed elsewhere."
+// M in the middle. Her record R is Artist's, and Artist wrote One on it; Harry and Gaven are on One too, and both have
+// played with her more than Artist has. Writer wrote Two, cut on Band X's record Q (no picker is Band X). Cory is on
+// a show with her. Far is on One with Harry only (no tie to M); Taper on the show with Harry.
+const OWN = [ 'M', 'Harry', 'Gaven', 'Artist', 'Cory', 'Writer', 'Far', 'Taper' ];
+const [ OM, OH, OG, OA, OC, OW, OF, OT ] = OWN.map( ( _, i ) => i );
+const OWNED = {
+	people: OWN.map( ( n ) => [ n, 1, '' ] ),
+	music: [ [ 'arthel:r', 'record', 'Artist', '2024', 'R', 2, '', '' ], [ 'lma:s', 'show', 'Band', '2025-01-01', 'S', 2, '', '' ],
+		[ 'discogs:q', 'record', 'Band X', '2023', 'Q', 1, '', '' ] ],
+	cast: [ [], [], [] ],
+	ties: [
+		[ OM, OH, [ [ 0, 3, 3, [ 'One' ] ] ] ], [ OM, OG, [ [ 0, 3, 2, [ 'One' ] ] ] ], [ OM, OA, [ [ 0, 3, 1, [ 'One' ] ] ] ],
+		[ OM, OC, [ [ 1, 2, 1, [] ] ] ], [ OH, OG, [ [ 0, 3, 1, [ 'One', 'Three' ] ] ] ], [ OH, OA, [ [ 0, 3, 1, [ 'One' ] ] ] ],
+		[ OG, OA, [ [ 0, 3, 1, [ 'One' ] ] ] ], [ OH, OF, [ [ 0, 3, 5, [ 'One' ] ] ] ], [ OH, OT, [ [ 1, 2, 1, [] ] ] ],
+		[ OM, OW, [ [ 2, 3, 0.2, [ 'Two' ] ] ] ]
+	],
+	songcast: { QmOne: { song: 'One', on: [ 0 ], artist: OA, writers: [ OA ], pickers: [ [ OM ], [ OH ], [ OG ], [ OA ], [ OF ] ] },
+		QmTwo: { song: 'Two', on: [ 2 ], artist: null, writers: [ OW ], pickers: [ [ OM ], [ OW ] ] } }
+};
+const OG_ = K.build( OWNED );
+
+test( 'whose a record is: the pickers its credit names, or graph.json\'s own list; and who the page says wrote each song', () => {
+	assert.deepEqual( OG_.made, [ [ OA ], [], [] ] );                        // a show is nobody's; Band X is no picker here
+	assert.deepEqual( OG_.wrote.get( '0\none' ), [ OA ] );
+	assert.deepEqual( OG_.wrote.get( '2\ntwo' ), [ OW ] );                  // keyed by songKey
+	// the build's own list, by the wiki's names, wins over the credit as written ("Bronwyn Keith-Hynes", page Bronwyn)
+	assert.deepEqual( K.build( Object.assign( {}, OWNED, { made: [ [ OH ], [], [ OC ] ] } ) ).made, [ [ OH, OA ], [], [ OC ] ] );
+	// a credit naming several names each; a "Jr." stays with its name
+	const g = K.build( { people: [ [ 'Jerry Garcia', 1 ], [ 'David Grisman', 1 ], [ 'Emory Gordy, Jr.', 1 ], [ 'Johnny Campbell', 1 ] ],
+		music: [ [ 'd:1', 'record', 'Jerry Garcia, David Grisman', '', '', 1 ], [ 'd:2', 'record', 'David Grisman, Emory Gordy, Jr.', '', '', 1 ],
+			[ 'd:3', 'record', 'Johnny Campbell & The Bluegrass Drifters', '', '', 1 ], [ 'd:4', 'record', 'Old & In The Way', '', '', 1 ] ],
+		cast: [], ties: [] } );
+	assert.deepEqual( g.made, [ [ 0, 1 ], [ 1, 2 ], [ 3 ], [] ] );
+} );
+
+test( 'a song may end at its artist or its writer, and at another of its ensemble only with them in sight', () => {
+	const one = K.trackOn( OG_, 0, 'One' ), two = K.trackOn( OG_, 2, 'Two' ), show = OG_.whole[ 1 ];
+	assert.deepEqual( K.whose( OG_, one ), { artists: [ OA ], writers: [ OA ] } );
+	assert.deepEqual( K.whose( OG_, two ), { artists: [], writers: [ OW ] } );
+	assert.equal( K.whose( OG_, show ), null );
+	assert.equal( K.mayEnd( OG_, one, OA, new Set( [ OM ] ) ), true );       // 1, the artist
+	assert.equal( K.mayEnd( OG_, one, OH, new Set( [ OM, OG ] ) ), false );  // a sideman, the artist out of sight
+	assert.equal( K.mayEnd( OG_, one, OH, new Set( [ OM, OA ] ) ), true );   // 3, the artist in sight
+	assert.equal( K.mayEnd( OG_, two, OW, new Set() ), true );               // 2, the writer
+	assert.equal( K.mayEnd( OG_, two, OM, new Set( [ OH ] ) ), false );
+	assert.equal( K.mayEnd( OG_, show, OC, new Set() ), true );              // a show ends anywhere
+	// Three, on Artist's record without Artist: whoever is on it may stand at its end
+	assert.deepEqual( K.whose( OG_, K.trackOn( OG_, 0, 'Three' ) ), { artists: [], writers: [] } );
+	assert.equal( K.mayEnd( OG_, K.trackOn( OG_, 0, 'Three' ), OG, new Set( [ OH ] ) ), true );
+	assert.deepEqual( [ OA, OH ].map( ( x ) => K.claim( OG_, x, OG_.adj[ OM ].get( x ).ev[ 0 ] ) ), [ 0, 2 ] );
+	assert.equal( K.claim( OG_, OW, OG_.adj[ OM ].get( OW ).ev[ 0 ] ), 1 );
+	assert.equal( K.claim( OG_, OC, OG_.adj[ OM ].get( OC ).ev[ 0 ] ), 2 );
+	// what a line says: the first thing it may, ending there
+	assert.equal( K.lineSays( OG_, OG_.adj[ OM ].get( OH ), OH, new Set( [ OM ] ) ), undefined );
+	assert.equal( K.lineSays( OG_, OG_.adj[ OM ].get( OH ), OH, new Set( [ OM, OA ] ) ).piece, one );
+} );
+
+test( 'of those who come in by one record, its artist first, then its writer: no sideman takes its first place while they wait', () => {
+	const ring = ( g ) => K.fewPer( g, K.company( g, OM ) ).map( ( c ) => OWN[ c.id ] ).join( ' ' );
+	assert.equal( K.company( OG_, OM ).map( ( c ) => OWN[ c.id ] ).join( ' ' ), 'Harry Gaven Artist Cory Writer' );   // the loudest first
+	assert.equal( ring( OG_ ), 'Artist Harry Cory Writer Gaven' );
+	// with nobody's record said to be theirs, the company's own order, as before
+	assert.equal( ring( K.build( Object.assign( {}, OWNED, { made: [ [], [], [] ], songcast: {} } ) ) ), 'Harry Gaven Cory Writer Artist' );
+	// the writer before a sideman, where no artist of it is on it
+	const wrote = K.build( Object.assign( {}, OWNED, { ties: [ [ OM, OH, [ [ 2, 3, 3, [ 'Two' ] ] ] ], [ OM, OW, [ [ 2, 3, 0.2, [ 'Two' ] ] ] ],
+		[ OM, OG, [ [ 2, 3, 2, [ 'Two' ] ] ] ] ] } ) );
+	assert.equal( K.fewPer( wrote, K.company( wrote, OM ) ).map( ( c ) => OWN[ c.id ] ).join( ' ' ), 'Writer Harry Gaven' );
+} );
+
+test( 'a step further says a song only where it may end: with its artist out of sight, a sideman of it is not named', () => {
+	// Harry in the ring alone: Far is on One with him, and One is Artist's, out of sight; Taper is on a show with him
+	assert.deepEqual( ids( K.beyond( OG_, OM, [ OH ] ) ), [ [ OT ] ] );
+	assert.equal( K.beyond( OG_, OM, [ OH ] )[ 0 ][ 0 ].say.piece, OG_.whole[ 1 ] );
+	// Artist in the ring too: Far may stand at One's end, and is the louder
+	const both = K.beyond( OG_, OM, [ OH, OA ] );
+	assert.deepEqual( ids( both ), [ [ OF, OT ], [] ] );
+	assert.equal( both[ 0 ][ 0 ].say.piece, K.trackOn( OG_, 0, 'One' ) );
+	// the way the reader came stays, whatever it says
+	assert.deepEqual( ids( K.beyond( OG_, OM, [ OH ], 2, [ OH, OF ] ) ), [ [ OF, OT ] ] );
+} );
+
 test( 'a show whose source names the band goes by the band; a cut says whose it is', () => {
 	// Justin, #connectome, 15 Nov 2026: arthel's shows by the band, not the show's title; a cut's second line its artist
 	const g = K.build( { people: [ [ 'A', 1, '' ], [ 'B', 1, '' ] ], music: [

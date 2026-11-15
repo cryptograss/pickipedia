@@ -28,6 +28,10 @@ graph.json:
   plays     song title -> the track its Song: page says to play in Rabbithole (the CID in
             its {{Listen in Rabbithole}}), for songs on cryptograss's own records. A taped
             show's song of the same name is another recording, and gets none
+  made      beside each music: [picker, ...], who made a record: each picker its artist credit names, as
+            the wiki knows them ("Jerry Garcia, David Grisman": both), and the artist its Record page names
+            where cryptograss cut it; [] for a show. At the other end of a song's line the recording artist
+            stands first, then the writer (Justin, #connectome, 15 Nov 2026, 07:29Z)
   featured  this month's featured pickers (Cryptograss:Connectome/Featured), and month
 
 how:    3 the same track, 2 the same stage, 1 the same record (no source puts them
@@ -60,6 +64,23 @@ PERMANENT = ('arthel:',)
 ETREE = 'archive.org collection: etree'
 HOW = {'track': 3, 'show': 2, 'record': 1}
 ON_STAGE = {'song', 'song?', 'show', 'stage', 'track', 'release'}   # a credit that puts the picker in the music
+
+# Where an artist credit names several: "Jerry Garcia, David Grisman", "Johnny Campbell & The Bluegrass
+# Drifters"; not "Emory Gordy, Jr.". As connectome-core.js's CREDIT_SPLIT.
+CREDIT_SPLIT = re.compile(r'\s*(?:,(?!\s*(?:jr|sr)\b)|&|/|\band\b)\s*', re.I)
+
+
+def credited(artist):
+    """The names an artist credit may give a picker by: the whole credit, then each name in it."""
+    whole = (artist or '').strip()
+    if not whole:
+        return []
+    out = [whole]
+    for part in CREDIT_SPLIT.split(whole):
+        part = part.strip()
+        if part and part not in out:
+            out.append(part)
+    return out
 
 # Carriers with no DRM on them. A CD is Red Book audio unless its source says otherwise;
 # SACD, DVD, Blu-ray and MiniDisc carry copy controls; "File" and "Digital Media" don't
@@ -245,12 +266,21 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                 if r and r.lower() not in {x.lower() for x in said}:
                     said.append(r)
 
-    music = []
+    music, made = [], []
     for t in used:
         d = targets.get(t, {})
         page = pages.get(d.get('title', '')) if t.startswith('arthel:') and d.get('kind') == 'record' else ''
         music.append([t, d.get('kind', ''), d.get('artist', ''), d.get('date', ''), d.get('title', ''),
                       tier(t, d.get('formats')), source_url(t, sources[t]), page or '', d.get('art', '')])
+        # Who made it: its credit's names as the wiki knows them (makers, where the build gives them), each
+        # that is a picker here
+        mine = [] if d.get('kind') == 'show' else [pid[n] for n in (d['makers'] if 'makers' in d else credited(d.get('artist', '')))
+                                                   if n in pid]
+        made.append(list(dict.fromkeys(mine)))
+    for c in songcast.values():                         # and the artist a cut's Record page names
+        for m in c['on']:
+            if c['artist'] is not None and c['artist'] not in made[m] and music[m][1] != 'show':
+                made[m].append(c['artist'])
 
     songs, played = {}, {}
     ties = defaultdict(list)
@@ -271,6 +301,7 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         # name, has a page, instrument; and, only where their page gives one, the file that is their picture
         'people': [[n, 1 if has_page(n) else 0, inst.get(n, '')] + ([pics[n]] if pics and pics.get(n) else []) for n in names],
         'music': music,
+        'made': made,
         'cast': [[[pid[n], '; '.join(r)] for n, r in sorted(cast[t].items())] for t in used],
         'ties': [[a, b, sorted(ev, key=lambda e: (-e[1], -e[2], e[0]))] for (a, b), ev in sorted(ties.items())],
         'songs': dict(sorted(songs.items())),

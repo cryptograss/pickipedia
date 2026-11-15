@@ -47,6 +47,7 @@ import os
 import re
 import sqlite3
 import sys
+import unicodedata
 import urllib.parse
 import urllib.request
 from collections import defaultdict
@@ -331,6 +332,7 @@ class Store:
             cur = ev[o].get(g)
             if cur is None or RANK[p['kind']] > RANK[cur['kind']]:
                 ev[o][g] = {'kind': p['kind'], 'text': describe(p, self.targets), 'target': p['target'],
+                            'songs': [s for s in (song(p['target'], t) for t in p.get('tracks', [])) if s],
                             'tier': self.tiers.get(p['target'], connectome_graph.tier(p['target'])),
                             'show': p['target'] in self.shows}
         out = {}
@@ -484,23 +486,57 @@ def standing(kind, tier, show=False):
     return 5 if tier == 2 else (3 if tier == 1 else 1)
 
 
-def closest(store, center, nb, want=NAMED, cap=2):
+def song_key(name):
+    """A song's name as two spellings of it agree ("Barlow's Jig", "Barlows Jig"): connectome-core.js's songKey()."""
+    s = unicodedata.normalize('NFKD', str(name or '').lower())
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch) and ch not in "'\u2019")
+    return ' '.join(re.sub(r'[\W_]+', ' ', s).split())
+
+
+def owners(graph):
+    """Whose each record is and who wrote each song, by name, from graph.json: target -> {name}, the pickers who
+    made it (its made); (target, song_key) -> {name}, whoever the song's page says wrote it, of those on the cut."""
+    people = [p[0] for p in graph.get('people', [])]
+    music = graph.get('music', [])
+    made = {m[0]: {people[i] for i in ids} for m, ids in zip(music, graph.get('made', []))}
+    wrote = defaultdict(set)
+    for c in (graph.get('songcast') or {}).values():
+        for mi in c.get('on', []):
+            wrote[(music[mi][0], song_key(c['song']))] |= {people[w] for w in c.get('writers', [])}
+    return made, dict(wrote)
+
+
+def closest(store, center, nb, want=NAMED, cap=2, made=None, wrote=None):
     """Who a card names round its picker: down those they played with by Justin's order, each by the best
     record or show they share that hasn't already brought in `cap` others (Justin, #connectome, 15 Nov 2026:
     "only at most two 1-hop connections from any given record or show, unless there are no other connecting
-    objects available"); those whose every one is full come after, in their own order."""
+    objects available"); those whose every one is full come after, in their own order.
+
+    Of those who'd come in as near the front by one record, its recording artist first, then a writer of the
+    song (Justin, #connectome, 15 Nov 2026, 07:29Z: "1. the recording artist who made it, 2. the song writer if
+    they're on the track, 3. another person from the ensemble"), as connectome-core.js's fewPer(). made and
+    wrote: owners()."""
+    made, wrote = made or {}, wrote or {}
+
+    def claim(o, e):
+        if e['kind'] != 'track' or e.get('show'):
+            return 2
+        if o in made.get(e['target'], ()):
+            return 0
+        return 1 if any(o in wrote.get((e['target'], song_key(s)), ()) for s in e.get('songs', ())) else 2
+
     def ways(o):
-        return [(standing(e['kind'], e['tier'], e.get('show', False)), store.groups.get(e['target'], e['target']))
+        return [(standing(e['kind'], e['tier'], e.get('show', False)), store.groups.get(e['target'], e['target']), claim(o, e))
                 for e in nb[o]['list']]
-    order = sorted(nb, key=lambda o: (-max(s for s, _ in ways(o)), -len(nb[o]['list']), o))
+    order = sorted(nb, key=lambda o: (-max(w[0] for w in ways(o)), -len(nb[o]['list']), o))
     used, out, left = defaultdict(int), [], list(order)
     while left and len(out) < want:
         pick = None
         for i, o in enumerate(left):
-            room = [(s, g) for s, g in ways(o) if used[g] < cap]
+            room = [w for w in ways(o) if used[w[1]] < cap]
             if room:
-                best = max(room, key=lambda w: w[0])
-                if pick is None or best[0] > pick[1][0]:
+                best = max(room, key=lambda w: (w[0], -w[2]))
+                if pick is None or (best[0], -best[2]) > (pick[1][0], -pick[1][2]):
                     pick = (i, best)
         if pick is None:
             break
@@ -509,9 +545,9 @@ def closest(store, center, nb, want=NAMED, cap=2):
     return out + left[:max(0, want - len(out))]
 
 
-def card(center, store, has_page, inst, named=None):
+def card(center, store, has_page, inst, named=None, made=None, wrote=None):
     """The card's HTML for one picker, or None when the store has nobody they played with. named: who it
-    names round them, in order (closest() when not given)."""
+    names round them, in order (closest() when not given, with made and wrote)."""
     nb = store.evidence(center)
     nb = {o: d for o, d in nb.items() if d['kind'] in ('track', 'show')}   # played *with*
     if not nb:
@@ -521,7 +557,7 @@ def card(center, store, has_page, inst, named=None):
         e = store.evidence(a, b)
         return e['list'][0] if e else None
 
-    ring = [n for n in (closest(store, center, nb) if named is None else named) if n in nb and n != center]
+    ring = [n for n in (closest(store, center, nb, made=made, wrote=wrote) if named is None else named) if n in nb and n != center]
     pos = {}
     if ring:
         step = 360 / len(ring)
@@ -839,6 +875,8 @@ def load_whole(db_path):
 
 def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()):
     names = {p['a'] for p in pairs} | {p['b'] for p in pairs} | {c[0] for c in credits}   # a credit's spelling joins too
+    # and each name a record's artist credit gives, so who made it is known by the wiki's own name
+    names |= {n for d in (whole or {}).values() if d.get('kind') == 'record' for n in connectome_graph.credited(d.get('artist', ''))}
     resolved = wiki.resolve(names)
     alias = {n: (t if ok else n) for n, (t, ok) in resolved.items()}
     exists = {t for t, ok in resolved.values() if ok}
@@ -853,15 +891,8 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
     def has_page(n):
         return n in exists
 
-    pages = [only] if only and not only.startswith('Song:') else ([] if only else wiki.musician_pages())
-    pics = wiki.portraits(pages) if pages else {}        # each musician page's own picture, for the big graph
-    cards, skipped = {}, []
-    for title in pages:
-        html = card(title, store, has_page, inst) if title in store.by else None
-        if html is None:
-            skipped.append(title)
-        else:
-            cards[title] = html
+    musicians = [only] if only and not only.startswith('Song:') else ([] if only else wiki.musician_pages())
+    pics = wiki.portraits(musicians) if musicians else {}   # each musician page's own picture, for the big graph
     graph = None
     song_cards = {}
     cut_cards = {}
@@ -914,6 +945,12 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                     d['artist'] = alias.get(who[d['title']], who[d['title']])
                 if art.get(d.get('title')):
                     d['art'] = art[d['title']]
+        # Who made each record, by the wiki's own names: the recording artist stands first at the end of a
+        # song's line (Justin, #connectome, 15 Nov 2026, 07:29Z), and a credit writes "Bronwyn Keith-Hynes"
+        # where her page is Bronwyn.
+        for t, d in whole.items():
+            if d.get('kind') == 'record':
+                d['makers'] = [alias.get(n, n) for n in connectome_graph.credited(d.get('artist', ''))]
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
             has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons,
@@ -947,6 +984,15 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                     cut_cards.setdefault(page_title, {})[f"{c['record']}|{c['number']}|{c['cid']}"] = html
             if parts:
                 song_cards[page_title] = ''.join(parts)
+    # The cards, once whose each record and song is is known: a card names a song's artist before its sidemen.
+    made, wrote = owners(graph) if graph else ({}, {})
+    cards, skipped = {}, []
+    for title in musicians:
+        html = card(title, store, has_page, inst, made=made, wrote=wrote) if title in store.by else None
+        if html is None:
+            skipped.append(title)
+        else:
+            cards[title] = html
     return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,
             'song_cards': song_cards, 'cut_cards': cut_cards,
             'pairs': store.pairs, 'names': {k: sorted(v) for k, v in sorted(store.raw.items())}}

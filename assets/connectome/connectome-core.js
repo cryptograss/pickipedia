@@ -59,7 +59,39 @@ export function build( g ) {
 	}
 	const byName = new Map( people.map( ( p ) => [ p.name.toLowerCase(), p.id ] ) );
 	return Object.assign( { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
-		songcast: g.songcast || {}, plays: g.plays || {}, built: g.built || '' }, pieces( g, people, music ) );
+		songcast: g.songcast || {}, plays: g.plays || {}, built: g.built || '' }, makers( g, music, byName ), pieces( g, people, music ) );
+}
+
+/**
+ * Whose each record is, and who wrote each song (Justin, #connectome, 15 Nov 2026, 07:29Z: at the other end of a
+ * song's line, its recording artist first, then its writer). made, for each record: the pickers who made it,
+ * graph.json's own list (each picker its artist credit names, as the wiki knows them) or, from a file without
+ * one, each name in the credit that is a picker's here; and a cut's {{Record|artist=}}. wrote: a record and a
+ * song (songKey) -> whoever the Song page says wrote it, of those on the cut.
+ */
+function makers( g, music, byName ) {
+	const made = music.map( ( m, i ) => ( m.kind === 'show' ? [] : ( g.made ? ( g.made[ i ] || [] ).slice() : credited( m.artist, byName ) ) ) );
+	const wrote = new Map();
+	for ( const c of Object.values( g.songcast || {} ) ) {
+		for ( const m of c.on || [] ) {
+			if ( made[ m ] && typeof c.artist === 'number' && c.artist >= 0 && !made[ m ].includes( c.artist ) ) {
+				made[ m ].push( c.artist );
+			}
+			const k = m + '\n' + songKey( c.song );
+			wrote.set( k, [ ...new Set( ( wrote.get( k ) || [] ).concat( ( c.writers || [] ).filter( ( w ) => w >= 0 ) ) ) ] );
+		}
+	}
+	return { made, wrote };
+}
+
+/** Where an artist credit names several: "Jerry Garcia, David Grisman", "Johnny Campbell & The Bluegrass Drifters"; not "Emory Gordy, Jr.". As connectome_graph.py's. */
+const CREDIT_SPLIT = /\s*(?:,(?!\s*(?:jr|sr)\b)|&|\/|\band\b)\s*/i;
+
+/** The pickers an artist credit names, as connectome_graph.py's credited(): the whole credit, then each name in it, that is a picker's. */
+function credited( artist, byName ) {
+	const s = String( artist || '' ).trim();
+	const ids = ( s ? [ s, ...s.split( CREDIT_SPLIT ) ] : [] ).map( ( x ) => byName.get( x.trim().toLowerCase() ) ).filter( ( x ) => x !== undefined );
+	return [ ...new Set( ids ) ];
 }
 
 /**
@@ -263,6 +295,12 @@ export function landing( G ) {
  * record and show is full waits, and those waiting come after everyone else, in their own order, so they're named
  * only when nobody else is left to name. The first `fixed` (those the reader came by) stay first, as they are, and
  * count toward the cap. Each is returned with `by`: the entry they're named by (none, for those who waited).
+ *
+ * Who comes in by a song (Justin, #connectome, 15 Nov 2026, 07:29Z: "When examining who to show at the other end of
+ * a link, in the case of a Song, prioritize in this order: 1. the recording artist who made it, 2. the song writer if
+ * they're on the track, 3. another person from the ensemble if 1 and 2 already exist in the constellation"): of
+ * those who'd come in by one record as near the front as each other, its artist first, then the song's writer, so
+ * the first of a record's places is never given to a sideman while the one who made it waits.
  */
 export function fewPer( G, comp, cap = 2, fixed = 0 ) {
 	const used = new Map(), out = [];
@@ -273,27 +311,31 @@ export function fewPer( G, comp, cap = 2, fixed = 0 ) {
 		out.push( Object.assign( {}, c, { by: e } ) );
 	};
 	const best = ( c ) => {                                       // the first by standing of what they share that has room
-		let at = null, high = -1;
+		let at = null, high = -1, mine = 3;                          // of equals, one whose song it is (claim())
 		for ( const e of c.tie.ev ) {
 			const s = ( used.get( e.m ) || 0 ) < cap ? standing( G.music[ e.m ], e.how ) : -1;
-			if ( s > high ) {
+			const k = s >= 0 ? claim( G, c.id, e ) : 3;
+			if ( s > high || ( s === high && k < mine ) ) {
 				at = e;
 				high = s;
+				mine = k;
 			}
 		}
-		return { at, high };
+		return { at, high, mine };
 	};
 	comp.slice( 0, fixed ).forEach( ( c ) => take( c, c.tie.ev.reduce( ( x, e ) => ( standing( G.music[ e.m ], e.how ) >
 		standing( G.music[ x.m ], x.how ) ? e : x ), c.tie.ev[ 0 ] ) ) );
 	const left = comp.slice( fixed );
 	for ( ;; ) {
-		let pick = -1, by = null, high = -1;
+		let pick = -1, by = null, high = -1, mine = 3;
 		left.forEach( ( c, i ) => {
 			const b = best( c );
-			if ( b.high > high ) {                                   // of equals, the first in the company's own order
+			// of equals, the song's recording artist, then its writer (Justin, 07:29Z); then the first in the company's own order
+			if ( b.high > high || ( b.high === high && b.high >= 0 && b.mine < mine ) ) {
 				pick = i;
 				by = b.at;
 				high = b.high;
+				mine = b.mine;
 			}
 		} );
 		if ( pick < 0 ) {
@@ -381,10 +423,17 @@ export function between( G, x, y ) {
  * `prefer` are the pickers the reader came by. One of them who is two hops out now comes first, and under the
  * ring picker the reader came by too, where they have played together: the way walked stays the way drawn.
  *
- * Returns, for each of the ring in turn, [{ id, tie, by }]: tie, theirs with the ring picker `by`.
+ * A line out to one of them says a song only where they may stand at its end (mayEnd: its artist or its writer, or
+ * else someone of its ensemble with its artist and writer in view; Justin, #connectome, 15 Nov 2026, 07:29Z). One
+ * whose every line out would say a song that isn't theirs, with its artist out of sight, isn't named; unless the
+ * reader came that way.
+ *
+ * Returns, for each of the ring in turn, [{ id, tie, by, say }]: tie, theirs with the ring picker `by`; say, what
+ * the line says ({ piece, e }, as lineSays()).
  */
 export function beyond( G, id, ring, per = 2, prefer = [] ) {
 	const near = new Set( [ id, ...G.adj[ id ].keys() ] );
+	const seen = new Set( [ id, ...ring ] );
 	const first = new Map( prefer.map( ( p, i ) => [ p, i ] ) );
 	const rank = ( o ) => ( first.has( o ) ? first.get( o ) : Infinity );
 	const best = new Map();                              // each one two hops out: the way in
@@ -393,9 +442,12 @@ export function beyond( G, id, ring, per = 2, prefer = [] ) {
 			if ( !tie.played || near.has( o ) ) {
 				continue;
 			}
-			const walked = first.has( o ) && first.has( s ) ? 1 : 0, was = best.get( o );
+			const say = lineSays( G, tie, o, seen ), walked = first.has( o ) && first.has( s ) ? 1 : 0, was = best.get( o );
+			if ( !say && !walked ) {
+				continue;
+			}
 			if ( !was || walked > was.walked || ( walked === was.walked && loudness( tie ) > loudness( was.tie ) ) ) {
-				best.set( o, { id: o, tie, by: s, i, walked } );
+				best.set( o, { id: o, tie, by: s, i, walked, say } );
 			}
 		}
 	} );
@@ -404,7 +456,7 @@ export function beyond( G, id, ring, per = 2, prefer = [] ) {
 	const out = ring.map( () => [] ), shown = new Set();
 	for ( const f of [ ...best.values() ].sort( order ) ) {
 		if ( out[ f.i ].length < per ) {
-			out[ f.i ].push( { id: f.id, tie: f.tie, by: f.by } );
+			out[ f.i ].push( { id: f.id, tie: f.tie, by: f.by, say: f.say } );
 			shown.add( f.id );
 		}
 	}
@@ -414,8 +466,9 @@ export function beyond( G, id, ring, per = 2, prefer = [] ) {
 		}
 		const spare = [];
 		for ( const [ o, tie ] of G.adj[ s ] ) {
-			if ( tie.played && !near.has( o ) && !shown.has( o ) ) {
-				spare.push( { id: o, tie, by: s } );
+			const say = tie.played && !near.has( o ) && !shown.has( o ) ? lineSays( G, tie, o, seen ) : undefined;
+			if ( say ) {
+				spare.push( { id: o, tie, by: s, say } );
 			}
 		}
 		for ( const f of spare.sort( order ).slice( 0, per - out[ i ].length ) ) {
@@ -623,14 +676,80 @@ export function playOf( G, m, song ) {
  * Returns { piece, e }, e with the song to say first; undefined when everything has been said.
  */
 export function unsaid( G, tie, heard ) {
+	for ( const say of sayings( G, tie ) ) {
+		if ( !heard.has( say.piece ) ) {
+			return say;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Everything a line between two pickers may say, in the order it's said: what they share that is named up front (on
+ * one stage or one track, a Full or Permanent Release; where there's nothing such, the first thing), the entry
+ * `first` first, and each song of a track on its own. Yields { piece, e }, e with that song first.
+ */
+export function* sayings( G, tie, first = null ) {
 	const ev = tie.ev.filter( ( e ) => e.how >= STAGE && G.music[ e.m ].tier >= FULL );
-	for ( const e of ( ev.length ? ev : tie.ev.slice( 0, 1 ) ) ) {
+	const pool = ev.length ? ev : tie.ev.slice( 0, 1 );
+	for ( const e of ( first && pool.includes( first ) ? [ first ].concat( pool.filter( ( x ) => x !== first ) ) : pool ) ) {
 		for ( const song of ( e.how === TRACK && e.songs.length ? e.songs : [ null ] ) ) {
 			const one = song === null ? e : Object.assign( {}, e, { songs: [ song, ...e.songs.filter( ( x ) => x !== song ) ] } );
-			const piece = pieceFor( G, one );
-			if ( !heard.has( piece ) ) {
-				return { piece, e: one };
-			}
+			yield { piece: pieceFor( G, one ), e: one };
+		}
+	}
+}
+
+/**
+ * Whose a song is, of those on the track: its recording artists (made) and whoever its Song page says wrote it
+ * (wrote). null for a piece that is no one song: a show, a record whole.
+ */
+export function whose( G, piece ) {
+	const pc = G.pieces[ piece ];
+	if ( !pc || pc.kind !== 'track' ) {
+		return null;
+	}
+	const on = ( x ) => pc.cast.includes( x );
+	return { artists: ( ( G.made || [] )[ pc.m ] || [] ).filter( on ),
+		writers: ( ( G.wrote && G.wrote.get( pc.m + '\n' + songKey( pc.song ) ) ) || [] ).filter( on ) };
+}
+
+/**
+ * May a line that says this piece end at `end`, with `seen` in view (a Set of the pickers named there, the middle
+ * among them)? At the other end of a song's line (Justin, #connectome, 15 Nov 2026, 07:29Z): 1 the recording artist
+ * who made it; 2 the writer, if they're on the track; 3 another of the ensemble, if 1 and 2 are in the view already.
+ * So a song may end at its artist or its writer, and at anyone else only where an artist of it and a writer of it
+ * (of those on the track: one who isn't can't stand at the end of its line) are in sight. A show, or a record whole,
+ * may end anywhere.
+ */
+export function mayEnd( G, piece, end, seen ) {
+	const o = whose( G, piece );
+	if ( !o || o.artists.includes( end ) || o.writers.includes( end ) ) {
+		return true;
+	}
+	const there = ( xs ) => !xs.length || xs.some( ( x ) => seen.has( x ) );
+	return there( o.artists ) && there( o.writers );
+}
+
+/**
+ * How near the front of a song's line someone stands, by one entry of their tie (07:29Z): 0, the recording artist of
+ * its record; 1, the writer of one of its songs; 2, anyone else, and anyone at a show.
+ */
+export function claim( G, who, e ) {
+	if ( !e || e.how !== TRACK || !e.songs || !e.songs.length || !G.made ) {
+		return 2;
+	}
+	if ( ( G.made[ e.m ] || [] ).includes( who ) ) {
+		return 0;
+	}
+	return e.songs.some( ( s ) => ( ( G.wrote && G.wrote.get( e.m + '\n' + songKey( s ) ) ) || [] ).includes( who ) ) ? 1 : 2;
+}
+
+/** What a line ending at `end` says of a tie, with `seen` in view: the first of its sayings() that may end there (mayEnd); undefined when none may. */
+export function lineSays( G, tie, end, seen, first = null ) {
+	for ( const say of sayings( G, tie, first ) ) {
+		if ( mayEnd( G, say.piece, end, seen ) ) {
+			return say;
 		}
 	}
 	return undefined;
