@@ -8,84 +8,139 @@
 # interpreter is the one the wiki itself runs, the binary Scribunto ships, fetched from Scribunto's repository
 # at the release branch the Jenkinsfile's MEDIAWIKI_VERSION names and held to a hash kept below.
 #
+# Every section runs, whatever the one before it did, and the end says which failed: one run on the agent
+# shows everything that's wrong there, not only the first thing.
+#
 # Not here: extensions/PickiPediaContent/tests/smoke.py reads a running wiki, and what runs is production, not
 # the branch under test; check-in-wiki.sh needs docker; check-todo.php and check-moodlinks.php need
 # MediaWiki's vendor/autoload.php.
 set -eu
 root=$(pwd)
+failed=''
+section() {
+    name=$1; shift
+    echo "--- $name"
+    # Not `if ( ... )`: a shell ignores -e all through a condition, and a failing check would run on.
+    set +e
+    ( set -e; "$@" )
+    status=$?
+    set -e
+    if [ "$status" -ne 0 ]; then
+        echo "*** failed: $name"
+        failed="$failed
+    $name"
+    fi
+}
+
+php_has_the_wikis_extensions() {
+    # MediaWiki requires these of its PHP, and the extensions here use them (mb_substr, DOMDocument).
+    # Debian's php-cli alone has none of the three: php-mbstring, php-xml and php-intl bring them.
+    missing=$(php -r 'foreach (["mbstring", "dom", "intl"] as $e) { if (!extension_loaded($e)) { echo "$e "; } }')
+    if [ -n "$missing" ]; then
+        echo "this PHP is missing: $missing"
+        echo "the checks that call them will fail below; the agent's image (maybelle-config, maybelle/jenkins-branches/Dockerfile) needs them"
+        return 1
+    fi
+    echo "mbstring, dom and intl are loaded"
+}
+
+php_parses() {
+    find . -name '*.php' -not -path './.git/*' -not -path './vendor/*' -print0 | xargs -0 -n 1 php -l > /dev/null
+    echo "$(find . -name '*.php' -not -path './.git/*' -not -path './vendor/*' | wc -l) PHP files"
+}
+
+web_parses() {
+    find . -name '*.js' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*' -print0 \
+        | xargs -0 -n 1 node --check
+    find . -name '*.json' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*' -print0 \
+        | xargs -0 -n 1 python3 -c 'import json, sys; json.load(open(sys.argv[1]))'
+    echo "$(find . \( -name '*.js' -o -name '*.json' \) -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*' | wc -l) JavaScript and JSON files"
+}
+
+verification_gate() {
+    for check in extensions/PickiPediaVerification/tests/check-*.php; do
+        echo "- $check"
+        php "$check"
+    done
+    node extensions/PickiPediaVerification/tests/check-verify-js.mjs
+}
+
+both_builds_load_the_same_extensions() {
+    php docker/check-extensions.php "$root"
+}
+
+releases() {
+    php extensions/PickiPediaReleases/tests/check-on-the-record.php
+}
+
+content() {
+    # Every check-*.php there, so one added later runs without anyone remembering to add it here, but for the
+    # two that take MediaWiki's autoloader as an argument. One failing doesn't stop the others.
+    cd extensions/PickiPediaContent
+    bad=0
+    for check in tests/check-*.php; do
+        case "$check" in tests/check-todo.php|tests/check-moodlinks.php) continue ;; esac
+        echo "- $check"
+        php "$check" || { echo "*** failed: $check"; bad=1; }
+    done
+    return "$bad"
+}
+
+lua_modules() {
+    cd extensions/PickiPediaContent
+    release=$(sed -n "s/.*MEDIAWIKI_VERSION = '\([0-9]*\)\.\([0-9]*\)\..*/REL\1_\2/p" "$root/Jenkinsfile")
+    # sha256 of Scribunto's lua5_1_5_linux_64_generic/lua at REL1_43. A new MEDIAWIKI_VERSION whose Scribunto
+    # ships another binary fails here, on purpose: look at the new one, then change this line.
+    want=2d491d57d2defd88deb96c4d4b513dec6a531df80a4c8ac6bdd0f8e4c4081f43
+    lua_dir=$(mktemp -d)
+    lua="$lua_dir/lua"
+    curl -fsSL --retry 2 -o "$lua" \
+        "https://raw.githubusercontent.com/wikimedia/mediawiki-extensions-Scribunto/${release}/includes/Engines/LuaStandalone/binaries/lua5_1_5_linux_64_generic/lua"
+    have=$(sha256sum "$lua" | cut -d' ' -f1)
+    if [ "$have" != "$want" ]; then
+        echo "Scribunto's lua at $release isn't the binary this was written against: $have, not $want"
+        return 1
+    fi
+    chmod +x "$lua"
+    "$lua" -v
+    for module in lua/pickipedia/*.lua tests/check-*.lua; do
+        "$lua" -e "assert(loadfile('$module'))"
+    done
+    for check in tests/check-*.lua; do
+        echo "- $check"
+        "$lua" "$check"
+    done
+    rm -rf "$lua_dir"
+}
+
+tools() {
+    venv=$(mktemp -d)   # its own, so two runs at once can't rebuild one venv under each other
+    python3 -m venv "$venv"
+    . "$venv/bin/activate"
+    pip install -q --upgrade pip
+    # PyYAML because homeplace.py reads arthel's YAML (the Jenkinsfile's Connectome stage installs it too).
+    pip install -q pytest PyYAML
+    # blue-railroad-import is left out, as GitHub's checks leave it out: its tests import modules that aren't
+    # in this repository (#126).
+    (cd tools && python -m pytest -q --ignore=blue-railroad-import)
+    node tools/test_connectome_core.mjs > /dev/null
+    echo 'tools/test_connectome_core.mjs: ok'
+    rm -rf "$venv"
+}
+
 echo "php $(php -r 'echo PHP_VERSION;'), $(python3 --version), node $(node --version)"
+section "this PHP has the extensions the wiki's has" php_has_the_wikis_extensions
+section 'every PHP file parses' php_parses
+section 'every JavaScript and JSON file parses' web_parses
+section 'the verification gate' verification_gate
+section 'the extensions both builds load' both_builds_load_the_same_extensions
+section 'PickiPediaReleases' releases
+section 'PickiPediaContent' content
+section 'the Lua modules, with the interpreter the wiki runs' lua_modules
+section 'the tools' tools
 
-echo '--- every PHP file parses'
-find . -name '*.php' -not -path './.git/*' -not -path './vendor/*' -print0 | xargs -0 -n 1 php -l > /dev/null
-echo "$(find . -name '*.php' -not -path './.git/*' -not -path './vendor/*' | wc -l) PHP files"
-
-echo '--- every JavaScript and JSON file parses'
-find . -name '*.js' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*' -print0 \
-    | xargs -0 -n 1 node --check
-find . -name '*.json' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*' -print0 \
-    | xargs -0 -n 1 python3 -c 'import json, sys; json.load(open(sys.argv[1]))'
-
-echo '--- the verification gate'
-for check in extensions/PickiPediaVerification/tests/check-*.php; do
-    echo "- $check"
-    php "$check"
-done
-node extensions/PickiPediaVerification/tests/check-verify-js.mjs
-
-echo '--- the extensions both builds load'
-php docker/check-extensions.php "$root"
-
-echo '--- PickiPediaReleases'
-php extensions/PickiPediaReleases/tests/check-on-the-record.php
-
-echo '--- PickiPediaContent'
-# Every check-*.php there, so one added later runs without anyone remembering to add it here, but for the two
-# that take MediaWiki's autoloader as an argument.
-cd extensions/PickiPediaContent
-for check in tests/check-*.php; do
-    case "$check" in tests/check-todo.php|tests/check-moodlinks.php) continue ;; esac
-    echo "- $check"
-    php "$check"
-done
-
-echo '--- the Lua modules, with the interpreter the wiki runs'
-release=$(sed -n "s/.*MEDIAWIKI_VERSION = '\([0-9]*\)\.\([0-9]*\)\..*/REL\1_\2/p" "$root/Jenkinsfile")
-# sha256 of Scribunto's lua5_1_5_linux_64_generic/lua at REL1_43. A new MEDIAWIKI_VERSION whose Scribunto
-# ships another binary fails here, on purpose: look at the new one, then change this line.
-want=2d491d57d2defd88deb96c4d4b513dec6a531df80a4c8ac6bdd0f8e4c4081f43
-lua_dir=$(mktemp -d)
-lua="$lua_dir/lua"
-curl -fsSL --retry 2 -o "$lua" \
-    "https://raw.githubusercontent.com/wikimedia/mediawiki-extensions-Scribunto/${release}/includes/Engines/LuaStandalone/binaries/lua5_1_5_linux_64_generic/lua"
-have=$(sha256sum "$lua" | cut -d' ' -f1)
-if [ "$have" != "$want" ]; then
-    echo "Scribunto's lua at $release isn't the binary this was written against: $have, not $want"
+if [ -n "$failed" ]; then
+    echo "--- FAILED:$failed"
     exit 1
 fi
-chmod +x "$lua"
-"$lua" -v
-for module in lua/pickipedia/*.lua tests/check-*.lua; do
-    "$lua" -e "assert(loadfile('$module'))"
-done
-for check in tests/check-*.lua; do
-    echo "- $check"
-    "$lua" "$check"
-done
-rm -rf "$lua_dir"
-cd "$root"
-
-echo '--- the tools'
-venv=$(mktemp -d)   # its own, so two runs at once can't rebuild one venv under each other
-python3 -m venv "$venv"
-. "$venv/bin/activate"
-pip install -q --upgrade pip
-# PyYAML because homeplace.py reads arthel's YAML (the Jenkinsfile's Connectome stage installs it too).
-pip install -q pytest PyYAML
-# blue-railroad-import is left out, as GitHub's checks leave it out: its tests import modules that aren't
-# in this repository (#126).
-(cd tools && python -m pytest -q --ignore=blue-railroad-import)
-node tools/test_connectome_core.mjs > /dev/null
-echo 'tools/test_connectome_core.mjs: ok'
-deactivate
-rm -rf "$venv"
-echo '--- all of pickipedia'"'"'s checks passed'
+echo "--- all of pickipedia's checks passed"
