@@ -1,4 +1,3 @@
-	const fresh = ( tie ) => K.unsaid( G, tie, heard );
 /*
  * The connectome's big graph, drawn (index.html). connectome-core.js says what a view holds and where each
  * thing sits; this puts it on the page, moves it when the view changes, and answers the pointer.
@@ -689,14 +688,17 @@ function egoScene( v ) {
 	const midName = wide( cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
 	taken.push( { x1: lay.C.x - midName, y1: lay.C.y + 22, x2: lay.C.x + midName, y2: lay.C.y + 41 } );
 	const onLine = ( from, to, f, room ) => ( { x1: from.x + ( to.x - from.x ) * f - room / 2, x2: from.x + ( to.x - from.x ) * f + room / 2, y: from.y + ( to.y - from.y ) * f } );
-	const whisper = ( u, id, tie, from, to, f ) => {                // said only when the far end is pointed at
+	// Who is named in sight: a line that says a song ends at its artist or its writer, or at another of its ensemble
+	// only with them in sight (K.mayEnd; Justin, #connectome, 15 Nov 2026, 07:29Z).
+	const seen = new Set( [ a, ...mine.map( ( c ) => c.id ), ...( out ? out.fars.filter( ( f ) => f.named ).map( ( f ) => f.id ) : [] ) ] );
+	const whisper = ( u, id, tie, from, to, f, say ) => {           // said only when the far end is pointed at
 		const room = Math.min( 200, W * 0.32 ), clearOf = ( b ) => b.x + 70 < midBox.x1 || b.x - 70 > midBox.x2 ||
 			b.y + 13 < midBox.y1 || b.y - 13 > midBox.y2;
 		// along the line either way, until clear of the middle's own name; nowhere clear, where it was
 		const g = [ f, f + 0.08, f - 0.08, f + 0.16, f - 0.16, f + 0.24, f - 0.24 ].filter( ( x ) => x > 0.12 && x < 0.92 )
 			.find( ( x ) => clearOf( { x: from.x + ( to.x - from.x ) * x, y: from.y + ( to.y - from.y ) * x } ) );
 		const at = onLine( from, to, g === undefined ? f : g, room );
-		placePills( sc, u, id, tie, at.x1, at.x2, at.y, 1, 0, 0, undefined, { shy: true, owner: 'p' + id, is: undefined } );
+		placePills( sc, u, id, tie, at.x1, at.x2, at.y, 1, 0, 0, undefined, { shy: true, owner: 'p' + id, is: undefined }, say ? say.e : undefined );
 	};
 	// Of the things two share that come first alike, a line says one no other line here has said yet: eight
 	// lines that all say "August" say less than eight that say what else there is.
@@ -704,18 +706,12 @@ function egoScene( v ) {
 	// a record, the line says one no other line has, not the first by the alphabet; a line with nothing left
 	// unsaid says it only when its far end is pointed at.
 	const heard = new Set( [ ...sc.pills.values() ].map( ( p ) => p.piece ) );
-	// a line first says what its far end was named by (fewPer's `by`), so two lines by one record or show at most
-	const fresh = ( tie, by ) => {
-		const ev = tie.ev.filter( ( e ) => e.how >= K.STAGE && G.music[ e.m ].tier >= K.FULL );
-		const pool = ev.length ? ev : tie.ev.slice( 0, 1 );
-		for ( const e of ( by && pool.includes( by ) ? [ by ].concat( pool.filter( ( x ) => x !== by ) ) : pool ) ) {
-			const songs = e.how === K.TRACK && e.songs.length ? e.songs : [ null ];
-			for ( const song of songs ) {
-				const one = song === null ? e : Object.assign( {}, e, { songs: [ song, ...e.songs.filter( ( x ) => x !== song ) ] } );
-				const piece = K.pieceFor( G, one );
-				if ( !heard.has( piece ) ) {
-					return { piece, e: one };
-				}
+	// a line first says what its far end was named by (fewPer's `by`), so two lines by one record or show at most;
+	// and a song only where it may end at them (K.mayEnd)
+	const fresh = ( tie, by, end ) => {
+		for ( const say of K.sayings( G, tie, by ) ) {
+			if ( !heard.has( say.piece ) && K.mayEnd( G, say.piece, end, seen ) ) {
+				return say;
 			}
 		}
 		return undefined;
@@ -726,14 +722,14 @@ function egoScene( v ) {
 			return;
 		}
 		// A label lies across its line, not along it: it may be wider than the line is long, if nothing else is there.
-		const room = Math.min( out ? 150 : 190, W * 0.3 ), say = fresh( c.tie, c.by ), fit = say ? pillsFor( c.tie, room, 1, say.piece, say.e ) : { shown: [] };
+		const room = Math.min( out ? 150 : 190, W * 0.3 ), say = fresh( c.tie, c.by, c.id ), fit = say ? pillsFor( c.tie, room, 1, say.piece, say.e ) : { shown: [] };
 		const w = fit.shown.length ? fit.shown[ 0 ].w : 0;
 		const f = say && i < n && w && W >= 560 && len >= 120 ? [ 0.56, 0.47, 0.65, 0.4, 0.72, 0.34 ].find( ( t ) => {
 			const x = lay.C.x + ( pos.x - lay.C.x ) * t, y = lay.C.y + ( pos.y - lay.C.y ) * t;
 			return !taken.some( ( b ) => x - w / 2 < b.x2 + 2 && b.x1 < x + w / 2 + 2 && y - 12 < b.y2 + 2 && b.y1 < y + 12 + 2 );
 		} ) : undefined;
 		if ( f === undefined ) {
-			whisper( a, c.id, c.tie, lay.C, pos, 0.58 );
+			whisper( a, c.id, c.tie, lay.C, pos, 0.58, K.lineSays( G, c.tie, c.id, seen, c.by ) );
 			return;
 		}
 		const at = onLine( lay.C, pos, f, room );
@@ -742,7 +738,7 @@ function egoScene( v ) {
 		taken.push( { x1: ( at.x1 + at.x2 ) / 2 - w / 2, y1: at.y - 12, x2: ( at.x1 + at.x2 ) / 2 + w / 2, y2: at.y + 12 } );
 	} );
 	for ( const f of out ? out.fars : [] ) {
-		whisper( f.by, f.id, f.tie, seatOf.get( f.by ), f.at, 0.5 );
+		whisper( f.by, f.id, f.tie, seatOf.get( f.by ), f.at, 0.5, f.say );
 	}
 	// Between two the reader came by, a line of the web is the way they came, and stays as plain as it was.
 	for ( const t of web ) {

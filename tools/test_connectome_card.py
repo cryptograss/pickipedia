@@ -172,6 +172,43 @@ def test_a_sit_in_on_one_song_of_a_tape_is_a_show_not_a_studio_track():
     assert cc.standing('track', 2, show=True) == cc.standing('show', 2) == 4 and cc.standing('track', 2) == 5
 
 
+def test_a_card_names_a_songs_artist_before_its_sidemen_then_its_writer():
+    # Justin, #connectome, 15 Nov 2026, 07:29Z, and 20:15Z: Maddie Denton's card named Harry and Gaven by 4masks,
+    # and Justin, whose record it is, nowhere. Of those by one record, the one who made it first; then the writer.
+    targets = {'r': ('Ours', '2025', 'Zed'), 's': ('Live', '2025-01-01', 'Band'), 'q': ('Theirs', '2024', 'Band X')}
+    pairs = ([pair('M', n, 'track', 'r', [('u', '1', 'One')]) for n in ('Harry', 'Gaven', 'Zed')]
+             + [pair('M', 'Cory', 'show', 's')]
+             + [pair('M', n, 'track', 'q', [('u', '1', "Barlow's Jig")]) for n in ('Side', 'Writer')])
+    store = cc.Store(pairs, targets, {t: t for t in targets}, {}, {'r': 2, 's': 2, 'q': 1})
+    nb = store.evidence('M')
+    made, wrote = {'r': {'Zed'}}, {('q', cc.song_key('Barlows Jig')): {'Writer'}}
+    assert cc.closest(store, 'M', nb, want=6) == ['Gaven', 'Harry', 'Cory', 'Side', 'Writer', 'Zed']   # nobody's: the alphabet
+    assert cc.closest(store, 'M', nb, want=6, made=made, wrote=wrote) == ['Zed', 'Gaven', 'Cory', 'Writer', 'Side', 'Harry']
+    html = cc.card('M', store, lambda n: True, {}, made=made, wrote=wrote)
+    assert '>Zed</text></a>' in html and '>Writer</text></a>' in html and '>Harry</text></a>' not in html
+    assert cc.song_key("Barlow\u2019s  Jig") == cc.song_key('barlows jig') == 'barlows jig'
+
+
+def test_the_build_knows_who_made_a_record_by_the_wikis_own_name(tmp_path):
+    # a credit writes "Bronwyn Keith-Hynes" where her page is Bronwyn: Rattlin' Bones is hers, in the graph and on the card
+    whole = {'discogs:9': {'kind': 'record', 'title': "Rattlin' Bones", 'date': '2026', 'artist': 'Bronwyn Keith-Hynes',
+                           'grp': 'discogs:9', 'formats': ['CD (Album)']}}
+    targets = {'discogs:9': ("Rattlin' Bones", '2026', 'Bronwyn Keith-Hynes')}
+    pairs = [pair('Kyle Tuttle', n, 'track', 'discogs:9', [('u', '1', 'Sticks And Stones')])
+             for n in ('Allen Cooke', 'Ann Picker', 'Bronwyn Keith-Hynes')]
+    wiki = FakeWiki(redirects={'Bronwyn Keith-Hynes': 'Bronwyn'}, pages={'Bronwyn', 'Kyle Tuttle', 'Allen Cooke'},
+                    musicians=['Kyle Tuttle'])
+    out = cc.build(pairs, targets, {t: t for t in targets}, wiki, date(2026, 11, 15), None, whole, [])
+    g = out['graph']
+    assert [g['people'][i][0] for i in g['made'][0]] == ['Bronwyn']
+    store = cc.Store(pairs, targets, {t: t for t in targets}, {'Bronwyn Keith-Hynes': 'Bronwyn'}, {'discogs:9': 1})
+    nb = store.evidence('Kyle Tuttle')
+    assert cc.closest(store, 'Kyle Tuttle', nb) == ['Allen Cooke', 'Ann Picker', 'Bronwyn']           # nobody's: the alphabet
+    assert cc.closest(store, 'Kyle Tuttle', nb, made=cc.owners(g)[0]) == ['Bronwyn', 'Allen Cooke', 'Ann Picker']
+    card = out['cards']['Kyle Tuttle']                                # the ring's names in its order, the middle's last
+    assert card.index('>Bronwyn</text></a>') < card.index('>Allen Cooke</text></a>') < card.index('>Ann Picker</text></a>')
+
+
 def test_a_card_is_gold_for_permanent_ink_for_full_and_dotted_for_the_rest():
     targets = dict(TARGETS, **{'discogs:2': ('Looser', '2016', 'Else')})
     pairs = [pair('K', 'Tape', 'show', 'lma:show1'), pair('K', 'Disc', 'track', 'discogs:1', [('u', '1', 'Song')]),
@@ -500,6 +537,8 @@ def test_a_cuts_entry_says_who_the_record_names_as_the_artist():
     names = [p[0] for p in g['people']]
     assert 'Justin Myles Holmes' in names                        # the record's artist is a node even off the cast
     assert g['songcast']['QmAugCut']['artist'] == names.index('Justin Myles Holmes')
+    # and the one who made the record, though its credit is blank
+    assert g['made'][[m[0] for m in g['music']].index('arthel:4masks')] == [names.index('Justin Myles Holmes')]
 
 
 def test_a_cut_with_no_artist_said_carries_none():

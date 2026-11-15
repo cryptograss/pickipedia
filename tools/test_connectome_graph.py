@@ -97,6 +97,32 @@ def test_export_keeps_one_entry_a_show_the_closest_way_they_are_together():
     assert g['music'][m][5] == 2 and g['music'][m][6] == 'https://archive.org/details/tape2'
 
 
+def test_an_artist_credit_names_itself_and_each_name_in_it():
+    assert cg.credited('Alison Brown') == ['Alison Brown']
+    assert cg.credited('Jerry Garcia, David Grisman') == ['Jerry Garcia, David Grisman', 'Jerry Garcia', 'David Grisman']
+    assert cg.credited('David Grisman, Emory Gordy, Jr.') == ['David Grisman, Emory Gordy, Jr.', 'David Grisman', 'Emory Gordy, Jr.']
+    assert cg.credited('Johnny Campbell & The Bluegrass Drifters')[1:] == ['Johnny Campbell', 'The Bluegrass Drifters']
+    assert cg.credited('') == [] and cg.credited(None) == []
+
+
+def test_export_says_who_made_each_record_and_nobody_made_a_show():
+    # Justin, #connectome, 15 Nov 2026, 07:29Z: at the other end of a song's line, the recording artist who made it first
+    pairs = [pair('Kyle Tuttle', 'Alison Brown', 'track', 'discogs:7', [('u', '1', 'Tune')]),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:tape1')]
+    g = _export(pairs)
+    people = [p[0] for p in g['people']]
+    made = {m[0]: [people[i] for i in ids] for m, ids in zip(g['music'], g['made'])}
+    assert made == {'discogs:7': ['Alison Brown'], 'lma:tape1': []}
+    # a band's night named for a picker is still nobody's record
+    named = dict(TARGETS, **{'lma:tape1': dict(TARGETS['lma:tape1'], artist='Molly Tuttle')})
+    g = cg.export(pairs, named, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15')
+    assert g['made'][[m[0] for m in g['music']].index('lma:tape1')] == []
+    # the build's makers, by the wiki's own names, over the credit as written
+    targets = dict(TARGETS, **{'discogs:7': dict(TARGETS['discogs:7'], artist='Alison Brown & Friends', makers=['Kyle Tuttle'])})
+    g = cg.export(pairs, targets, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15')
+    assert [g['people'][i][0] for i in g['made'][[m[0] for m in g['music']].index('discogs:7')]] == ['Kyle Tuttle']
+
+
 def test_export_says_each_records_tier_and_where_to_check_it():
     pairs = [pair('Molly Tuttle', 'Vickie Vaughn', 'track', 'discogs:7', [('u', '9', "Girl, Have Money When You're Old")]),
              pair('Molly Tuttle', 'Vickie Vaughn', 'record', 'discogs:8'),
