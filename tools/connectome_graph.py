@@ -17,6 +17,10 @@ graph.json:
             one record or show; one entry per record or show, the closest way the
             sources put them together
   songs     song title -> its wiki page, for the songs that have one
+  songcast   song title -> { on: [music...], pickers: [[picker, roles], ...] }: who the store's credits put
+            on each cut of each song on cryptograss's own records (scope track, roles as that source wrote
+            them), and which of the music entries those cuts are. A track the store's pairs put two pickers
+            on but no credits name is still the song: its pickers, with no roles said
   plays     song title -> the track its Song: page says to play in Rabbithole (the CID in
             its {{Listen in Rabbithole}}), for songs on cryptograss's own records. A taped
             show's song of the same name is another recording, and gets none
@@ -42,6 +46,8 @@ weight: 1 / (how many were there - 1), Newman's collaboration weight (Phys. Rev.
 """
 import re
 from collections import defaultdict
+
+
 
 PERMANENT = ('lma:', 'arthel:')
 HOW = {'track': 3, 'show': 2, 'record': 1}
@@ -106,7 +112,33 @@ def weight(p, track, stage, record, show=False):
     return one(len(record[p['target']]))
 
 
-def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None):
+def icon_for(roles, icons):
+    """The icon file an instrument's roles draw, or '' for none: the role as the wiki names it, then
+    without a string-count qualifier ('5-string banjo' draws banjo's), then the longest tail of the
+    role's words an icon exists for, then the store's own spellings of a few."""
+    if not roles:
+        return ''
+    for role in (r.strip() for r in roles.split(';')):
+        if not role:
+            continue
+        name = role.lower().replace(' ', '_')
+        if name in icons:
+            return name
+        name = re.sub(r'^\d+-string\s+', '', role, flags=re.I).lower().replace(' ', '_')
+        if name in icons:
+            return name
+        words = role.lower().replace('-', ' ').split()
+        for i in range(len(words)):
+            name = '_'.join(words[i:])
+            if name in icons:
+                return name
+        name = {'six-whistle': 'tin_whistle', 'tin whistle': 'tin_whistle'}.get(role.lower(), '')
+        if name and name in icons:
+            return name
+    return ''
+
+
+def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None, songcuts=None, icons=()):
     """
     pairs     the store's pairs, each name already as the wiki knows it
     targets   id -> {kind, title, date, artist, grp, formats: [..]}
@@ -130,10 +162,47 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         if key not in best or cand[:3] > best[key][0][:3]:
             best[key] = (cand, p)
 
-    names = sorted({n for a, b, _ in best for n in (a, b)} | set(featured))
+    # Song nodes: who is on each cut of each song on cryptograss's own records, and which of the music
+    # entries those cuts are (Justin, #rabbithole, 15 Nov 2026, 00:23Z: the song-centred card). The song
+    # pages' own cuts ({{Studio cut}}) come first — track precedence, as the schema consensus has it, and
+    # the page is what a reader checks (magent, #connectome, 15 Nov 2026: the store's arthel filenames were
+    # stale, missed pages and grouped August under the wrong record) — songcast is the pages' alone. A
+    # page's cut brings its record into the music; a cut whose record the store has never heard of is out.
+    record_target = {}
+    for t in sorted(targets):
+        if targets[t].get('kind') == 'record' and targets[t].get('title'):
+            record_target.setdefault(targets[t]['title'], t)
+    page_cut, page_people = defaultdict(set), defaultdict(dict)
+    for title, cuts in (songcuts or {}).items():
+        for c in cuts:
+            target = record_target.get(c['record'])
+            if target is None:
+                continue
+            page_cut[title].add(target)
+            for person, roles in c['cast'].items():
+                said = page_people[title].setdefault(person, [])
+                for r in (roles or '').split(';'):
+                    r = r.strip()
+                    if r and r.lower() not in {x.lower() for x in said}:
+                        said.append(r)
+    names = sorted({n for a, b, _ in best for n in (a, b)} | set(featured)
+                   | { p for cast in page_people.values() for p in cast })
     pid = {n: i for i, n in enumerate(names)}
-    used = sorted({c[3] for c, _ in best.values()})
+    used = sorted({c[3] for c, _ in best.values()} | { t for ts in page_cut.values() for t in ts })
     mid = {t: i for i, t in enumerate(used)}
+
+    songcut, songpeople = defaultdict(set), defaultdict(dict)
+    covered = set()
+    for title, ts in page_cut.items():
+        if not all( t in mid for t in ts ):
+            continue
+        covered.add(title)
+        songcut[title] |= ts
+        for person, said in page_people[title].items():
+            songpeople[title][person] = list(said)
+    # The store's credits and pairs stay out of songcast: a page's key is the song's real title, and the
+    # store's arthel slugs made ghosts beside them (magent, #connectome, 15 Nov 2026, 01:07Z: 27 keys were
+    # 20 songs and 7 stale doubles). The credits' work is the ties; a song no page states has no node.
 
     sources, cast = defaultdict(set), defaultdict(dict)
     for person, roles, target, scope, source in credits:
@@ -175,6 +244,11 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         'cast': [[[pid[n], '; '.join(r)] for n, r in sorted(cast[t].items())] for t in used],
         'ties': [[a, b, sorted(ev, key=lambda e: (-e[1], -e[2], e[0]))] for (a, b), ev in sorted(ties.items())],
         'songs': dict(sorted(songs.items())),
+        'songcast': { t: { 'on': sorted( mid[ x ] for x in songcut[ t ] ),
+                           'pickers': [ [ pid[ p ], '; '.join( songpeople[ t ][ p ] ),
+                                          icon_for( '; '.join( songpeople[ t ][ p ] ), icons ) ]
+                                        for p in sorted( songpeople[ t ] ) ] }
+                     for t in sorted( songpeople ) },
         'plays': dict(sorted(played.items())),
     }
 

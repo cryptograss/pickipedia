@@ -60,7 +60,7 @@ export function build( g ) {
 	}
 	const byName = new Map( people.map( ( p ) => [ p.name.toLowerCase(), p.id ] ) );
 	return Object.assign( { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
-		plays: g.plays || {}, built: g.built || '' }, pieces( g, people, music ) );
+		songcast: g.songcast || {}, plays: g.plays || {}, built: g.built || '' }, pieces( g, people, music ) );
 }
 
 /**

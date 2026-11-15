@@ -51,14 +51,17 @@ from datetime import date
 from html import escape
 
 import connectome_graph
+from connectome_graph import icon_for
 
 FEATURED_PAGE = 'Cryptograss:Connectome/Featured'
 TEMPLATE = 'Template:MusicianInfo'
 VIEWER = '/assets/connectome/'          # the big graph, served beside the wiki
 ICON = '/index.php?title=Special:Redirect/file/Instrument-icon-{}.png'
 UA = 'PickiPedia-connectome-card/1.0'
-# The track a song page plays in Rabbithole: the first parameter of its {{Listen in Rabbithole}}.
+# The track a song page plays in Rabbithole: the first parameter of its {{Listen in Rabbithole}}; or, since
+# the song pages state their cut (HearThatWhistleBlow), the cid of that page's {{Studio cut}}.
 LISTEN = re.compile(r'\{\{\s*Listen[ _]in[ _]Rabbithole\s*\|\s*([A-Za-z0-9]{20,})\s*[|}]')
+STUDIO_CUT_CID = re.compile(r'\{\{\s*Studio[ _]cut\b[^}]*?\bcid\s*=\s*([A-Za-z0-9]{20,})', re.S)
 
 GOLD = '#eda100'                        # a Permanent Release, and nothing else
 INK2 = '#52514e'                        # a Full Release
@@ -125,7 +128,8 @@ class Wiki:
                          rvslots='main', formatversion=2)['query']
             for page in q.get('pages', []):
                 revs = page.get('revisions') or []
-                m = LISTEN.search(revs[0]['slots']['main'].get('content', '') if revs else '')
+                text = revs[0]['slots']['main'].get('content', '') if revs else ''
+                m = LISTEN.search(text) or STUDIO_CUT_CID.search(text)
                 if m:
                     out[page['title']] = m.group(1)
         return out
@@ -148,6 +152,56 @@ class Wiki:
             if v:
                 out[row['fulltext']] = v[0]['fulltext'].lower()
         return out
+
+    def studio_cuts(self):
+        """The song pages that state a cut: title -> [{'record', 'number', 'cid', 'cast': {name: roles}}],
+        one entry per {{Studio cut}} on the page. The page is the source here (track precedence, as the
+        schema consensus has it); the store's credits fill the songs these don't reach."""
+        titles, cont = [], {}
+        while True:
+            q = self.api(action='query', list='embeddedin', eititle='Template:Studio cut',
+                         eilimit=500, eifilterredir='nonredirects', **cont)
+            titles += [p['title'] for p in q['query']['embeddedin']]
+            if 'continue' not in q:
+                break
+            cont = {'eicontinue': q['continue']['eicontinue']}
+        out = {}
+        for i in range(0, len(titles), 50):
+            q = self.api(action='query', titles='|'.join(titles[i:i + 50]), prop='revisions', rvprop='content',
+                         rvslots='main', formatversion=2)['query']
+            for page in q.get('pages', []):
+                revs = page.get('revisions') or []
+                text = revs[0]['slots']['main'].get('content', '') if revs else ''
+                cuts = studio_cuts_from(text)
+                if cuts:
+                    out[page['title']] = cuts
+        return out
+
+    def instrument_icons(self):
+        """The instruments the wiki keeps an icon for: the names after Instrument-icon-."""
+        q = self.api(action='query', list='allimages', aiprefix='Instrument-icon-', ailimit=100)
+        return {i['name'].split('Instrument-icon-')[-1].replace('.png', '')
+                for i in q.get('query', {}).get('allimages', [])}
+
+
+def studio_cuts_from(text):
+    """The {{Studio cut}} blocks of a page's wikitext: their record, number, cid, and each person's roles.
+    The store writes roles "; "-joined; a page writes them with commas, so they arrive in the store's shape."""
+    cuts = []
+    for m in re.finditer(r'\{\{\s*Studio[ _]cut\b(.*?)\}\}', text, re.S):
+        fields, cast = {}, {}
+        for line in m.group(1).split('\n'):
+            k, _, v = line.strip().lstrip('|').partition('=')
+            k, v = k.strip(), v.strip()
+            if not k:
+                continue
+            if k in ('record', 'number', 'cid'):
+                fields[k] = v
+            elif k not in ('studio', 'recorded', 'engineer', 'status', 'note') and v:
+                cast[k] = re.sub(r'\s*,\s*', '; ', v)
+        cuts.append({'record': fields.get('record', ''), 'number': fields.get('number', ''),
+                     'cid': fields.get('cid', ''), 'cast': cast})
+    return cuts
 
 
 def featured_from(wikitext, today):
@@ -296,6 +350,53 @@ def attr(s):
     return escape(str(s), quote=True)
 
 
+def line_svg(a, b, **kw):
+    attrs = ' '.join(f'{k.replace("_", "-")}="{attr(v)}"' for k, v in kw.items())
+    return f'<line x1="{a[0]:.1f}" y1="{a[1]:.1f}" x2="{b[0]:.1f}" y2="{b[1]:.1f}" {attrs}/>'
+
+
+def trim_svg(a, b, ra, rb):
+    d = math.dist(a, b) or 1
+    ux, uy = (b[0] - a[0]) / d, (b[1] - a[1]) / d
+    return (a[0] + ux * ra, a[1] + uy * ra), (b[0] - ux * rb, b[1] - uy * rb)
+
+
+def tip_box(lines, x, y, box):
+    """A hover note, kept inside the card's box (x0, y0, x1, y1); the first line bold."""
+    x0, y0, x1, y1 = box
+    maxc = int((x1 - x0 - 8) / (0.52 * FS))
+    lines = [ln if len(ln) <= maxc else ln[:maxc - 1] + '…' for ln in lines]
+    w = max(tw(ln, bold=(i == 0)) for i, ln in enumerate(lines))
+    h = FS * 1.2 * len(lines)
+    cx = min(max(x, x0 + 4 + w / 2), x1 - 4 - w / 2)
+    ty = y - 14 - h + FS if y - 14 - h > y0 + 2 else y + 14 + FS
+    spans = ''.join(f'<tspan x="{cx:.1f}" dy="{0 if i == 0 else FS * 1.2:.1f}"'
+                    + (' font-weight="bold"' if i == 0 else '') + f'>{escape(ln)}</tspan>'
+                    for i, ln in enumerate(lines))
+    return (f'<g class="cc-tip"><rect x="{cx - w / 2 - 5:.1f}" y="{ty - FS - 2:.1f}" width="{w + 10:.1f}" '
+            f'height="{h + 6:.1f}" rx="4" fill="{PAPER}" stroke="#a2a9b1"/>'
+            f'<text x="{cx:.1f}" y="{ty:.1f}" text-anchor="middle" fill="{INK}">{spans}</text></g>')
+
+
+def strokes_svg(a, b, tier, loose, lit):
+    """A line by what it stands on: gold for a Permanent Release, ink for a Full one, dotted for the rest."""
+    if loose or tier == 0:
+        return line_svg(a, b, stroke=SHUT, stroke_width=2 if lit else 1.2, stroke_dasharray='1 5', stroke_linecap='round')
+    if tier == 2 and lit:
+        return (line_svg(a, b, stroke=GOLD, stroke_width=8, opacity='.6', stroke_linecap='round')
+                + line_svg(a, b, stroke=INK, stroke_width=2, stroke_linecap='round'))
+    if tier == 2:
+        return line_svg(a, b, stroke=GOLD, stroke_width=2.2, stroke_linecap='round')
+    return line_svg(a, b, stroke=INK2, stroke_width=2 if lit else 1.2, stroke_linecap='round')
+
+
+NOTE = ('<circle r="21" fill="%s" stroke="%s" stroke-width="1.5"/>' % (PAPER, INK) +
+        '<g fill="%s">' % INK +
+        '<ellipse cx="-3.5" cy="7" rx="5" ry="3.8" transform="rotate(-18 -3.5 7)"/>' +
+        '<rect x="1.2" y="-13" width="2.4" height="20"/>' +
+        '<path d="M1.2 -13 q 7.5 1.5 7.5 7 q 0 -3.4 -7.5 -4.4 z"/></g>')
+
+
 RABBIT = ('<circle r="21" fill="%s" stroke="%s" stroke-width="1.5"/>' % (PAPER, INK) +
           '<g fill="%s" transform="translate(1 2)">' % INK +
           '<ellipse cx="-5" cy="-12" rx="2.2" ry="6.5" transform="rotate(-8 -5 -12)"/>'
@@ -399,27 +500,13 @@ def card(center, store, featured, has_page, inst):
     x0, y0, x1, y1 = min(xs) - 14, min(ys) - 14, max(xs) + 14, max(ys) + 14
 
     def line(a, b, **kw):
-        attrs = ' '.join(f'{k.replace("_", "-")}="{attr(v)}"' for k, v in kw.items())
-        return f'<line x1="{a[0]:.1f}" y1="{a[1]:.1f}" x2="{b[0]:.1f}" y2="{b[1]:.1f}" {attrs}/>'
+        return line_svg(a, b, **kw)
 
     def trim(a, b, ra, rb):
-        d = math.dist(a, b) or 1
-        ux, uy = (b[0] - a[0]) / d, (b[1] - a[1]) / d
-        return (a[0] + ux * ra, a[1] + uy * ra), (b[0] - ux * rb, b[1] - uy * rb)
+        return trim_svg(a, b, ra, rb)
 
     def tip(lines, x, y):
-        maxc = int((x1 - x0 - 8) / (0.52 * FS))
-        lines = [ln if len(ln) <= maxc else ln[:maxc - 1] + '…' for ln in lines]
-        w = max(tw(ln, bold=(i == 0)) for i, ln in enumerate(lines))
-        h = FS * 1.2 * len(lines)
-        cx = min(max(x, x0 + 4 + w / 2), x1 - 4 - w / 2)
-        ty = y - 14 - h + FS if y - 14 - h > y0 + 2 else y + 14 + FS
-        spans = ''.join(f'<tspan x="{cx:.1f}" dy="{0 if i == 0 else FS * 1.2:.1f}"'
-                        + (' font-weight="bold"' if i == 0 else '') + f'>{escape(ln)}</tspan>'
-                        for i, ln in enumerate(lines))
-        return (f'<g class="cc-tip"><rect x="{cx - w / 2 - 5:.1f}" y="{ty - FS - 2:.1f}" width="{w + 10:.1f}" '
-                f'height="{h + 6:.1f}" rx="4" fill="{PAPER}" stroke="#a2a9b1"/>'
-                f'<text x="{cx:.1f}" y="{ty:.1f}" text-anchor="middle" fill="{INK}">{spans}</text></g>')
+        return tip_box(lines, x, y, (x0, y0, x1, y1))
 
     def what(n):
         ev = nb[n]['list']
@@ -437,16 +524,7 @@ def card(center, store, featured, has_page, inst):
         fill = INK if has_page(n) else PAPER
         return f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{fill}" stroke="{INK}" stroke-width="1.5"/>'
 
-    def strokes(a, b, tier, loose, lit):
-        """A line by what it stands on: gold for a Permanent Release, ink for a Full one, dotted for the rest."""
-        if loose or tier == 0:
-            return line(a, b, stroke=SHUT, stroke_width=2 if lit else 1.2, stroke_dasharray='1 5', stroke_linecap='round')
-        if tier == 2 and lit:
-            return (line(a, b, stroke=GOLD, stroke_width=8, opacity='.6', stroke_linecap='round')
-                    + line(a, b, stroke=INK, stroke_width=2, stroke_linecap='round'))
-        if tier == 2:
-            return line(a, b, stroke=GOLD, stroke_width=2.2, stroke_linecap='round')
-        return line(a, b, stroke=INK2, stroke_width=2 if lit else 1.2, stroke_linecap='round')
+    strokes = strokes_svg
 
     out = []
     o = out.append
@@ -530,6 +608,140 @@ def card_file(title):
     return hashlib.md5(title.encode('utf-8')).hexdigest() + '.html'
 
 
+SONG_RING = 120.0                      # the ring a song's cast sits on; wider when the cast is a big one
+
+
+def song_cut(whole, tiers, pages, target):
+    """What a song's card says about the cut it draws: its record, when, its page, its release kind."""
+    d = whole.get(target, {})
+    return {'target': target, 'tier': tiers.get(target, connectome_graph.tier(target, d.get('formats'))),
+            'title': d.get('title') or target, 'date': d.get('date') or '', 'artist': d.get('artist') or '',
+            'page': pages.get(d.get('title', '')) or ''}
+
+
+def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
+    """The song-centred card: the song in the middle, the pickers of its cut on the ring, each labelled
+    with the instrument the track-level credits gave them, and a line between two of them when the store
+    knows they played together elsewhere (Justin, #rabbithole, 15 Nov 2026, 00:23Z). cut: what song_cut()
+    returned; cast: [(picker, roles as that cut's credits wrote them)]."""
+    if not cast:
+        return None
+    ring = [n for n, _ in cast]
+    roles = dict(cast)
+    r = SONG_RING + max(0, len(ring) - 8) * 9
+    step = 360 / len(ring)
+    pos = {n: pol(r, -90 + step / 4 + step * i) for i, n in enumerate(ring)}
+
+    def label(n, below=None):
+        x, y = pos[n]
+        if below is None:
+            below = y > C[1] + 1
+        w = max(tw(n, bold=True), tw(roles[n]) * 0.62 if roles[n] else 0)
+        ny = y + 17 + FS * 0.8 if below else y - 17                 # the name's baseline
+        top = ny - FS * 0.8 if below else ny - FS * 1.5
+        h = FS * (1.55 if roles[n] else 1.0)
+        return [x, ny, below, (x - w / 2, top, x + w / 2, top + h)]
+
+    labels = {}
+    for n in ring:                                                  # a label that runs into one placed flips sides
+        lb = label(n)
+        if any(hits(lb[3], L[3]) for L in labels.values()):
+            lb = label(n, below=not lb[2])
+        labels[n] = lb
+    cw = tw(title, FS * 1.25, True)
+    boxes = [L[3] for L in labels.values()] + [(C[0] - cw / 2, 266 - FS * 1.25, C[0] + cw / 2, 270)]
+
+    def elsewhere(n):
+        ev = store.evidence(n) or {}                                # every cut they're on, this one left out
+        out = [e for d in ev.values() for e in d['list'] if e['target'] != cut['target']]
+        out.sort(key=lambda e: (-e['tier'], -RANK[e['kind']], e['text']))
+        return out
+
+    edges = []
+    for i, x in enumerate(ring):
+        for y in ring[i + 1:]:
+            ev = store.evidence(x, y) or {'list': []}
+            others = [e for e in ev['list'] if e['target'] != cut['target']]
+            if not others:
+                continue
+            e = others[0]
+            s, t = trim_svg(pos[x], pos[y], 12, 12)
+            if e['tier'] == 0:
+                html = line_svg(s, t, stroke=SHUT, stroke_width=1.2, stroke_dasharray='1 5', stroke_linecap='round')
+            else:
+                col = GOLD if e['tier'] == 2 else INK2
+                w = 2.2 if e['kind'] == 'track' else 1.2            # the same cut again: solid; a record or a stage: thin
+                html = line_svg(s, t, stroke=col, stroke_width=w, stroke_linecap='round')
+            edges.append((x, y, html, e, len(others)))
+
+    xs = [C[0]] + [p[0] for p in pos.values()] + [b[0] for b in boxes] + [b[2] for b in boxes]
+    ys = [C[1]] + [p[1] for p in pos.values()] + [b[1] for b in boxes] + [b[3] for b in boxes]
+    x0, y0, x1, y1 = min(xs) - 14, min(ys) - 14, max(xs) + 14, max(ys) + 14
+
+    def tip(lines, x, y):
+        return tip_box(lines, x, y, (x0, y0, x1, y1))
+
+    out = []
+    o = out.append
+    o(f'<svg xmlns="http://www.w3.org/2000/svg" class="cc" viewBox="{x0:.0f} {y0:.0f} {x1 - x0:.0f} {y1 - y0:.0f}" '
+      f'width="100%" font-family="Georgia, serif" font-size="{FS:g}" role="img" '
+      f'aria-label="{attr("Who played " + title)}">')
+    o(f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/>')
+    for _, _, html, _, _ in edges:
+        o(html)
+    for n in ring:
+        x, y = pos[n]
+        icon = icon_for(roles[n], icons)                            # the icon the wiki has for this cut's own roles
+        if icon:
+            href = attr(ICON.format(urllib.parse.quote(icon)))
+            ic = (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="14" fill="{PAPER}" stroke="{INK}" stroke-width="2"/>'
+                  f'<image href="{href}" x="{x - 10:.1f}" y="{y - 10:.1f}" width="20" height="20"></image>')
+        else:
+            ic = (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="10" fill="{INK if has_page(n) else PAPER}" '
+                  f'stroke="{INK}" stroke-width="1.5"/>')
+        x_lab, ny, below, nbox = labels[n]
+        ry = ny + FS * 1.05 if below else ny - FS * 1.05            # the roles line, out from the name
+        o(f'<a href="{attr(viewer(p=n))}">{ic}<text class="cc-lab" x="{x_lab:.1f}" y="{ny:.1f}" '
+          f'text-anchor="middle" fill="{INK}" font-weight="bold">{escape(n)}</text>'
+          + (f'<text class="cc-lab" x="{x_lab:.1f}" y="{ry:.1f}" text-anchor="middle" fill="{INK2}" '
+             f'font-size="0.62em">{escape(roles[n])}</text>' if roles[n] else '') + '</a>')
+    o(f'<a href="{attr(viewer(s=title))}"><g transform="translate({C[0]:.0f} {C[1]:.0f})">{NOTE}</g>'
+      f'<text class="cc-lab" x="{C[0]:.0f}" y="266" text-anchor="middle" fill="{INK}" font-weight="bold" '
+      f'font-size="1.25em" stroke-width="5px">{escape(title)}</text></a>')
+    if play:
+        o(f'<a class="cc-play" href="/rabbithole/?track={attr(play)}" aria-label="Play {escape(title)} in Rabbithole">'
+          f'<text x="{C[0] + tw(title, FS * 1.25, True) / 2 + 14:.1f}" y="266" fill="{INK}" font-weight="bold">▶</text></a>')
+    for x, y, _, e, more in edges:                                  # the lines say where else the two have played
+        mx, my = (pos[x][0] + pos[y][0]) / 2, (pos[x][1] + pos[y][1]) / 2
+        tail = f' (+{more - 1} more)' if more > 1 else ''
+        o(f'<g class="cc-h">{tip([f"{x} & {y}", "also: " + e["text"] + tail], mx, my)}</g>')
+    for n in ring:
+        x, y = pos[n]
+        ev = elsewhere(n)
+        here = f"on {cut['title']}" + (f", {cut['date']}" if cut['date'] else '')
+        where = ('elsewhere: ' + ev[0]['text'] + (f' (+{len(ev) - 1} more)' if len(ev) > 1 else '')) if ev else here
+        head = n + (f' · {roles[n]}' if roles[n] else '')
+        o(f'<g class="cc-h"><a href="{attr(viewer(p=n))}"><circle cx="{x:.1f}" cy="{y:.1f}" r="15" fill="transparent"/></a>'
+          f'<rect x="{labels[n][3][0]:.1f}" y="{labels[n][3][1]:.1f}" width="{labels[n][3][2] - labels[n][3][0]:.1f}" '
+          f'height="{labels[n][3][3] - labels[n][3][1]:.1f}" fill="transparent"/>'
+          f'{tip([head, where], x, y)}</g>')
+    o('</svg>')
+
+    legend = ('<div class="cc-legend">'
+              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
+              "a taper's tape or Creative Commons<br>"
+              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
+              '<span class="cc-key cc-rest"></span> the rest<br>'
+              'a solid line: the same cut again · a thin one: a record or a stage</div>')
+    record = f'<a href="{attr(cut["page"])}">{escape(cut["title"])}</a>' if cut['page'] else escape(cut['title'])
+    when = ', ' + escape(cut['date']) if cut['date'] else ''
+    playnote = ' The ▶ beside the song opens it in Rabbithole.' if play else ''
+    return (f'<div class="connectome-card" data-song="{attr(title)}">'
+            f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(viewer(s=title))}">⤢ explore</a></div>'
+            + ''.join(out) + legend +
+            f'<div class="cc-foot">On {record}{when}.{playnote}</div></div>')
+
+
 # ---------------------------------------------------------------------------
 
 def load_store(db_path, pairs_path):
@@ -554,7 +766,7 @@ def load_whole(db_path):
 
 
 def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()):
-    names = {p['a'] for p in pairs} | {p['b'] for p in pairs}
+    names = {p['a'] for p in pairs} | {p['b'] for p in pairs} | {c[0] for c in credits}   # a credit's spelling joins too
     resolved = wiki.resolve(names)
     alias = {n: (t if ok else n) for n, (t, ok) in resolved.items()}
     exists = {t for t, ok in resolved.values() if ok}
@@ -572,7 +784,7 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
     def has_page(n):
         return n in exists
 
-    pages = [only] if only else wiki.musician_pages()
+    pages = [only] if only and not only.startswith('Song:') else ([] if only else wiki.musician_pages())
     cards, skipped = {}, []
     for title in pages:
         html = card(title, store, featured, has_page, inst) if title in store.by else None
@@ -581,6 +793,7 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         else:
             cards[title] = html
     graph = None
+    song_cards = {}
     if whole is not None:                            # the big graph's one file, from the same store and names
         asked = connectome_graph.arthel_pages(store.pairs, whole, song)
         found = wiki.resolve(asked) if asked else {}
@@ -588,16 +801,48 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         song_page = {t: n[len('Song:'):] for n, (t, ok) in found.items() if ok and n.startswith('Song:')}
         heard = wiki.listens(song_page) if song_page else {}
         plays = {song_page[t]: cid for t, cid in heard.items() if t in song_page}
+        # The song pages' own cuts are the source (magent, #connectome, 15 Nov 2026); the store's credits
+        # and pairs stay out of songcast — a page's key is the song's real title, and the store's arthel
+        # slugs made ghosts beside them. The icons the wiki keeps decide what a role draws.
+        icons = wiki.instrument_icons() if hasattr(wiki, 'instrument_icons') else set()
+        cutmap = {}
+        for page_title, cs in (wiki.studio_cuts() if hasattr(wiki, 'studio_cuts') else {}).items():
+            song_title = page_title[len('Song:'):] if page_title.startswith('Song:') else page_title
+            cutmap[song_title] = [{'record': c['record'], 'number': c['number'], 'cid': c['cid'],
+                                   'cast': {alias.get(n, n): r for n, r in c['cast'].items()}} for c in cs]
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
-            has_page, inst, featured, month, song, pages, today.isoformat(), plays)
+            has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons)
+        # Song cards: the store's cut of each song with a Song: page (Justin, #rabbithole, 15 Nov 2026, 00:23Z).
+        songcast = graph.get('songcast') or {}
+        people = graph.get('people') or []
+        for song_title, sc in sorted(songcast.items()):
+            page_title = 'Song:' + song_title
+            if page_title not in found or not found[page_title][1] or (only and only != page_title):
+                continue
+            cast = [(people[i][0], r) for i, r, _ in sc['pickers'] if 0 <= i < len(people)]
+            if not cast:
+                continue
+            targets = graph.get('music') or []
+            cut = sorted((song_cut(whole, tiers, pages, targets[ i ][ 0 ]) for i in sc['on'] if 0 <= i < len(targets)),
+                         key=lambda c: c['title'])[0] if sc['on'] else None
+            if cut is None:
+                continue
+            html = song_card(song_title, cut, cast, store, has_page, inst,
+                             play=(graph.get('plays') or {}).get(song_title), icons=icons)
+            if html:
+                song_cards[page_title] = html
     return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,
+            'song_cards': song_cards,
             'pairs': store.pairs, 'names': {k: sorted(v) for k, v in sorted(store.raw.items())}}
 
 
 def write(result, out_dir, built_from):
     os.makedirs(os.path.join(out_dir, 'cards'), exist_ok=True)
     for title, html in result['cards'].items():
+        with open(os.path.join(out_dir, 'cards', card_file(title)), 'w') as f:
+            f.write(html)
+    for title, html in result.get('song_cards', {}).items():
         with open(os.path.join(out_dir, 'cards', card_file(title)), 'w') as f:
             f.write(html)
     with open(os.path.join(out_dir, 'pairs.json'), 'w') as f:
@@ -610,6 +855,7 @@ def write(result, out_dir, built_from):
     with open(os.path.join(out_dir, 'cards.json'), 'w') as f:
         json.dump({'month': result['month'], 'featured': result['featured'],
                    'cards': {t: card_file(t) for t in sorted(result['cards'])},
+                   'song_cards': {t: card_file(t) for t in sorted(result.get('song_cards', {}))},
                    'no_card': result['skipped'], 'built_from': built_from}, f, indent=1)
 
 
@@ -628,6 +874,7 @@ def main(argv):
     result = build(pairs, targets, groups, Wiki(a.wiki), today, a.only, whole, credits)
     write(result, a.out, {'db': os.path.basename(a.db), 'wiki': a.wiki, 'today': today.isoformat()})
     print(f"{len(result['cards'])} cards, featured {result['month']}: {', '.join(result['featured'])}; "
+          f"{len(result.get('song_cards', {}))} song cards; "
           f"no card for {len(result['skipped'])} pages", file=sys.stderr)
 
 
