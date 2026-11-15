@@ -19,8 +19,10 @@ services:
     # image cannot be rebuilt (see the composer audit gate in the Jenkinsfile).
     image: ${WIKI_IMAGE:-pickipedia-wiki:latest}
     # To rebuild: docker build -t pickipedia-wiki:latest --build-arg MEDIAWIKI_VERSION=1.43.0 .
+    # Bind to localhost by default (where hunter's Caddy proxies), not 0.0.0.0 around ufw;
+    # set WIKI_BIND=172.17.0.1 when reaching a preview from another container on docker0.
     ports:
-      - "${WIKI_PORT:-8888}:80"
+      - "${WIKI_BIND:-127.0.0.1}:${WIKI_PORT:-8888}:80"
     environment:
       - MEDIAWIKI_DB_TYPE=mysql
       - MEDIAWIKI_DB_HOST=db
