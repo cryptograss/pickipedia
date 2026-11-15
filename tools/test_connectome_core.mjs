@@ -426,6 +426,29 @@ test( 'another turn of the company: the next ones round, those the reader came b
 	assert.equal( ids( K.turned( ring, 0, 6, 1 ) ), 'kabcde' );         // all of them in sight already: no turn
 } );
 
+test( 'a rabbithole walk, as the graph knows it: each cut, who was followed to it, and what came round again', () => {
+	// Justin, #connectome, 15 Nov 2026: Rabbithole's "Your rabbithole" drawn with the explorer's marks
+	const g = K.build( { people: [ [ 'Justin Myles Holmes', 1, 'guitar' ], [ 'Kyle Tuttle', 1, 'banjo' ] ], music: [
+		[ 'arthel:4masks', 'record', 'Justin Myles Holmes', '2025', '4masks', 2, 'gh/x.yaml', '/wiki/4masks', 'Four-masks.png' ] ],
+	cast: [ [ [ 0, 'guitar' ], [ 1, 'banjo' ] ] ],
+	ties: [ [ 0, 1, [ [ 0, 3, 1, [ 'August', 'Victory' ] ] ] ] ],
+	songcast: { QmAug: { song: 'August', on: [ 0 ], artist: 0, pickers: [ [ 0, 'guitar', 'guitar' ], [ 1, 'banjo', 'banjo' ] ] },
+		QmVic: { song: 'Victory', on: [ 0 ], artist: 0, pickers: [ [ 0, 'guitar', 'guitar' ], [ 1, 'banjo', 'banjo' ] ] } } } );
+	const steps = K.walkSteps( g, [
+		{ cid: 'QmAug', song: 'August', via: null, at: 1000 },
+		{ cid: 'QmVic', song: 'Victory', via: { name: 'Justin Holmes', instrument: 'guitar' }, at: 2000 },   // the page's own spelling
+		{ cid: 'QmNotKnown', song: 'Song:Cork Board', via: { name: 'Nobody Here' }, at: 3000 },
+		{ cid: 'QmAug', song: 'August', via: { name: 'Kyle Tuttle' }, at: 4000 },
+		{ song: 'no cid' } ] );
+	assert.deepEqual( steps.map( ( s ) => [ s.song, s.via, s.again ] ),
+		[ [ 'August', null, 0 ], [ 'Victory', 0, 0 ], [ 'Cork Board', null, 0 ], [ 'August', 1, 1 ] ] );
+	assert.equal( steps[ 0 ].piece, K.trackOn( g, 0, 'August' ) );          // the track, where the record has one
+	assert.equal( steps[ 2 ].piece, undefined );                              // a cut the graph doesn't know: its name, as the walk wrote it
+	assert.equal( steps[ 2 ].viaName, 'Nobody Here' );
+	assert.deepEqual( K.walkSum( steps ), { songs: 4, followed: 3, since: 1000 } );
+	assert.deepEqual( K.walkSteps( g, null ), [] );
+} );
+
 test( 'those the reader came by stay in the company, first, whatever their rank; a stranger does not join it', () => {
 	const comp = K.company( G, KYLE );
 	const ring = K.keeping( G, KYLE, comp, [ CHOIR, JUSTIN, LONE, KYLE ] );

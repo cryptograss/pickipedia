@@ -571,6 +571,59 @@ export function unsaid( G, tie, heard ) {
 	return undefined;
 }
 
+/* ------------------------------------------------------------------------------------------------------------
+ * Your rabbithole: the songs a listener has heard in Rabbithole, and who they followed from each to the next
+ * --------------------------------------------------------------------------------------------------------- */
+
+/**
+ * The picker a walk's step was made by, as the graph knows them: by name; else, of those on the cut, the one whose
+ * first and last names are these (a cut's page may write "Justin Holmes" for Justin Myles Holmes). null where
+ * nobody here answers to it.
+ */
+function walker( G, name, cut ) {
+	const id = find( G, name );
+	if ( id !== null || !name ) {
+		return id;
+	}
+	const words = String( name ).toLowerCase().split( /\s+/ ).filter( Boolean );
+	const on = cut ? cut.pickers.map( ( p ) => p[ 0 ] ).filter( ( x ) => x >= 0 ) : [];
+	const like = on.filter( ( x ) => {
+		const w = G.people[ x ].name.toLowerCase().split( /\s+/ );
+		return words.length > 1 && w[ 0 ] === words[ 0 ] && w[ w.length - 1 ] === words[ words.length - 1 ];
+	} );
+	return like.length === 1 ? like[ 0 ] : null;
+}
+
+/**
+ * A walk as the graph knows it (Justin, #connectome, 15 Nov 2026: Rabbithole's "Your rabbithole" drawn as the
+ * explorer draws). hops: Rabbithole's walk, oldest first: { cid, song, via: { name, instrument } | null, at }.
+ * Each step: the cut the cid plays (songcast) and the piece it is in the graph (the track where the cut's record
+ * has one, else the record), the song's name, who the listener followed to it (`via`, an id or null; `viaName`,
+ * as the walk wrote it), when, and `again`, how many times the same song was on before in this walk.
+ */
+export function walkSteps( G, hops ) {
+	const seen = new Map();
+	return ( hops || [] ).filter( ( h ) => h && h.cid ).map( ( h, i ) => {
+		const cut = G.songcast[ h.cid ] || null;
+		const rec = cut && cut.on && cut.on.length ? cut.on[ 0 ] : undefined;
+		const track = rec !== undefined ? trackOn( G, rec, cut.song ) : undefined;
+		const piece = track !== undefined ? track : ( rec !== undefined ? G.whole[ rec ] : undefined );
+		const song = cut ? cut.song : String( h.song || '' ).replace( /^Song:/, '' ) || h.cid.slice( 0, 10 );
+		const key = song.toLowerCase();
+		const again = seen.get( key ) || 0;
+		seen.set( key, again + 1 );
+		const viaName = h.via && h.via.name ? h.via.name : null;
+		return { i, cid: h.cid, cut, piece, song, rec, via: viaName ? walker( G, viaName, cut ) : null, viaName,
+			instrument: h.via && h.via.instrument ? h.via.instrument : '', at: typeof h.at === 'number' ? h.at : null, again };
+	} );
+}
+
+/** What a walk comes to: how many songs, how many of them reached by following someone, and since when. */
+export function walkSum( steps ) {
+	const at = steps.map( ( s ) => s.at ).filter( ( t ) => t !== null );
+	return { songs: steps.length, followed: steps.filter( ( s ) => s.viaName ).length, since: at.length ? Math.min( ...at ) : null };
+}
+
 /** The piece one entry of a tie stands for: the track, where the sources name one (the first of several); else the record or the show. */
 export function pieceFor( G, e ) {
 	const t = e.how === TRACK && e.songs.length ? trackOn( G, e.m, e.songs[ 0 ] ) : undefined;
