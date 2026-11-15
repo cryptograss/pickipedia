@@ -30,8 +30,8 @@
 
 /*
  * By night: the reader's system, unless they chose on the wiki (the cookie "pickipedia-mode", which
- * index.html reads into pp-dark or pp-light on <html> before anything paints; the wiki's own pages and
- * Rabbithole read the same one). The night's paper and ink are the wiki's
+ * index.html reads into pp-dark or pp-light on <html> before anything paints; the wiki's own pages read
+ * the same one, and Rabbithole will). The night's paper and ink are the wiki's
  * (extensions/PickiPediaContent/resources/night/night.less). Gold stays gold: it is the one mark that
  * means something, and it is as bright on dark paper as on light. A browser without light-dark() gets
  * the day, written out above.

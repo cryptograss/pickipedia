@@ -3,8 +3,8 @@
  *
  * The page is already the right way when this runs: by the reader's system, or by their choice, which the
  * server reads from the cookie and puts on <html>. This only adds the switch among the reader's own links
- * and, when it is pressed, keeps the choice where the server, Broadside, the connectome's graph and
- * Rabbithole all read it: the cookie "pickipedia-mode".
+ * and, when it is pressed, keeps the choice where the server, Broadside and the connectome's graph read it,
+ * and where Rabbithole will: the cookie "pickipedia-mode".
  */
 ( function () {
 	var COOKIE = 'pickipedia-mode';

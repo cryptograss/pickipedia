@@ -6,7 +6,7 @@
  * or the templates that set their own colours. Those are most of what a reader sees here, and they need
  * dark colours of ours whichever skin is under them. So one set of night colours, Broadside's
  * (resources/skins.broadside/tokens.css), is used in all of them, and one choice, the cookie
- * "pickipedia-mode", says which: Broadside, this, the graph and Rabbithole all read it.
+ * "pickipedia-mode", says which: Broadside, this and the graph read it, and Rabbithole will.
  *
  * By day nothing here applies: MonoBook is as it was. By night is the reader's system saying dark, unless
  * they chose (pp-dark, pp-light on <html>, from the server: Night.php). The rules are written once, in
@@ -179,7 +179,7 @@
 	}
 	.mw-parser-output [style*="background"]:not( [style*=" color:"] ):not( [style*=";color:"] ):not( [style^="color:"] ) a:not( .new ),
 	.mw-parser-output [bgcolor] a:not( .new ) { color: #2c5cb5; }
-	.mw-parser-output [style*="background"]:not( [style*=" color:"] ):not( [style*=";color:"] ):not( [style^="color:"] ) a.new { color: #c2372d; }
+	.mw-parser-output [style*="background"]:not( [style*=" color:"] ):not( [style*=";color:"] ):not( [style^="color:"] ) a.new { color: #a82a22; }
 	/* The inks the wiki's own pages and templates write by hand (Main Page, Template:Song and their kin use
 	   one palette, by its hex): each has a night ink. Only where it is the colour of words: a selector on
 	   "color:#…" also meets "background-color:#…", and none of these is used as a ground. */
@@ -232,20 +232,18 @@
 		color: var( --night-ink );
 	}
 	.oo-ui-tagItemWidget.oo-ui-widget-enabled { background-color: var( --night-wash ); }
-	.hls-video-player button, .hls-quality-bar button, .hls-playback-bar button {
-		border: 1px solid var( --night-line );
-		background: var( --night-wash );
-		color: var( --night-ink );
-	}
 	/* A box of ours that stays pale by night keeps day's ink and day's links on it. */
 	.pv-proposed, .bot-proposal, .claim-unverified, .pp-record-box, .pp-record-box .pp-record-meta,
 	.pp-song-card, .pp-connectome-card { color: #261c15; }
 	.pv-proposed a:not( .new ), .bot-proposal a:not( .new ), .claim-unverified a:not( .new ),
 	.pp-record-box a:not( .new ), .pp-song-card a:not( .new ), .pp-connectome-card a:not( .new ) { color: #2c5cb5; }
+	/* A red link on a pale box: darker than day's (#c2372d is 4.1:1 on the grey of an unverified claim). */
+	.pv-proposed a.new, .bot-proposal a.new, .claim-unverified a.new,
+	.pp-record-box a.new, .pp-song-card a.new, .pp-connectome-card a.new { color: #a82a22; }
 	.pp-listen-rh, .pp-listen-rh a, .pp-listen-rh span, .plainlinks [style*="background"] span { color: #fff; }
 
 	.hls-video-player button, .hls-quality-bar button, .hls-playback-bar button {
-		border-color: var( --night-line ) !important;
+		border: 1px solid var( --night-line ) !important;
 		background: var( --night-wash ) !important;
 		color: var( --night-ink ) !important;
 	}
@@ -284,6 +282,16 @@
 		--pp-accent: var( --night-rust );
 		--pp-card: var( --night-wash );
 	}
+
+	/* Under a hero picture the gadget takes the ensemble's box off its pale ground ("background: transparent
+	   !important"), though the box's own style still says it has one: so its words are night's, not the
+	   day's ink a pale patch keeps (re, 15 Nov 2026: the names were 2.85:1). */
+	body.pickipedia-show.has-show-hero .ensemble-infobox { color: var( --night-ink ) !important; }
+	body.pickipedia-show.has-show-hero .ensemble-infobox a:not( .new ) { color: inherit !important; }
+	body.pickipedia-show.has-show-hero .ensemble-infobox a:not( .new ):hover { color: var( --night-rust ) !important; }
+	body.pickipedia-show.has-show-hero .ensemble-infobox a.new { color: var( --night-link-new ) !important; }
+	/* The gadget's "verified" is day's green, 4.1:1 on the dark. */
+	body.pickipedia-show .show-poster .pp-status.is-verified { color: var( --night-green ); }
 
 	/* A picture drawn in black on nothing (a diagram, an icon) is on a pale ground, not lost in the dark. */
 	.mw-parser-output img[src$=".svg"], .mw-parser-output img[src*=".svg/"] { background: #f1e9db; border-radius: 2px; }
