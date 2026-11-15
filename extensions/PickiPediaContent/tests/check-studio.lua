@@ -4,7 +4,7 @@
 -- Run from the extension root:  lua tests/check-studio.lua
 package.path = "./lua/?.lua;" .. package.path
 
-local recorded = { subobjects = {}, asks = {}, onTheRecord = {} }
+local recorded = { subobjects = {}, asks = {}, onTheRecord = {}, urls = {}, templates = {} }
 local answers = {}      -- query substring -> answer
 local licenceAnswer = "CC BY-SA 4.0"
 local artistAnswer = "Justin Myles Holmes"
@@ -30,17 +30,28 @@ mw = {
 			return out
 		end,
 	},
+	-- fullUrl answers with the call itself, not with a URL. What a URL looks
+	-- like is MediaWiki's business and differs with $wgArticlePath; writing
+	-- one out here would be inventing a shape and then checking the invention.
+	-- What the module is answerable for is which page it asks for, and with
+	-- what query, so that is what comes back and what the checks read.
 	title = {
 		getCurrentTitle = function() return { fullText = "Song:Barlows" } end,
 		new = function( text )
 			return {
 				fullText = text,
 				fullUrl = function( _, query )
-					local q = ""
-					for key, value in pairs( query or {} ) do
-						q = q .. "?" .. key .. "=" .. value
+					local keys = {}
+					for key in pairs( query or {} ) do
+						table.insert( keys, key )
 					end
-					return "https://pickipedia.xyz/index.php/" .. text .. q
+					table.sort( keys )
+					local q = {}
+					for _, key in ipairs( keys ) do
+						table.insert( q, key .. "=" .. tostring( query[ key ] ) )
+					end
+					table.insert( recorded.urls, { page = text, query = table.concat( q, "&" ) } )
+					return "URL<" .. text .. "|" .. table.concat( q, "&" ) .. ">"
 				end,
 			}
 		end,
@@ -88,6 +99,7 @@ local function makeFrame( args, parentArgs )
 			return ""
 		end,
 		expandTemplate = function( _, spec )
+			table.insert( recorded.templates, spec )
 			local instrument = spec.args[2]
 			return "[[" .. spec.args[1] .. "]]"
 				.. ( ( instrument and instrument ~= "" )
@@ -162,7 +174,7 @@ print( "\nA cut that names its release:" )
 -- One parameter, `cid`, and the page needs no other copy of the CID: the
 -- listen button, the record's track row, the chart and both ways to edit it
 -- all come from it (Justin, #rabbithole, 14 Nov 2026).
-recorded.subobjects, recorded.onTheRecord = {}, {}
+recorded.subobjects, recorded.onTheRecord, recorded.urls, recorded.templates = {}, {}, {}, {}
 artAnswer = "File:four-masks-temp.png"
 onTheRecordAnswer = '<div class="pp-on-record">the tracks</div>'
 out = studio.cut( makeFrame( {}, {
@@ -180,13 +192,20 @@ check( "the record's tracks are asked for, not typed out",
 check( "and shown", out:find( "the tracks", 1, true ) ~= nil, out )
 check( "the release is linked", out:find( "%[%[Release:QmS3QEZ|the release%]%]" ) ~= nil, out )
 check( "its chart too", out:find( "%[%[Release:QmS3QEZ/Metadata|its chart%]%]" ) ~= nil, out )
-check( "with a way to edit the chart by hand",
-	out:find( "Release:QmS3QEZ/Metadata?action=edit edit the chart", 1, true ) ~= nil, out )
-check( "and a way to edit it in the player",
-	out:find( "/rabbithole/?track=QmS3QEZ&action=edit chart it in Rabbithole", 1, true ) ~= nil,
+check( "with a way to edit the chart by hand: the wiki's own edit URL for it",
+	#recorded.urls == 1 and recorded.urls[1].page == "Release:QmS3QEZ/Metadata"
+		and recorded.urls[1].query == "action=edit"
+		and out:find( "URL<Release:QmS3QEZ/Metadata|action=edit> edit the chart", 1, true ) ~= nil,
 	out )
+check( "and a way to edit it in the player",
+	out:find( "https://pickipedia.xyz/rabbithole/?track=QmS3QEZ&action=edit chart it in Rabbithole",
+		1, true ) ~= nil, out )
 check( "the listen button is the template's, not written again",
-	out:find( "%[%[QmS3QEZ%]%]" ) ~= nil, out )
+	#recorded.templates > 0
+		and recorded.templates[ #recorded.templates ].title == "Listen in Rabbithole"
+		and recorded.templates[ #recorded.templates ].args[1] == "QmS3QEZ"
+		and recorded.templates[ #recorded.templates ].args.inline == "yes",
+	out )
 check( "the record's art comes from the record",
 	out:find( "%[%[File:four%-masks%-temp.png|80px|link=4masks|alt=4masks%]%]" ) ~= nil, out )
 check( "and the appearance says which release holds the performance",
