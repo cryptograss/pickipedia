@@ -92,9 +92,16 @@ class OnTheRecord {
 					. ' border:1px solid #3c6749; background:#4a7c59; color:#fff; font-weight:600;">'
 					. $label . '</li>';
 			} else {
-				$href = rtrim( $server, '/' ) . '/rabbithole/?track=' . rawurlencode( $t['cid'] );
+				// action=open: in Rabbithole this changes the page to that
+				// track's, and starts it only when nothing is playing --
+				// a row of tracks is about getting somewhere, not about
+				// interrupting what you are listening to (Justin, item 20,
+				// #rabbithole, 15 Nov 2026). Outside Rabbithole the
+				// address opens the player on that track, as it always did.
+				$href = rtrim( $server, '/' ) . '/rabbithole/?track=' . rawurlencode( $t['cid'] )
+					. '&action=open';
 				$items .= '<li style="' . $pill . ' border:1px solid #9aa895; background:#f1f4ef;"'
-					. ' title="Listen in Rabbithole">'
+					. ' title="Open this track">'
 					. '[' . $href . ' <span style="color:#2d5016;">' . $label . '</span>]</li>';
 			}
 		}
