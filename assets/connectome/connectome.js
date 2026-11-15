@@ -835,24 +835,28 @@ const draw = {
 			return;
 		}
 		const p = P( d.id );
+		// On a song's ring the instrument is the cut's own (magent, #connectome, 15 Nov 2026: Skyler Golden
+		// played bass on August, however his page says guitar); the icon tries it and falls back to a dot.
+		const onCut = d.song !== undefined && d.role;
+		const inst = onCut ? d.role.split( ';' )[ 0 ].trim() : p.inst;
 		g.textContent = '';
 		g.setAttribute( 'class', 'pk ' + d.kind + ( p.page ? '' : ' nopage' ) + ( d.lit ? ' lit' : '' ) );
-		g.setAttribute( 'aria-label', p.name + instOf( d.id ) );
+		g.setAttribute( 'aria-label', p.name + ( onCut && d.role ? ' · ' + d.role : instOf( d.id ) ) );
 		( d.kind === 'dot' ? layers.dots : layers.nodes ).appendChild( g );
 		if ( d.kind === 'dot' ) {
 			g.appendChild( s( 'circle', { class: 'halo', r: coarse ? 15 : Math.max( 12, d.r + 7 ) } ) );
 			g.appendChild( s( 'circle', { class: 'dot' + ( p.page ? '' : ' hollow' ), r: d.r } ) );
 			return;
 		}
-		const marked = d.kind !== 'far' && ( d.rabbit || p.inst );   // a ring with something in it, or a plain dot
+		const marked = d.kind !== 'far' && ( d.rabbit || inst );	// a ring with something in it, or a plain dot
 		const R = d.kind === 'subject' ? ( marked ? 22 : 13 ) : ( d.kind === 'far' ? 5.5 : ( marked ? 14 : 9 ) );
 		g.appendChild( s( 'circle', { class: 'halo', r: R + 8 } ) );
 		if ( d.rabbit ) {
 			g.appendChild( s( 'circle', { class: 'ring', r: R } ) );
 			g.appendChild( rabbit( 0.95 ) );
-		} else if ( p.inst ) {
+		} else if ( inst ) {
 			const size = R * 1.42;
-			const img = s( 'image', { href: ICON + encodeURIComponent( p.inst.replace( / /g, '_' ) ) + '.png', x: -size / 2, y: -size / 2,
+			const img = s( 'image', { href: ICON + encodeURIComponent( inst.replace( / /g, '_' ) ) + '.png', x: -size / 2, y: -size / 2,
 				width: size, height: size, 'aria-hidden': 'true' } );
 			img.addEventListener( 'error', () => {
 				img.replaceWith( s( 'circle', { class: 'dot', r: 4 } ) );

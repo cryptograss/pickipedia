@@ -35,9 +35,10 @@ GROUPS = {t: t for t in TARGETS}
 
 
 class FakeWiki:
-    def __init__(self, redirects=None, pages=(), musicians=(), inst=None, featured=FEATURED, listens=None):
+    def __init__(self, redirects=None, pages=(), musicians=(), inst=None, featured=FEATURED, listens=None, cuts=None):
         self.redirects, self.pages, self.heard = redirects or {}, set(pages), listens or {}
         self.musicians, self.inst, self.featured = list(musicians), inst or {}, featured
+        self.cuts = cuts or {}
 
     def resolve(self, names):
         out = {}
@@ -58,6 +59,9 @@ class FakeWiki:
 
     def instruments(self):
         return self.inst
+
+    def studio_cuts(self):
+        return self.cuts
 
 
 def test_featured_is_the_newest_month_begun():
@@ -339,3 +343,56 @@ def test_a_song_page_whose_cut_says_its_cid_plays_that(tmp_path):
             return {'query': {'pages': [{'title': t, 'revisions': [{'slots': {'main': {'content': x}}}]} for t, x in text.items()]}}
     heard = Api('https://example.test/').listens(['Song:August'])
     assert heard == {'Song:August': 'QmStudioCidThisIsLongEnoughForARealOne'}                     # the cut's cid plays when no Listen line says one
+
+
+# ---- the song pages' cuts come first (magent, #connectome, 15 Nov 2026) ----
+
+def test_the_song_pages_cut_names_the_record_and_the_whole_cast(tmp_path):
+    pairs = [pair('Kyle Tuttle', 'Maddie Denton', 'track', 'arthel:vowel sounds', [(AUG, '', 'august')])]
+    whole = song_whole()
+    wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
+                    pages={'Kyle Tuttle', 'Justin Myles Holmes', '4masks', 'Song:August'}, musicians=['Kyle Tuttle'],
+                    cuts={'Song:August': [{'record': '4masks', 'number': '5',
+                                           'cid': 'QmCutCid', 'cast': {'Justin Holmes': 'guitar; vocals',
+                                                                       'Lauren Luz': 'vocals',
+                                                                       'Harry Clark': 'mandolin'}}]})
+    credits = [('Justin Holmes', 'guitar', 'arthel:vowel sounds', 'track', AUG)]
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, whole, credits)
+    sc = result['graph']['songcast']['August']
+    music = result['graph']['music']
+    cut = music[sc['on'][0]]
+    assert cut[0] == 'arthel:4masks'                                       # the page's record, not the store's grouping
+    cast = dict(sc['pickers'])
+    names = [p[0] for p in result['graph']['people']]
+    assert cast[names.index('Justin Myles Holmes')] == 'guitar; vocals'    # the page's roles, in the store's shape
+    assert cast[names.index('Lauren Luz')] == 'vocals'                     # whom the store's credits left out
+    assert result['song_cards']['Song:August']
+
+
+def test_the_page_writes_roles_with_commas_the_store_with_semicolons():
+    cuts = cc.studio_cuts_from('{{Studio cut\n|record=4masks\n|cid=QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a\n'
+                               '|Justin Holmes=guitar, six-whistle\n|Kyle Tuttle=5-string banjo\n}}')
+    assert cuts == [{'record': '4masks', 'number': '', 'cid': 'QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a',
+                     'cast': {'Justin Holmes': 'guitar; six-whistle', 'Kyle Tuttle': '5-string banjo'}}]
+    assert cc.studio_cuts_from('no cut here') == []
+
+
+def test_a_store_song_the_pages_dont_reach_keeps_the_stores_cast():
+    import connectome_graph as cg
+    pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'only-in-store')])]
+    credits = [('A', 'fiddle', 'arthel:4masks', 'track', 'u'), ('B', 'banjo', 'arthel:4masks', 'track', 'u')]
+    g = cg.export(pairs, song_whole(), credits, lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
+                  songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': '', 'cast': {'A': 'guitar'}}]})
+    assert dict(g['songcast']['Only In Store']['pickers'].copy()) is not None
+    assert 'August' in g['songcast'] and dict(g['songcast']['August']['pickers']) != {}
+    assert dict(g['songcast']['Only In Store']['pickers']) != {}
+
+
+def test_a_cut_whose_record_the_store_doesnt_know_is_left_out():
+    import connectome_graph as cg
+    pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'other-song')])]
+    g = cg.export(pairs, song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
+                  songcuts={'August': [{'record': 'Some Other Record', 'cast': {'A': 'guitar'}},
+                                       {'record': '4masks', 'cast': {'A': 'guitar'}}]})
+    want = g['music'].index(next(m for m in g['music'] if m[0] == 'arthel:4masks'))
+    assert g['songcast']['August']['on'] == [want]

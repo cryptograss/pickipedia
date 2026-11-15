@@ -152,6 +152,50 @@ class Wiki:
                 out[row['fulltext']] = v[0]['fulltext'].lower()
         return out
 
+    def studio_cuts(self):
+        """The song pages that state a cut: title -> [{'record', 'number', 'cid', 'cast': {name: roles}}],
+        one entry per {{Studio cut}} on the page. The page is the source here (track precedence, as the
+        schema consensus has it); the store's credits fill the songs these don't reach."""
+        titles, cont = [], {}
+        while True:
+            q = self.api(action='query', list='embeddedin', eititle='Template:Studio cut',
+                         eilimit=500, eifilterredir='nonredirects', **cont)
+            titles += [p['title'] for p in q['query']['embeddedin']]
+            if 'continue' not in q:
+                break
+            cont = {'eicontinue': q['continue']['eicontinue']}
+        out = {}
+        for i in range(0, len(titles), 50):
+            q = self.api(action='query', titles='|'.join(titles[i:i + 50]), prop='revisions', rvprop='content',
+                         rvslots='main', formatversion=2)['query']
+            for page in q.get('pages', []):
+                revs = page.get('revisions') or []
+                text = revs[0]['slots']['main'].get('content', '') if revs else ''
+                cuts = studio_cuts_from(text)
+                if cuts:
+                    out[page['title']] = cuts
+        return out
+
+
+def studio_cuts_from(text):
+    """The {{Studio cut}} blocks of a page's wikitext: their record, number, cid, and each person's roles.
+    The store writes roles "; "-joined; a page writes them with commas, so they arrive in the store's shape."""
+    cuts = []
+    for m in re.finditer(r'\{\{\s*Studio[ _]cut\b(.*?)\}\}', text, re.S):
+        fields, cast = {}, {}
+        for line in m.group(1).split('\n'):
+            k, _, v = line.strip().lstrip('|').partition('=')
+            k, v = k.strip(), v.strip()
+            if not k:
+                continue
+            if k in ('record', 'number', 'cid'):
+                fields[k] = v
+            elif k not in ('studio', 'recorded', 'engineer', 'status', 'note') and v:
+                cast[k] = re.sub(r'\s*,\s*', '; ', v)
+        cuts.append({'record': fields.get('record', ''), 'number': fields.get('number', ''),
+                     'cid': fields.get('cid', ''), 'cast': cast})
+    return cuts
+
 
 def featured_from(wikitext, today):
     """The [[links]] under the newest `== YYYY-MM ==` heading that has begun by today."""
@@ -751,9 +795,15 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         song_page = {t: n[len('Song:'):] for n, (t, ok) in found.items() if ok and n.startswith('Song:')}
         heard = wiki.listens(song_page) if song_page else {}
         plays = {song_page[t]: cid for t, cid in heard.items() if t in song_page}
+        # The song pages' own cuts come first (magent, #connectome, 15 Nov 2026); the store fills the rest.
+        cutmap = {}
+        for page_title, cs in (wiki.studio_cuts() if hasattr(wiki, 'studio_cuts') else {}).items():
+            song_title = page_title[len('Song:'):] if page_title.startswith('Song:') else page_title
+            cutmap[song_title] = [{'record': c['record'], 'number': c['number'], 'cid': c['cid'],
+                                   'cast': {alias.get(n, n): r for n, r in c['cast'].items()}} for c in cs]
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
-            has_page, inst, featured, month, song, pages, today.isoformat(), plays)
+            has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap)
         # Song cards: the store's cut of each song with a Song: page (Justin, #rabbithole, 15 Nov 2026, 00:23Z).
         songcast = graph.get('songcast') or {}
         people = graph.get('people') or []

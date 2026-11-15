@@ -110,7 +110,7 @@ def weight(p, track, stage, record, show=False):
     return one(len(record[p['target']]))
 
 
-def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None):
+def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None, songcuts=None):
     """
     pairs     the store's pairs, each name already as the wiki knows it
     targets   id -> {kind, title, date, artist, grp, formats: [..]}
@@ -134,21 +134,52 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         if key not in best or cand[:3] > best[key][0][:3]:
             best[key] = (cand, p)
 
-    names = sorted({n for a, b, _ in best for n in (a, b)} | set(featured))
+    # Song nodes: who is on each cut of each song on cryptograss's own records, and which of the music
+    # entries those cuts are (Justin, #rabbithole, 15 Nov 2026, 00:23Z: the song-centred card). The song
+    # pages' own cuts ({{Studio cut}}) come first — track precedence, as the schema consensus has it, and
+    # the page is what a reader checks (magent, #connectome, 15 Nov 2026: the store's arthel filenames were
+    # stale and missed pages, and grouped August under the wrong record) — the store's track-level credits
+    # fill the songs the pages don't reach. A page's cut brings its record into the music; a cut whose
+    # record the store has never heard of is left out.
+    record_target = {}
+    for t in sorted(targets):
+        if targets[t].get('kind') == 'record' and targets[t].get('title'):
+            record_target.setdefault(targets[t]['title'], t)
+    page_cut, page_people = defaultdict(set), defaultdict(dict)
+    for title, cuts in (songcuts or {}).items():
+        for c in cuts:
+            target = record_target.get(c['record'])
+            if target is None:
+                continue
+            page_cut[title].add(target)
+            for person, roles in c['cast'].items():
+                said = page_people[title].setdefault(person, [])
+                for r in (roles or '').split(';'):
+                    r = r.strip()
+                    if r and r.lower() not in {x.lower() for x in said}:
+                        said.append(r)
+    names = sorted({n for a, b, _ in best for n in (a, b)} | set(featured)
+                   | { p for cast in page_people.values() for p in cast })
     pid = {n: i for i, n in enumerate(names)}
-    used = sorted({c[3] for c, _ in best.values()})
+    used = sorted({c[3] for c, _ in best.values()} | { t for ts in page_cut.values() for t in ts })
     mid = {t: i for i, t in enumerate(used)}
 
-    # Song nodes: who the store's credits put on each cut of each song on cryptograss's own records, and which
-    # of the music entries those cuts are (Justin, #rabbithole, 15 Nov 2026, 00:23Z: the song-centred card).
     songcut, songpeople = defaultdict(set), defaultdict(dict)
+    covered = set()
+    for title, ts in page_cut.items():
+        if not all( t in mid for t in ts ):
+            continue
+        covered.add(title)
+        songcut[title] |= ts
+        for person, said in page_people[title].items():
+            songpeople[title][person] = list(said)
     for person, roles, target, scope, source in credits:
         if scope != 'track' or not target.startswith('arthel:') or target not in mid:
             continue
         stem = source.rsplit('/', 1)[-1]
         stem = stem[:-5] if stem.endswith('.yaml') else stem
         title = song_title(target, [source, '', stem])
-        if not title:
+        if not title or title in covered:
             continue
         songcut[title].add(target)
         said = songpeople[title].setdefault(person, [])
@@ -159,7 +190,7 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
     for key, people in track.items():                 # a cut the pairs put pickers on, but no credits name: their roles unsaid
         if key[0].startswith('arthel:') and key[0] in mid:
             title = song_title(key[0], list(key[1:]))
-            if title:
+            if title and title not in covered:
                 songcut[title].add(key[0])
                 for q in people:
                     songpeople[title].setdefault(q, [])
