@@ -61,6 +61,7 @@ let G = null;
 let view = null;
 let sel = { picker: null };
 let scene = null;
+let listed = null;               // the view the list was last drawn for: its scroll is kept until the view changes
 let was = new Map();             // where each thing in sight is, by what it stands for, as the view changes
 let fingers = false;             // the last pointer down was a finger or a pen: nothing hovers, so a touch asks before it acts
 let held = null;                 // the mark whose sheet is open
@@ -538,7 +539,7 @@ function further( v, lay, mine, seats, seatOf, web, W, H ) {
 	const on = K.beyond( G, v.a, mine.map( ( c ) => c.id ), 2, v.keep || [] ), fars = [];
 	disc( lay.C, 26 );
 	const mid = wide( cut( first( v.a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
-	discs.push( { x1: lay.C.x - mid, y1: lay.C.y + 28, x2: lay.C.x + mid, y2: lay.C.y + 50 } );   // the middle's own name, under it
+	discs.push( { x1: lay.C.x - mid, y1: lay.C.y + 22, x2: lay.C.x + mid, y2: lay.C.y + 41 } );   // the middle's own name, tucked under it
 	mine.forEach( ( c, i ) => {
 		const from = seatOf.get( c.id );
 		line( lay.C, from );
@@ -604,6 +605,23 @@ function egoScene( v ) {
 	} ), 10 );
 	const shown = n + spots.length;
 	const beads = K.seat( spots, ring.slice( n, shown ).map( ( c ) => wanted( 'p' + c.id, pan ) ) );
+	// Where the line the reader came by says what it is: a little past halfway out, or further, until its band
+	// is clear of the middle's own name (Justin, #connectome, 15 Nov 2026: a label never on the middle's name).
+	const midBox = ( () => {
+		const half = wide( cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
+		const R = G.people[ a ].img ? 26 : 22, base = lay.C.y + R + 10;        // as draw.node sets the subject's name
+		return { x1: lay.C.x - half - 4, y1: base - 16, x2: lay.C.x + half + 4, y2: base + 6 };
+	} )();
+	const homeward = ( pos, room ) => {
+		let at;
+		for ( const f of [ 0.54, 0.62, 0.7, 0.78, 0.86 ] ) {
+			at = { x: lay.C.x + ( pos.x - lay.C.x ) * f, y: lay.C.y + ( pos.y - lay.C.y ) * f };
+			if ( at.x + room / 2 < midBox.x1 || at.x - room / 2 > midBox.x2 || at.y + 13 < midBox.y1 || at.y - 13 > midBox.y2 ) {
+				break;
+			}
+		}
+		return at;
+	};
 	// The one in the middle is named there too, as on the cards, though the headline says who it is (Justin, #connectome, 15 Nov 2026).
 	addNode( sc, a, lay.C, 'subject', { rabbit: true, label: cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ) } );
 	ring.slice( 0, shown ).forEach( ( c, i ) => {
@@ -618,7 +636,7 @@ function egoScene( v ) {
 			delay: named ? 120 + i * 40 : 300, role: 'spoke', c: c.id } );
 		if ( by ) {                                                  // the line the reader came down: what it is, said on it
 			const len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y ), room = Math.max( 92, Math.min( 190, len - 64 ) );
-			const at = { x: lay.C.x + ( pos.x - lay.C.x ) * 0.54, y: lay.C.y + ( pos.y - lay.C.y ) * 0.54 };
+			const at = homeward( pos, room );
 			placePills( sc, a, c.id, c.tie, at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, v.by );
 		}
 	} );
@@ -632,7 +650,7 @@ function egoScene( v ) {
 		if ( homeId !== null && rec !== undefined ) {
 			const pos = seatOf.get( homeId ), len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y );
 			const room = Math.max( 92, Math.min( 190, len - 64 ) );
-			const at = { x: lay.C.x + ( pos.x - lay.C.x ) * 0.54, y: lay.C.y + ( pos.y - lay.C.y ) * 0.54 };
+			const at = homeward( pos, room );
 			placePills( sc, a, homeId, { ev: [ { m: rec, how: K.TRACK, songs: [ home.song ] } ] },
 				at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, undefined );
 		}
@@ -645,10 +663,15 @@ function egoScene( v ) {
 		.concat( [ { x1: lay.C.x - 30, y1: lay.C.y - 30, x2: lay.C.x + 30, y2: lay.C.y + 30 } ],
 			mine.map( ( c ) => seatOf.get( c.id ) ).map( ( p ) => ( { x1: p.x - 17, y1: p.y - 17, x2: p.x + 17, y2: p.y + 17 } ) ) );
 	const midName = wide( cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
-	taken.push( { x1: lay.C.x - midName, y1: lay.C.y + 28, x2: lay.C.x + midName, y2: lay.C.y + 50 } );
+	taken.push( { x1: lay.C.x - midName, y1: lay.C.y + 22, x2: lay.C.x + midName, y2: lay.C.y + 41 } );
 	const onLine = ( from, to, f, room ) => ( { x1: from.x + ( to.x - from.x ) * f - room / 2, x2: from.x + ( to.x - from.x ) * f + room / 2, y: from.y + ( to.y - from.y ) * f } );
 	const whisper = ( u, id, tie, from, to, f ) => {                // said only when the far end is pointed at
-		const at = onLine( from, to, f, Math.min( 200, W * 0.32 ) );
+		const room = Math.min( 200, W * 0.32 ), clearOf = ( b ) => b.x + 70 < midBox.x1 || b.x - 70 > midBox.x2 ||
+			b.y + 13 < midBox.y1 || b.y - 13 > midBox.y2;
+		// along the line either way, until clear of the middle's own name; nowhere clear, where it was
+		const g = [ f, f + 0.08, f - 0.08, f + 0.16, f - 0.16, f + 0.24, f - 0.24 ].filter( ( x ) => x > 0.12 && x < 0.92 )
+			.find( ( x ) => clearOf( { x: from.x + ( to.x - from.x ) * x, y: from.y + ( to.y - from.y ) * x } ) );
+		const at = onLine( from, to, g === undefined ? f : g, room );
 		placePills( sc, u, id, tie, at.x1, at.x2, at.y, 1, 0, 0, undefined, { shy: true, owner: 'p' + id, is: undefined } );
 	};
 	// Of the things two share that come first alike, a line says one no other line here has said yet: eight
@@ -1033,7 +1056,9 @@ const draw = {
 		const at = d.at ? { x: d.at.x, y: d.at.y, 'text-anchor': d.at.anchor } :   // where the scene found it room (K.beside)
 			d.side === 'left' ? { x: -R - 12, y: 6, 'text-anchor': 'end' } :
 				d.side === 'right' ? { x: R + 12, y: 6, 'text-anchor': 'start' } :
-					{ x: d.dx || 0, y: d.below ? R + ( big ? 21 : 18 ) : -R - 8, 'text-anchor': 'middle' };
+					// the middle's name tucked in tight, its top just over the circle's rim, clear of the pills on the
+					// lines out of it (Justin, #connectome, 15 Nov 2026)
+					{ x: d.dx || 0, y: d.below ? R + ( big ? 10 : 18 ) : -R - 8, 'text-anchor': 'middle' };
 		g.appendChild( s( 'a', { href: address( { a: d.id } ), 'aria-label': 'Go to ' + p.name }, s( 'text', at, label ) ) );
 	},
 	line( g, d ) {
@@ -1449,7 +1474,10 @@ function fillPanel() {
 	out.push( h( 'p', { class: 'foot' }, `${ G.people.length } pickers, ${ G.music.length } records and shows that join them. Built ${ K.when( G.built ) }. `,
 		h( 'a', { href: 'connectome.sqlite', download: '' }, 'The whole store (SQLite)' ) ) );
 	panel.replaceChildren( ...out.flat().filter( Boolean ) );
-	panel.scrollTop = 0;
+	if ( listed !== view ) {                                     // a new view's list starts at its top; a click in this one keeps its place
+		panel.scrollTop = 0;
+		listed = view;
+	}
 }
 
 /* ------------------------------------------------------------------------------------------------------------
@@ -1595,17 +1623,12 @@ function go( v ) {
 	}
 	show();
 	stamp( trail.length > 1 );
-	if ( narrow() && window.scrollY > 40 ) {                        // asked for from the list, under the graph: up to the graph
-		window.scrollTo( 0, 0 );
-	}
+	// The page stays where the reader has it (Justin, #connectome, 15 Nov 2026: not to the top on every click).
 }
 
 function choose( picked ) {
 	Object.assign( sel, picked );
 	show();
-	if ( narrow() && window.scrollY > 0 ) {                         // the list is under the graph: bring what changed into sight
-		window.scrollTo( { top: 0, behavior: still ? 'auto' : 'smooth' } );
-	}
 }
 
 function back() {
