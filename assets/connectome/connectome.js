@@ -2463,6 +2463,27 @@ function typed( ev ) {
 	$( id ).addEventListener( 'focus', ( e ) => e.target.select() );
 } );
 
+// The drawer (Justin, #connectome, 15 Nov 2026): the list folds away at any width, and stays as the reader left
+// it. The graph's frame grows into the room, and the observer below lays the view out again.
+const drawer = $( 'drawer' ), mainEl = drawer.parentElement;
+function fold( shut ) {
+	mainEl.classList.toggle( 'shut', shut );
+	drawer.setAttribute( 'aria-expanded', String( !shut ) );
+	drawer.title = shut ? 'Show the list' : 'Hide the list';
+	drawer.querySelector( '.chev' ).textContent = shut ? '‹' : '›';
+	drawer.querySelector( '.word' ).textContent = shut ? 'Show the list' : 'Hide the list';
+}
+try {
+	fold( localStorage.getItem( 'connectome-list' ) === 'shut' );
+} catch ( e ) {}                                                   // storage refused: the list starts open
+drawer.addEventListener( 'click', () => {
+	const shut = !mainEl.classList.contains( 'shut' );
+	fold( shut );
+	try {
+		localStorage.setItem( 'connectome-list', shut ? 'shut' : 'open' );
+	} catch ( e ) {}
+} );
+
 let sized = 0;
 new ResizeObserver( () => {
 	cancelAnimationFrame( sized );

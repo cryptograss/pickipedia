@@ -402,6 +402,27 @@ main {
 	color: var( --muted );
 }
 
+/* ---- the drawer: the list folds away at any width, and the graph takes the room (Justin, #connectome,
+   15 Nov 2026). Beside the graph it is a strip down the list's edge; under it, a bar across. ---- */
+#drawer {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	padding: 0;
+	border: 0;
+	border-left: 1px solid var( --hair );
+	background: var( --plane );
+	color: var( --ink2 );
+	font: 700 15px var( --ui );
+	cursor: pointer;
+}
+#drawer:hover { background: var( --hover ); color: var( --ink ); }
+#drawer:focus-visible { outline: 2px solid var( --link ); outline-offset: -2px; }
+#drawer .word { display: none; }
+main.shut #panel { display: none; }
+
 /* ---- the panel: the same, as a list a reader can check ---- */
 #panel {
 	flex: none;
@@ -808,6 +829,9 @@ a.out:focus { text-decoration: underline; }
 	#legend .lg.more { display: none; }
 	#say { padding: 10px 12px 0; }
 	#panel { width: auto; border-top: 1px solid var( --hair ); border-left: 0; }
+	#drawer { gap: 8px; width: auto; min-height: 36px; border-top: 1px solid var( --hair ); border-left: 0; font-size: 13px; }
+	#drawer .word { display: inline; font-weight: 600; }
+	#drawer .chev { transform: rotate( -90deg ); }        /* under the graph: up to fold it, down to open it */
 	#say h1 { font-size: 18px; }
 	#crumbs { display: none; }
 	.bar { gap: 6px; padding: 6px 8px; }
@@ -839,6 +863,9 @@ a.out:focus { text-decoration: underline; }
 	#say h1 a.out { display: inline-block; padding: 6px 4px; }
 	.ln .hit { stroke-width: 24; }
 	#say h1 button.turn { padding: 5px 12px; font-size: 13px; }
+}
+@media ( pointer: coarse ) and ( min-width: 761px ) {
+	#drawer { width: 32px; }                               /* beside the graph: wide enough for a fingertip */
 }
 
 @media ( prefers-reduced-motion: reduce ) {
