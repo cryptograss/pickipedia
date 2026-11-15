@@ -423,6 +423,24 @@ def test_each_cut_of_a_page_carries_its_own_graph_in_the_pages_order():
     assert g['songcast']['QmCutTwo']['song'] == 'Barlow'
 
 
+def test_each_cuts_card_file_is_named_as_the_php_names_it(tmp_path):
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:vowel sounds', [(AUG, '', 'barlow')])]
+    whole = song_whole()
+    wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
+                    pages={'Justin Myles Holmes', 'Kyle Tuttle', 'Vowel Sounds', 'Song:Barlow'},
+                    musicians=['Kyle Tuttle'], inst={'Kyle Tuttle': 'banjo'},
+                    cuts={'Song:Barlow': [
+                        {'record': 'Vowel Sounds', 'number': '6', 'cid': 'QmCutOne', 'recorded': '',
+                         'cast': {'Justin Holmes': 'guitar', 'Kyle Tuttle': 'banjo'}}]})
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, whole, [])
+    cc.write(result, str(tmp_path), {'today': '2026-11-15'})
+    # Connectome::cutFileFor: md5( title|record|number|cid ) — the template passes the block's own params
+    want = hashlib.md5("Song:Barlow|Vowel Sounds|6|QmCutOne".encode()).hexdigest() + '.html'
+    assert (tmp_path / 'cards' / want).exists()
+    html = (tmp_path / 'cards' / want).read_text()
+    assert html.count('data-cut=') == 1                                     # one cut, its own graph
+
+
 def test_a_cut_with_no_cid_keys_itself_by_its_record_and_track():
     import connectome_graph as cg
 
