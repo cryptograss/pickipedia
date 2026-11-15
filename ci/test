@@ -1,0 +1,91 @@
+#!/bin/sh
+# pickipedia's checks, as Jenkins' branches agent runs them (Cryptograss:Moods/ramp/Plan, section 11;
+# maybelle-config's maybelle/jobs/branch-tests.groovy): what .github/workflows/checks.yml and the Jenkinsfile's
+# "Check Verification Gate" run, in one place, on every branch pushed to githouse, with the result on the ramp.
+#
+# The Lua checks run here, which until 15 Nov 2026 they did nowhere: the wiki's build has no lua ("no lua
+# interpreter; skipping the module checks", pickipedia-build #94753) and GitHub only parsed them. The
+# interpreter is the one the wiki itself runs, the binary Scribunto ships, fetched from Scribunto's repository
+# at the release branch the Jenkinsfile's MEDIAWIKI_VERSION names and held to a hash kept below.
+#
+# Not here: extensions/PickiPediaContent/tests/smoke.py reads a running wiki, and what runs is production, not
+# the branch under test; check-in-wiki.sh needs docker; check-todo.php and check-moodlinks.php need
+# MediaWiki's vendor/autoload.php.
+set -eu
+root=$(pwd)
+echo "php $(php -r 'echo PHP_VERSION;'), $(python3 --version), node $(node --version)"
+
+echo '--- every PHP file parses'
+find . -name '*.php' -not -path './.git/*' -not -path './vendor/*' -print0 | xargs -0 -n 1 php -l > /dev/null
+echo "$(find . -name '*.php' -not -path './.git/*' -not -path './vendor/*' | wc -l) PHP files"
+
+echo '--- every JavaScript and JSON file parses'
+find . -name '*.js' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*' -print0 \
+    | xargs -0 -n 1 node --check
+find . -name '*.json' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*' -print0 \
+    | xargs -0 -n 1 python3 -c 'import json, sys; json.load(open(sys.argv[1]))'
+
+echo '--- the verification gate'
+for check in extensions/PickiPediaVerification/tests/check-*.php; do
+    echo "- $check"
+    php "$check"
+done
+node extensions/PickiPediaVerification/tests/check-verify-js.mjs
+
+echo '--- the extensions both builds load'
+php docker/check-extensions.php "$root"
+
+echo '--- PickiPediaReleases'
+php extensions/PickiPediaReleases/tests/check-on-the-record.php
+
+echo '--- PickiPediaContent'
+# Every check-*.php there, so one added later runs without anyone remembering to add it here, but for the two
+# that take MediaWiki's autoloader as an argument.
+cd extensions/PickiPediaContent
+for check in tests/check-*.php; do
+    case "$check" in tests/check-todo.php|tests/check-moodlinks.php) continue ;; esac
+    echo "- $check"
+    php "$check"
+done
+
+echo '--- the Lua modules, with the interpreter the wiki runs'
+release=$(sed -n "s/.*MEDIAWIKI_VERSION = '\([0-9]*\)\.\([0-9]*\)\..*/REL\1_\2/p" "$root/Jenkinsfile")
+# sha256 of Scribunto's lua5_1_5_linux_64_generic/lua at REL1_43. A new MEDIAWIKI_VERSION whose Scribunto
+# ships another binary fails here, on purpose: look at the new one, then change this line.
+want=2d491d57d2defd88deb96c4d4b513dec6a531df80a4c8ac6bdd0f8e4c4081f43
+lua_dir=$(mktemp -d)
+lua="$lua_dir/lua"
+curl -fsSL --retry 2 -o "$lua" \
+    "https://raw.githubusercontent.com/wikimedia/mediawiki-extensions-Scribunto/${release}/includes/Engines/LuaStandalone/binaries/lua5_1_5_linux_64_generic/lua"
+have=$(sha256sum "$lua" | cut -d' ' -f1)
+if [ "$have" != "$want" ]; then
+    echo "Scribunto's lua at $release isn't the binary this was written against: $have, not $want"
+    exit 1
+fi
+chmod +x "$lua"
+"$lua" -v
+for module in lua/pickipedia/*.lua tests/check-*.lua; do
+    "$lua" -e "assert(loadfile('$module'))"
+done
+for check in tests/check-*.lua; do
+    echo "- $check"
+    "$lua" "$check"
+done
+rm -rf "$lua_dir"
+cd "$root"
+
+echo '--- the tools'
+venv=$(mktemp -d)   # its own, so two runs at once can't rebuild one venv under each other
+python3 -m venv "$venv"
+. "$venv/bin/activate"
+pip install -q --upgrade pip
+# PyYAML because homeplace.py reads arthel's YAML (the Jenkinsfile's Connectome stage installs it too).
+pip install -q pytest PyYAML
+# blue-railroad-import is left out, as GitHub's checks leave it out: its tests import modules that aren't
+# in this repository (#126).
+(cd tools && python -m pytest -q --ignore=blue-railroad-import)
+node tools/test_connectome_core.mjs > /dev/null
+echo 'tools/test_connectome_core.mjs: ok'
+deactivate
+rm -rf "$venv"
+echo '--- all of pickipedia'"'"'s checks passed'

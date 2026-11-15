@@ -1,343 +1,52 @@
--- Checks for Module:Studio sessions: cuts, appearances, and the pages that
--- read them.
-
+-- Checks for Module:Studio sessions that need no wiki: what identifies a cut.
+--
+-- That is the one rule in the module that is its own. The rest of what it
+-- does is ask MediaWiki for things (a subobject stored, a query answered, a
+-- template expanded, a URL made), and a check of that written here would have
+-- to play MediaWiki's part itself. This file did, until 15 Nov 2026: thirteen
+-- stand-ins for mw and the frame, one of which answered fullUrl with an
+-- address the wiki never makes, and a check that then asserted the stand-in.
+-- So that half is checked where the real answers are, by tests/smoke.py, on a
+-- running wiki: each page's source against what was rendered and stored.
+--
 -- Run from the extension root:  lua tests/check-studio.lua
 package.path = "./lua/?.lua;" .. package.path
 
-local recorded = { subobjects = {}, asks = {}, onTheRecord = {}, urls = {}, templates = {} }
-local answers = {}      -- query substring -> answer
-local licenceAnswer = "CC BY-SA 4.0"
-local artistAnswer = "Justin Myles Holmes"
-local artAnswer = ""
-local onTheRecordAnswer = ""
-
-mw = {
-	text = {
-		unstrip = function( s ) return s end,
-		split = function( s, sep, plain )
-			local out = {}
-			local pattern = plain and ( sep:gsub( "%p", "%%%0" ) ) or sep
-			local start = 1
-			while true do
-				local from, to = s:find( pattern, start )
-				if not from then
-					table.insert( out, s:sub( start ) )
-					break
-				end
-				table.insert( out, s:sub( start, from - 1 ) )
-				start = to + 1
-			end
-			return out
-		end,
-	},
-	-- fullUrl answers with the call itself, not with a URL. What a URL looks
-	-- like is MediaWiki's business and differs with $wgArticlePath; writing
-	-- one out here would be inventing a shape and then checking the invention.
-	-- What the module is answerable for is which page it asks for, and with
-	-- what query, so that is what comes back and what the checks read.
-	title = {
-		getCurrentTitle = function() return { fullText = "Song:Barlows" } end,
-		new = function( text )
-			return {
-				fullText = text,
-				fullUrl = function( _, query )
-					local keys = {}
-					for key in pairs( query or {} ) do
-						table.insert( keys, key )
-					end
-					table.sort( keys )
-					local q = {}
-					for _, key in ipairs( keys ) do
-						table.insert( q, key .. "=" .. tostring( query[ key ] ) )
-					end
-					table.insert( recorded.urls, { page = text, query = table.concat( q, "&" ) } )
-					return "URL<" .. text .. "|" .. table.concat( q, "&" ) .. ">"
-				end,
-			}
-		end,
-	},
-	site = { server = "https://pickipedia.xyz" },
-}
-
-local function lazyArgs( values )
-	local proxy = {}
-	setmetatable( proxy, {
-		__index = function( _, key ) return values[ key ] end,
-		__pairs = function() return pairs( values ) end,
-	} )
-	return proxy
-end
-
-local function makeFrame( args, parentArgs )
-	return {
-		args = lazyArgs( args or {} ),
-		getParent = function()
-			if not parentArgs then return nil end
-			return { args = lazyArgs( parentArgs ) }
-		end,
-		preprocess = function( _, text )
-			table.insert( recorded.subobjects, text )
-			return ""
-		end,
-		callParserFunction = function( _, name, params )
-			if name == "#ask" then
-				table.insert( recorded.asks, params[1] )
-				for needle, answer in pairs( answers ) do
-					if params[1]:find( needle, 1, true ) then
-						return answer
-					end
-				end
-				return ""
-			elseif name == "#show" then
-				if params[2] == "?Has record artist" then return artistAnswer end
-				if params[2] == "?Album art" then return artAnswer end
-				return licenceAnswer
-			elseif name == "#ontherecord" then
-				table.insert( recorded.onTheRecord, params )
-				return onTheRecordAnswer
-			end
-			return ""
-		end,
-		expandTemplate = function( _, spec )
-			table.insert( recorded.templates, spec )
-			local instrument = spec.args[2]
-			return "[[" .. spec.args[1] .. "]]"
-				.. ( ( instrument and instrument ~= "" )
-					and ( "{" .. instrument .. "}" ) or "" )
-		end,
-	}
-end
-
-local rawpairs = pairs
-pairs = function( t )
-	local mt = getmetatable( t )
-	if mt and mt.__pairs then return mt.__pairs( t ) end
-	return rawpairs( t )
-end
-
 local failures = 0
-local function check( name, ok, detail )
-	if ok then
+local function check( name, got, want )
+	if got == want then
 		print( "  ok   " .. name )
 	else
 		failures = failures + 1
-		print( "  FAIL " .. name .. ( detail and ( "\n       " .. tostring( detail ) ) or "" ) )
+		print( "  FAIL " .. name .. "\n       wanted " .. tostring( want )
+			.. ", got " .. tostring( got ) )
 	end
 end
 
-local studio = require( 'pickipedia.studio' )
+-- No mw is defined, here or anywhere in tests/: if loading the module or
+-- naming a cut ever comes to need one, this fails rather than being humoured.
+local id = require( 'pickipedia.studio' )._cutId
 
-print( "\nA cut, on its composition's page:" )
-recorded.subobjects = {}
-local out = studio.cut( makeFrame( {}, {
-	blockheight = "24638686",
-	studio = "Tunesmith Studios",
-	recorded = "3 April, 2024",
-	engineer = "Jake Stargel",
-	record = "4masks",
-	number = "1",
-	["Harry Clark"] = "mandolin",
-	["Justin Holmes"] = "guitar, vocals",
-} ) )
-
-check( "the record is named", out:find( "%[%[4masks%]%]" ) ~= nil, out )
-check( "the track number is shown", out:find( "track 1" ) ~= nil )
-check( "the block height is shown", out:find( "block 24638686" ) ~= nil, out )
-check( "each player has a row of their own",
-	select( 2, out:gsub( '<div class="pp%-players%-who">', "" ) ) == 2, out )
-check( "with their instruments in a column beside them",
-	out:find( 'Harry Clark.-</div><div class="pp%-players%-what">mandolin</div>' ) ~= nil,
-	out )
--- The old version of this asserted the personnel table held no newline,
--- because a newline inside raw <table> markup ends the table and spills the
--- rest of the page out as text. A grid cannot be closed early that way, so
--- the fragility is gone and there is nothing left to guard. What replaces it
--- is the property that made the grid possible: no presentation in the Lua.
-check( "and the module states no styling of its own",
-	out:find( "style=" ) == nil, out )
-check( "a subobject per player, plus one for the appearance",
-	#recorded.subobjects == 3, #recorded.subobjects )
-
-local ids = {}
-for _, s in ipairs( recorded.subobjects ) do
-	ids[ s:match( "Has cut=([^|}]*)" ) ] = true
-end
-check( "every subobject carries the same cut id",
-	ids[ "24638686 Tunesmith Studios" ] and not next( ids, next( ids ) ),
-	table.concat( recorded.subobjects, "\n" ) )
-check( "the appearance names the record and track",
-	recorded.subobjects[3]:find( "Has record=4masks" )
-		and recorded.subobjects[3]:find( "Has track number=1" ),
-	recorded.subobjects[3] )
-
-print( "\nA cut that names its release:" )
--- One parameter, `cid`, and the page needs no other copy of the CID: the
--- listen button, the record's track row, the chart and both ways to edit it
--- all come from it (Justin, #rabbithole, 14 Nov 2026).
-recorded.subobjects, recorded.onTheRecord, recorded.urls, recorded.templates = {}, {}, {}, {}
-artAnswer = "File:four-masks-temp.png"
-onTheRecordAnswer = '<div class="pp-on-record">the tracks</div>'
-out = studio.cut( makeFrame( {}, {
-	studio = "Tunesmith Studios",
-	record = "4masks",
-	number = "5",
-	cid = "QmS3QEZ",
-	["Maddie Denton"] = "fiddle",
-} ) )
-
-check( "the record's tracks are asked for, not typed out",
-	#recorded.onTheRecord == 1 and recorded.onTheRecord[1][1] == "QmS3QEZ"
-		and recorded.onTheRecord[1][2] == "4masks",
-	out )
-check( "and shown", out:find( "the tracks", 1, true ) ~= nil, out )
-check( "the release is linked", out:find( "%[%[Release:QmS3QEZ|the release%]%]" ) ~= nil, out )
-check( "its chart too", out:find( "%[%[Release:QmS3QEZ/Metadata|its chart%]%]" ) ~= nil, out )
-check( "with a way to edit the chart by hand: the wiki's own edit URL for it",
-	#recorded.urls == 1 and recorded.urls[1].page == "Release:QmS3QEZ/Metadata"
-		and recorded.urls[1].query == "action=edit"
-		and out:find( "URL<Release:QmS3QEZ/Metadata|action=edit> edit the chart", 1, true ) ~= nil,
-	out )
-check( "and a way to edit it in the player",
-	out:find( "https://pickipedia.xyz/rabbithole/?track=QmS3QEZ&action=edit chart it in Rabbithole",
-		1, true ) ~= nil, out )
-check( "the listen button is the template's, not written again",
-	#recorded.templates > 0
-		and recorded.templates[ #recorded.templates ].title == "Listen in Rabbithole"
-		and recorded.templates[ #recorded.templates ].args[1] == "QmS3QEZ"
-		and recorded.templates[ #recorded.templates ].args.inline == "yes",
-	out )
-check( "the record's art comes from the record",
-	out:find( "%[%[File:four%-masks%-temp.png|80px|link=4masks|alt=4masks%]%]" ) ~= nil, out )
-check( "and the appearance says which release holds the performance",
-	recorded.subobjects[2]:find( "Has release=Release:QmS3QEZ", 1, true ) ~= nil,
-	recorded.subobjects[2] )
-
-print( "\nA cut with no release named:" )
-artAnswer, onTheRecordAnswer = "", ""
-recorded.onTheRecord = {}
-out = studio.cut( makeFrame( {}, {
-	studio = "Tunesmith Studios", record = "4masks", ["Maddie Denton"] = "fiddle",
-} ) )
-check( "asks for no track row", #recorded.onTheRecord == 0 )
-check( "and offers no chart links", out:find( "pp-cut-links" ) == nil, out )
-
-print( "\nA cut that never made a record:" )
-recorded.subobjects = {}
-out = studio.cut( makeFrame( {}, {
-	blockheight = "24700000",
-	studio = "a kitchen",
-	["David Grier"] = "guitar",
-} ) )
-check( "is still a cut", out:find( "studio cut" ) ~= nil, out )
-check( "and records no appearance", #recorded.subobjects == 1, #recorded.subobjects )
-
-print( "\nIdentity:" )
-check( "block height and studio make the id",
-	recorded.subobjects[1]:find( "Has cut=24700000 a kitchen" ) ~= nil,
-	recorded.subobjects[1] )
-recorded.subobjects = {}
-studio.cut( makeFrame( {}, { record = "4masks", ["Harry Clark"] = "mandolin" } ) )
-check( "falling back to the record when nothing better is given",
-	recorded.subobjects[1]:find( "Has cut=4masks" ) ~= nil, recorded.subobjects[1] )
-check( "and a cut with nothing at all is refused",
-	studio.cut( makeFrame( {}, { ["Harry Clark"] = "mandolin" } ) ):find( "error" ) ~= nil )
-
-print( "\nThe same cut, turning up again:" )
-recorded.subobjects = {}
-out = studio.appearance( makeFrame( {}, {
-	cut = "24638686 Tunesmith Studios", record = "Best of the Whistle", number = "7",
-} ) )
-check( "says where", out:find( "also on %[%[Best of the Whistle%]%]" ) ~= nil, out )
-check( "and records it against the same cut",
-	recorded.subobjects[1]:find( "Has cut=24638686 Tunesmith Studios" ) ~= nil )
-check( "an appearance with no cut is refused",
-	studio.appearance( makeFrame( {}, { record = "4masks" } ) ):find( "error" ) ~= nil )
-
-print( "\nA musician's page, in two queries:" )
-answers = {
-	["Has performer::Harry Clark"] = table.concat( {
-		"Song:Silver 44||24638686 Tunesmith Studios||mandolin||Harry Clark",
-		"Song:Barlows||24700000 a kitchen||mandolin||Harry Clark",
-	}, "@@" ),
-	["Has cut::"] = table.concat( {
-		"Song:Silver 44||24638686 Tunesmith Studios||4masks||1",
-	}, "@@" ),
-}
-local page = studio.appearances( makeFrame( { "" }, { "Harry Clark" } ) )
-check( "the record they played on is listed",
-	page:find( "%[%[4masks%]%]" ) ~= nil, page )
-check( "with the composition linked",
-	page:find( "%[%[Song:Silver 44|Silver 44%]%]" ) ~= nil, page )
-check( "the cut with no record stays out of it",
-	page:find( "Barlows" ) == nil, page )
-
-local loose = studio.unreleased( makeFrame( { "" }, { "Harry Clark" } ) )
-check( "and turns up under its own heading",
-	loose:find( "Studio cuts not on a record" ) and loose:find( "Barlows" ), loose )
-check( "named by the cut it was", loose:find( "24700000 a kitchen" ) ~= nil, loose )
-
-print( "\nA record's page, in two queries:" )
-answers = {
-	["Has record::4masks"] = table.concat( {
-		"Song:Silver 44||24638686 Tunesmith||1||4masks",
-		"Song:Barlows||24700001 Tunesmith||||4masks",
-	}, "@@" ),
-	["Has performer::+"] = table.concat( {
-		"Song:Silver 44||24638686 Tunesmith||Harry Clark||mandolin",
-		"Song:Silver 44||24638686 Tunesmith||Kyle Tuttle||5-string banjo",
-		"Song:Barlows||24700001 Tunesmith||David Grier||guitar",
-	}, "@@" ),
-}
-local listing = studio.tracks( makeFrame( { "" }, { "4masks" } ) )
-check( "numbered tracks come first", listing:find( "1%. " ) ~= nil, listing )
-check( "each composition appears once",
-	select( 2, listing:gsub( "Silver 44|Silver 44", "" ) ) == 1, listing )
-check( "players come from the cut that appears here",
-	listing:find( "Harry Clark" ) and listing:find( "Kyle Tuttle" ), listing )
-check( "and the unnumbered one still lists its player",
-	listing:find( "David Grier" ) ~= nil, listing )
-check( "only two queries, however many tracks",
-	#recorded.asks >= 2, #recorded.asks )
-
-print( "\nOne record's name, shared by every cut on it:" )
--- Imported cuts fall back to the record's name, so Silver 44 and Barlows both
--- carry the cut id "4masks". Harry Clark is only on Silver 44, and must not be
--- credited with the other.
-answers = {
-	["Has performer::Harry Clark"] = "Song:Silver 44||4masks||mandolin||Harry Clark",
-	["Has cut::"] = table.concat( {
-		"Song:Silver 44||4masks||4masks||1",
-		"Song:Barlows||4masks||4masks||2",
-	}, "@@" ),
-}
-page = studio.appearances( makeFrame( { "" }, { "Harry Clark" } ) )
-check( "the composition they played on is listed",
-	page:find( "Silver 44" ) ~= nil, page )
-check( "and the one they did not is not",
-	page:find( "Barlows" ) == nil, page )
-
-answers = {
-	["Has record::4masks"] = table.concat( {
-		"Song:Silver 44||4masks||1||4masks",
-		"Song:Barlows||4masks||2||4masks",
-	}, "@@" ),
-	["Has performer::+"] = table.concat( {
-		"Song:Silver 44||4masks||Harry Clark||mandolin",
-		"Song:Barlows||4masks||David Grier||guitar",
-	}, "@@" ),
-}
-listing = studio.tracks( makeFrame( { "" }, { "4masks" } ) )
-local silverLine = listing:match( "Silver 44.-</div></div>" ) or ""
-check( "a track lists only its own players",
-	silverLine:find( "Harry Clark" ) and not silverLine:find( "David Grier" ),
-	silverLine )
-
-print( "\nNothing to show:" )
-answers = {}
-check( "a record with no cuts renders nothing",
-	studio.tracks( makeFrame( { "" }, { "4masks" } ) ) == "" )
-check( "and a musician with none renders nothing",
-	studio.appearances( makeFrame( { "" }, { "Nobody" } ) ) == "" )
+print( "\nWhat identifies a cut:" )
+check( "block height and studio, together",
+	id{ blockheight = "24638686", studio = "Tunesmith Studios" },
+	"24638686 Tunesmith Studios" )
+check( "whatever space was typed around them",
+	id{ blockheight = " 24638686 ", studio = "  Tunesmith Studios " },
+	"24638686 Tunesmith Studios" )
+check( "a block height alone will do",
+	id{ blockheight = "24700000" }, "24700000" )
+check( "a studio alone will not, and the record stands in",
+	id{ studio = "Tunesmith Studios, Nashville TN", record = "4masks" }, "4masks" )
+check( "the record never outranks a block height and studio",
+	id{ blockheight = "24700000", studio = "a kitchen", record = "4masks" },
+	"24700000 a kitchen" )
+check( "an explicit cut outranks them all",
+	id{ cut = "the kitchen take", blockheight = "24700000", studio = "a kitchen",
+		record = "4masks" },
+	"the kitchen take" )
+check( "players are not identity: with nothing else there is no id, and the cut is refused",
+	id{ ["Harry Clark"] = "mandolin" }, "" )
 
 print( failures == 0 and "\nAll checks passed.\n" or ( "\n" .. failures .. " FAILED\n" ) )
 os.exit( failures == 0 and 0 or 1 )

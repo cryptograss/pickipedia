@@ -95,6 +95,16 @@ jobs:
             count=$((count + 1))
           done < <(find . -name '*.lua' -not -path './.git/*')
           echo "$count Lua modules OK"
+      # Parsing was all this job did until 15 Nov 2026, and the wiki's build skips the module checks
+      # for want of a lua, so nothing ran them. They need no wiki (README, "Tests").
+      - name: Run the module checks
+        working-directory: extensions/PickiPediaContent
+        run: |
+          set -e
+          for check in tests/check-*.lua; do
+            echo "--- $check"
+            lua5.1 "$check"
+          done
 
   python:
     name: Python tests
@@ -107,7 +117,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pytest
+      # PyYAML because homeplace.py reads arthel's YAML. Without it two of its tests could not import,
+      # and this job failed on every push from 11 Nov 2026 until this line.
+      - run: pip install pytest PyYAML
       - name: Run the podcast tooling tests
         # blue-railroad-import is excluded deliberately, and loudly: its two
         # test files import blue_railroad_import.importer, .leaderboard and

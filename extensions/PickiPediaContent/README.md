@@ -63,8 +63,8 @@ The other order leaves `require()` failing on a path that does not exist yet.
 | markup | wikitext templates on the wiki | editors can change it; VisualEditor sees it |
 | styling | `resources/*.css` here | reviewed, and it lets the Lua emit classes |
 
-No module states any presentation of its own — `check-studio.lua` and
-`check-ensemble.lua` both assert the output contains no `style=`. The one
+No module states any presentation of its own — `check-classes.php` refuses a
+`style=` written in any of them. The one
 exception is the instrument icon's box, whose width and height mirror the
 thumbnail size the module asked MediaWiki to generate; a stylesheet guessing
 at that is a stylesheet that can disagree with the image.
@@ -75,17 +75,48 @@ live.
 
 ## Tests
 
-Run from this directory; neither needs a wiki.
+Two kinds, by what they need.
+
+**No wiki.** Run from this directory:
 
 ```
-php tests/check-classes.php        # Lua and CSS agree on class names
+php tests/check-classes.php        # Lua and CSS agree on class names; no style written in Lua
 lua  tests/check-instruments.lua   # instrument name -> icon family
-lua  tests/check-ensemble.lua      # a named lineup
-lua  tests/check-studio.lua        # cuts, appearances, and the pages reading them
+lua  tests/check-studio.lua        # what identifies a cut
 ```
 
-The Jenkinsfile runs every `tests/check-*.lua`, so a module arriving later is
-tested without anyone remembering to add it.
+A Lua check defines no `mw` and no frame. `check-studio.lua` and
+`check-ensemble.lua` used to: thirteen stand-ins for MediaWiki between them,
+and on 15 Nov 2026 one of them answered `fullUrl` with an address the wiki
+never makes, while its check asserted the stand-in. What a module asks of
+MediaWiki is checked where the answers are real.
+
+**A running wiki.**
+
+```
+tests/smoke.py                            # the live wiki
+tests/smoke.py --wiki http://host:4010    # a preview
+tests/smoke.py -v --page "Song:August"    # one page, every check
+```
+
+It reads every page that carries a `{{Studio cut}}`, `{{Record tracks}}`,
+`{{In the studio}}` or `{{Lineup}}`: the page's source on one side, what the
+wiki rendered and what Semantic MediaWiki stored on the other, and checks that
+the second follows from the first. Record and musician pages are checked
+against the song pages' sources, because that is where their lists come from.
+A link is found by the page it names and a URL is checked by opening it, so
+nothing in it says what MediaWiki's output looks like. Which parameters are
+session details and not players is read from `lua/pickipedia/studio.lua` in
+the checkout, so a wiki still running an older module fails. It only reads.
+Run it against a preview before a deploy and against the wiki after one.
+
+**Where they run.** `ci/test`, at the repository's root, runs the first kind
+on every branch pushed to githouse, with the Lua interpreter Scribunto ships,
+and the result is the branch's badge on the ramp. GitHub's `checks` workflow
+runs them too. The Jenkinsfile's gate runs every `tests/check-*.lua` only if
+the build host has a `lua`, and maybelle's has none: the build's console says
+"no lua interpreter; skipping the module checks". Nothing runs `smoke.py` by
+itself yet.
 
 One more needs docker, and is a local tool rather than a CI step:
 
@@ -94,8 +125,8 @@ tests/check-in-wiki.sh [host-path-to-extensions]
 ```
 
 It stands up a throwaway MediaWiki on SQLite, points a `Module:` page at this
-directory through `require()`, and parses it — proving the *wiring*, which the
-other two take on faith. Pass the host path when running from inside a
+directory through `require()`, and parses it — proving that a `Module:` page
+reaches this directory at all, on a wiki with nothing else in it. Pass the host path when running from inside a
 container, where this directory has a different path on the docker host. It
 skips rather than fails without docker or the image.
 

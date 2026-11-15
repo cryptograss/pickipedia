@@ -15,8 +15,8 @@
 
 --
 -- This file is the module. Module:Ensemble on the wiki is a shim that requires
--- it, so that what runs is what was reviewed. Tests live next door in
--- tests/check-ensemble.lua and run without a wiki.
+-- it, so that what runs is what was reviewed. It is checked on a running wiki
+-- by tests/smoke.py: each {{Lineup}} as written against the row it rendered.
 
 local p = {}
 

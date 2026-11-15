@@ -99,6 +99,20 @@ foreach ( $defined as $name ) {
 	}
 }
 
+// The other half of the bargain: with classes to carry it, no module writes
+// a style attribute of its own. The Lua checks used to assert this of one
+// rendered row each; reading the modules says it of everything they can emit.
+// The one exception is the instrument icon's box (README, "Layers").
+$styleAllowed = [ 'instruments.lua' => 1 ];
+foreach ( glob( "$root/lua/pickipedia/*.lua" ) ?: [] as $file ) {
+	$written = substr_count( file_get_contents( $file ), 'style=' );
+	$allowed = $styleAllowed[ basename( $file ) ] ?? 0;
+	if ( $written > $allowed ) {
+		$failures[] = "  a style attribute written in Lua: " . basename( $file )
+			. " has $written, and may have $allowed";
+	}
+}
+
 if ( $failures ) {
 	echo "check-classes.php FAILED\n";
 	echo implode( "\n", $failures ) . "\n";

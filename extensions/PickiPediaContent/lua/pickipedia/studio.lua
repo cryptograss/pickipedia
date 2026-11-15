@@ -18,8 +18,11 @@
 --
 --
 -- This file is the module. Module:Studio sessions on the wiki is a shim that requires
--- it, so that what runs is what was reviewed. Tests live next door in
--- tests/check-studio.lua and run without a wiki.
+-- it, so that what runs is what was reviewed. Tests live next door, in two
+-- kinds. tests/check-studio.lua checks the one rule here that needs no wiki:
+-- what identifies a cut. Everything else in this file is a conversation with
+-- MediaWiki, and tests/smoke.py checks that on a running wiki: each page's
+-- source against what was rendered and stored for it. Nothing fakes mw.
 --
 -- Note for future editors: do not wrap this header in a --[==[ ]==] block
 -- comment containing wiki link syntax. Lua reads the inner brackets as nested
@@ -692,5 +695,9 @@ function p.tracks( frame )
 	end
 	return table.concat( out, "\n" )
 end
+
+-- For tests/check-studio.lua. The underscore is the convention for a module's
+-- insides shown to its checks (pickipedia.instruments' _family is another).
+p._cutId = cutId
 
 return p
