@@ -190,6 +190,9 @@ class Wiki:
                 revs = page.get('revisions') or []
                 text = revs[0]['slots']['main'].get('content', '') if revs else ''
                 cuts = studio_cuts_from(text)
+                writers = writers_from(text)
+                for c in cuts:
+                    c['writers'] = writers
                 if cuts:
                     out[page['title']] = cuts
         return out
@@ -234,6 +237,16 @@ def studio_cuts_from(text):
         cuts.append({'record': fields.get('record', ''), 'number': fields.get('number', ''),
                      'cid': fields.get('cid', ''), 'recorded': fields.get('recorded', ''), 'cast': cast})
     return cuts
+
+
+def writers_from(text):
+    """Who a song page's {{Song|composer=}} says wrote it, as written: "Justin Holmes", "[[A|a]] and B" -> A, B.
+    A traditional song has nobody here, and nobody is guessed."""
+    m = re.search(r'\{\{\s*Song\b[^{}]*?\|\s*composer\s*=\s*((?:\[\[[^\]]*\]\]|[^\n|{}\[])*)', text)
+    if not m:
+        return []
+    said = re.sub(r'\[\[([^\]|]*)(?:\|[^\]]*)?\]\]', r'\1', m.group(1))             # a link: the page it names
+    return [n.strip() for n in re.split(r'\s*(?:,|;|&|/|\band\b)\s*', said) if n.strip()]
 
 
 def featured_from(wikitext, today):
@@ -849,7 +862,8 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                     continue
                 entry.append({'record': c['record'], 'number': c['number'], 'cid': c['cid'],
                               'recorded': c.get('recorded', ''), 'target': target,
-                              'cast': {alias.get(n, n): r for n, r in c['cast'].items()}})
+                              'cast': {alias.get(n, n): r for n, r in c['cast'].items()},
+                              'writers': [alias.get(n, n) for n in c.get('writers', [])]})
             if entry:
                 cutmap[song_title] = entry
         # The recording artist of each cut: the record page's {{Record|artist=}} — the node a route home
