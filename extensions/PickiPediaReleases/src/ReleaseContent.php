@@ -10,6 +10,7 @@ namespace MediaWiki\Extension\PickiPediaReleases;
 
 use Content;
 use MediaWiki\Content\TextContent;
+use MediaWiki\Title\Title;
 use StatusValue;
 use Symfony\Component\Yaml\Yaml;
 use Symfony\Component\Yaml\Exception\ParseException;
@@ -202,6 +203,39 @@ class ReleaseContent extends TextContent {
 			return mb_substr( $title, 0, $maxLength );
 		}
 		return mb_substr( $this->getText(), 0, $maxLength );
+	}
+
+	/**
+	 * Serialize a redirect target as release-yaml so moving a Release page to a
+	 * repackaged CID leaves a real MediaWiki redirect at the old address.
+	 *
+	 * @param string $prefixedTitle
+	 * @return string
+	 */
+	public static function formatRedirectYaml( string $prefixedTitle ): string {
+		return 'redirect_to: ' . Yaml::dump( $prefixedTitle ) . "\n";
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getRedirectTarget() {
+		$data = $this->getData();
+		$target = $data['redirect_to'] ?? null;
+		if ( !is_string( $target ) || trim( $target ) === '' ) {
+			return null;
+		}
+		return Title::newFromText( trim( $target ) );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function updateRedirect( Title $target ) {
+		if ( !$this->isRedirect() ) {
+			return $this;
+		}
+		return new ReleaseContent( self::formatRedirectYaml( $target->getPrefixedText() ) );
 	}
 
 	/**
