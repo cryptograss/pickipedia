@@ -456,6 +456,19 @@ test( 'a rabbithole walk, as the graph knows it: each cut, who was followed to i
 	assert.equal( K.walkSteps( g2, [ { cid: 'QmGm' } ] )[ 0 ].piece, K.trackOn( g2, 0, 'Gm' ) );
 } );
 
+test( 'with no address, the graph opens on whoever with a page has played with the most, featured or not', () => {
+	// the featured pickers are set aside (Justin, #connectome, 15 Nov 2026)
+	const most = G.people.map( ( p, i ) => ( p.page ? K.company( G, i ).length : -1 ) );
+	assert.equal( K.landing( G ), most.indexOf( Math.max( ...most ) ) );
+	assert.equal( G.people[ K.landing( G ) ].page, true );
+	assert.equal( K.landing( K.build( Object.assign( {}, GRAPH, { featured: [ VICKIE ] } ) ) ), K.landing( G ) );
+	// the most played-with of all has no page: the graph opens on the most played-with of those who have one
+	const hub = K.build( { people: [ [ 'Hub', 0, '' ], [ 'Paged', 1, '' ], [ 'X', 0, '' ], [ 'Y', 0, '' ] ],
+		music: [ [ 'lma:t', 'show', 'Band', '2025-01-01', 'Live', 2, 'https://archive.org/details/t', '' ] ], cast: [ [] ],
+		ties: [ [ 0, 1, [ [ 0, 2, 1, [] ] ] ], [ 0, 2, [ [ 0, 2, 1, [] ] ] ], [ 0, 3, [ [ 0, 2, 1, [] ] ] ] ] } );
+	assert.equal( K.landing( hub ), 1 );
+} );
+
 test( 'a walk runs as a snake: left to right, down a row, right to left; the names hang inward at the ends', () => {
 	// Justin, #connectome, 15 Nov 2026: "left to right, and then down a row and right-to-left, and keep going thusly"
 	const lay = K.snake( { W: 900, n: 9, room: 200, side: 78, top: 92, pitch: 186 } );
