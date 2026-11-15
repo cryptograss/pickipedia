@@ -426,6 +426,104 @@ test( 'another turn of the company: the next ones round, those the reader came b
 	assert.equal( ids( K.turned( ring, 0, 6, 1 ) ), 'kabcde' );         // all of them in sight already: no turn
 } );
 
+test( 'a rabbithole walk, as the graph knows it: each cut, who was followed to it, and what came round again', () => {
+	// Justin, #connectome, 15 Nov 2026: Rabbithole's "Your rabbithole" drawn with the explorer's marks
+	const g = K.build( { people: [ [ 'Justin Myles Holmes', 1, 'guitar' ], [ 'Kyle Tuttle', 1, 'banjo' ] ], music: [
+		[ 'arthel:4masks', 'record', 'Justin Myles Holmes', '2025', '4masks', 2, 'gh/x.yaml', '/wiki/4masks', 'Four-masks.png' ] ],
+	cast: [ [ [ 0, 'guitar' ], [ 1, 'banjo' ] ] ],
+	ties: [ [ 0, 1, [ [ 0, 3, 1, [ 'August', 'Victory' ] ] ] ] ],
+	songcast: { QmAug: { song: 'August', on: [ 0 ], artist: 0, pickers: [ [ 0, 'guitar', 'guitar' ], [ 1, 'banjo', 'banjo' ] ] },
+		QmVic: { song: 'Victory', on: [ 0 ], artist: 0, pickers: [ [ 0, 'guitar', 'guitar' ], [ 1, 'banjo', 'banjo' ] ] } } } );
+	const steps = K.walkSteps( g, [
+		{ cid: 'QmAug', song: 'August', via: null, at: 1000 },
+		{ cid: 'QmVic', song: 'Victory', via: { name: 'Justin Holmes', instrument: 'guitar' }, at: 2000 },   // the page's own spelling
+		{ cid: 'QmNotKnown', song: 'Song:Cork Board', via: { name: 'Nobody Here' }, at: 3000 },
+		{ cid: 'QmAug', song: 'August', via: { name: 'Kyle Tuttle' }, at: 4000 },
+		{ song: 'no cid' } ] );
+	assert.deepEqual( steps.map( ( s ) => [ s.song, s.via, s.again ] ),
+		[ [ 'August', null, 0 ], [ 'Victory', 0, 0 ], [ 'Cork Board', null, 0 ], [ 'August', 1, 1 ] ] );
+	assert.equal( steps[ 0 ].piece, K.trackOn( g, 0, 'August' ) );          // the track, where the record has one
+	assert.equal( steps[ 2 ].piece, undefined );                              // a cut the graph doesn't know: its name, as the walk wrote it
+	assert.equal( steps[ 2 ].viaName, 'Nobody Here' );
+	assert.deepEqual( K.walkSum( steps ), { songs: 4, followed: 3, since: 1000 } );
+	assert.deepEqual( K.walkSteps( g, null ), [] );
+	// a Song page and a record's track list may spell a song two ways: the same track either way
+	assert.deepEqual( [ 'Barlow\'s Jig', 'Barlows Jig', 'Gm☕', 'GM', 'Señor', 'Senor' ].map( K.songKey ), [ 'barlows jig', 'barlows jig', 'gm', 'gm', 'senor', 'senor' ] );
+	const g2 = K.build( { people: [ [ 'Justin Myles Holmes', 1, 'guitar' ], [ 'Kyle Tuttle', 1, 'banjo' ] ], music: [
+		[ 'arthel:vs', 'record', 'Justin Myles Holmes', '2025', 'Vowel Sounds', 2, 'gh/x.yaml', '' ] ], cast: [ [] ],
+	ties: [ [ 0, 1, [ [ 0, 3, 1, [ 'Gm', 'Lost' ] ] ] ] ],
+	songcast: { QmGm: { song: 'Gm☕', on: [ 0 ], artist: 0, pickers: [ [ 0, 'guitar', 'guitar' ] ] } } } );
+	assert.equal( K.walkSteps( g2, [ { cid: 'QmGm' } ] )[ 0 ].piece, K.trackOn( g2, 0, 'Gm' ) );
+} );
+
+test( 'a walk runs as a snake: left to right, down a row, right to left; the names hang inward at the ends', () => {
+	// Justin, #connectome, 15 Nov 2026: "left to right, and then down a row and right-to-left, and keep going thusly"
+	const lay = K.snake( { W: 900, n: 9, room: 200, side: 78, top: 92, pitch: 186 } );
+	assert.equal( lay.cols, 4 );
+	assert.equal( lay.rows, 3 );
+	assert.equal( lay.S, 248 );
+	assert.deepEqual( lay.at.map( ( p ) => [ p.x, p.y, p.dir ] ), [
+		[ 78, 92, 1 ], [ 326, 92, 1 ], [ 574, 92, 1 ], [ 822, 92, 1 ],
+		[ 822, 278, -1 ], [ 574, 278, -1 ], [ 326, 278, -1 ], [ 78, 278, -1 ],
+		[ 78, 464, 1 ] ] );
+	// a row ends where the next begins, one row down: the line between them turns at the frame's edge
+	for ( let i = 1; i < lay.at.length; i++ ) {
+		const a = lay.at[ i - 1 ], b = lay.at[ i ];
+		assert.ok( a.row === b.row ? a.y === b.y && Math.abs( a.x - b.x ) === lay.S : a.x === b.x && b.row === a.row + 1 );
+	}
+	assert.deepEqual( lay.at.slice( 0, 4 ).map( ( p ) => p.anchor ), [ 'start', 'middle', 'middle', 'end' ] );
+	assert.deepEqual( lay.at.slice( 4, 8 ).map( ( p ) => p.anchor ), [ 'end', 'middle', 'middle', 'start' ] );
+	assert.equal( K.snake( { W: 300, n: 3, room: 70, side: 19, top: 50, pitch: 0, most: 3 } ).cols, 3 );   // the dock: three at most
+	const one = K.snake( { W: 200, n: 2, room: 150, side: 78, top: 92, pitch: 186 } );   // no room for two: a column
+	assert.deepEqual( [ one.cols, one.at[ 1 ].x, one.at[ 1 ].y, one.at[ 1 ].anchor ], [ 1, 78, 278, 'middle' ] );
+	assert.deepEqual( K.snake( { W: 900, n: 0, room: 200, side: 78, top: 92, pitch: 186 } ).rows, 0 );
+} );
+
+test( 'the roads a walk did not take: where its songs\' pickers lead, a picker to each, each place once, nowhere it has been', () => {
+	// Justin, #connectome, 15 Nov 2026: "showing other unused but potential connections and allowing the user to explore those"
+	const g = K.build( { people: [ [ 'Justin', 1, 'guitar' ], [ 'Kyle', 1, 'banjo' ], [ 'Molly', 1, 'guitar' ], [ 'Sam', 0, 'mandolin' ] ], music: [
+		[ 'arthel:4masks', 'record', 'Justin', '2025', '4masks', 2, 'gh/x.yaml', '/wiki/4masks' ],
+		[ 'lma:kt', 'show', 'Kyle and Molly', '2024-05-01', 'Live', 2, 'https://archive.org/details/kt', '' ],
+		[ 'discogs:9', 'record', 'Sam', '2020', 'Sam Plays', 1, 'https://www.discogs.com/release/9', '' ],
+		[ 'arthel:single', 'record', 'Justin', '2026', 'Victory (single)', 2, 'gh/y.yaml', '' ] ],
+	cast: [ [], [], [], [] ],
+	ties: [ [ 0, 1, [ [ 0, 3, 1, [ 'August', 'Victory', 'Silver 44' ] ], [ 3, 3, 1, [ 'Victory' ] ] ] ], [ 1, 2, [ [ 1, 2, 1, [] ] ] ],
+		[ 0, 3, [ [ 2, 3, 1, [] ] ] ], [ 0, 2, [ [ 0, 3, 1, [ 'A Duet' ] ] ] ] ],
+	songcast: Object.assign( Object.fromEntries( [ 'August', 'Victory', 'Silver 44' ].map( ( s ) => [ 'Qm' + s, { song: s, on: [ 0 ], artist: 0,
+		pickers: [ [ 0, 'guitar', 'guitar' ], [ 1, 'banjo', 'banjo' ] ] } ] ) ),
+	{ QmLost: { song: 'Lost', on: [ 0 ], artist: 0, pickers: [ [ 0, 'guitar', 'guitar' ] ] } } ) } );
+	const steps = K.walkSteps( g, [ { cid: 'QmAugust', via: null, at: 1 }, { cid: 'QmVictory', via: { name: 'Kyle' }, at: 2 } ] );
+	const name = ( x ) => K.called( g, g.pieces[ x.id ] ).name;
+	const all = K.walkRoads( g, steps, 3 );
+	const said = all.flat().map( name );
+	assert.equal( new Set( said ).size, said.length );                         // each place once in the whole walk
+	assert.ok( !said.some( ( n ) => n === 'August' || n === 'Victory' ) );      // nowhere it has been: Victory on the single neither
+	all.forEach( ( rs, i ) => {
+		assert.equal( new Set( rs.map( ( r ) => r.by ) ).size, rs.length );     // a picker to each road
+		assert.ok( rs.every( ( r ) => r.via[ 0 ] === r.by && g.pieces[ r.id ].cast.includes( r.by ) && castOf( steps[ i ] ).includes( r.by ) ) );
+	} );
+	function castOf( st ) {
+		return st.cut.pickers.map( ( p ) => p[ 0 ] );
+	}
+	// The song on now chooses first, by Justin's order: for Justin, a Creative Commons studio track, and of those his
+	// own (A Duet, with Molly) before one Kyle is on too; for Kyle, the studio track (Silver 44) before his show. From
+	// August, Kyle was followed on to Victory: that road is the walk's own line; Silver 44 is said already, so
+	// Justin's road from August is what's left of his.
+	assert.deepEqual( all.map( ( rs ) => rs.map( ( r ) => [ name( r ), r.by ] ) ), [
+		[ [ 'Sam Plays', 0 ] ],
+		[ [ 'A Duet', 0 ], [ 'Silver 44', 1 ] ] ] );
+	assert.deepEqual( K.walkRoads( g, steps, ( i ) => ( i ? 1 : 0 ) ).map( ( rs ) => rs.length ), [ 0, 1 ] );
+	// Justin has carried this walk through every song, Kyle through two of three: Kyle's is the connection less used
+	const three = K.walkSteps( g, [ { cid: 'QmAugust' }, { cid: 'QmVictory' }, { cid: 'QmLost' } ] );
+	assert.deepEqual( K.walkRoads( g, three, ( i ) => ( i === 1 ? 1 : 0 ) )[ 1 ].map( ( r ) => r.by ), [ 1 ] );
+	assert.deepEqual( K.walkRoads( g, K.walkSteps( g, [ { cid: 'QmNobody', song: 'Nobody' } ] ), 3 ), [ [] ] );   // a song the graph doesn't know leads nowhere here
+	// A cut the graph knows only as its record: its own pickers, as its page names them, not everyone on the record
+	const lost = K.walkSteps( g, [ { cid: 'QmLost', via: null, at: 1 } ] );
+	assert.equal( lost[ 0 ].piece, g.whole[ 0 ] );
+	assert.ok( g.pieces[ g.whole[ 0 ] ].cast.includes( 2 ) );                  // Molly is on the record
+	assert.deepEqual( K.walkRoads( g, lost, 3 )[ 0 ].map( ( r ) => r.by ), [ 0 ] );   // and on no road from Lost, which is Justin's alone
+} );
+
 test( 'those the reader came by stay in the company, first, whatever their rank; a stranger does not join it', () => {
 	const comp = K.company( G, KYLE );
 	const ring = K.keeping( G, KYLE, comp, [ CHOIR, JUSTIN, LONE, KYLE ] );

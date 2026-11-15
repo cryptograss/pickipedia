@@ -571,6 +571,176 @@ export function unsaid( G, tie, heard ) {
 	return undefined;
 }
 
+/* ------------------------------------------------------------------------------------------------------------
+ * Your rabbithole: the songs a listener has heard in Rabbithole, and who they followed from each to the next
+ * --------------------------------------------------------------------------------------------------------- */
+
+/**
+ * The picker a walk's step was made by, as the graph knows them: by name; else, of those on the cut, the one whose
+ * first and last names are these (a cut's page may write "Justin Holmes" for Justin Myles Holmes). null where
+ * nobody here answers to it.
+ */
+function walker( G, name, cut ) {
+	const id = find( G, name );
+	if ( id !== null || !name ) {
+		return id;
+	}
+	const words = String( name ).toLowerCase().split( /\s+/ ).filter( Boolean );
+	const on = cut ? cut.pickers.map( ( p ) => p[ 0 ] ).filter( ( x ) => x >= 0 ) : [];
+	const like = on.filter( ( x ) => {
+		const w = G.people[ x ].name.toLowerCase().split( /\s+/ );
+		return words.length > 1 && w[ 0 ] === words[ 0 ] && w[ w.length - 1 ] === words[ words.length - 1 ];
+	} );
+	return like.length === 1 ? like[ 0 ] : null;
+}
+
+/**
+ * A walk as the graph knows it (Justin, #connectome, 15 Nov 2026: Rabbithole's "Your rabbithole" drawn as the
+ * explorer draws). hops: Rabbithole's walk, oldest first: { cid, song, via: { name, instrument } | null, at }.
+ * Each step: the cut the cid plays (songcast) and the piece it is in the graph (the track where the cut's record
+ * has one, else the record), the song's name, who the listener followed to it (`via`, an id or null; `viaName`,
+ * as the walk wrote it), when, and `again`, how many times the same song was on before in this walk.
+ */
+export function walkSteps( G, hops ) {
+	const seen = new Map();
+	return ( hops || [] ).filter( ( h ) => h && h.cid ).map( ( h, i ) => {
+		const cut = G.songcast[ h.cid ] || null;
+		const rec = cut && cut.on && cut.on.length ? cut.on[ 0 ] : undefined;
+		const track = rec !== undefined ? trackOn( G, rec, cut.song ) ?? trackLike( G, rec, cut.song ) : undefined;
+		const piece = track !== undefined ? track : ( rec !== undefined ? G.whole[ rec ] : undefined );
+		const song = cut ? cut.song : String( h.song || '' ).replace( /^Song:/, '' ) || h.cid.slice( 0, 10 );
+		const key = songKey( song );
+		const again = seen.get( key ) || 0;
+		seen.set( key, again + 1 );
+		const viaName = h.via && h.via.name ? h.via.name : null;
+		return { i, cid: h.cid, cut, piece, song, rec, via: viaName ? walker( G, viaName, cut ) : null, viaName,
+			instrument: h.via && h.via.instrument ? h.via.instrument : '', at: typeof h.at === 'number' ? h.at : null, again };
+	} );
+}
+
+/**
+ * A song's name as two spellings of it agree: "Barlow's Jig" and "Barlows Jig", "Gm☕" and "Gm" (a Song page and a
+ * record's track list don't always spell a song alike).
+ */
+export function songKey( name ) {
+	return String( name || '' ).toLowerCase().normalize( 'NFKD' ).replace( /[\p{M}'’]/gu, '' ).replace( /[^\p{L}\p{N}]+/gu, ' ' ).trim();
+}
+
+/** A record's track whose song is spelled another way: the one track there whose name agrees with this one, if one does. */
+function trackLike( G, m, song ) {
+	const k = songKey( song ), like = G.pieces.map( ( pc, x ) => x ).filter( ( x ) => G.pieces[ x ].kind === 'track' && G.pieces[ x ].m === m &&
+		songKey( G.pieces[ x ].song ) === k );
+	return like.length === 1 ? like[ 0 ] : undefined;
+}
+
+/** What a walk comes to: how many songs, how many of them reached by following someone, and since when. */
+export function walkSum( steps ) {
+	const at = steps.map( ( s ) => s.at ).filter( ( t ) => t !== null );
+	return { songs: steps.length, followed: steps.filter( ( s ) => s.viaName ).length, since: at.length ? Math.min( ...at ) : null };
+}
+
+/**
+ * Where a walk's songs sit, as a snake (Justin, #connectome, 15 Nov 2026: "go left to right, and then down a row
+ * and right-to-left, and keep going thusly"): as many to a row as the frame has room for, every other row running
+ * back, so the line from the end of one row to the start of the next turns at the frame's edge.
+ * W: the frame's width; n: how many songs; room: the least a song needs across; side: from the frame's edge to the
+ * first and last place in a row (a turn goes round out there); top: the first row; pitch: from a row to the next;
+ * most: the most to a row.
+ * Each place: x and y, its row, its column (0 at the left), which way its row runs (1 to the right, -1 back), and
+ * how its name hangs under it, so that no name runs out over a turn: from its left edge at the left end, from its
+ * right edge at the right end, else from its middle.
+ */
+export function snake( { W, n, room, side, top, pitch, most = Infinity } ) {
+	const inner = Math.max( 0, W - 2 * side );
+	const cols = Math.max( 1, Math.min( most, Math.floor( inner / room ) + 1 ) );
+	const S = cols > 1 ? inner / ( cols - 1 ) : 0;
+	const at = [];
+	for ( let i = 0; i < n; i++ ) {
+		const row = Math.floor( i / cols ), dir = row % 2 ? -1 : 1, c = i % cols;
+		const col = dir > 0 ? c : cols - 1 - c;
+		at.push( { x: side + col * S, y: top + row * pitch, row, col, dir,
+			anchor: cols < 2 ? 'middle' : ( col === 0 ? 'start' : ( col === cols - 1 ? 'end' : 'middle' ) ) } );
+	}
+	return { cols, S, rows: n ? Math.floor( ( n - 1 ) / cols ) + 1 : 0, at };
+}
+
+/**
+ * The roads a walk didn't take (Justin, #connectome, 15 Nov 2026: "constellation-ish in the sense of showing other
+ * unused but potential connections and allowing the user to explore those"): from each song, where its pickers lead
+ * that the walk hasn't been. Each picker's road is the one place that comes first by Justin's order (standing():
+ * Creative Commons studio tracks, Creative Commons shows, DRM-free studio tracks, other shows), then the one fewest
+ * others of the song's pickers are on, so the road is that picker's own; then the newest. The pickers who have
+ * carried the walk least come first: those are the connections it hasn't used. Never the one followed on from the
+ * song (their road is the line to the next), one road to a picker, and a place is a road once in the whole walk,
+ * from the newest song that has it: the song on now chooses first. A song is the same place under any record, and
+ * a song the walk has heard is no road.
+ * The pickers are the cut's own, as its page names them: the graph may know a cut only as its record, and everyone
+ * on a record isn't on every song of it.
+ * want: how many from step i, a number or a function of i. Returns, for each step, [{ id: the piece, by: the picker
+ * it goes by, via: every picker of the song's on it, `by` first }].
+ */
+export function walkRoads( G, steps, want = 3 ) {
+	const many = typeof want === 'function' ? want : () => want;
+	const place = ( x ) => {
+		const pc = G.pieces[ x ];
+		return pc.kind === 'track' ? 'song:' + songKey( pc.song ) : 'piece:' + x;
+	};
+	const avoid = new Set();
+	const carried = new Map();                                      // a picker: how many of the walk's songs they're on
+	for ( const st of steps ) {
+		avoid.add( 'song:' + songKey( st.song ) );
+		if ( st.piece !== undefined ) {
+			avoid.add( 'piece:' + st.piece );
+			if ( st.rec !== undefined ) {
+				avoid.add( 'piece:' + G.whole[ st.rec ] );              // being on a record the walk has been on is no road
+			}
+		}
+		for ( const p of new Set( castOf( G, st ) ) ) {
+			carried.set( p, ( carried.get( p ) || 0 ) + 1 );
+		}
+	}
+	const all = steps.map( () => [] );
+	for ( let i = steps.length - 1; i >= 0; i-- ) {
+		const st = steps[ i ], n = many( i );
+		if ( st.piece === undefined || !( n > 0 ) ) {
+			continue;
+		}
+		const next = steps[ i + 1 ], out = next && next.via !== null ? next.via : -1;
+		const cast = [ ...new Set( castOf( G, st ) ) ];
+		const via = new Map();
+		for ( const p of cast ) {
+			for ( const x of G.on[ p ] ) {
+				if ( !avoid.has( place( x ) ) ) {
+					via.set( x, ( via.get( x ) || [] ).concat( [ p ] ) );
+				}
+			}
+		}
+		const tier = ( x ) => pieceStanding( G, G.pieces[ x ] ), day = ( x ) => roughly( G.music[ G.pieces[ x ].m ].date );
+		const order = ( x, y ) => ( tier( y ) - tier( x ) ) || ( via.get( x ).length - via.get( y ).length ) || ( day( y ) - day( x ) || 0 ) || ( x - y );
+		const who = cast.filter( ( p ) => p !== out ).sort( ( a, b ) => ( carried.get( a ) - carried.get( b ) ) ||
+			( G.on[ b ].length - G.on[ a ].length ) || G.people[ a ].name.localeCompare( G.people[ b ].name ) );
+		for ( const p of who ) {
+			if ( all[ i ].length >= n ) {
+				break;
+			}
+			const best = [ ...via.keys() ].filter( ( x ) => !avoid.has( place( x ) ) && via.get( x ).includes( p ) ).sort( order )[ 0 ];
+			if ( best !== undefined ) {
+				avoid.add( place( best ) );
+				all[ i ].push( { id: best, by: p, via: [ p ].concat( via.get( best ).filter( ( q ) => q !== p ) ) } );
+			}
+		}
+	}
+	return all;
+}
+
+/** Who is on one step of a walk: the cut's own pickers where the walk has the cut, else whoever the graph has on its piece. */
+function castOf( G, st ) {
+	if ( st.cut ) {
+		return st.cut.pickers.map( ( p ) => p[ 0 ] ).filter( ( p ) => p >= 0 && G.on[ p ] );
+	}
+	return st.piece !== undefined ? G.pieces[ st.piece ].cast : [];
+}
+
 /** The piece one entry of a tie stands for: the track, where the sources name one (the first of several); else the record or the show. */
 export function pieceFor( G, e ) {
 	const t = e.how === TRACK && e.songs.length ? trackOn( G, e.m, e.songs[ 0 ] ) : undefined;

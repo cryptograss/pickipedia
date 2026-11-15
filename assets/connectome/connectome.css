@@ -871,3 +871,21 @@ a.out:focus { text-decoration: underline; }
 @media ( prefers-reduced-motion: reduce ) {
 	.ln { transition: none; }
 }
+
+/* ---- your rabbithole: the walk, top to bottom (Justin, #connectome, 15 Nov 2026) ---- */
+#stage.walking { overflow-y: auto; }
+#stage.walking #g { flex: none; }
+main.walking #panel, main.walking #drawer { display: none; }
+.pk text.note { font: 600 11.5px var( --ui ); fill: var( --ink2 ); stroke-width: 0; }
+.pk text.note.now { fill: var( --play ); }
+g.day text { font: 700 11px var( --ui ); fill: var( --muted ); letter-spacing: .04em; text-transform: uppercase; }
+/* The roads it didn't take: a bead on a thin line, behind the walk, plain when pointed at. */
+.ln.road .core.th { stroke: var( --ink2 ); }
+#stage:not( .walking ) #legend .wk { display: none; }
+.pill.rn { pointer-events: none; }
+.pill.rn text { font: italic 400 12px var( --name ); fill: var( --ink2 ); stroke: var( --surface ); stroke-width: 4px; paint-order: stroke; stroke-linejoin: round; }
+
+/* In the player's dock: the few steps there's room for, and nothing else. */
+body.mini .bar, body.mini #say, body.mini #legend, body.mini #panel, body.mini #drawer { display: none; }
+body.mini, body.mini main, body.mini #stage { background: transparent; }
+body.mini #g { cursor: pointer; }
