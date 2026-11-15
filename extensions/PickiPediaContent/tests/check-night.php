@@ -55,6 +55,10 @@ namespace {
 	check( 'the switch keeps it in the cookie Broadside reads',
 		str_contains( (string)file_get_contents( $root . '/resources/night/night.js' ), "var COOKIE = '$cookie';" )
 		&& str_contains( (string)file_get_contents( $root . '/src/Posts/SkinBroadside.php' ), "MODE_COOKIE = '$cookie'" ) );
+	$js = (string)file_get_contents( $root . '/resources/night/night.js' );
+	check( 'and giving it up takes the cookie away, so the system is followed again',
+		str_contains( $js, "COOKIE + '=; path=/; max-age=0" ) && str_contains( $js, "'content', 'light dark'" )
+		&& str_contains( $less, '#pt-night-system[hidden] { display: none !important; }' ) );
 	$graph = dirname( $root, 2 ) . '/assets/connectome/';
 	check( "the connectome's graph reads it before it paints",
 		str_contains( (string)file_get_contents( $graph . 'index.html' ), "$cookie=(dark|light)" ) );

@@ -61,7 +61,9 @@
 			"messages": [
 				"pickipediacontent-night-switch",
 				"pickipediacontent-night-night",
-				"pickipediacontent-night-day"
+				"pickipediacontent-night-day",
+				"pickipediacontent-night-system",
+				"pickipediacontent-night-system-title"
 			],
 			"dependencies": [
 				"mediawiki.util"

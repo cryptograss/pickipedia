@@ -70,5 +70,7 @@
 	"apihelp-pagecard-example-1": "The front page, in brief",
 	"pickipediacontent-night-switch": "Read the wiki by day or by night",
 	"pickipediacontent-night-night": "☾ Night",
-	"pickipediacontent-night-day": "☼ Day"
+	"pickipediacontent-night-day": "☼ Day",
+	"pickipediacontent-night-system": "↺ Auto",
+	"pickipediacontent-night-system-title": "Follow this device's setting for day or night again"
 }

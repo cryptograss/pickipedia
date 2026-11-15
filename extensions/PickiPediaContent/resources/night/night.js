@@ -5,6 +5,9 @@
  * server reads from the cookie and puts on <html>. This only adds the switch among the reader's own links
  * and, when it is pressed, keeps the choice where the server, Broadside and the connectome's graph read it,
  * and where Rabbithole will: the cookie "pickipedia-mode".
+ *
+ * A choice holds for a year whatever the reader's system does, so while one is in force a second link sits
+ * beside the switch to give it up: the cookie goes, and the page follows the system again (Justin, 15 Nov 2026).
  */
 ( function () {
 	var COOKIE = 'pickipedia-mode';
@@ -32,6 +35,20 @@
 		document.cookie = COOKIE + '=' + mode + '; path=/; max-age=' + ONE_YEAR + '; samesite=lax';
 	}
 
+	function hasChosen() {
+		return root.classList.contains( 'pp-dark' ) || root.classList.contains( 'pp-light' );
+	}
+
+	/** Give the choice up: nothing on <html>, no cookie, and the stylesheet follows the system. */
+	function followSystem() {
+		root.classList.remove( 'pp-dark', 'pp-light' );
+		var meta = document.querySelector( 'meta[name="color-scheme"]' );
+		if ( meta ) {
+			meta.setAttribute( 'content', 'light dark' );
+		}
+		document.cookie = COOKIE + '=; path=/; max-age=0; samesite=lax';
+	}
+
 	mw.loader.using( 'mediawiki.util' ).then( function () {
 		$( function () {
 			var link = mw.util.addPortletLink( 'p-personal', '#', '', 'pt-night', mw.msg( 'pickipediacontent-night-switch' ) );
@@ -39,9 +56,22 @@
 				return;
 			}
 			var a = link.querySelector( 'a' );
+			var back = mw.util.addPortletLink( 'p-personal', '#', mw.msg( 'pickipediacontent-night-system' ), 'pt-night-system',
+				mw.msg( 'pickipediacontent-night-system-title' ), null, link.nextSibling );
 			function label() {
 				a.textContent = isDark() ? mw.msg( 'pickipediacontent-night-day' ) : mw.msg( 'pickipediacontent-night-night' );
 				a.setAttribute( 'aria-pressed', isDark() ? 'true' : 'false' );
+				if ( back ) {
+					back.hidden = !hasChosen();
+				}
+			}
+			if ( back ) {
+				back.querySelector( 'a' ).setAttribute( 'role', 'button' );
+				back.querySelector( 'a' ).addEventListener( 'click', function ( event ) {
+					event.preventDefault();
+					followSystem();
+					label();
+				} );
 			}
 			a.setAttribute( 'role', 'button' );
 			a.addEventListener( 'click', function ( event ) {

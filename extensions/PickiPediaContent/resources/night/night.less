@@ -327,4 +327,6 @@
 }
 
 /* The switch, among the reader's own links (night.js puts it there). */
-#pt-night a { cursor: pointer; }
+#pt-night a, #pt-night-system a { cursor: pointer; }
+/* Giving the choice up: only there while a choice is in force ("hidden" alone loses to MonoBook's "body.skin--responsive #p-personal li"). */
+#pt-night-system[hidden] { display: none !important; }
