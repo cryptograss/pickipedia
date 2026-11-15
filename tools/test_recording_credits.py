@@ -185,6 +185,21 @@ def test_render_separates_track_from_release():
     ("Banjo Tech", []),
     ("Guitar, Guitar Technician", ["Guitar"]),
     ("Engineer [Assistant]", []),
+    # The walk of 15 Nov 2026: people a record's Discogs page credits who didn't play on it.
+    ("Stylist [Glam By]", []),
+    ("Stylist [Wardrobe Styling By]", []),
+    ("Promotion [Publicity]", []),
+    ("Luthier [Instrument Set-up]", []),
+    ("Orchestrated By", []),
+    ("Hair, Makeup", []),
+    # A job's bracketed note is part of that job: the studio's town is nobody's instrument.
+    ("Recorded At [Fantasy Studios, Berkeley / Oceanway Recording]", []),
+    ("Mandolin [F-5, 1923 / Loar], Vocals", ["Mandolin [F-5, 1923 / Loar]", "Vocals"]),
+    ("Guitar [Acoustic, Lead], Producer", ["Guitar [Acoustic, Lead]"]),
+    # Still playing: a conductor is on the session; a koto is an instrument whatever a list of ours forgot.
+    ("Conductor", ["Conductor"]),
+    ("Koto", ["Koto"]),
+    ("Banjo, Stylist", ["Banjo"]),
 ])
 def test_composite_roles(role, performing):
     assert rc.performance_roles(role) == performing

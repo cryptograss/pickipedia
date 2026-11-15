@@ -21,7 +21,7 @@ What a card shows:
   named on hover. Only people who played *with* the picker (same track or same show)
   get a dot; a same-record link is drawn only when a featured path needs it.
   The marks are the big graph's (assets/connectome/) and Rabbithole's: one colour, and
-  it means one thing. A gold line is a Permanent Release (a Live Music Archive tape, or
+  it means one thing. A gold line is a Permanent Release (a tape in archive.org's etree collection, or
   one of cryptograss's Creative Commons records); plain ink is a Full Release (no DRM);
   dotted grey is the rest, counted and not vouched for (PickiPedia:Release_Types;
   connectome_graph.tier reads which from the source). A bigger dot is more times
@@ -625,7 +625,7 @@ def card(center, store, featured, has_page, inst):
                     f'<a href="{attr(viewer(a=center, b=f))}">{len(p)}</a></td></tr>')
     legend = ('<div class="cc-legend">'
               '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
-              'a taper\'s tape or Creative Commons<br>'
+              'an etree tape or Creative Commons<br>'
               '<span class="cc-key cc-ink"></span> Full Release: no DRM '
               '<span class="cc-key cc-rest"></span> the rest<br>'
               'bigger = more times · hollow = no page yet</div>')
@@ -766,7 +766,7 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
 
     legend = ('<div class="cc-legend">'
               '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
-              "a taper's tape or Creative Commons<br>"
+              "an etree tape or Creative Commons<br>"
               '<span class="cc-key cc-ink"></span> Full Release: no DRM '
               '<span class="cc-key cc-rest"></span> the rest<br>'
               'a solid line: the same cut again · a thin one: a record or a stage</div>')

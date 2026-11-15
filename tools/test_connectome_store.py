@@ -58,6 +58,15 @@ def test_lma_song_credit_carries_the_songs_and_the_line():
     assert rows["Kyle Tuttle"]["target"]["id"] == "lma:SGP2025-07-05"
 
 
+def test_a_tape_carries_its_collections():
+    item = {"metadata": {"identifier": "slocanramblers-2025-06-22", "creator": "The Slocan Ramblers",
+                         "collection": ["taperssection", "audio_music"], "description": "Frank Evans - banjo"}}
+    row = S.from_lma(item, ["Frank Evans"])[0]
+    assert row["target"]["formats"] == ["archive.org collection: taperssection", "archive.org collection: audio_music"]
+    item["metadata"]["collection"] = "etree"
+    assert S.from_lma(item, ["Frank Evans"])[0]["target"]["formats"] == ["archive.org collection: etree"]
+
+
 def test_pairs_track_record_show_apart():
     rows = S.from_discogs(JULIA) + S.from_discogs(SAFE)
     item = {"metadata": {"identifier": "X", "creator": "Band", "date": "2025",

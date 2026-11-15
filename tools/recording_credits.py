@@ -100,6 +100,11 @@ DISCOGS_OTHER_ROLES = tuple(_norm_role(r) for r in (
     "edited by", "editor", "remastered by", "transferred by", "compiled by",
     "a&r", "copyright", "licensed", "manufactured by", "distributed by",
     "created by", "directed by", "film director", "music director", "legal",
+    # Seen on the walk of 15 Nov 2026 (Rattlin' Bones, Dawg Jazz / Dawg Grass, Tone Poems, a Slocan Ramblers
+    # record): people who made the record look or travel, or wrote its parts, and nobody who played on it.
+    "stylist", "styling", "styled by", "hair", "makeup", "make up", "wardrobe", "glam",
+    "promotion", "publicity", "publicist", "luthier", "orchestrated by",
+    "recorded at", "mixed at", "mastered at",
 ))
 
 _last_call = {}
@@ -269,7 +274,9 @@ def performance_roles(role):
     reporting it as a performance would credit a producer as a player.
     """
     parts = []
-    for part in re.split(r"[,/]", role):
+    # A job's own note, in square brackets, is part of that job and not another one: 'Recorded At [Fantasy,
+    # Berkeley / Oceanway Recording]' is one job, and 'Berkeley' is not somebody's instrument.
+    for part in re.split(r"[,/](?![^\[\]]*\])", role):
         norm = _norm_role(part)
         if norm and not any(re.search(rf"\b{re.escape(other)}\b", norm) for other in DISCOGS_OTHER_ROLES):
             parts.append(part.strip())

@@ -168,9 +168,10 @@ def test_a_card_is_gold_for_permanent_ink_for_full_and_dotted_for_the_rest():
     assert 'Permanent Release' in html and 'Full Release' in html         # the legend names the tiers
 
 
-def test_a_store_with_no_tiers_given_still_knows_a_tape_is_permanent():
+def test_a_store_with_no_tiers_given_draws_a_tape_full_not_permanent():
+    # the build always gives tiers, read from each tape's collections; with none given, nothing says etree
     store = cc.Store([pair('K', 'Tape', 'show', 'lma:show1'), pair('K', 'Disc', 'record', 'discogs:1')], TARGETS, GROUPS, {})
-    assert store.evidence('K', 'Tape')['tier'] == 2 and store.evidence('K', 'Disc')['tier'] == 0
+    assert store.evidence('K', 'Tape')['tier'] == 1 and store.evidence('K', 'Disc')['tier'] == 0
 
 
 def test_build_writes_the_big_graphs_file_beside_the_cards(tmp_path):
