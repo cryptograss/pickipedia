@@ -232,3 +232,110 @@ def test_the_track_a_page_plays_is_read_from_its_listen_template():
 
     heard = Api('https://example.test/').listens(['Song:Silver 44', 'Song:August', 'Song:Plain', 'Song:August'])
     assert heard == {'Song:August': cid, 'Song:Silver 44': cid[::-1]}       # a bare link in prose is not the template
+
+
+# ---- the song-centred card: who the store's credits put on a cut (Justin, #rabbithole, 15 Nov 2026) ----
+
+AUG = 'https://github.com/cryptograss/arthel/blob/main/src/data/songs_and_tunes/august.yaml'
+
+
+def song_whole():
+    return {'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '2025', 'artist': '', 'grp': 'arthel:4masks', 'formats': []},
+            'arthel:vowel sounds': {'kind': 'record', 'title': 'Vowel Sounds', 'date': '2026', 'artist': '', 'grp': 'arthel:vowel sounds', 'formats': []}}
+
+
+def test_a_song_cast_is_what_the_track_level_credits_say():
+    import connectome_graph as cg
+    pairs = [pair('Kyle Tuttle', 'Maddie Denton', 'track', 'arthel:vowel sounds', [(AUG, '', 'august')])]
+    credits = [('Justin Holmes', 'guitar; vocals', 'arthel:vowel sounds', 'track', AUG),
+               ('Maddie Denton', 'fiddle', 'arthel:vowel sounds', 'track', AUG),
+               ('Kyle Tuttle', '5-string banjo', 'arthel:vowel sounds', 'track', AUG),
+               ('Justin Holmes', 'guitar', 'arthel:vowel sounds', 'release', AUG)]
+    credits = [((alias_of := {'Justin Holmes': 'Justin Myles Holmes'}).get(c[0], c[0]),) + tuple(c[1:]) for c in credits]
+    g = cg.export(pairs, song_whole(), credits, lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {})
+    sc = g['songcast']['August']
+    cast = dict(sc['pickers'])
+    names = [p[0] for p in g['people']]
+    assert cast[names.index('Kyle Tuttle')] == '5-string banjo'            # the store's roles, as the source wrote them
+    assert cast[names.index('Justin Myles Holmes')] == 'guitar; vocals'    # the wiki's name; a release-scope credit stays out
+    assert [i for i, r in sc['pickers']][0] >= 0
+
+
+def test_a_track_the_pairs_know_but_no_credits_name_is_still_the_song():
+    import connectome_graph as cg
+    pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'lost-cut')])]
+    g = cg.export(pairs, song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {})
+    sc = g['songcast']['Lost Cut']
+    assert [p[1] for p in sc['pickers']] == ['', '']                       # on the song, roles unsaid
+    assert len(sc['on']) == 1
+
+
+def test_a_song_card_labels_the_cut_and_escapes_every_name():
+    store = _store()
+    cut = cc.song_cut(song_whole(), {}, {'4masks': '/wiki/4masks'}, 'arthel:4masks')
+    html = cc.song_card('<b>Silver 44</b>', cut, [('Kyle Tuttle', '5-string banjo'), ('Molly Tuttle', '')],
+                        store, lambda n: n == 'Kyle Tuttle', {'Kyle Tuttle': 'banjo'}, play='QmTest')
+    assert html.startswith('<div class="connectome-card"') and 'data-song="' in html
+    assert '&lt;b&gt;' in html and '<b>' not in html                       # nothing reaches the card as markup
+    assert '5-string banjo' in html                                        # the instrument this cut gave them
+    assert cc.attr(viewer := cc.viewer(s='<b>Silver 44</b>')) in html or 's=%3Cb%3E' in html
+    assert 'Rabbithole' in html and 'On ' in html
+
+
+def test_a_song_cards_lines_are_the_ways_on_elsewhere():
+    pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'the-song')]),
+             pair('A', 'C', 'show', 'lma:show1'),                          # A and C: elsewhere, a stage
+             pair('B', 'C', 'record', 'discogs:1'),                        # B and C: elsewhere, a record only
+             pair('A', 'D', 'track', 'lma:show1', [('u', '', 'the-song')]),     # A and D: the same song again, on a tape
+             pair('B', 'D', 'track', 'arthel:4masks', [('u', '', 'the-song')])]  # B and D: this cut, nothing else
+    store = cc.Store(pairs, TARGETS, GROUPS, {})
+    cut = cc.song_cut(song_whole(), {}, {}, 'arthel:4masks')
+    html = cc.song_card('The Song', cut, [('A', 'fiddle'), ('B', 'banjo'), ('C', 'guitar'), ('D', 'bass')],
+                        store, lambda n: True, {})
+    assert html.count('stroke-width="2.2"') == 1                           # the same song on another stage: solid
+    assert html.count('stroke-width="1.2"') == 2                           # a stage or a record: thin
+    assert 'also: ' in html
+
+
+def test_a_song_card_without_another_cut_says_so():
+    pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'the-song')])]
+    store = cc.Store(pairs, TARGETS, GROUPS, {})
+    html = cc.song_card('The Song', cc.song_cut(song_whole(), {}, {}, 'arthel:4masks'),
+                        [('A', ''), ('B', '')], store, lambda n: True, {})
+    assert 'stroke-width' not in html.split('</svg>')[0].split('viewBox')[1] or 'also: ' not in html
+    assert 'only here' not in html                                          # the ring's tips say the cut itself
+
+
+def test_build_builds_a_song_card_for_a_song_page_and_names_it_like_the_wiki_does(tmp_path):
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:vowel sounds', [(AUG, '', 'august')]),
+             pair('Kyle Tuttle', 'Maddie Denton', 'track', 'arthel:vowel sounds', [(AUG, '', 'august')])]
+    whole = song_whole()
+    wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
+                    pages={'Justin Myles Holmes', 'Kyle Tuttle', 'Vowel Sounds', 'Song:August'},
+                    musicians=['Kyle Tuttle'], inst={'Kyle Tuttle': 'banjo'},
+                    listens={'Song:August': 'QmSongCid'})
+    credits = [('Justin Holmes', 'guitar; vocals', 'arthel:vowel sounds', 'track', AUG),
+               ('Kyle Tuttle', '5-string banjo', 'arthel:vowel sounds', 'track', AUG),
+               ('Maddie Denton', 'fiddle', 'arthel:vowel sounds', 'track', AUG)]
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, whole, credits)
+    assert 'Song:August' in result['song_cards']                            # keyed as the page names itself
+    card = result['song_cards']['Song:August']
+    assert 'August' in card and card.count('QmSongCid') == 1                 # the CID goes in the link, not the text
+    assert '/rabbithole/?track=QmSongCid' in card
+    assert 'Justin Myles Holmes' in card and 'guitar; vocals' in card
+    cc.write(result, str(tmp_path), {})
+    want = hashlib.md5('Song:August'.encode()).hexdigest() + '.html'
+    assert (tmp_path / 'cards' / want).exists()                             # the wiki looks for exactly this file
+    cards = (tmp_path / 'cards.json')
+    assert '"Song:August"' in cards.read_text()
+    only = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), 'Song:August', whole, credits)
+    assert only['song_cards'] and only['cards'] == {}                       # a song page alone: the song card only
+
+
+def test_a_song_page_whose_cut_says_its_cid_plays_that(tmp_path):
+    class Api(cc.Wiki):
+        def api(self, **q):
+            text = {'Song:August': "{{Song}}\n{{Studio cut\n|record=4masks\n|cid=QmStudioCidThisIsLongEnoughForARealOne\n}}"}
+            return {'query': {'pages': [{'title': t, 'revisions': [{'slots': {'main': {'content': x}}}]} for t, x in text.items()]}}
+    heard = Api('https://example.test/').listens(['Song:August'])
+    assert heard == {'Song:August': 'QmStudioCidThisIsLongEnoughForARealOne'}                     # the cut's cid plays when no Listen line says one

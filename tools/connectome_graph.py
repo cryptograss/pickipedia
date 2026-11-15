@@ -17,6 +17,10 @@ graph.json:
             one record or show; one entry per record or show, the closest way the
             sources put them together
   songs     song title -> its wiki page, for the songs that have one
+  songcast   song title -> { on: [music...], pickers: [[picker, roles], ...] }: who the store's credits put
+            on each cut of each song on cryptograss's own records (scope track, roles as that source wrote
+            them), and which of the music entries those cuts are. A track the store's pairs put two pickers
+            on but no credits name is still the song: its pickers, with no roles said
   plays     song title -> the track its Song: page says to play in Rabbithole (the CID in
             its {{Listen in Rabbithole}}), for songs on cryptograss's own records. A taped
             show's song of the same name is another recording, and gets none
@@ -135,6 +139,33 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
     used = sorted({c[3] for c, _ in best.values()})
     mid = {t: i for i, t in enumerate(used)}
 
+    # Song nodes: who the store's credits put on each cut of each song on cryptograss's own records, and which
+    # of the music entries those cuts are (Justin, #rabbithole, 15 Nov 2026, 00:23Z: the song-centred card).
+    songcut, songpeople = defaultdict(set), defaultdict(dict)
+    for person, roles, target, scope, source in credits:
+        if scope != 'track' or not target.startswith('arthel:') or target not in mid:
+            continue
+        stem = source.rsplit('/', 1)[-1]
+        stem = stem[:-5] if stem.endswith('.yaml') else stem
+        title = song_title(target, [source, '', stem])
+        if not title:
+            continue
+        songcut[title].add(target)
+        said = songpeople[title].setdefault(person, [])
+        for r in (roles or '').split(';'):
+            r = r.strip()
+            if r and r.lower() not in {x.lower() for x in said}:
+                said.append(r)
+    for key, people in track.items():                 # a cut the pairs put pickers on, but no credits name: their roles unsaid
+        if key[0].startswith('arthel:') and key[0] in mid:
+            title = song_title(key[0], list(key[1:]))
+            if title:
+                songcut[title].add(key[0])
+                for q in people:
+                    songpeople[title].setdefault(q, [])
+    names = sorted(set(names) | { p for cast in songpeople.values() for p in cast })
+    pid = {n: i for i, n in enumerate(names)}
+
     sources, cast = defaultdict(set), defaultdict(dict)
     for person, roles, target, scope, source in credits:
         if target not in mid:
@@ -175,6 +206,10 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         'cast': [[[pid[n], '; '.join(r)] for n, r in sorted(cast[t].items())] for t in used],
         'ties': [[a, b, sorted(ev, key=lambda e: (-e[1], -e[2], e[0]))] for (a, b), ev in sorted(ties.items())],
         'songs': dict(sorted(songs.items())),
+        'songcast': { t: { 'on': sorted( mid[ x ] for x in songcut[ t ] ),
+                           'pickers': [ [ pid[ p ], '; '.join( songpeople[ t ][ p ] ) ]
+                                        for p in sorted( songpeople[ t ] ) ] }
+                     for t in sorted( songpeople ) },
         'plays': dict(sorted(played.items())),
     }
 

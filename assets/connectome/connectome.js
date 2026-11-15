@@ -162,6 +162,9 @@ function listNames( ids ) {
 
 /** A view's address: what the bar shows, and what a link to somewhere in the graph points at. */
 function address( v ) {
+	if ( v.s !== undefined ) {
+		return '?' + new URLSearchParams( { s: v.s } );
+	}
 	if ( v.m !== undefined ) {
 		const pc = M( v.m );
 		return '?' + new URLSearchParams( Object.assign( { m: G.music[ pc.m ].key }, pc.song ? { s: pc.song } : null ) );
@@ -174,6 +177,10 @@ function parse( q ) {
 	const m = q.get( 'm' ) ? K.findPiece( G, q.get( 'm' ), q.get( 's' ) ) : null;
 	if ( m !== null ) {
 		return { m };
+	}
+	const s = q.get( 's' );                                      // a song, by name: its cut's cast (the song card's explore)
+	if ( s && G.songcast && G.songcast[ s ] ) {
+		return { s };
 	}
 	const a = K.find( G, q.get( 'a' ) || q.get( 'from' ) || q.get( 'p' ) ), b = K.find( G, q.get( 'b' ) || q.get( 'to' ) );
 	return a === null ? null : ( b === null || b === a ? { a } : { a, b } );
@@ -679,6 +686,49 @@ function pieceScene( v ) {
 }
 
 /* ------------------------------------------------------------------------------------------------------------
+ * A song: its cut's cast round it, each with what the cut's credits gave them, and the web among them of
+ * everywhere else (Justin, #rabbithole, 15 Nov 2026, 00:23Z: the song-centred card; K.songcast has the cast).
+ * --------------------------------------------------------------------------------------------------------- */
+
+function songScene( v ) {
+	const scd = G.songcast[ v.s ], { W, H } = frame();
+	const sc = newScene();
+	const ids = scd.pickers.map( ( p ) => p[ 0 ] ).filter( ( id ) => id >= 0 && id < G.people.length );
+	const rolesOf = new Map( scd.pickers.map( ( p ) => [ p[ 0 ], p[ 1 ] ] ) );
+	const cuts = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean );
+	const tier = cuts.length ? Math.max( ...cuts.map( ( c ) => c.tier ) ) : 0;
+	const lay = K.ego( { W, H, named: Math.min( ids.length, 12 ), dots: 0 } );
+	const n = lay.named.length, mine = ids.slice( 0, n );
+	const pan = slide( 's' + v.s, lay.C );
+	const seats = K.seat( lay.named, mine.map( ( id ) => wanted( 's' + v.s + '·' + id, pan ) ) );
+	const seatOf = new Map( mine.map( ( id, i ) => [ id, lay.named[ seats[ i ] ] ] ) );
+	for ( const id of mine ) {						// a spoke to each of the cast: it says nothing itself, the picker does
+		sc.lines.set( 'sp' + id, { a: 'song', b: 'p' + id, u: -1, v: id, tie: { played: true, tier, w: 0.35 },
+			stands: 'tie', w: lineWidth( { w: 0.35 } ), o: 0.95, role: 'spoke', c: id, quiet: true, delay: 120 } );
+	}
+	// The web: who of the cast have played together. What brought them here is the ring itself, so a line
+	// stands only where they share something else as well.
+	const web = K.among( G, mine, false )
+		.filter( ( t ) => t.tie.ev.some( ( e ) => !cuts.some( ( c ) => c.id === e.m ) ) )
+		.map( ( t ) => Object.assign( t, { bow: K.arc( lay, seatOf.get( t.u ), seatOf.get( t.v ) ) } ) );
+	for ( const t of web ) {
+		sc.lines.set( lineKey( t.u, t.v ), { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, stands: 'tie', role: 'web', quiet: true,
+			w: lineWidth( t.tie ), o: lay.web ? webShade( t.bow, false ) : 0, bow: t.bow, delay: 300 } );
+	}
+	sc.nodes.set( 'song', { stands: 'song', is: 'song', x: lay.C.x, y: lay.C.y, kind: 'song', o: 1, title: v.s, tier,
+		cuts } );
+	mine.forEach( ( id ) => {
+		const nm = nameAt( first( id ), seatOf.get( id ), W, FONT.named );
+		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { role: rolesOf.get( id ) || '', song: v.s, delay: 180 }, nm ) );
+	} );
+	sc.web = lay.web;
+	sc.head = [ h( 'b', null, v.s ), cuts[ 0 ] ? playButton( G.music[ cuts[ 0 ].id ], v.s ) : null ];
+	sc.sub = [ 'On ', h( 'b', null, cuts.map( ( c ) => c.title ).join( ', ' ) || 'no cut the sources name' ), ' · ',
+		h( 'b', null, K.plural( ids.length, 'picker' ) ), ids.length === 1 ? ' the sources put on it' : ' the sources put on it' ];
+	return sc;
+}
+
+/* ------------------------------------------------------------------------------------------------------------
  * The scene, on the page: made once, then moved
  * --------------------------------------------------------------------------------------------------------- */
 
@@ -763,6 +813,25 @@ const draw = {
 	node( g, d ) {
 		if ( d.stands === 'piece' ) {
 			drawPiece( g, d );
+			return;
+		}
+		if ( d.stands === 'song' ) {
+			g.textContent = '';
+			g.setAttribute( 'class', 'pk song t' + ( d.tier || 0 ) );
+			g.setAttribute( 'aria-label', d.title + ', a song' );
+			layers.nodes.appendChild( g );
+			g.appendChild( s( 'circle', { class: 'halo', r: 32 } ) );
+			g.appendChild( s( 'circle', { class: 'ring', r: 24 } ) );
+			const gl = glyph( 'track' );
+			gl.setAttribute( 'transform', 'scale(1.9)' );
+			g.appendChild( gl );
+			const to = G.plays[ d.title ] ? '/rabbithole/?track=' + encodeURIComponent( G.plays[ d.title ] ) : '';
+			const nm = K.clip( d.title, 30 );
+			g.appendChild( s( 'a', { href: G.songs[ d.title ] ? pageUrl( 'Song:' + d.title ) : address( { s: d.title } ),
+				'aria-label': 'About ' + d.title }, s( 'text', { y: 44, 'text-anchor': 'middle', 'font-weight': 'bold' }, nm ) ) );
+			if ( to ) {
+				g.appendChild( playChip( wide( nm, FONT.subject ) / 2 + 5, 40, to, d.title ) );
+			}
 			return;
 		}
 		const p = P( d.id );
@@ -1153,7 +1222,16 @@ function baconTable( a ) {
 
 function fillPanel() {
 	const out = [];
-	if ( view.m !== undefined ) {
+	if ( view.s !== undefined ) {
+		const scd = G.songcast[ view.s ];
+		const cut = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean )[ 0 ];
+		out.push( h( 'h2', null, view.s ), h( 'p', { class: 'sub' }, cut ? 'on ' + cut.title + ( cut.date ? ', ' + cut.date : '' )
+			: 'no cut the sources name' ) );
+		if ( scd.pickers.length ) {
+			out.push( h( 'h3', null, `On this cut · ${ scd.pickers.length }` ), h( 'ul', null, scd.pickers.map( ( [ id, roles ] ) =>
+				personRow( id, roles || 'no instrument said', () => go( { a: id } ) ) ) ) );
+		}
+	} else if ( view.m !== undefined ) {
 		out.push( ...piecePanel() );
 	} else if ( view.b === undefined ) {
 		const a = view.a;
@@ -1215,13 +1293,16 @@ function fillPanel() {
  * --------------------------------------------------------------------------------------------------------- */
 
 function label( v ) {
+	if ( v.s !== undefined ) {
+		return v.s;
+	}
 	if ( v.m !== undefined ) {
 		return K.called( G, M( v.m ) ).name;
 	}
 	return v.b === undefined ? first( v.a ) : first( v.a ) + ' ⟷ ' + first( v.b );
 }
 
-const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m;
+const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m && v.s === w.s;
 
 /** Where each thing in sight is now, by what it stands for: a picker ('p' and their number) or a piece ('m' and its). */
 function whereabouts() {
@@ -1278,14 +1359,14 @@ function show( quick, again ) {
 	}
 	stage.classList.toggle( 'dual', view.m !== undefined );
 	steady();
-	scene = view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
+	scene = view.s !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
 	stage.classList.toggle( 'webbed', !!scene.web );
 	stage.classList.toggle( 'deep', !!scene.deep );
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
 	$( 'say' ).lastElementChild.replaceChildren( ...( lost && trail.length < 2 ? [ lost ] : scene.sub ) );
 	put( scene, quick );
 	fillPanel();
-	$( 'pa' ).value = view.m !== undefined ? '' : first( view.a );
+	$( 'pa' ).value = view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
 	$( 'pb' ).value = view.m !== undefined || view.b === undefined ? '' : first( view.b );
 	$( 'back' ).hidden = trail.length < 2;
 	$( 'crumbs' ).replaceChildren( ...trail.slice( -4, -1 ).flatMap( ( v, i, arr ) => [
@@ -1322,7 +1403,7 @@ function stamp( step ) {
 }
 
 function go( v ) {
-	if ( v.m === undefined && v.b === v.a ) {
+	if ( v.m === undefined && v.s === undefined && v.b === v.a ) {
 		v = { a: v.a };
 	}
 	view = carry( v );
@@ -1461,7 +1542,38 @@ function aFar( d ) {
 			act( `${ first( view.a ) } & ${ name }: the ways between`, () => go( { a: view.a, b: id } ) ), pageAct( id ) ] };
 }
 
+function aSong( d ) {
+	const w = { kind: 'a song', title: d.title, tipTitle: d.title + ', a song', lines: [], hint: 'click a picker round it: go to them', acts: [] };
+	if ( d.cuts && d.cuts.length ) {
+		w.lines.push( 'on ' + d.cuts.map( ( c ) => c.title ).join( ', ' ) + ( d.cuts[ 0 ].date ? ', ' + d.cuts[ 0 ].date : '' ) );
+	} else {
+		w.lines.push( 'no cut the sources name' );
+	}
+	if ( G.plays[ d.title ] ) {
+		w.lines.push( 'it plays in Rabbithole: the ▶ beside its name' );
+	}
+	return w;
+}
+
+/** A picker on a song's ring: what this cut's credits gave them, and where else they lead. */
+function aPickerOfSong( d ) {
+	const id = d.id, name = first( id ), role = d.role;
+	const w = { kind: 'a picker' + instOf( id ), title: name, tipTitle: name + instOf( id ), lines: [],
+		hint: 'click: go to ' + name, acts: [ act( 'Go to ' + name, () => go( { a: id } ) ) ] };
+	w.lines.push( role ? 'on this cut: ' + role : 'on this cut, and no instrument the sources name' );
+	const web = webFrom( ( l ) => ( l.u === id ? l.v : ( l.v === id ? l.u : undefined ) ) );
+	if ( web.length ) {
+		w.lines.push( `and with ${ K.plural( web.length, 'other' ) } here: ${ listNames( web ) }` );
+	}
+	w.lines.push( K.plural( K.company( G, id ).length, 'picker' ) + ' played with, everywhere the sources know' );
+	w.acts.push( pageAct( id ) );
+	return w;
+}
+
 function aPicker( d ) {
+	if ( d.song !== undefined ) {
+		return aPickerOfSong( d );
+	}
 	if ( d.by !== undefined ) {
 		return aFar( d );
 	}
@@ -1585,6 +1697,8 @@ function what( g ) {
 			return out ? aPickerBetween( d ) : aPicker( d );
 		case 'piece':
 			return d.more ? theRest( d ) : ( out ? aPieceAmong( d ) : aPiece( d ) );
+		case 'song':
+			return aSong( d );
 		case 'thread':
 			return d.quiet ? null : aPickerBetween( d );
 		default:
