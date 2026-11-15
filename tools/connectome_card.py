@@ -177,6 +177,21 @@ class Wiki:
                     out[page['title']] = cuts
         return out
 
+    def record_artists(self, titles):
+        """Who a record page's {{Record}} names as the artist: title -> name. The recording artist of a
+        cut's track is the node a route home points at (Justin, #connectome, 15 Nov 2026)."""
+        out = {}
+        for i in range(0, len(titles), 50):
+            q = self.api(action='query', titles='|'.join(titles[i:i + 50]), prop='revisions', rvprop='content',
+                         rvslots='main', formatversion=2)['query']
+            for page in q.get('pages', []):
+                revs = page.get('revisions') or []
+                text = revs[0]['slots']['main'].get('content', '') if revs else ''
+                m = re.search(r'\|\s*artist\s*=\s*([^\n|}]+)', text)
+                if m:
+                    out[page['title']] = m.group(1).strip()
+        return out
+
     def instrument_icons(self):
         """The instruments the wiki keeps an icon for: the names after Instrument-icon-."""
         q = self.api(action='query', list='allimages', aiprefix='Instrument-icon-', ailimit=100)
@@ -814,6 +829,13 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                               'cast': {alias.get(n, n): r for n, r in c['cast'].items()}})
             if entry:
                 cutmap[song_title] = entry
+        # The recording artist of each cut: the record page's {{Record|artist=}} — the node a route home
+        # points at when a reader walks out of a cut's graph (Justin, #connectome, 15 Nov 2026, 04:53Z).
+        recs = sorted({c['record'] for cs in cutmap.values() for c in cs})
+        artists = wiki.record_artists(recs) if recs and hasattr(wiki, 'record_artists') else {}
+        for cs in cutmap.values():
+            for c in cs:
+                c['artist'] = artists.get(c['record'], '')
         asked = connectome_graph.arthel_pages(store.pairs, whole, song)
         found = wiki.resolve(asked) if asked else {}
         # The store's arthel slugs are titles of their own mind ('To' where the page has 'to'); ask the

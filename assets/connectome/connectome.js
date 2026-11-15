@@ -172,7 +172,23 @@ function address( v ) {
 		const pc = M( v.m );
 		return '?' + new URLSearchParams( Object.assign( { m: G.music[ pc.m ].key }, pc.song ? { s: pc.song } : null ) );
 	}
-	return '?' + new URLSearchParams( v.b === undefined ? { p: first( v.a ) } : { a: first( v.a ), b: first( v.b ) } );
+	if ( v.b === undefined ) {
+		const q = { p: first( v.a ) };
+		if ( ( v.keep || [] ).length ) {
+			q.keep = v.keep.map( ( x ) => first( x ) ).join( ',' );
+		}
+		if ( v.by !== undefined && v.by !== null ) {
+			q.by = G.music[ typeof v.by === 'object' ? v.by.m : v.by ].key;
+			if ( typeof v.by === 'object' ) {
+				q.on = v.by.song;
+			}
+		}
+		if ( v.via !== undefined && v.via !== null ) {
+			q.via = v.via;
+		}
+		return '?' + new URLSearchParams( q );
+	}
+	return '?' + new URLSearchParams( { a: first( v.a ), b: first( v.b ) } );
 }
 
 /** The view an address asks for; null when it names nothing the graph knows. (?from= and ?to= are read as a and b.) */
@@ -194,7 +210,18 @@ function parse( q ) {
 		}
 	}
 	const a = K.find( G, q.get( 'a' ) || q.get( 'from' ) || q.get( 'p' ) ), b = K.find( G, q.get( 'b' ) || q.get( 'to' ) );
-	return a === null ? null : ( b === null || b === a ? { a } : { a, b } );
+	if ( a === null ) {
+		return null;
+	}
+	if ( b === null || b === a ) {
+		// The way the reader came (Justin, #connectome, 13 Nov 2026): who they passed, and on what.
+		const keep = ( q.get( 'keep' ) || '' ).split( ',' ).map( ( n ) => K.find( G, n ) ).filter( ( x ) => x !== null && x !== a );
+		const byRaw = q.get( 'by' );
+		const by = byRaw ? K.findPiece( G, byRaw, q.get( 'on' ) ) : undefined;
+		const via = q.get( 'via' );
+		return { a, keep, by: by === null ? undefined : by, via: via || undefined };
+	}
+	return { a, b };
 }
 
 /** A plain click on a link to somewhere in the graph goes there without leaving; any other kind of click is the browser's. */
@@ -590,6 +617,21 @@ function egoScene( v ) {
 			placePills( sc, a, c.id, c.tie, at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, v.by );
 		}
 	} );
+	// The route home, said once and said straight (Justin, #connectome, 15 Nov 2026, 04:53Z): the cut's own
+	// song on the line to the first one the reader passed — the record's artist, when they're not who this
+	// is — with its way into Rabbithole where the cut has one. Not the tie's guess: what the page states.
+	const home = G.songcast ? G.songcast[ v.via ] : null;
+	if ( home && v.keep && v.keep.length ) {
+		const homeId = v.keep[ 0 ] !== a && seatOf.get( v.keep[ 0 ] ) ? v.keep[ 0 ] : ( v.keep[ 1 ] !== a && seatOf.get( v.keep[ 1 ] ) ? v.keep[ 1 ] : null );
+		const rec = ( home.on || [] )[ 0 ];
+		if ( homeId !== null && rec !== undefined ) {
+			const pos = seatOf.get( homeId ), len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y );
+			const room = Math.max( 92, Math.min( 190, len - 64 ) );
+			const at = { x: lay.C.x + ( pos.x - lay.C.x ) * 0.54, y: lay.C.y + ( pos.y - lay.C.y ) * 0.54 };
+			placePills( sc, a, homeId, { ev: [ { m: rec, how: K.TRACK, songs: [ home.song ] } ] },
+				at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, undefined );
+		}
+	}
 	// Between two the reader came by, a line of the web is the way they came, and stays as plain as it was.
 	for ( const t of web ) {
 		sc.lines.set( lineKey( t.u, t.v ), { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, stands: 'tie', role: 'web', quiet: true,
@@ -708,7 +750,25 @@ function songScene( v ) {
 	const rolesOf = new Map( scd.pickers.map( ( p ) => [ p[ 0 ], { role: p[ 1 ] || '', icon: p[ 2 ] || '' } ] ) );
 	const cuts = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean );
 	const tier = cuts.length ? Math.max( ...cuts.map( ( c ) => c.tier ) ) : 0;
-	const lay = K.ego( { W, H, named: Math.min( ids.length, 12 ), dots: 0 } );
+	// The constellation around the cut (Justin, #connectome, 15 Nov 2026, 04:53Z): a step out from each of
+	// the cast to who else they've played with — the song's ecosystem, not just its ensemble. Each picker
+	// lends their loudest few; the strongest of those stand named, the rest as beads.
+	const inCut = new Set( ids );
+	const chosen = new Map();
+	for ( const id of ids ) {
+		for ( const [ o, tie ] of ( G.adj[ id ] || [] ) ) {
+			if ( !tie.played || inCut.has( o ) ) {
+				continue;
+			}
+			const was = chosen.get( o );
+			if ( !was || tie.ev.length > was.tie.ev.length || ( tie.ev.length === was.tie.ev.length && tie.w > was.tie.w ) ) {
+				chosen.set( o, { id: o, tie, by: id } );
+			}
+		}
+	}
+	const outer = [ ...chosen.values() ].sort( ( x, y ) => ( y.tie.ev.length - x.tie.ev.length ) || ( y.tie.w - x.tie.w ) )
+		.slice( 0, W > 700 && H > 560 ? 20 : ( W > 460 || H > 500 ? 12 : 8 ) );
+	const lay = K.ego( { W, H, named: Math.min( ids.length, 12 ), dots: outer.length } );
 	const n = lay.named.length, mine = ids.slice( 0, n );
 	const pan = slide( 'c' + v.cut, lay.C );
 	const seats = K.seat( lay.named, mine.map( ( id ) => wanted( 'c' + v.cut + '·' + id, pan ) ) );
@@ -732,6 +792,28 @@ function songScene( v ) {
 		const nm = nameAt( first( id ), seatOf.get( id ), W, FONT.named );
 		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { cutOf: rolesOf.get( id ) || { role: '', icon: '' }, song: scd.song, delay: 180 }, nm ) );
 	} );
+	if ( outer.length ) {
+		const seated = outer.slice( 0, lay.dots.length );
+		// The far names go only where no name sits: the ecosystem reads by shape first, and the sweep keeps
+		// the rule that no two names touch. A far node without room is a bead; the sheet still says who.
+		const taken = mine.map( ( id ) => {
+			const pos = seatOf.get( id ), nm = nameAt( first( id ), pos, W, FONT.named );
+			return { x: pos.x + nm.dx, y: pos.y + ( pos.below ? 24 : -32 ), w: wide( nm.label, FONT.named ) / 2 + 3 };
+		} );
+		const clash = ( b, d ) => Math.abs( b.x - d.x ) < b.w + d.w && Math.abs( b.y - d.y ) < 22;
+		const oseats = K.seat( lay.dots, seated.map( ( c ) => wanted( 'c' + v.cut + '·o' + c.id, pan ) ) );
+		seated.forEach( ( c, i ) => {
+			const at = lay.dots[ oseats[ i ] ], nm = nameAt( first( c.id ), at, W, FONT.far );
+			const box = { x: at.x + nm.dx, y: at.y + ( at.below ? 24 : -14 ), w: wide( nm.label, FONT.far ) / 2 + 2 };
+			const hit = taken.some( ( b ) => clash( b, box ) );
+			if ( !hit ) {
+				taken.push( box );
+			}
+			addNode( sc, c.id, at, hit ? 'dot' : 'far', Object.assign( { r: 4, by: c.by, tie: c.tie, delay: 360 }, hit ? {} : nm ) );
+			addLine( sc, c.by, c.id, c.tie, { o: 0.4, quiet: true, fine: true, role: 'far', c: c.id, delay: 360 } );
+		} );
+		sc.far = seated.map( ( c, i ) => ( { id: c.id, at: lay.dots[ oseats[ i ] ], tie: c.tie, by: c.by } ) );
+	}
 	sc.web = lay.web;
 	sc.head = [ h( 'b', null, scd.song ), h( 'a', { class: 'play', href: HOME + '/rabbithole/?track=' + encodeURIComponent( v.cut ),
 		target: '_top', title: 'Play ' + scd.song + ' in Rabbithole', 'aria-label': 'Play ' + scd.song + ' in Rabbithole' }, playMark() ) ];
@@ -1409,6 +1491,18 @@ function show( quick, again ) {
 function carry( v ) {
 	if ( !view || !scene || v.b !== undefined ) {
 		return v;
+	}
+	// Out of a cut's graph (Justin, #connectome, 15 Nov 2026, 04:53Z): the way back is the cut itself — the
+	// record's artist first, then who else the page puts on this cut; the line says the song, and plays it
+	// where the cut states a track.
+	if ( view.cut !== undefined && G.songcast && G.songcast[ view.cut ] ) {
+		const entry = G.songcast[ view.cut ];
+		const others = entry.pickers.map( ( p ) => p[ 0 ] ).filter( ( x ) => x >= 0 && x !== v.a );
+		const artist = entry.artist;
+		const keep = ( artist != null && artist !== v.a ? [ artist, ...others.filter( ( x ) => x !== artist ) ] : others ).slice( 0, 3 );
+		const rec = ( entry.on || [] )[ 0 ];
+		const track = rec !== undefined ? K.trackOn( G, rec, entry.song ) : undefined;
+		return { a: v.a, keep, by: track !== undefined ? track : rec, via: view.cut };
 	}
 	const here = view.m !== undefined ? ( scene.tagged || [] ) : [ view.a, view.b ].filter( ( x ) => x !== undefined );
 	if ( v.m === undefined ) {

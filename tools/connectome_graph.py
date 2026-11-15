@@ -17,7 +17,7 @@ graph.json:
             one record or show; one entry per record or show, the closest way the
             sources put them together
   songs     song title -> its wiki page, for the songs that have one
-  songcast   cut cid -> { song, on: [music...], number, recorded, pickers: [[picker, roles, icon], ...] }:
+  songcast   cut cid -> { song, on: [music...], number, recorded, artist, pickers: [[picker, roles, icon], ...] }:
             each cut of each song on cryptograss's own records, as its Song: page's {{Studio cut}} states
             it — the record, the track number, when it was recorded, who the page says is on it and with
             what, each with the icon the wiki keeps for that role. Keyed by the cut's cid, or by its record
@@ -188,7 +188,8 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                     if r and r.lower() not in {x.lower() for x in said}:
                         said.append(r)
     names = sorted({n for a, b, _ in best for n in (a, b)} | set(featured)
-                   | { p for cast in page_people.values() for p in cast })
+                   | { p for cast in page_people.values() for p in cast }
+                   | { c['artist'] for cuts in (songcuts or {}).values() for c in cuts if c.get('artist') })
     pid = {n: i for i, n in enumerate(names)}
     used = sorted({c[3] for c, _ in best.values()} | { t for ts in page_cut.values() for t in ts })
     mid = {t: i for i, t in enumerate(used)}
@@ -216,7 +217,9 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                 if person in pid:
                     pickers.append([pid[person], '; '.join(said), icon_for('; '.join(said), icons)])
             songcast[key] = {'song': title, 'on': [mid[target]], 'number': c['number'],
-                             'recorded': c['recorded'], 'pickers': pickers}
+                             'recorded': c['recorded'],
+                             'artist': pid.get(c['artist']) if c.get('artist') else None,
+                             'pickers': pickers}
 
     sources, cast = defaultdict(set), defaultdict(dict)
     for person, roles, target, scope, source in credits:
