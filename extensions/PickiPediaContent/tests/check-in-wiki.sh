@@ -239,6 +239,24 @@ php /tmp/card.php 'Bill_Monroe'
 php /tmp/card.php 'Bill_Monroe' edit
 php /tmp/card.php 'Special:RecentChanges'
 
+# Signing in from Rabbithole (SpecialRabbithole.php): Special:UserLogin -> Special:Rabbithole -> /rabbithole/.
+LOGIN_URL='http://127.0.0.1:8080/index.php?title=Special:UserLogin&returnto=Special:Rabbithole&returntoquery=track%3DQmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a%26page%3DSong%253AAugust'
+LOGIN_TOKEN=$(curl -s -H 'Host: localhost' -c /tmp/rh-cookies.txt 'http://127.0.0.1:8080/api.php?action=query&meta=tokens&type=login&format=json' \
+    | php -r '$d = json_decode(stream_get_contents(STDIN), true); echo $d["query"]["tokens"]["logintoken"] ?? "";')
+STEP1=$(curl -s -D - -o /dev/null -H 'Host: localhost' -b /tmp/rh-cookies.txt -c /tmp/rh-cookies.txt \
+    --data-urlencode "wpName=Admin" \
+    --data-urlencode "wpPassword=testtesttest" \
+    --data-urlencode "wploginattempt=Log in" \
+    --data-urlencode "wpEditToken=+\\" \
+    --data-urlencode "authAction=login" \
+    --data-urlencode "force=" \
+    --data-urlencode "wpLoginToken=$LOGIN_TOKEN" \
+    "$LOGIN_URL" | tr -d '\r' | sed -n 's/^[Ll]ocation: //p' | tail -1)
+STEP1_LOCAL=$(printf '%s' "$STEP1" | sed 's#^http://[^/]*#http://127.0.0.1:8080#')
+STEP2=$(curl -s -D - -o /dev/null -H 'Host: localhost' -b /tmp/rh-cookies.txt "$STEP1_LOCAL" | tr -d '\r' | sed -n 's/^[Ll]ocation: //p' | tail -1)
+STEP_BARE=$(curl -s -D - -o /dev/null -H 'Host: localhost' "http://127.0.0.1:8080/index.php?title=Special:Rabbithole" | tr -d '\r' | sed -n 's/^[Ll]ocation: //p' | tail -1)
+echo "RH_LOGIN step1=$STEP1 step2=$STEP2 bare=$STEP_BARE"
+
 printf '%s' 'FAMILY:{{#invoke:Instruments|family|5-string banjo}} EMPTY:[{{#invoke:Instruments|family|cello}}] BADGE:{{#invoke:Instruments|badge|1=5-string banjo|size=18|tuck=1}}' \
     | php maintenance/parse.php --title "Test" 2>/dev/null
 INSIDE
@@ -323,6 +341,13 @@ expect "and for search, the same" "CARD Bill_Monroe [description=The father of b
 expect "with no picture, the wiki's logo and a small card" "og:image=http://localhost/resources/assets/change-your-logo.svg | twitter:card=summary]"
 expect "its edit form has none" "CARD Bill_Monroe (edit) []"
 expect "nor a special page" "CARD Special:RecentChanges []"
+
+echo
+echo "Signing in from Rabbithole returns into Rabbithole (SpecialRabbithole.php):"
+expect "login redirects back to the exact track and page in /rabbithole/" \
+    "/rabbithole/?track=QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a&page=Song%3AAugust bare="
+expect "bare Special:Rabbithole lands at /rabbithole/" \
+    "bare=http://localhost/rabbithole/"
 
 echo
 if [ "$failures" -ne 0 ]; then
