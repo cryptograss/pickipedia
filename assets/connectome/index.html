@@ -24,7 +24,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>The connectome · PickiPedia</title>
+<script>
+/* Day or night as the reader chose on the wiki (the cookie "pickipedia-mode"), on <html> before anything
+   paints; with no choice made, connectome.css follows their system. */
+( function () {
+	var m = /(?:^|;\s*)pickipedia-mode=(dark|light)(?:;|$)/.exec( document.cookie );
+	if ( m ) {
+		document.documentElement.classList.add( 'pp-' + m[ 1 ] );
+	}
+}() );
+</script>
 <link rel="stylesheet" href="connectome.css">
 </head>
 <body>

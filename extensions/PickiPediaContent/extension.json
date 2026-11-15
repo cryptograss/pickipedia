@@ -49,6 +49,26 @@
 				"ext.pickipediaContent.templates.css"
 			]
 		},
+		"ext.pickipediaContent.night.styles": {
+			"styles": [
+				"night/night.less"
+			]
+		},
+		"ext.pickipediaContent.night": {
+			"scripts": [
+				"night/night.js"
+			],
+			"messages": [
+				"pickipediacontent-night-switch",
+				"pickipediacontent-night-night",
+				"pickipediacontent-night-day",
+				"pickipediacontent-night-system",
+				"pickipediacontent-night-system-title"
+			],
+			"dependencies": [
+				"mediawiki.util"
+			]
+		},
 		"ext.pickipediaContent.tidingBanner": {
 			"scripts": [
 				"ext.pickipediaContent.tidingBanner.js"

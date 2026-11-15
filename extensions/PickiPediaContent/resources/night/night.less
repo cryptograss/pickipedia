@@ -1,0 +1,332 @@
+/*
+ * Night: the wiki by dark, in MonoBook (and whatever else isn't Broadside, which has its own).
+ *
+ * Our own, not Vector's night mode (Justin and magent, 15 Nov 2026). Vector's covers Vector's own chrome
+ * and nothing we built: not Rabbithole, not the connectome's graph, not the 17 KB of MediaWiki:Common.css
+ * or the templates that set their own colours. Those are most of what a reader sees here, and they need
+ * dark colours of ours whichever skin is under them. So one set of night colours, Broadside's
+ * (resources/skins.broadside/tokens.css), is used in all of them, and one choice, the cookie
+ * "pickipedia-mode", says which: Broadside, this and the graph read it, and Rabbithole will.
+ *
+ * By day nothing here applies: MonoBook is as it was. By night is the reader's system saying dark, unless
+ * they chose (pp-dark, pp-light on <html>, from the server: Night.php). The rules are written once, in
+ * .night(), and set down twice: for the system, and for the choice. No script is needed for either.
+ */
+
+.night() {
+	color-scheme: dark;
+
+	--night-paper: #18151a;
+	--night-panel: #211c22;
+	--night-wash: #272129;
+	--night-ink: #ece3d8;
+	--night-soft: #cfc4b8;
+	--night-muted: #a2978c;
+	--night-line: #3a323b;
+	--night-rust: #e08a5b;
+	--night-link: #8fb1f2;
+	--night-link-seen: #b9a4ea;
+	--night-link-new: #ff8a75;
+	--night-magenta: #ef5aa6;
+	--night-green: #6fb486;
+	--night-add: #1d3324;
+	--night-del: #40201f;
+	--night-warn: #3d3215;
+
+	/* Codex (MediaWiki's newer form styles) reads its colours from variables of its own, with day's as the
+	   fallback: "var( --color-subtle, #54595d )" is the help text on Special:CreateAccount. If more of its
+	   forms come out dim, set its main ones here rather than chase each selector (re, 15 Nov 2026). */
+	--color-subtle: var( --night-muted );
+
+	/* ---- The page and MonoBook's frame ---- */
+
+	body {
+		background: var( --night-paper ) none;
+		color: var( --night-ink );
+	}
+	#content,
+	.portlet .pBody,
+	#footer,
+	#p-cactions li,
+	#p-cactions li a {
+		border-color: var( --night-line );
+		background: var( --night-panel );
+		color: var( --night-ink );
+	}
+	#p-cactions li.selected,
+	#p-cactions li.selected a {
+		border-color: var( --night-line );
+		background: var( --night-panel );
+	}
+	#p-cactions li:not( .selected ) a { background: var( --night-wash ); }
+	.portlet h3,
+	.portlet h5,
+	#p-personal,
+	#footer li,
+	#footer { color: var( --night-muted ); }
+	#p-personal .pBody { background: none; }
+
+	/* ---- Words ---- */
+
+	h1, h2, h3, h4, h5, h6,
+	.mw-body-content h1, .mw-body-content h2 {
+		border-color: var( --night-line );
+		color: var( --night-ink );
+	}
+	a { color: var( --night-link ); }
+	a:visited { color: var( --night-link-seen ); }
+	a:hover, a:active { color: var( --night-link ); }
+	a.new, a.new:visited, #p-personal a.new, #p-cactions a.new { color: var( --night-link-new ); }
+	.mw-parser-output a.external, a.extiw { color: var( --night-link ); }
+	.portlet a, #p-cactions a, #p-personal a, #footer a { color: var( --night-link ); }
+	hr { border-color: var( --night-line ); background: var( --night-line ); }
+	.mw-editsection, .mw-editsection-bracket, #siteSub, #contentSub, .subpages,
+	.mw-changeslist-separator, .mw-changeslist-date, .comment, .autocomment, .mw-usertoollinks,
+	.thumbcaption, figcaption, small { color: var( --night-muted ); }
+	code, pre, kbd, samp, .mw-code {
+		border-color: var( --night-line );
+		background: var( --night-wash );
+		color: var( --night-ink );
+	}
+
+	/* ---- Boxes the wiki draws ---- */
+
+	.toc, #toc, .catlinks, .thumbinner, figure[typeof~="mw:File/Thumb"], figure[typeof~="mw:File/Frame"],
+	figure[typeof~="mw:File/Thumb"] > figcaption, figure[typeof~="mw:File/Frame"] > figcaption,
+	.mw-warning, .usermessage, #mw-content-subtitle, .mw-content-ltr .mw-file-description,
+	.gallerybox .thumb, li.gallerybox div.thumb, .mw-datatable, .mw-htmlform-ooui-wrapper, fieldset,
+	.mw-rcfilters-container, .searchresults .mw-search-profile-tabs, .mw-search-profile-tabs,
+	.printfooter, .mw-pager-navigation-bar, .mw-notification, .suggestions-results, .suggestions-special,
+	.mw-specialpages-list, .mw-allpages-nav, .templatesUsed, .hiddencats, .limitreport, .previewnote,
+	#editpage-copywarn, .editOptions, .mw-editform, .wikiEditor-ui, .wikiEditor-ui-toolbar,
+	.wikiEditor-ui-toolbar .tabs, .wikiEditor-ui-toolbar .sections .section, .wikiEditor-ui-view {
+		border-color: var( --night-line );
+		background-color: var( --night-panel );
+		color: var( --night-ink );
+	}
+	.toctitle, .toctogglespan, .tocnumber { color: var( --night-soft ); }
+	.suggestions-result-current { background: var( --night-wash ); color: var( --night-ink ); }
+
+	table.wikitable,
+	table.wikitable > * > tr > td,
+	table.wikitable > * > tr > th,
+	table.wikitable > caption {
+		border-color: var( --night-line );
+		color: var( --night-ink );
+	}
+	table.wikitable { background-color: var( --night-panel ); }
+	table.wikitable > * > tr > th { background-color: var( --night-wash ); }
+	table.wikitable > * > tr > td { background-color: transparent; }
+
+	.mw-message-box, .cdx-message {
+		border-color: var( --night-line );
+		background-color: var( --night-wash );
+		color: var( --night-ink );
+	}
+	.mw-message-box-error, .cdx-message--error, .error { border-color: #a5483f; background-color: var( --night-del ); color: var( --night-ink ); }
+	.mw-message-box-warning, .cdx-message--warning, .warningbox { border-color: #8a7330; background-color: var( --night-warn ); }
+	.mw-message-box-success, .cdx-message--success, .successbox { border-color: #3f7a52; background-color: var( --night-add ); }
+	span.error, strong.error, .error { background: none; color: var( --night-link-new ); }
+
+	/* ---- What is typed into ---- */
+
+	input:not( [type="checkbox"] ):not( [type="radio"] ):not( [type="range"] ):not( [type="color"] ),
+	textarea, select, button,
+	.oo-ui-textInputWidget .oo-ui-inputWidget-input, .oo-ui-buttonElement-framed.oo-ui-widget-enabled > .oo-ui-buttonElement-button,
+	.oo-ui-dropdownWidget.oo-ui-widget-enabled .oo-ui-dropdownWidget-handle, .oo-ui-menuSelectWidget,
+	.oo-ui-popupWidget-popup, .oo-ui-tagMultiselectWidget.oo-ui-widget-enabled .oo-ui-tagMultiselectWidget-handle,
+	.oo-ui-panelLayout-framed, .oo-ui-window-frame, .oo-ui-window-head, .oo-ui-window-body, .oo-ui-window-foot,
+	.oo-ui-messageDialog-actions, .oo-ui-processDialog-navigation, .oo-ui-fieldsetLayout,
+	.cdx-text-input__input, .cdx-button:not( .cdx-button--action-progressive ):not( .cdx-button--action-destructive ) {
+		border-color: var( --night-line );
+		background-color: var( --night-wash );
+		color: var( --night-ink );
+	}
+	.oo-ui-buttonElement-framed.oo-ui-flaggedElement-primary.oo-ui-flaggedElement-progressive.oo-ui-widget-enabled > .oo-ui-buttonElement-button {
+		border-color: #36c;
+		background-color: #36c;
+		color: #fff;
+	}
+	.oo-ui-labelElement-label, .oo-ui-fieldLayout-header, .oo-ui-fieldLayout .oo-ui-fieldLayout-help,
+	.oo-ui-optionWidget, .oo-ui-fieldsetLayout-header .oo-ui-labelElement-label, .oo-ui-inline-help,
+	.oo-ui-fieldLayout-messages .oo-ui-labelElement-label { color: var( --night-ink ); }
+	.oo-ui-optionWidget-highlighted, .oo-ui-optionWidget-selected { background-color: var( --night-line ); color: var( --night-ink ); }
+	.oo-ui-iconElement-icon:not( .oo-ui-image-invert ), .oo-ui-indicatorElement-indicator { filter: invert( 1 ) hue-rotate( 180deg ); }
+	::placeholder { color: var( --night-muted ); opacity: 1; }
+
+	/* ---- What changed ---- */
+
+	table.diff, td.diff-context, td.diff-marker, td.diff-lineno, td.diff-otitle, td.diff-ntitle {
+		border-color: var( --night-line );
+		background: transparent;
+		color: var( --night-ink );
+	}
+	td.diff-context { background: var( --night-wash ); }
+	td.diff-addedline, td.diff-addedline .diffchange { border-color: #3f7a52; background: var( --night-add ); color: var( --night-ink ); }
+	td.diff-deletedline, td.diff-deletedline .diffchange { border-color: #a5483f; background: var( --night-del ); color: var( --night-ink ); }
+	td.diff-addedline .diffchange { background: #2f5a3d; }
+	td.diff-deletedline .diffchange { background: #70302d; }
+	.mw-plusminus-pos { color: var( --night-green ); }
+	.mw-plusminus-neg { color: var( --night-link-new ); }
+	.mw-plusminus-null { color: var( --night-muted ); }
+	#pagehistory li.selected, .mw-changeslist-line-watched .mw-title { background: var( --night-wash ); border-color: var( --night-line ); }
+	.mw-changeslist-legend, .mw-changeslist table, .mw-enhanced-rc { border-color: var( --night-line ); background: var( --night-panel ); color: var( --night-ink ); }
+	.mw-highlight, .mw-highlight pre { background: var( --night-wash ); color: var( --night-ink ); }
+	.mw-highlight span { filter: brightness( 1.7 ) saturate( 0.8 ); }
+
+	/* ---- What a page brought with it ----
+	   A template that set its own background set it for day, and its words were the page's dark ink. By
+	   night the page's ink is light, so words on such a patch keep the day's ink, unless the template chose
+	   a colour for them too. (Broadside does the same: --bs-on-patch.) */
+	.mw-parser-output [style*="background"]:not( [style*=" color:"] ):not( [style*=";color:"] ):not( [style^="color:"] ),
+	.mw-parser-output [bgcolor] {
+		color: #261c15;
+	}
+	.mw-parser-output [style*="background"]:not( [style*=" color:"] ):not( [style*=";color:"] ):not( [style^="color:"] ) a:not( .new ),
+	.mw-parser-output [bgcolor] a:not( .new ) { color: #2c5cb5; }
+	.mw-parser-output [style*="background"]:not( [style*=" color:"] ):not( [style*=";color:"] ):not( [style^="color:"] ) a.new { color: #a82a22; }
+	/* The inks the wiki's own pages and templates write by hand (Main Page, Template:Song and their kin use
+	   one palette, by its hex): each has a night ink. Only where it is the colour of words: a selector on
+	   "color:#…" also meets "background-color:#…", and none of these is used as a ground. */
+	.ink( @day, @night ) {
+		// "\20 " is a space: ResourceLoader's minifier takes a plain one out of the string, and the rule then
+		// meets nothing written "color: #666".
+		[style*="color:@{day}"], [style*="color:\20 @{day}"] { color: @night !important; }
+	}
+	.ink( ~"#2b1d12", var( --night-ink ) );
+	.ink( ~"#000", var( --night-ink ) );
+	.ink( ~"#222", var( --night-ink ) );
+	.ink( ~"#333", var( --night-ink ) );
+	.ink( ~"#444", var( --night-soft ) );
+	.ink( ~"#555", var( --night-soft ) );
+	.ink( ~"#54595d", var( --night-soft ) );
+	.ink( ~"#3d4a3e", var( --night-soft ) );
+	.ink( ~"#5a6858", var( --night-soft ) );
+	.ink( ~"#5a6354", var( --night-soft ) );
+	.ink( ~"#666", var( --night-muted ) );
+	.ink( ~"#777", var( --night-muted ) );
+	.ink( ~"#888", var( --night-muted ) );
+	.ink( ~"#72777d", var( --night-muted ) );
+	.ink( ~"#6b7566", var( --night-muted ) );
+	.ink( ~"#6b6560", var( --night-muted ) );
+	.ink( ~"#7a6450", var( --night-muted ) );
+	.ink( ~"#9a3b1b", var( --night-rust ) );
+	.ink( ~"#4a7c59", var( --night-green ) );
+	.ink( ~"#2d5016", var( --night-green ) );
+	.ink( ~"#0645ad", var( --night-link ) );
+
+	/* ---- What our own extensions draw (their stylesheets write day's colours) ---- */
+
+	.pp-moodlinks-words, .pp-moodlinks-more, .pp-moodlinks h2, .pp-moodlinks-foot h2,
+	.pp-todo-note, .pp-todo-meta, .pp-todo-box, .pp-todo-done > summary, .pp-row-note,
+	.release-byline, .release-captions, .release-meta, .timeago,
+	.mw-search-result-data, .results-info, .results-info strong, .searchmatch + .mw-search-result-data,
+	.mw-parser-output sup, .mw-tag-markers, .mw-history-histlinks, .history-size, abbr.minoredit,
+	#pagehistory li.selected, #pagehistory li.selected * { color: var( --night-muted ); }
+	#pagehistory li.selected a { color: var( --night-link ); }
+	.pp-players-what, .pp-players-who, .pp-row, .pp-todo-text, .pp-todo-item { color: var( --night-soft ); }
+	.pp-todo-item { border-color: var( --night-line ); }
+	.noarticletext, .mw-search-form-wrapper, .mw-search-results li, #mw-search-top-table,
+	.mw-htmlform, .mw-htmlform-ooui, .oo-ui-fieldLayout, .oo-ui-layout.oo-ui-labelElement,
+	.oo-ui-panelLayout, .oo-ui-panelLayout-padded, #userloginForm, .mw-userlogin-content, #mw-createaccount-join,
+	.mw-rcfilters-ui-filterTagMultiselectWidget, .mw-rcfilters-ui-changesLimitAndDateButtonWidget,
+	.mw-rcfilters-ui-liveUpdateButtonWidget, .mw-rcfilters-ui-filterWrapperWidget,
+	.mw-rcfilters-ui-filterTagMultiselectWidget-views {
+		border-color: var( --night-line );
+		background-color: var( --night-panel );
+		color: var( --night-ink );
+	}
+	/* A box of ours that stays pale by night keeps day's ink and day's links on it. */
+	.pv-proposed, .bot-proposal, .claim-unverified, .pp-record-box, .pp-record-box .pp-record-meta,
+	.pp-song-card, .pp-connectome-card { color: #261c15; }
+	.pv-proposed a:not( .new ), .bot-proposal a:not( .new ), .claim-unverified a:not( .new ),
+	.pp-record-box a:not( .new ), .pp-song-card a:not( .new ), .pp-connectome-card a:not( .new ) { color: #2c5cb5; }
+	/* A red link on a pale box: darker than day's (#c2372d is 4.1:1 on the grey of an unverified claim). */
+	.pv-proposed a.new, .bot-proposal a.new, .claim-unverified a.new,
+	.pp-record-box a.new, .pp-song-card a.new, .pp-connectome-card a.new { color: #a82a22; }
+	.pp-listen-rh, .pp-listen-rh a, .pp-listen-rh span, .plainlinks [style*="background"] span { color: #fff; }
+
+	.hls-video-player button, .hls-quality-bar button, .hls-playback-bar button {
+		border: 1px solid var( --night-line ) !important;
+		background: var( --night-wash ) !important;
+		color: var( --night-ink ) !important;
+	}
+	.mw-parser-output .pv-proposed__badge, .mw-parser-output .pv-proposed__byline,
+	.mw-parser-output .bot-proposal sup, .mw-parser-output .pv-proposed sup { color: #5c4a3a !important; }
+	#mw-searchoptions, #powersearch fieldset, .search-types, .mw-search-profile-tabs,
+	.oo-ui-buttonElement-framed.oo-ui-widget-disabled > .oo-ui-buttonElement-button {
+		border-color: var( --night-line );
+		background-color: var( --night-panel );
+		color: var( --night-muted );
+	}
+	.search-types li.current a, .oo-ui-buttonElement-frameless.oo-ui-widget-enabled > .oo-ui-buttonElement-button,
+	.oo-ui-buttonElement-frameless.oo-ui-widget-enabled > .oo-ui-buttonElement-button > .oo-ui-labelElement-label { color: var( --night-ink ); }
+	.oo-ui-buttonElement-frameless.oo-ui-flaggedElement-progressive.oo-ui-widget-enabled > .oo-ui-buttonElement-button,
+	.oo-ui-buttonElement-frameless.oo-ui-flaggedElement-progressive.oo-ui-widget-enabled > .oo-ui-buttonElement-button > .oo-ui-labelElement-label,
+	.release-raw-yaml > summary, details > summary a { color: var( --night-link ); }
+
+	/* MonoBook's button theme paints a pale gradient as a picture behind a framed button: without taking it
+	   off, night's ground never shows and its pale words are on near-white. A chip is written as the theme
+	   writes it ("-outlined"), which is what it takes to outrank it; and the date field is the theme's too. */
+	.oo-ui-buttonElement-framed > .oo-ui-buttonElement-button,
+	.oo-ui-tagItemWidget, .mw-rcfilters-ui-tagItemWidget,
+	.oo-ui-tagMultiselectWidget.oo-ui-tagMultiselectWidget-outlined .oo-ui-tagItemWidget.oo-ui-widget-enabled,
+	.mw-widget-dateInputWidget-handle {
+		background-image: none;
+		border-color: var( --night-line );
+		background-color: var( --night-wash );
+		color: var( --night-ink );
+	}
+	.oo-ui-tagItemWidget .oo-ui-labelElement-label, .oo-ui-buttonElement-framed .oo-ui-labelElement-label { color: var( --night-ink ); }
+	/* A primary button's words are its own white, and a button that can't be pressed keeps its muted ones. */
+	.oo-ui-buttonElement-framed.oo-ui-flaggedElement-primary .oo-ui-labelElement-label,
+	.oo-ui-buttonElement-framed.oo-ui-widget-disabled .oo-ui-labelElement-label { color: inherit; }
+	/* The wiki's mark by day (assets/logo.png) is drawn on white that is only partly taken out, with its
+	   name in black: on the dark it is a grey haze and the name is lost (Justin, 15 Nov 2026). By night
+	   it is assets/logo-night.png, made from the art on a clear ground (File:Pickipedia-quarter-transparent.png
+	   on the wiki): the name in night's ink, the floor's haze thinned. 270px, drawn at 135. */
+	#p-logo a.mw-wiki-logo {
+		background-image: url( /assets/logo-night.png ) !important;
+		background-size: 135px 135px;
+	}
+
+	/* A Show page is drawn by a gadget from a handful of colours of its own, set on <body>
+	   (MediaWiki:Gadget-pickipedia-show.css): by night they are these. */
+	body.pickipedia-show {
+		--pp-paper: var( --night-paper );
+		--pp-ink: var( --night-ink );
+		--pp-muted: var( --night-muted );
+		--pp-rule: var( --night-line );
+		--pp-accent: var( --night-rust );
+		--pp-card: var( --night-wash );
+	}
+
+	/* Under a hero picture the gadget takes the ensemble's box off its pale ground ("background: transparent
+	   !important"), though the box's own style still says it has one: so its words are night's, not the
+	   day's ink a pale patch keeps (re, 15 Nov 2026: the names were 2.85:1). */
+	body.pickipedia-show.has-show-hero .ensemble-infobox { color: var( --night-ink ) !important; }
+	body.pickipedia-show.has-show-hero .ensemble-infobox a:not( .new ) { color: inherit !important; }
+	body.pickipedia-show.has-show-hero .ensemble-infobox a:not( .new ):hover { color: var( --night-rust ) !important; }
+	body.pickipedia-show.has-show-hero .ensemble-infobox a.new { color: var( --night-link-new ) !important; }
+	/* The gadget's "verified" is day's green, 4.1:1 on the dark. */
+	body.pickipedia-show .show-poster .pp-status.is-verified { color: var( --night-green ); }
+
+	/* A picture drawn in black on nothing (a diagram, an icon) is on a pale ground, not lost in the dark. */
+	.mw-parser-output img[src$=".svg"], .mw-parser-output img[src*=".svg/"] { background: #f1e9db; border-radius: 2px; }
+}
+
+@media screen and ( prefers-color-scheme: dark ) {
+	:root:not( .pp-light ) {
+		.night();
+	}
+}
+@media screen {
+	:root.pp-dark {
+		.night();
+	}
+}
+
+/* The switch, among the reader's own links (night.js puts it there). */
+#pt-night a, #pt-night-system a { cursor: pointer; }
+/* Giving the choice up: only there while a choice is in force ("hidden" alone loses to MonoBook's "body.skin--responsive #p-personal li"). */
+#pt-night-system[hidden] { display: none !important; }

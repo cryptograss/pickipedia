@@ -381,6 +381,8 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	 */
 	public function onBeforePageDisplay( $out, $skin ): void {
 		$out->addModuleStyles( [ 'ext.pickipediaContent.styles' ] );
+		// Day or night, as the reader's system or their own choice says (Night.php).
+		Night::onPage( $out, $skin );
 		// A user page says whose pronouns are what, under its title.
 		$title = $out->getTitle();
 		if ( $title && $title->getNamespace() === NS_USER && !$title->isSubpage()

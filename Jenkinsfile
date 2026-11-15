@@ -99,6 +99,7 @@ pipeline {
                     # Posts (a user's subpages, read in the Broadside skin): which titles, their headlines and
                     # series, the rail, their videos' shapes, and what is kept of magenta's word on a tiding.
                     php tests/check-posts.php
+                    php tests/check-night.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter
                     # but MediaWiki is not downloaded yet at this stage, so a
