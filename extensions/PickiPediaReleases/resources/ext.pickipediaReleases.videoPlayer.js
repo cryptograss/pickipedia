@@ -44,7 +44,19 @@
         return cid;
     }
 
+    // Classic Media Source only. Since iOS 17.1 iPhones expose
+    // ManagedMediaSource without MediaSource, which makes Hls.isSupported()
+    // true and sent iPhones into hls.js — where our AV1+Opus streams play
+    // sound over a black picture (Skyler, iPhone 17, 8 & 15 Nov). Safari's
+    // own HLS player plays them natively, and needs no hls.js download.
+    function hasClassicMediaSource() {
+        return 'MediaSource' in window;
+    }
+
     function loadHls() {
+        if (!hasClassicMediaSource()) {
+            return Promise.resolve();
+        }
         if (typeof Hls !== 'undefined') {
             return Promise.resolve();
         }
@@ -668,12 +680,14 @@ function initPlayer(container) {
         // see the ladder, offer a choice, and tell a decoder failure apart
         // from a missing playlist.
         //
-        // Native remains the fallback for anything hls.js cannot drive
-        // (no Media Source Extensions), which includes iOS Safari.
+        // Native remains the fallback for anything without classic Media
+        // Source Extensions, including iOS Safari (where ManagedMediaSource
+        // alone makes Hls.isSupported() true, giving sound over a black
+        // picture through hls.js).
         addDeliveryKidMark(container, video);
         addPlaybackBar(container, video, cid);
 
-        if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+        if (hasClassicMediaSource() && typeof Hls !== 'undefined' && Hls.isSupported()) {
             // The stream playing now: replaced when someone picks Audio only
             // or comes back from it (see addQualitySelector).
             var player = { hls: null, src: hlsSrc, audioOnly: false };

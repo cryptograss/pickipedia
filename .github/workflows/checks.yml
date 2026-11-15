@@ -67,6 +67,8 @@ jobs:
             count=$((count + 1))
           done < <(find . -name '*.js' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*')
           echo "$count JavaScript files OK"
+      - name: Run video player checks
+        run: node extensions/PickiPediaReleases/tests/check-video-player.mjs
       - name: Check every JSON file parses
         # extension.json decides whether an extension loads at all; a stray
         # comma there takes the wiki down rather than degrading it.
