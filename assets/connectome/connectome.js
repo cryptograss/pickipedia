@@ -1648,13 +1648,11 @@ function carry( v ) {
 		return v;                                                    // two pickers, or a cut: a view of its own, with nothing brought along
 	}
 	// Out of a cut's graph (Justin, #connectome, 15 Nov 2026, 04:53Z): the way back is the cut itself — the
-	// record's artist first, then who else the page puts on this cut; the line says the song, and plays it
-	// where the cut states a track.
+	// record's artist first, then the song's writer where they're on it, then the rest of the cut's ensemble
+	// (K.homeward; 07:29Z); the line says the song, and plays it where the cut states a track.
 	if ( v.a !== undefined && view.cut !== undefined && G.songcast && G.songcast[ view.cut ] ) {
 		const entry = G.songcast[ view.cut ];
-		const others = entry.pickers.map( ( p ) => p[ 0 ] ).filter( ( x ) => x >= 0 && x !== v.a );
-		const artist = entry.artist;
-		const keep = ( artist != null && artist !== v.a ? [ artist, ...others.filter( ( x ) => x !== artist ) ] : others ).slice( 0, 3 );
+		const keep = K.homeward( entry, v.a ).slice( 0, 3 );
 		const rec = ( entry.on || [] )[ 0 ];
 		const track = rec !== undefined ? K.trackOn( G, rec, entry.song ) : undefined;
 		return { a: v.a, keep, by: track !== undefined ? track : rec, via: view.cut };

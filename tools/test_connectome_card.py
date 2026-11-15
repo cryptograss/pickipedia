@@ -542,3 +542,41 @@ def test_the_graph_carries_a_picture_only_for_those_whose_page_gives_one(tmp_pat
     people = {p[0]: p for p in result['graph']['people']}
     assert people['Kyle Tuttle'] == ['Kyle Tuttle', 1, 'banjo', 'Kyle <b>.jpg']     # as the page wrote it: the page escapes it
     assert len(people) > 2 and all(len(p) == 3 for n, p in people.items() if n != 'Kyle Tuttle')    # nobody else gets one
+
+
+def test_a_song_pages_writers_are_its_composer_as_written():
+    assert cc.writers_from('{{Song\n|status=proposed\n|composer=Justin Holmes\n}}') == ['Justin Holmes']
+    assert cc.writers_from('{{Song|composer=[[Bill Monroe|Monroe]] and Lester Flatt, Earl Scruggs}}') == \
+        ['Bill Monroe', 'Lester Flatt', 'Earl Scruggs']
+    assert cc.writers_from('{{Song\n|traditional=yes\n}}') == []                      # nobody guessed
+    assert cc.writers_from('{{Studio cut\n|composer=Somebody\n}}') == []              # only the Song block says
+
+
+def test_a_cuts_writers_are_those_of_them_on_the_cut():
+    # Justin, #connectome, 15 Nov 2026, 07:29Z: the song writer, if they're on the track
+    import connectome_graph as cg
+    g = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
+                  songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': 'QmAugCut', 'recorded': '',
+                                        'artist': 'Justin Myles Holmes',
+                                        'writers': ['Kyle Tuttle', 'Justin Myles Holmes', 'Nobody Here'],   # Justin: not on it
+                                        'cast': {'Kyle Tuttle': 'banjo', 'Harry Clark': 'mandolin'}}]})
+    names = [p[0] for p in g['people']]
+    assert g['songcast']['QmAugCut']['writers'] == [names.index('Kyle Tuttle')]
+    g = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
+                  songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': 'QmAugCut', 'recorded': '',
+                                        'artist': '', 'cast': {'Kyle Tuttle': 'banjo'}}]})
+    assert g['songcast']['QmAugCut']['writers'] == []
+
+
+def test_a_cuts_writer_comes_through_the_build_by_the_wikis_own_name():
+    # the page writes "Justin Holmes"; the wiki redirects it, and the graph knows him by his page
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:vowel sounds', [(AUG, '', 'barlow')])]
+    wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
+                    pages={'Justin Myles Holmes', 'Kyle Tuttle', 'Vowel Sounds', 'Song:Barlow'},
+                    musicians=['Kyle Tuttle'], inst={'Kyle Tuttle': 'banjo'},
+                    cuts={'Song:Barlow': [
+                        {'record': 'Vowel Sounds', 'number': '6', 'cid': 'QmCutOne', 'recorded': '', 'writers': ['Justin Holmes'],
+                         'cast': {'Justin Holmes': 'guitar', 'Kyle Tuttle': 'banjo'}}]})
+    g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, song_whole(), [])['graph']
+    names = [p[0] for p in g['people']]
+    assert g['songcast']['QmCutOne']['writers'] == [names.index('Justin Myles Holmes')]
