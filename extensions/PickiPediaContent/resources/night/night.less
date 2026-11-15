@@ -11,6 +11,8 @@
  * By day nothing here applies: MonoBook is as it was. By night is the reader's system saying dark, unless
  * they chose (pp-dark, pp-light on <html>, from the server: Night.php). The rules are written once, in
  * .night(), and set down twice: for the system, and for the choice. No script is needed for either.
+ * The choice's setting-down also answers to pp-night on any element, for a page shown inside something
+ * else (Rabbithole's pane), which decides for itself when it is night.
  */
 
 .night() {
@@ -65,6 +67,34 @@
 	#footer li,
 	#footer { color: var( --night-muted ); }
 	#p-personal .pBody { background: none; }
+	/* MonoBook lights a link white under the pointer: the reader's own links (talk, preferences), a tab, and
+	   the phone's tabs. By night that is a white block with pale words on it (Justin, 15 Nov 2026). */
+	#p-personal li a:hover { background-color: var( --night-wash ); }
+	#p-personal li.active a:hover { background-color: transparent; }
+	#p-cactions li:not( .selected ) a:hover { background: var( --night-panel ); }
+	#p-cactions-mobile li.selected a,
+	#p-cactions-mobile li:hover a { background-color: var( --night-panel ); }
+	/* Other grounds that light up pale under the pointer, with night's pale words on them: a row of a
+	   listing, Semantic MediaWiki's striped tables, menus and grey buttons. */
+	.pp-ll-row:hover,
+	.smwtable-striped tbody > tr:hover,
+	.smw-dropdown .smw-dropdown-menu li:hover { background-color: var( --night-wash ); }
+	a.smw-ask-action-btn-lgrey:hover,
+	.smw-action-btn-lgrey:hover,
+	.smw-jsonview-menu .smw-jsonview-button:hover { background-color: var( --night-line ); color: var( --night-ink ); }
+	/* The banner to a page's tiding on magenta is a link, so it took night's link blue on its own pale
+	   pink. By night it is magenta's colour on the dark, with night's ink. */
+	a.pp-tiding-banner,
+	a.pp-tiding-banner:visited {
+		border-color: #a23aa0;
+		border-left-color: #ff67fd;
+		background: #2b1a2c;
+		color: var( --night-ink );
+	}
+	a.pp-tiding-banner:hover,
+	a.pp-tiding-banner:focus { background: #38203a; color: var( --night-ink ); }
+	.pp-tiding-banner__mark { box-shadow: 0 0 0 3px #5a2a59; }
+	.pp-tiding-banner__go { color: #ff8cfd; }
 
 	/* ---- Words ---- */
 
@@ -193,6 +223,12 @@
 		// meets nothing written "color: #666".
 		[style*="color:@{day}"], [style*="color:\20 @{day}"] { color: @night !important; }
 	}
+	/* And one ground: the pale pill of a track in a record's list ("On the record"), whose words are one of
+	   the inks above, so by night they were pale green on pale grey (2.2:1). The pill goes dark with them. */
+	[style*="background:#f1f4ef"], [style*="background:\20 #f1f4ef"] {
+		border-color: var( --night-line ) !important;
+		background: var( --night-wash ) !important;
+	}
 	.ink( ~"#2b1d12", var( --night-ink ) );
 	.ink( ~"#000", var( --night-ink ) );
 	.ink( ~"#222", var( --night-ink ) );
@@ -203,6 +239,7 @@
 	.ink( ~"#3d4a3e", var( --night-soft ) );
 	.ink( ~"#5a6858", var( --night-soft ) );
 	.ink( ~"#5a6354", var( --night-soft ) );
+	.ink( ~"#5a6b5c", var( --night-soft ) );
 	.ink( ~"#666", var( --night-muted ) );
 	.ink( ~"#777", var( --night-muted ) );
 	.ink( ~"#888", var( --night-muted ) );
@@ -224,6 +261,7 @@
 	.mw-parser-output sup, .mw-tag-markers, .mw-history-histlinks, .history-size, abbr.minoredit,
 	#pagehistory li.selected, #pagehistory li.selected * { color: var( --night-muted ); }
 	#pagehistory li.selected a { color: var( --night-link ); }
+	.pp-qualifier, .pp-cut-links { color: var( --night-muted ); }
 	.pp-players-what, .pp-players-who, .pp-row, .pp-todo-text, .pp-todo-item { color: var( --night-soft ); }
 	.pp-todo-item { border-color: var( --night-line ); }
 	.noarticletext, .mw-search-form-wrapper, .mw-search-results li, #mw-search-top-table,
@@ -238,12 +276,16 @@
 	}
 	/* A box of ours that stays pale by night keeps day's ink and day's links on it. */
 	.pv-proposed, .bot-proposal, .claim-unverified, .pp-record-box, .pp-record-box .pp-record-meta,
-	.pp-song-card, .pp-connectome-card { color: #261c15; }
+	.pp-song-card, .pp-connectome-card, .connectome-card { color: #261c15; }
 	.pv-proposed a:not( .new ), .bot-proposal a:not( .new ), .claim-unverified a:not( .new ),
-	.pp-record-box a:not( .new ), .pp-song-card a:not( .new ), .pp-connectome-card a:not( .new ) { color: #2c5cb5; }
+	.pp-record-box a:not( .new ), .pp-song-card a:not( .new ), .pp-connectome-card a:not( .new ),
+	.connectome-card a:not( .new ) { color: #2c5cb5; }
+	/* The connectome card ({{#connectome:}}) is a picture drawn for day, ink on paper, so the card around it
+	   stays pale too. Its class is connectome-card: under night's pale ink its heading was 1.07:1 and its
+	   legend 1.2:1 (measured on Song:August, 15 Nov 2026). */
 	/* A red link on a pale box: darker than day's (#c2372d is 4.1:1 on the grey of an unverified claim). */
 	.pv-proposed a.new, .bot-proposal a.new, .claim-unverified a.new,
-	.pp-record-box a.new, .pp-song-card a.new, .pp-connectome-card a.new { color: #a82a22; }
+	.pp-record-box a.new, .pp-song-card a.new, .pp-connectome-card a.new, .connectome-card a.new { color: #a82a22; }
 	.pp-listen-rh, .pp-listen-rh a, .pp-listen-rh span, .plainlinks [style*="background"] span { color: #fff; }
 
 	.hls-video-player button, .hls-quality-bar button, .hls-playback-bar button {
@@ -251,7 +293,10 @@
 		background: var( --night-wash ) !important;
 		color: var( --night-ink ) !important;
 	}
-	.mw-parser-output .pv-proposed__badge, .mw-parser-output .pv-proposed__byline,
+	/* "[unverified]" and "Proposed by": day's brown where the claim has its pale patch under them, and a
+	   gold where they stand on the page itself, as after a line of plain text (there the brown was 2:1). */
+	.mw-parser-output .pv-proposed__badge, .mw-parser-output .pv-proposed__byline { color: #d9b45a !important; }
+	.mw-parser-output .pv-proposed .pv-proposed__badge, .mw-parser-output .pv-proposed .pv-proposed__byline,
 	.mw-parser-output .bot-proposal sup, .mw-parser-output .pv-proposed sup { color: #5c4a3a !important; }
 	#mw-searchoptions, #powersearch fieldset, .search-types, .mw-search-profile-tabs,
 	.oo-ui-buttonElement-framed.oo-ui-widget-disabled > .oo-ui-buttonElement-button {
@@ -320,8 +365,12 @@
 		.night();
 	}
 }
+/* The choice; and anything that is not <html> and says pp-night. Rabbithole's wiki pane is a shadow root,
+   where :root matches nothing and a class on <html> cannot reach: by night its own root carries pp-night,
+   and the article inside goes dark by these same rules (rabbithole: src/styles/pane-night.css). */
 @media screen {
-	:root.pp-dark {
+	:root.pp-dark,
+	.pp-night {
 		.night();
 	}
 }

@@ -36,7 +36,9 @@ namespace {
 	check( 'its rules are written once and set down twice: for the system, and for the choice',
 		substr_count( $bare, '.night();' ) === 2
 		&& (bool)preg_match( '/@media screen and \( prefers-color-scheme: dark \) \{\s*:root:not\( \.pp-light \) \{\s*\.night\(\);/', $bare )
-		&& (bool)preg_match( '/:root\.pp-dark \{\s*\.night\(\);/', $bare ) );
+		&& (bool)preg_match( '/:root\.pp-dark,\s*\.pp-night \{\s*\.night\(\);/', $bare ) );
+	check( 'the choice\'s also answers to pp-night, for a page shown inside something else (Rabbithole\'s pane)',
+		(bool)preg_match( '/^\s*\.pp-night \{\s*\.night\(\);/m', $bare ) );
 	// By day MonoBook is as it was: nothing that colours is outside .night().
 	$outside = preg_replace( '/\.night\(\) \{.*?\n\}\n/s', '', $bare );
 	check( 'nothing is coloured outside them, so day is untouched',
