@@ -194,3 +194,15 @@ def test_fetch_says_how_many_wait(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out == "fetched 0; 0 failed; 3 waiting for the next run\n"
     assert S.main(["x", "fetch", "--raw", raw, "--sources", str(sources)]) == 0
     assert capsys.readouterr().out == "fetched 3; 0 failed\n"                # no budget: the line it always printed
+
+
+def test_an_arthel_show_is_its_bands_where_the_id_is_known(tmp_path):
+    # Justin, #connectome, 15 Nov 2026: artist 0 is Justin Holmes and the Immutable String Band; not the venue
+    (tmp_path / "shows").mkdir()
+    (tmp_path / "shows" / "0-11908068.yaml").write_text(
+        'title: "Hello Decentralization"\nvenue: "chiva lounge"\nensemble:\n  "Justin Holmes": ["guitar"]\n  "Leify Green": ["fiddle"]\n')
+    (tmp_path / "shows" / "0_7-22575700.yaml").write_text(
+        'title: "ETHPrague 2025 First Show"\nvenue: "Burza #4"\nensemble:\n  "Justin Holmes": ["guitar"]\n  "Skyler Golden": ["bass"]\n')
+    artist = {r["target"]["title"]: r["target"]["artist"] for r in S.from_arthel(str(tmp_path))}
+    assert artist == {"Hello Decentralization": "Justin Holmes and the Immutable String Band",
+                      "ETHPrague 2025 First Show": ""}                      # an id nobody has named: no band, no venue

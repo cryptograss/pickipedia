@@ -319,7 +319,8 @@ test( 'a piece is found by its key, and a track by its song; a song nobody is na
 } );
 
 test( 'a piece is called what a reader would call it', () => {
-	assert.deepEqual( K.called( G, G.pieces[ SILVER ] ), { glyph: 'track', name: 'Silver 44', sub: '4masks', long: '4masks' } );
+	// no artist said for the record: the record under the cut's name
+	assert.deepEqual( K.called( G, G.pieces[ SILVER ] ), { glyph: 'track', name: 'Silver 44', sub: '4masks', on: '4masks', long: '4masks' } );
 	assert.deepEqual( [ K.called( G, G.pieces[ 1 ] ).name, K.called( G, G.pieces[ 1 ] ).sub ], [ 'Sam Grisman Project', 'live · 5 Jul 2025' ] );    // a show always says it is one
 	assert.deepEqual( [ K.called( G, G.pieces[ 5 ] ).name, K.called( G, G.pieces[ 5 ] ).sub ], [ 'Hello Decentralization', 'live · block 11,908,068' ] );
 	assert.deepEqual( [ K.called( G, G.pieces[ 2 ] ).name, K.called( G, G.pieces[ 2 ] ).sub ], [ 'Safe, Sensible And Sane', 'Alison Brown · 2025' ] );
@@ -359,7 +360,7 @@ test( 'one night is one piece, however many tapers taped it; a show with a name 
 	const g = K.build( { people: [ [ 'A', 1, '' ], [ 'B', 1, '' ], [ 'C', 0, '' ] ], music: [
 		[ 'lma:band2025-06-14.akg', 'show', 'The Band', '2025-06-14', 'The Band Live at The Hall on 2025-06-14', 2, 'https://archive.org/details/akg', '' ],
 		[ 'lma:band2025-06-14.mv88', 'show', 'The Band', '2025-06-14', 'The Band Live at The Hall on 2025-06-14', 2, 'https://archive.org/details/mv88', '' ],
-		[ 'arthel:show:0-9', 'show', 'chiva lounge', 'block 15735471', 'devcon VI night 1', 2, 'gh/show.yaml', '' ] ],
+		[ 'arthel:show:0-9', 'show', '', 'block 15735471', 'devcon VI night 1', 2, 'gh/show.yaml', '' ] ],
 	cast: [ [ [ 0, 'guitar' ], [ 1, '' ] ], [ [ 1, 'banjo' ], [ 2, '' ] ], [ [ 0, '' ], [ 2, '' ] ] ],
 	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ] ] ], [ 1, 2, [ [ 1, 2, 1, [] ] ] ], [ 0, 2, [ [ 2, 2, 1, [] ] ] ] ] } );
 	assert.deepEqual( g.whole, [ 0, 0, 2 ] );
@@ -368,7 +369,35 @@ test( 'one night is one piece, however many tapers taped it; a show with a name 
 	assert.equal( K.findPiece( g, 'lma:band2025-06-14.mv88' ), 0 );
 	assert.deepEqual( K.leads( g, 0 ).named.map( ( n ) => n.id ), [ 2 ] );    // the other tape of the night isn't somewhere else
 	const own = K.naming( g, g.adj[ 0 ].get( 2 ).ev[ 0 ] );
-	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1', 'devcon VI night 1', 'chiva lounge, block 15,735,471' ] );
+	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1', 'devcon VI night 1', 'block 15,735,471' ] );   // no band said
+} );
+
+test( 'a show whose source names the band goes by the band; a cut says whose it is', () => {
+	// Justin, #connectome, 15 Nov 2026: arthel's shows by the band, not the show's title; a cut's second line its artist
+	const g = K.build( { people: [ [ 'A', 1, '' ], [ 'B', 1, '' ] ], music: [
+		[ 'arthel:show:0-9', 'show', 'Justin Holmes and the Immutable String Band', 'block 15735471', 'devcon VI night 1', 2, 'gh/show.yaml', '' ],
+		[ 'arthel:4masks', 'record', 'Justin Myles Holmes', '2025', '4masks', 2, 'gh/x.yaml', '/wiki/4masks', 'Four-masks.png' ] ],
+	cast: [ [ [ 0, '' ], [ 1, '' ] ], [ [ 0, '' ], [ 1, '' ] ] ],
+	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 3, 1, [ 'Victory' ] ] ] ] ] } );
+	const show = K.naming( g, { m: 0, how: K.STAGE, songs: [] } );
+	assert.deepEqual( [ show.short, show.brief, show.long ], [ 'Justin Holmes and the Immutable String Band · block 15,735,471',
+		'Justin Holmes and the Immutable String Band', 'devcon VI night 1' ] );
+	const cut = K.called( g, g.pieces[ K.trackOn( g, 1, 'Victory' ) ] );
+	assert.deepEqual( [ cut.name, cut.sub, cut.on ], [ 'Victory', 'Justin Myles Holmes', '4masks' ] );
+	assert.equal( g.music[ 1 ].art, 'Four-masks.png' );
+	assert.equal( g.music[ 0 ].art, '' );
+	assert.ok( K.catalogue( g ).some( ( x ) => x.label === 'Victory · track on 4masks' ) );
+} );
+
+test( 'a tag on a line keeps off a name it is told of', () => {
+	const a = { x: 400, y: 300 }, b = { x: 400, y: 440 };            // straight down, past the middle's own name
+	const name = { x1: 330, y1: 326, x2: 470, y2: 360 };
+	const free = K.tagAt( a, b, 24, 15, 150 );
+	assert.equal( free.y, 370 );                                      // told of nothing: halfway, its top on the name
+	const kept = K.tagAt( a, b, 24, 15, 150, 23, [ name ], 120 );
+	assert.ok( kept.room > 0 && kept.y - 11.5 >= name.y2 );          // further out, clear of it
+	assert.deepEqual( K.tagAt( a, b, 24, 15, 150, 23, [], 120 ), free );   // nothing to keep off: as before
+	assert.equal( K.tagAt( a, { x: 400, y: 380 }, 24, 15, 150, 23, [ name ], 120 ).room, 0 );   // nowhere clear: no room
 } );
 
 test( 'those the reader came by stay in the company, first, whatever their rank; a stranger does not join it', () => {

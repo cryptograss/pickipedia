@@ -766,7 +766,12 @@ function pieceScene( v ) {
 	} ), 10 );
 	const all = L.named.concat( L.rest ).slice( 0, n + spots.length );
 	const beads = K.seat( spots, all.slice( n ).map( ( x ) => wanted( 'm' + x.id, pan ) ) );
-	addPiece( sc, v.m, lay.C, 'subject', Object.assign( { below: true }, pieceLabel( v.m, { x: lay.C.x, y: lay.C.y }, W ) ) );
+	const own = pieceLabel( v.m, { x: lay.C.x, y: lay.C.y }, W );
+	addPiece( sc, v.m, lay.C, 'subject', Object.assign( { below: true }, own ) );
+	// The middle's name and the line under it (whose a cut is, its record's artist: Justin, #connectome, 15 Nov
+	// 2026), as drawPiece sets them: no tag goes on them.
+	const ownHalf = Math.max( wide( own.label, FONT.piece ), own.sub ? wide( own.sub, FONT.sub ) : 0 ) / 2 + ( own.play ? 40 : 0 ) + 8;
+	const middle = { x1: lay.C.x - ownHalf, y1: lay.C.y + 26, x2: lay.C.x + ownHalf, y2: lay.C.y + ( own.sub ? 60 : 46 ) };
 	all.forEach( ( x, i ) => {
 		const named = i < n;
 		const pos = named ? lay.named[ seats[ i ] ] : spots[ beads[ i - n ] ];
@@ -781,9 +786,13 @@ function pieceScene( v ) {
 			const extra = x.via.length > 1 ? ' +' + ( x.via.length - 1 ) : '', ew = wide( extra, FONT.sub );
 			const full = 28 + wide( K.clip( first( x.via[ 0 ] ), 26 ), FONT.tag ) + ew;
 			const most = Math.min( 176, W * 0.42 );
-			let at = K.tagAt( lay.C, pos, 24, 15, most );
+			let at = K.tagAt( lay.C, pos, 24, 15, most, 23, [ middle ], Math.min( full, most ) );
 			if ( at.room < Math.min( full, most ) ) {
-				at = { x: pos.x + K.nudge( pos.x, Math.min( full, most ) / 2, 4, W - 4 ), y: pos.y + ( pos.below ? -32 : 32 ), room: most };
+				// against the piece, on the side the line comes in by; or, where that is on the middle's name, the other
+				const x = pos.x + K.nudge( pos.x, Math.min( full, most ) / 2, 4, W - 4 ), half = Math.min( full, most ) / 2;
+				const onName = ( y ) => x + half > middle.x1 && x - half < middle.x2 && y + 12 > middle.y1 && y - 12 < middle.y2;
+				const y = pos.y + ( pos.below ? -32 : 32 );
+				at = { x, y: onName( y ) ? pos.y + ( pos.below ? 32 : -32 ) : y, room: most };
 			}
 			const label = cut( first( x.via[ 0 ] ), FONT.tag, at.room - 28 - ew );
 			sc.pills.set( 'w' + threadKey( v.m, x.id ), { id: x.via[ 0 ], who: x.via, stands: 'picker', is: 'p' + x.via[ 0 ], tag: true, px: v.m, py: x.id,
@@ -804,7 +813,7 @@ function pieceScene( v ) {
 	sc.web = lay.web;
 	sc.leads = L;
 	sc.tagged = [ ...new Set( L.named.flatMap( ( x ) => x.via ) ) ];
-	const kind = me.kind === 'track' ? 'A track on ' + nm.sub : ( me.kind === 'show' ? 'A show' : 'A record' ) + ( nm.sub ? ' · ' + nm.sub : '' );
+	const kind = me.kind === 'track' ? 'A track on ' + nm.on : ( me.kind === 'show' ? 'A show' : 'A record' ) + ( nm.sub ? ' · ' + nm.sub : '' );
 	sc.head = [ h( 'span', { class: 'kind' }, glyphBox( nm.glyph ) ), nm.name + ( me.kind === 'show' && nm.sub ? ' · ' + nm.sub : '' ), playButton( G.music[ me.m ], me.song ) ];
 	sc.sub = [ kind, ' · ', h( 'b', null, K.plural( L.cast.length, 'picker' ) ), L.named.length ?
 		' on it: each line is one of them, and where else they lead' : ' on it, and none of them on anything else the sources here know' ];
@@ -926,6 +935,29 @@ function playChip( x, y, to, song ) {
 		s( 'path', { class: 'tri', d: `M${ ( x + 21.5 ).toFixed( 1 ) } ${ y - 4.5 }v9l7.5 -4.5z` } ) );
 }
 
+const noCover = new Set();                                         // pictures that wouldn't load: not asked for again
+
+/**
+ * A record's own art inside its ring, where its Record page names one (Justin, #connectome, 15 Nov 2026: "where
+ * there is an image, let's use that"); the ring stays over it, so the colour still says how free it is. Returns
+ * false where there is none; a picture that won't load gives way, and `again` draws the mark without it.
+ */
+function cover( g, file, R, again ) {
+	if ( !file || noCover.has( file ) ) {
+		return false;
+	}
+	const r = R - 2;
+	const img = s( 'image', { class: 'face', href: FACE + encodeURIComponent( file.replace( / /g, '_' ) ) + '&width=120', x: -r, y: -r,
+		width: 2 * r, height: 2 * r, preserveAspectRatio: 'xMidYMid slice', 'clip-path': `circle(${ r }px at ${ r }px ${ r }px)`, 'aria-hidden': 'true' } );
+	img.addEventListener( 'error', () => {
+		noCover.add( file );
+		again();
+	} );
+	g.appendChild( img );
+	g.appendChild( s( 'circle', { class: 'ring rim', r: R } ) );
+	return true;
+}
+
 /** A circle that is a piece of music: a ring as free as the piece is, and inside it what kind of piece. */
 function drawPiece( g, d ) {
 	const pc = M( d.piece ), c = K.called( G, pc );
@@ -943,7 +975,9 @@ function drawPiece( g, d ) {
 	gl.setAttribute( 'transform', `scale(${ d.kind === 'subject' ? 1.9 : 1.25 })` );
 	g.appendChild( s( 'circle', { class: 'halo', r: R + 8 } ) );
 	g.appendChild( s( 'circle', { class: 'ring', r: R } ) );
-	g.appendChild( gl );
+	if ( !cover( g, G.music[ pc.m ].art, R, () => drawPiece( g, d ) ) ) {
+		g.appendChild( gl );
+	}
 	if ( d.bare ) {                                              // the headline names this one
 		return;
 	}
@@ -990,9 +1024,11 @@ const draw = {
 			layers.nodes.appendChild( g );
 			g.appendChild( s( 'circle', { class: 'halo', r: 32 } ) );
 			g.appendChild( s( 'circle', { class: 'ring', r: 24 } ) );
-			const gl = glyph( 'track' );
-			gl.setAttribute( 'transform', 'scale(1.9)' );
-			g.appendChild( gl );
+			if ( !cover( g, d.cuts && d.cuts[ 0 ] ? d.cuts[ 0 ].art : '', 24, () => draw.node( g, d ) ) ) {
+				const gl = glyph( 'track' );
+				gl.setAttribute( 'transform', 'scale(1.9)' );
+				g.appendChild( gl );
+			}
 			const to = d.cut ? '/rabbithole/?track=' + encodeURIComponent( d.cut ) : '';
 			// Named, as every middle is (Justin, #connectome, 15 Nov 2026), over whatever of the web runs under the name.
 			g.appendChild( s( 'a', { href: G.songs[ d.title ] ? pageUrl( 'Song:' + d.title ) : address( { s: d.title, cut: d.cut } ),

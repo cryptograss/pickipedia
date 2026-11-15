@@ -101,6 +101,10 @@ def from_mb(release):
             for r in sideman.mb_credit_rows(release)]
 
 
+# arthel's artist ids, as a person who knows has named them: the id is what a show's file name starts with.
+ARTHEL_ARTISTS = {"0": "Justin Holmes and the Immutable String Band"}
+
+
 def from_arthel(data_dir):
     """Studio cuts (songs_and_tunes) and shows, from arthel's YAML, through Homeplace's readers."""
     import yaml
@@ -123,9 +127,14 @@ def from_arthel(data_dir):
         with open(fn) as f:
             data = yaml.safe_load(f) or {}
         src = homeplace.ARTHEL_BLOB + "shows/" + os.path.basename(fn)
-        rec = homeplace.arthel_show(os.path.basename(fn)[:-5], data, src)
+        stem = os.path.basename(fn)[:-5]
+        rec = homeplace.arthel_show(stem, data, src)
+        # Who played it: arthel names a show's artist only by the id its file name starts with. Its YAML's
+        # venue was standing in as the artist, so the graph named these shows by their title. Artist 0 is Justin
+        # Holmes and the Immutable String Band (Justin, #connectome, 15 Nov 2026); an id nobody has said stays
+        # unnamed (0_7: two ETHPrague shows, 2025), and that show goes by its title as before.
         target = {"kind": "show", "id": "arthel:" + rec["id"], "title": rec["title"], "date": rec["date"],
-                  "artist": rec["artist"], "group": "arthel:" + rec["id"]}
+                  "artist": ARTHEL_ARTISTS.get(stem.split("-")[0], ""), "group": "arthel:" + rec["id"]}
         for name, p in rec["people"].items():
             for scope in sorted(p["scopes"]):
                 rows.append(credit(name, p["roles"], target, scope, [], src, "arthel", "homeplace.arthel_show"))
