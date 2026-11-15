@@ -42,8 +42,8 @@ check(
 );
 check( strpos( $out, 'track=QmPaint' ) === false, 'no link to the page\'s own track' );
 check(
-	strpos( $out, '[https://pickipedia.xyz/rabbithole/?track=QmSilver <span' ) !== false,
-	'another track links into Rabbithole, one slash after the host'
+	strpos( $out, '[https://pickipedia.xyz/rabbithole/?track=QmSilver&action=open <span' ) !== false,
+	'another track opens in Rabbithole, one slash after the host'
 );
 check( strpos( $out, "Barlow&#39;s &#91;Jig&#93; &#124; &#123;&#123;x&#125;&#125;" ) !== false, 'a title cannot start markup' );
 
