@@ -65,6 +65,34 @@
 	#footer li,
 	#footer { color: var( --night-muted ); }
 	#p-personal .pBody { background: none; }
+	/* MonoBook lights a link white under the pointer: the reader's own links (talk, preferences), a tab, and
+	   the phone's tabs. By night that is a white block with pale words on it (Justin, 15 Nov 2026). */
+	#p-personal li a:hover { background-color: var( --night-wash ); }
+	#p-personal li.active a:hover { background-color: transparent; }
+	#p-cactions li:not( .selected ) a:hover { background: var( --night-panel ); }
+	#p-cactions-mobile li.selected a,
+	#p-cactions-mobile li:hover a { background-color: var( --night-panel ); }
+	/* Other grounds that light up pale under the pointer, with night's pale words on them: a row of a
+	   listing, Semantic MediaWiki's striped tables, menus and grey buttons. */
+	.pp-ll-row:hover,
+	.smwtable-striped tbody > tr:hover,
+	.smw-dropdown .smw-dropdown-menu li:hover { background-color: var( --night-wash ); }
+	a.smw-ask-action-btn-lgrey:hover,
+	.smw-action-btn-lgrey:hover,
+	.smw-jsonview-menu .smw-jsonview-button:hover { background-color: var( --night-line ); color: var( --night-ink ); }
+	/* The banner to a page's tiding on magenta is a link, so it took night's link blue on its own pale
+	   pink. By night it is magenta's colour on the dark, with night's ink. */
+	a.pp-tiding-banner,
+	a.pp-tiding-banner:visited {
+		border-color: #a23aa0;
+		border-left-color: #ff67fd;
+		background: #2b1a2c;
+		color: var( --night-ink );
+	}
+	a.pp-tiding-banner:hover,
+	a.pp-tiding-banner:focus { background: #38203a; color: var( --night-ink ); }
+	.pp-tiding-banner__mark { box-shadow: 0 0 0 3px #5a2a59; }
+	.pp-tiding-banner__go { color: #ff8cfd; }
 
 	/* ---- Words ---- */
 
