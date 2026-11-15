@@ -17,10 +17,12 @@ graph.json:
             one record or show; one entry per record or show, the closest way the
             sources put them together
   songs     song title -> its wiki page, for the songs that have one
-  songcast   song title -> { on: [music...], pickers: [[picker, roles], ...] }: who the store's credits put
-            on each cut of each song on cryptograss's own records (scope track, roles as that source wrote
-            them), and which of the music entries those cuts are. A track the store's pairs put two pickers
-            on but no credits name is still the song: its pickers, with no roles said
+  songcast   cut cid -> { song, on: [music...], number, recorded, pickers: [[picker, roles, icon], ...] }:
+            each cut of each song on cryptograss's own records, as its Song: page's {{Studio cut}} states
+            it — the record, the track number, when it was recorded, who the page says is on it and with
+            what, each with the icon the wiki keeps for that role. Keyed by the cut's cid, or by its record
+            and number when no cid is stated. The store's credits and pairs stay out of it: a page's key is
+            the song's real title, and the store's arthel slugs made ghosts beside them
   plays     song title -> the track its Song: page says to play in Rabbithole (the CID in
             its {{Listen in Rabbithole}}), for songs on cryptograss's own records. A taped
             show's song of the same name is another recording, and gets none
@@ -191,18 +193,30 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
     used = sorted({c[3] for c, _ in best.values()} | { t for ts in page_cut.values() for t in ts })
     mid = {t: i for i, t in enumerate(used)}
 
-    songcut, songpeople = defaultdict(set), defaultdict(dict)
-    covered = set()
-    for title, ts in page_cut.items():
-        if not all( t in mid for t in ts ):
-            continue
-        covered.add(title)
-        songcut[title] |= ts
-        for person, said in page_people[title].items():
-            songpeople[title][person] = list(said)
-    # The store's credits and pairs stay out of songcast: a page's key is the song's real title, and the
-    # store's arthel slugs made ghosts beside them (magent, #connectome, 15 Nov 2026, 01:07Z: 27 keys were
-    # 20 songs and 7 stale doubles). The credits' work is the ties; a song no page states has no node.
+    # Each cut its own node set (Justin, #connectome, 15 Nov 2026, 01:58Z: "each cut having (and displaying)
+    # its own graph is fine"): songcast is keyed by the cut's cid — what the page plays and what Rabbithole
+    # takes — or, when no cid is stated, by its record and the song the block sits on: the block itself is
+    # the cut's identity. A block naming no record the store knows is left out.
+    songcast = {}
+    for title, cuts in (songcuts or {}).items():
+        for c in cuts:
+            target = c.get('target') or record_target.get(c['record'])
+            if target is None or target not in mid:
+                continue
+            key = c['cid'] or (target + '|' + title if title else '')
+            if not key:
+                continue
+            pickers = []
+            for person, roles in c['cast'].items():
+                said = []
+                for r in (roles or '').split(';'):
+                    r = r.strip()
+                    if r and r.lower() not in {x.lower() for x in said}:
+                        said.append(r)
+                if person in pid:
+                    pickers.append([pid[person], '; '.join(said), icon_for('; '.join(said), icons)])
+            songcast[key] = {'song': title, 'on': [mid[target]], 'number': c['number'],
+                             'recorded': c['recorded'], 'pickers': pickers}
 
     sources, cast = defaultdict(set), defaultdict(dict)
     for person, roles, target, scope, source in credits:
@@ -244,11 +258,7 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         'cast': [[[pid[n], '; '.join(r)] for n, r in sorted(cast[t].items())] for t in used],
         'ties': [[a, b, sorted(ev, key=lambda e: (-e[1], -e[2], e[0]))] for (a, b), ev in sorted(ties.items())],
         'songs': dict(sorted(songs.items())),
-        'songcast': { t: { 'on': sorted( mid[ x ] for x in songcut[ t ] ),
-                           'pickers': [ [ pid[ p ], '; '.join( songpeople[ t ][ p ] ),
-                                          icon_for( '; '.join( songpeople[ t ][ p ] ), icons ) ]
-                                        for p in sorted( songpeople[ t ] ) ] }
-                     for t in sorted( songpeople ) },
+        'songcast': dict(sorted(songcast.items())),
         'plays': dict(sorted(played.items())),
     }
 

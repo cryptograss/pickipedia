@@ -195,12 +195,12 @@ def studio_cuts_from(text):
             k, v = k.strip(), v.strip()
             if not k:
                 continue
-            if k in ('record', 'number', 'cid'):
+            if k in ('record', 'number', 'cid', 'recorded'):
                 fields[k] = v
             elif k not in ('studio', 'recorded', 'engineer', 'status', 'note') and v:
                 cast[k] = re.sub(r'\s*,\s*', '; ', v)
         cuts.append({'record': fields.get('record', ''), 'number': fields.get('number', ''),
-                     'cid': fields.get('cid', ''), 'cast': cast})
+                     'cid': fields.get('cid', ''), 'recorded': fields.get('recorded', ''), 'cast': cast})
     return cuts
 
 
@@ -705,7 +705,7 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
           f'text-anchor="middle" fill="{INK}" font-weight="bold">{escape(n)}</text>'
           + (f'<text class="cc-lab" x="{x_lab:.1f}" y="{ry:.1f}" text-anchor="middle" fill="{INK2}" '
              f'font-size="0.62em">{escape(roles[n])}</text>' if roles[n] else '') + '</a>')
-    o(f'<a href="{attr(viewer(s=title))}"><g transform="translate({C[0]:.0f} {C[1]:.0f})">{NOTE}</g>'
+    o(f'<a href="{attr(viewer(cut=cut["key"]) if cut.get("key") else viewer(s=title))}"><g transform="translate({C[0]:.0f} {C[1]:.0f})">{NOTE}</g>'
       f'<text class="cc-lab" x="{C[0]:.0f}" y="266" text-anchor="middle" fill="{INK}" font-weight="bold" '
       f'font-size="1.25em" stroke-width="5px">{escape(title)}</text></a>')
     if play:
@@ -734,12 +734,13 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
               '<span class="cc-key cc-rest"></span> the rest<br>'
               'a solid line: the same cut again · a thin one: a record or a stage</div>')
     record = f'<a href="{attr(cut["page"])}">{escape(cut["title"])}</a>' if cut['page'] else escape(cut['title'])
-    when = ', ' + escape(cut['date']) if cut['date'] else ''
-    playnote = ' The ▶ beside the song opens it in Rabbithole.' if play else ''
-    return (f'<div class="connectome-card" data-song="{attr(title)}">'
-            f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(viewer(s=title))}">⤢ explore</a></div>'
+    which = ', track ' + escape(cut['number']) if cut.get('number') else ''
+    took = ', recorded ' + escape(cut['recorded']) if cut.get('recorded') else ''
+    playnote = ' The ▶ opens it in Rabbithole.' if play else ''
+    return (f'<div class="connectome-card" data-song="{attr(title)}" data-cut="{attr(cut.get("key", ""))}">'
+            f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(viewer(cut=cut["key"]) if cut.get("key") else viewer(s=title))}">⤢ explore</a></div>'
             + ''.join(out) + legend +
-            f'<div class="cc-foot">On {record}{when}.{playnote}</div></div>')
+            f'<div class="cc-foot">On {record}{which}{took}.{playnote}</div></div>')
 
 
 # ---------------------------------------------------------------------------
@@ -795,12 +796,6 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
     graph = None
     song_cards = {}
     if whole is not None:                            # the big graph's one file, from the same store and names
-        asked = connectome_graph.arthel_pages(store.pairs, whole, song)
-        found = wiki.resolve(asked) if asked else {}
-        pages = {n: page_url(t) for n, (t, ok) in found.items() if ok}
-        song_page = {t: n[len('Song:'):] for n, (t, ok) in found.items() if ok and n.startswith('Song:')}
-        heard = wiki.listens(song_page) if song_page else {}
-        plays = {song_page[t]: cid for t, cid in heard.items() if t in song_page}
         # The song pages' own cuts are the source (magent, #connectome, 15 Nov 2026); the store's credits
         # and pairs stay out of songcast — a page's key is the song's real title, and the store's arthel
         # slugs made ghosts beside them. The icons the wiki keeps decide what a role draws.
@@ -808,30 +803,58 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         cutmap = {}
         for page_title, cs in (wiki.studio_cuts() if hasattr(wiki, 'studio_cuts') else {}).items():
             song_title = page_title[len('Song:'):] if page_title.startswith('Song:') else page_title
-            cutmap[song_title] = [{'record': c['record'], 'number': c['number'], 'cid': c['cid'],
-                                   'cast': {alias.get(n, n): r for n, r in c['cast'].items()}} for c in cs]
+            entry = []
+            for c in cs:
+                target = next((t for t, d in whole.items() if d.get('kind') == 'record' and d.get('title') == c['record']), None)
+                if target is None:
+                    continue
+                entry.append({'record': c['record'], 'number': c['number'], 'cid': c['cid'],
+                              'recorded': c.get('recorded', ''), 'target': target,
+                              'cast': {alias.get(n, n): r for n, r in c['cast'].items()}})
+            if entry:
+                cutmap[song_title] = entry
+        asked = connectome_graph.arthel_pages(store.pairs, whole, song)
+        found = wiki.resolve(asked) if asked else {}
+        # The store's arthel slugs are titles of their own mind ('To' where the page has 'to'); ask the
+        # pages' own titles too, so a cut's card reaches the page it sits on.
+        stale = ['Song:' + s for s in cutmap if 'Song:' + s not in found]
+        if stale:
+            found.update(wiki.resolve(stale))
+        pages = {n: page_url(t) for n, (t, ok) in found.items() if ok}
+        song_page = {t: n[len('Song:'):] for n, (t, ok) in found.items() if ok and n.startswith('Song:')}
+        heard = wiki.listens(song_page) if song_page else {}
+        plays = {song_page[t]: cid for t, cid in heard.items() if t in song_page}
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
             has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons)
-        # Song cards: the store's cut of each song with a Song: page (Justin, #rabbithole, 15 Nov 2026, 00:23Z).
+        # Song cards: one graph per cut, the page's file carrying each of its cuts in the page's own order
+        # (Justin, #connectome, 15 Nov 2026, 01:58Z: each cut displays its own graph).
         songcast = graph.get('songcast') or {}
         people = graph.get('people') or []
-        for song_title, sc in sorted(songcast.items()):
+        targets = graph.get('music') or []
+        real = {t for t, ok in found.values() if ok}                # found is keyed by the asked slug; the
+        for song_title, cs in cutmap.items():                       # page's own title is what a cut names
             page_title = 'Song:' + song_title
-            if page_title not in found or not found[page_title][1] or (only and only != page_title):
+            if page_title not in real or (only and only != page_title):
                 continue
-            cast = [(people[i][0], r) for i, r, _ in sc['pickers'] if 0 <= i < len(people)]
-            if not cast:
-                continue
-            targets = graph.get('music') or []
-            cut = sorted((song_cut(whole, tiers, pages, targets[ i ][ 0 ]) for i in sc['on'] if 0 <= i < len(targets)),
-                         key=lambda c: c['title'])[0] if sc['on'] else None
-            if cut is None:
-                continue
-            html = song_card(song_title, cut, cast, store, has_page, inst,
-                             play=(graph.get('plays') or {}).get(song_title), icons=icons)
-            if html:
-                song_cards[page_title] = html
+            parts = []
+            for c in cs:
+                key = c['cid'] or (c['target'] + '|' + song_title if song_title else '')
+                sc = songcast.get(key)
+                if not sc or not sc['pickers'] or not sc['on']:
+                    continue
+                cast = [(people[i][0], r) for i, r, _ in sc['pickers'] if 0 <= i < len(people)]
+                cut = song_cut(whole, tiers, pages, targets[sc['on'][0]][0])
+                if not cast:
+                    continue
+                cut['key'] = key
+                cut['number'] = sc.get('number', '')
+                cut['recorded'] = sc.get('recorded', '')
+                html = song_card(song_title, cut, cast, store, has_page, inst, play=c['cid'], icons=icons)
+                if html:
+                    parts.append(html)
+            if parts:
+                song_cards[page_title] = ''.join(parts)
     return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,
             'song_cards': song_cards,
             'pairs': store.pairs, 'names': {k: sorted(v) for k, v in sorted(store.raw.items())}}

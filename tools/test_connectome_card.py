@@ -260,17 +260,17 @@ def test_the_store_alone_makes_no_songcast():
 
 def test_the_pages_cuts_alone_are_songcast_and_carry_their_icons():
     import connectome_graph as cg
-    songcuts = {'August': [{'record': '4masks', 'number': '5', 'cid': '', 'cast': {'Kyle Tuttle': '5-string banjo', 'Justin Holmes': 'guitar; six-whistle'}}]}
+    songcuts = {'August': [{'record': '4masks', 'number': '5', 'cid': 'QmAugustCut', 'recorded': '', 'cast': {'Kyle Tuttle': '5-string banjo', 'Justin Holmes': 'guitar; six-whistle'}}]}
     g = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
                   songcuts=songcuts, icons={'banjo', 'guitar', 'tin_whistle'})
-    cast = g['songcast']['August']['pickers']
+    cast = g['songcast']['QmAugustCut']['pickers']
     names = [p[0] for p in g['people']]
     by_name = {names[p]: (r, i) for p, r, i in cast}
     assert by_name['Kyle Tuttle'] == ('5-string banjo', 'banjo')           # the qualifier goes; the icon is banjo's
     assert by_name['Justin Holmes'] == ('guitar; six-whistle', 'guitar')   # the first role that has an icon
     assert cg and __import__('connectome_graph').icon_for('six-whistle', {'tin_whistle'}) == 'tin_whistle'
-    g2 = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {}, songcuts=songcuts)
-    assert [i for _, _, i in g2['songcast']['August']['pickers']] == ['', '']   # no icons known: none said
+    g2 = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {}, songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': 'QmAugustCut', 'recorded': '', 'cast': {'Kyle Tuttle': 'x', 'Justin Holmes': 'y'}}]})
+    assert [i for _, _, i in g2['songcast']['QmAugustCut']['pickers']] == ['', '']   # no icons known: none said
 
 
 def test_a_song_card_labels_the_cut_and_escapes_every_name():
@@ -317,7 +317,7 @@ def test_build_builds_a_song_card_for_a_song_page_and_names_it_like_the_wiki_doe
                     pages={'Justin Myles Holmes', 'Kyle Tuttle', 'Vowel Sounds', 'Song:August'},
                     musicians=['Kyle Tuttle'], inst={'Kyle Tuttle': 'banjo'},
                     listens={'Song:August': 'QmSongCid'},
-                    cuts={'Song:August': [{'record': 'Vowel Sounds', 'number': '', 'cid': '',
+                    cuts={'Song:August': [{'record': 'Vowel Sounds', 'number': '1', 'cid': 'QmSongCid', 'recorded': '',
                                            'cast': {'Justin Holmes': 'guitar; vocals', 'Kyle Tuttle': '5-string banjo',
                                                     'Maddie Denton': 'fiddle'}}]})
     credits = [('Justin Holmes', 'guitar; vocals', 'arthel:vowel sounds', 'track', AUG),
@@ -326,8 +326,10 @@ def test_build_builds_a_song_card_for_a_song_page_and_names_it_like_the_wiki_doe
     result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, whole, credits)
     assert 'Song:August' in result['song_cards']                            # keyed as the page names itself
     card = result['song_cards']['Song:August']
-    assert 'August' in card and card.count('QmSongCid') == 1                 # the CID goes in the link, not the text
-    assert '/rabbithole/?track=QmSongCid' in card
+    assert 'August' in card
+    # the CID goes in the links (data-cut, the explore href, the centre's link, the play chip), not the text
+    assert card.count('QmSongCid') == 4 and card.count('href="/rabbithole/?track=QmSongCid"') == 1
+    assert '?cut=QmSongCid' in card                                          # the explore link opens this cut's graph
     assert 'Justin Myles Holmes' in card and 'guitar; vocals' in card
     cc.write(result, str(tmp_path), {})
     want = hashlib.md5('Song:August'.encode()).hexdigest() + '.html'
@@ -355,12 +357,13 @@ def test_the_song_pages_cut_names_the_record_and_the_whole_cast(tmp_path):
     wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
                     pages={'Kyle Tuttle', 'Justin Myles Holmes', '4masks', 'Song:August'}, musicians=['Kyle Tuttle'],
                     cuts={'Song:August': [{'record': '4masks', 'number': '5',
-                                           'cid': 'QmCutCid', 'cast': {'Justin Holmes': 'guitar; vocals',
+                                           'cid': 'QmCutCid', 'recorded': '3 April, 2024', 'cast': {'Justin Holmes': 'guitar; vocals',
                                                                        'Lauren Luz': 'vocals',
                                                                        'Harry Clark': 'mandolin'}}]})
     credits = [('Justin Holmes', 'guitar', 'arthel:vowel sounds', 'track', AUG)]
     result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, whole, credits)
-    sc = result['graph']['songcast']['August']
+    sc = result['graph']['songcast']['QmCutCid']
+    assert sc['song'] == 'August' and sc['number'] == '5' and sc['recorded'] == '3 April, 2024'
     music = result['graph']['music']
     cut = music[sc['on'][0]]
     assert cut[0] == 'arthel:4masks'                                       # the page's record, not the store's grouping
@@ -374,7 +377,7 @@ def test_the_song_pages_cut_names_the_record_and_the_whole_cast(tmp_path):
 def test_the_page_writes_roles_with_commas_the_store_with_semicolons():
     cuts = cc.studio_cuts_from('{{Studio cut\n|record=4masks\n|cid=QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a\n'
                                '|Justin Holmes=guitar, six-whistle\n|Kyle Tuttle=5-string banjo\n}}')
-    assert cuts == [{'record': '4masks', 'number': '', 'cid': 'QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a',
+    assert cuts == [{'record': '4masks', 'number': '', 'cid': 'QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a', 'recorded': '',
                      'cast': {'Justin Holmes': 'guitar; six-whistle', 'Kyle Tuttle': '5-string banjo'}}]
     assert cc.studio_cuts_from('no cut here') == []
 
@@ -392,7 +395,42 @@ def test_a_cut_whose_record_the_store_doesnt_know_is_left_out():
     import connectome_graph as cg
     pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'other-song')])]
     g = cg.export(pairs, song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
-                  songcuts={'August': [{'record': 'Some Other Record', 'cast': {'A': 'guitar'}},
-                                       {'record': '4masks', 'cast': {'A': 'guitar'}}]})
+                  songcuts={'August': [{'record': 'Some Other Record', 'number': '', 'cid': '', 'recorded': '', 'cast': {'A': 'guitar'}},
+                                       {'record': '4masks', 'number': '5', 'cid': 'QmCutCid', 'recorded': '', 'cast': {'A': 'guitar'}}]})
     want = g['music'].index(next(m for m in g['music'] if m[0] == 'arthel:4masks'))
-    assert g['songcast']['August']['on'] == [want]
+    assert all( e['on'] == [want] for e in g['songcast'].values() ) and len(g['songcast']) == 1
+
+
+def test_each_cut_of_a_page_carries_its_own_graph_in_the_pages_order():
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:vowel sounds', [(AUG, '', 'barlow')])]
+    whole = song_whole()
+    wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
+                    pages={'Justin Myles Holmes', 'Kyle Tuttle', 'Vowel Sounds', 'Song:Barlow'},
+                    musicians=['Kyle Tuttle'], inst={'Kyle Tuttle': 'banjo'},
+                    cuts={'Song:Barlow': [
+                        {'record': 'Vowel Sounds', 'number': '6', 'cid': 'QmCutOne', 'recorded': '3 April, 2024',
+                         'cast': {'Justin Holmes': 'guitar', 'Kyle Tuttle': 'banjo'}},
+                        {'record': 'Vowel Sounds', 'number': '2', 'cid': 'QmCutTwo', 'recorded': '20 June, 2024',
+                         'cast': {'Justin Holmes': 'guitar', 'Kyle Tuttle': 'banjo'}}]})
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, whole, [])
+    card = result['song_cards']['Song:Barlow']
+    assert card.count('data-cut=') == 2                                          # each cut its own graph
+    assert card.index('QmCutOne') < card.index('QmCutTwo')                       # in the page's own order
+    assert 'track 6' in card and 'recorded 3 April, 2024' in card                # each cut named by its own facts
+    g = result['graph']
+    assert set(g['songcast']) == {'QmCutOne', 'QmCutTwo'}
+    assert g['songcast']['QmCutOne']['recorded'] == '3 April, 2024'
+    assert g['songcast']['QmCutTwo']['song'] == 'Barlow'
+
+
+def test_a_cut_with_no_cid_keys_itself_by_its_record_and_track():
+    import connectome_graph as cg
+
+    wiki = FakeWiki(pages={'Kyle Tuttle', 'Song:August'}, musicians=['Kyle Tuttle'],
+                    cuts={'Song:August': [{'record': '4masks', 'number': '5', 'cid': '',
+                                           'recorded': '', 'cast': {'Kyle Tuttle': 'banjo'}}]})
+    g = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
+                  songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': '', 'recorded': '',
+                                        'cast': {'Kyle Tuttle': 'banjo'}}]})
+    assert 'QmAugCut' not in g and [k for k in g['songcast']] == ['arthel:4masks|August']  # record and song, since no cid
+    assert g['songcast']['arthel:4masks|August']['song'] == 'August'

@@ -162,6 +162,9 @@ function listNames( ids ) {
 
 /** A view's address: what the bar shows, and what a link to somewhere in the graph points at. */
 function address( v ) {
+	if ( v.cut !== undefined ) {
+		return '?' + new URLSearchParams( v.s !== undefined ? { s: v.s, cut: v.cut } : { cut: v.cut } );
+	}
 	if ( v.s !== undefined ) {
 		return '?' + new URLSearchParams( { s: v.s } );
 	}
@@ -179,8 +182,16 @@ function parse( q ) {
 		return { m };
 	}
 	const s = q.get( 's' );                                      // a song, by name: its cut's cast (the song card's explore)
-	if ( s && G.songcast && G.songcast[ s ] ) {
-		return { s };
+	const cut = q.get( 'cut' );                                  // a cut, by its cid: its own graph (Justin, #connectome, 01:58Z)
+	if ( cut && G.songcast && G.songcast[ cut ] && ( !s || G.songcast[ cut ].song === s ) ) {
+		return { s: G.songcast[ cut ].song, cut };
+	}
+	if ( s && G.songcast ) {
+		const mine = Object.entries( G.songcast ).filter( ( [ , c ] ) => c.song === s );
+		if ( mine.length ) {
+			const played = G.plays[ s ] && mine.some( ( [ k ] ) => k === G.plays[ s ] ) ? G.plays[ s ] : mine[ 0 ][ 0 ];
+			return { s, cut: played };
+		}
 	}
 	const a = K.find( G, q.get( 'a' ) || q.get( 'from' ) || q.get( 'p' ) ), b = K.find( G, q.get( 'b' ) || q.get( 'to' ) );
 	return a === null ? null : ( b === null || b === a ? { a } : { a, b } );
@@ -691,7 +702,7 @@ function pieceScene( v ) {
  * --------------------------------------------------------------------------------------------------------- */
 
 function songScene( v ) {
-	const scd = G.songcast[ v.s ], { W, H } = frame();
+	const scd = G.songcast[ v.cut ], { W, H } = frame();
 	const sc = newScene();
 	const ids = scd.pickers.map( ( p ) => p[ 0 ] ).filter( ( id ) => id >= 0 && id < G.people.length );
 	const rolesOf = new Map( scd.pickers.map( ( p ) => [ p[ 0 ], { role: p[ 1 ] || '', icon: p[ 2 ] || '' } ] ) );
@@ -699,8 +710,8 @@ function songScene( v ) {
 	const tier = cuts.length ? Math.max( ...cuts.map( ( c ) => c.tier ) ) : 0;
 	const lay = K.ego( { W, H, named: Math.min( ids.length, 12 ), dots: 0 } );
 	const n = lay.named.length, mine = ids.slice( 0, n );
-	const pan = slide( 's' + v.s, lay.C );
-	const seats = K.seat( lay.named, mine.map( ( id ) => wanted( 's' + v.s + '·' + id, pan ) ) );
+	const pan = slide( 'c' + v.cut, lay.C );
+	const seats = K.seat( lay.named, mine.map( ( id ) => wanted( 'c' + v.cut + '·' + id, pan ) ) );
 	const seatOf = new Map( mine.map( ( id, i ) => [ id, lay.named[ seats[ i ] ] ] ) );
 	for ( const id of mine ) {						// a spoke to each of the cast: it says nothing itself, the picker does
 		sc.lines.set( 'sp' + id, { a: 'song', b: 'p' + id, u: -1, v: id, tie: { played: true, tier, w: 0.35 },
@@ -715,16 +726,18 @@ function songScene( v ) {
 		sc.lines.set( lineKey( t.u, t.v ), { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, stands: 'tie', role: 'web', quiet: true,
 			w: lineWidth( t.tie ), o: lay.web ? webShade( t.bow, false ) : 0, bow: t.bow, delay: 300 } );
 	}
-	sc.nodes.set( 'song', { stands: 'song', is: 'song', x: lay.C.x, y: lay.C.y, kind: 'song', o: 1, title: v.s, tier,
-		cuts } );
+	sc.nodes.set( 'song', { stands: 'song', is: 'song', x: lay.C.x, y: lay.C.y, kind: 'song', o: 1, title: scd.song, tier,
+		cuts: [ cuts[ 0 ] ].filter( Boolean ), cut: v.cut } );
 	mine.forEach( ( id ) => {
 		const nm = nameAt( first( id ), seatOf.get( id ), W, FONT.named );
-		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { cutOf: rolesOf.get( id ) || { role: '', icon: '' }, song: v.s, delay: 180 }, nm ) );
+		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { cutOf: rolesOf.get( id ) || { role: '', icon: '' }, song: scd.song, delay: 180 }, nm ) );
 	} );
 	sc.web = lay.web;
-	sc.head = [ h( 'b', null, v.s ), cuts[ 0 ] ? playButton( G.music[ cuts[ 0 ].id ], v.s ) : null ];
-	sc.sub = [ 'On ', h( 'b', null, cuts.map( ( c ) => c.title ).join( ', ' ) || 'no cut the sources name' ), ' · ',
-		h( 'b', null, K.plural( ids.length, 'picker' ) ), ids.length === 1 ? ' the sources put on it' : ' the sources put on it' ];
+	sc.head = [ h( 'b', null, scd.song ), h( 'a', { class: 'play', href: HOME + '/rabbithole/?track=' + encodeURIComponent( v.cut ),
+		target: '_top', title: 'Play ' + scd.song + ' in Rabbithole', 'aria-label': 'Play ' + scd.song + ' in Rabbithole' }, playMark() ) ];
+	sc.sub = [ 'On ', h( 'b', null, cuts[ 0 ] ? cuts[ 0 ].title : 'no cut the sources name' ),
+		scd.number ? ', track ' + scd.number : '', scd.recorded ? ', recorded ' + scd.recorded : '', ' · ',
+		h( 'b', null, K.plural( ids.length, 'picker' ) ), ' the page puts on this cut' ];
 	return sc;
 }
 
@@ -825,9 +838,9 @@ const draw = {
 			const gl = glyph( 'track' );
 			gl.setAttribute( 'transform', 'scale(1.9)' );
 			g.appendChild( gl );
-			const to = G.plays[ d.title ] ? '/rabbithole/?track=' + encodeURIComponent( G.plays[ d.title ] ) : '';
+			const to = d.cut ? '/rabbithole/?track=' + encodeURIComponent( d.cut ) : '';
 			// Bare, as a picker's subject is: the headline says the song, and the web runs where it runs.
-			g.appendChild( s( 'a', { href: G.songs[ d.title ] ? pageUrl( 'Song:' + d.title ) : address( { s: d.title } ),
+			g.appendChild( s( 'a', { href: G.songs[ d.title ] ? pageUrl( 'Song:' + d.title ) : address( { s: d.title, cut: d.cut } ),
 				'aria-label': 'About ' + d.title }, s( 'text', { y: 44, 'text-anchor': 'middle' }, '' ) ) );
 			if ( to ) {
 				g.appendChild( playChip( 28, 0, to, d.title ) );
@@ -1226,10 +1239,11 @@ function baconTable( a ) {
 
 function fillPanel() {
 	const out = [];
-	if ( view.s !== undefined ) {
-		const scd = G.songcast[ view.s ];
+	if ( view.cut !== undefined && G.songcast[ view.cut ] ) {
+		const scd = G.songcast[ view.cut ];
 		const cut = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean )[ 0 ];
-		out.push( h( 'h2', null, view.s ), h( 'p', { class: 'sub' }, cut ? 'on ' + cut.title + ( cut.date ? ', ' + cut.date : '' )
+		out.push( h( 'h2', null, scd.song ), h( 'p', { class: 'sub' }, cut ? 'on ' + cut.title
+			+ ( scd.number ? ', track ' + scd.number : '' ) + ( scd.recorded ? ', recorded ' + scd.recorded : '' )
 			: 'no cut the sources name' ) );
 		if ( scd.pickers.length ) {
 			out.push( h( 'h3', null, `On this cut · ${ scd.pickers.length }` ), h( 'ul', null, scd.pickers.map( ( [ id, roles ] ) =>
@@ -1297,6 +1311,10 @@ function fillPanel() {
  * --------------------------------------------------------------------------------------------------------- */
 
 function label( v ) {
+	if ( v.cut !== undefined && G.songcast[ v.cut ] ) {
+		const c = G.songcast[ v.cut ];
+		return c.song + ( c.on && c.on.length ? ' · ' + G.music[ c.on[ 0 ] ].title : '' );
+	}
 	if ( v.s !== undefined ) {
 		return v.s;
 	}
@@ -1306,7 +1324,7 @@ function label( v ) {
 	return v.b === undefined ? first( v.a ) : first( v.a ) + ' ⟷ ' + first( v.b );
 }
 
-const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m && v.s === w.s;
+const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m && v.s === w.s && v.cut === w.cut;
 
 /** Where each thing in sight is now, by what it stands for: a picker ('p' and their number) or a piece ('m' and its). */
 function whereabouts() {
@@ -1363,14 +1381,14 @@ function show( quick, again ) {
 	}
 	stage.classList.toggle( 'dual', view.m !== undefined );
 	steady();
-	scene = view.s !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
+	scene = view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
 	stage.classList.toggle( 'webbed', !!scene.web );
 	stage.classList.toggle( 'deep', !!scene.deep );
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
 	$( 'say' ).lastElementChild.replaceChildren( ...( lost && trail.length < 2 ? [ lost ] : scene.sub ) );
 	put( scene, quick );
 	fillPanel();
-	$( 'pa' ).value = view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
+	$( 'pa' ).value = view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
 	$( 'pb' ).value = view.m !== undefined || view.b === undefined ? '' : first( view.b );
 	$( 'back' ).hidden = trail.length < 2;
 	$( 'crumbs' ).replaceChildren( ...trail.slice( -4, -1 ).flatMap( ( v, i, arr ) => [
