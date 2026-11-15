@@ -132,7 +132,8 @@
 		"remoteExtPath": "PickiPediaContent/resources"
 	},
 	"SpecialPages": {
-		"EmergentBundles": "MediaWiki\\Extension\\PickiPediaContent\\SpecialEmergentBundles"
+		"EmergentBundles": "MediaWiki\\Extension\\PickiPediaContent\\SpecialEmergentBundles",
+		"Rabbithole": "MediaWiki\\Extension\\PickiPediaContent\\SpecialRabbithole"
 	},
 	"ExtensionMessagesFiles": {
 		"PickiPediaContentAlias": "PickiPediaContent.alias.php",

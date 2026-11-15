@@ -12,4 +12,5 @@ $specialPageAliases = [];
 $specialPageAliases['en'] = [
 	// Special:AgentBundles until 25 Oct 2026: the old names still land here.
 	'EmergentBundles' => [ 'EmergentBundles', 'Emergent bundles', 'AgentBundles', 'Agent bundles' ],
+	'Rabbithole' => [ 'Rabbithole' ],
 ];
