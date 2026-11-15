@@ -899,3 +899,15 @@ g.day text { font: 700 11px var( --ui ); fill: var( --muted ); letter-spacing: .
 body.mini .bar, body.mini #say, body.mini #legend, body.mini #panel, body.mini #drawer { display: none; }
 body.mini, body.mini main, body.mini #stage { background: transparent; }
 body.mini #g { cursor: pointer; }
+
+/* The walk, while the graph's data is on its way: the songs the browser holds, named, until the drawn walk
+   takes over (Justin, #rabbithole, 15 Nov 2026, item 5: the dock "seems to be blank"). */
+.walk-boot { position: absolute; inset: 10px 12px auto; display: flex; flex-wrap: wrap; gap: 4px 6px;
+	align-content: start; align-items: center; font-size: 12px; color: var( --ink2 ); pointer-events: none; }
+.walk-boot b { font-weight: 600; color: var( --ink ); background: var( --plane ); border: 1px solid var( --hair );
+	border-radius: 9px; padding: 2px 9px; max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.walk-boot .arrow { flex: none; }
+
+/* The walk moving (Justin, item 7): a bead of light on the line it took, and the ring where it arrived. */
+.spark { fill: var( --ink ); stroke: none; pointer-events: none; }
+.spark-ring { fill: none; stroke: var( --ink ); stroke-width: 1.4; pointer-events: none; }
