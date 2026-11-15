@@ -17,7 +17,7 @@ graph.json:
             one record or show; one entry per record or show, the closest way the
             sources put them together
   songs     song title -> its wiki page, for the songs that have one
-  songcast   cut cid -> { song, on: [music...], number, recorded, artist, pickers: [[picker, roles, icon], ...] }:
+  songcast   cut cid -> { song, on: [music...], number, recorded, artist, writers, pickers: [[picker, roles, icon], ...] }:
             each cut of each song on cryptograss's own records, as its Song: page's {{Studio cut}} states
             it — the record, the track number, when it was recorded, who the page says is on it and with
             what, each with the icon the wiki keeps for that role. Keyed by the cut's cid, or by its record
@@ -226,6 +226,9 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
             songcast[key] = {'song': title, 'on': [mid[target]], 'number': c['number'],
                              'recorded': c['recorded'],
                              'artist': pid.get(c['artist']) if c.get('artist') else None,
+                             # who the song page says wrote it, of those on this cut: the next to stand at the
+                             # end of the way home, after the recording artist (Justin, #connectome, 15 Nov 2026)
+                             'writers': [pid[w] for w in c.get('writers', []) if w in c['cast'] and w in pid],
                              'pickers': pickers}
 
     sources, cast = defaultdict(set), defaultdict(dict)

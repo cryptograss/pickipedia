@@ -759,3 +759,13 @@ test( 'between two pickers, a way round by studio tracks comes before one by sho
 	const ways = K.mutuals( WAYS, 0, 1 );
 	assert.deepEqual( ways.map( ( m ) => [ WAYS.people[ m.id ].name, m.rank, m.tier ] ), [ [ 'Y', 5, 2 ], [ 'X', 4, 2 ] ] );
 } );
+
+test( 'the way home from a cut ends at its artist, then its writer on the track, then the ensemble', () => {
+	// Justin, #connectome, 15 Nov 2026, 07:29Z
+	const cut = { artist: JUSTIN, writers: [ MOLLY ], pickers: [ [ KYLE, 'banjo' ], [ MOLLY, 'guitar' ], [ JUSTIN, 'guitar' ], [ -1, 'x' ] ] };
+	assert.deepEqual( K.homeward( cut, KYLE ), [ JUSTIN, MOLLY ] );          // from anyone else's view: the artist
+	assert.deepEqual( K.homeward( cut, JUSTIN ), [ MOLLY, KYLE ] );          // from the artist's own: the writer
+	assert.deepEqual( K.homeward( { ...cut, writers: [ JUSTIN ] }, JUSTIN ), [ KYLE, MOLLY ] );   // both are the middle: the ensemble
+	assert.deepEqual( K.homeward( { artist: null, writers: [], pickers: [ [ SAM, 'bass' ] ] }, KYLE ), [ SAM ] );
+	assert.deepEqual( K.homeward( { artist: VICKIE, pickers: [] }, KYLE ), [ VICKIE ] );         // an older graph.json: no writers
+} );

@@ -679,6 +679,27 @@ export function leads( G, id, want = 6, hand = [], keep = [] ) {
 }
 
 /**
+ * Who stands at the other end of the way home from a cut, in order (Justin, #connectome, 15 Nov 2026, 07:29Z):
+ * the recording artist who made it; then whoever the song page says wrote it, where they are on the track; then
+ * the others of the cut's ensemble, as the page lists them. Whoever is already the middle of the view (`a`)
+ * stands there already, so the next one does: from the artist's own view, the writer, or else the ensemble.
+ *
+ * entry: a songcast entry ({ artist, writers, pickers }). Returns picker ids, each once.
+ */
+export function homeward( entry, a ) {
+	const out = [];
+	const add = ( x ) => {
+		if ( x != null && x >= 0 && x !== a && !out.includes( x ) ) {
+			out.push( x );
+		}
+	};
+	add( entry.artist );
+	( entry.writers || [] ).forEach( add );
+	( entry.pickers || [] ).forEach( ( p ) => add( p[ 0 ] ) );
+	return out;
+}
+
+/**
  * A picker's company with those the reader came by first, whatever their rank: the connections that were in
  * sight stay in sight (Justin, #connectome, 13 Nov 2026). One of them who only shares a record with this picker
  * stays too. comp is company()'s; returns the same shape.
