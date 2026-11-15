@@ -603,9 +603,11 @@ function egoScene( v ) {
 	if ( looseOnly ) {
 		comp = K.company( G, a, true );
 	}
-	// Those the reader came by stay, whatever their rank, and the line to each says what it is; then the closest.
+	// Those the reader came by stay, whatever their rank, and the line to each says what it is; then the closest,
+	// two at most by any one record or show while there are others to name (Justin, #connectome, 15 Nov 2026).
 	const came = new Set( ( v.keep || [] ).filter( ( k ) => G.adj[ a ].has( k ) ) );
-	const kept = K.keeping( G, a, comp, v.keep );
+	const queue = K.keeping( G, a, comp, v.keep );
+	const kept = K.fewPer( G, queue, 2, queue.filter( ( c ) => came.has( c.id ) ).length );
 	const want = Math.min( kept.length, H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 ) );
 	// another turn of the company, where there are more than one view names; those the reader came by stay
 	const stay = kept.filter( ( c ) => came.has( c.id ) ).length;
@@ -702,9 +704,11 @@ function egoScene( v ) {
 	// a record, the line says one no other line has, not the first by the alphabet; a line with nothing left
 	// unsaid says it only when its far end is pointed at.
 	const heard = new Set( [ ...sc.pills.values() ].map( ( p ) => p.piece ) );
-	const fresh = ( tie ) => {
+	// a line first says what its far end was named by (fewPer's `by`), so two lines by one record or show at most
+	const fresh = ( tie, by ) => {
 		const ev = tie.ev.filter( ( e ) => e.how >= K.STAGE && G.music[ e.m ].tier >= K.FULL );
-		for ( const e of ( ev.length ? ev : tie.ev.slice( 0, 1 ) ) ) {
+		const pool = ev.length ? ev : tie.ev.slice( 0, 1 );
+		for ( const e of ( by && pool.includes( by ) ? [ by ].concat( pool.filter( ( x ) => x !== by ) ) : pool ) ) {
 			const songs = e.how === K.TRACK && e.songs.length ? e.songs : [ null ];
 			for ( const song of songs ) {
 				const one = song === null ? e : Object.assign( {}, e, { songs: [ song, ...e.songs.filter( ( x ) => x !== song ) ] } );
@@ -722,7 +726,7 @@ function egoScene( v ) {
 			return;
 		}
 		// A label lies across its line, not along it: it may be wider than the line is long, if nothing else is there.
-		const room = Math.min( out ? 150 : 190, W * 0.3 ), say = fresh( c.tie ), fit = say ? pillsFor( c.tie, room, 1, say.piece, say.e ) : { shown: [] };
+		const room = Math.min( out ? 150 : 190, W * 0.3 ), say = fresh( c.tie, c.by ), fit = say ? pillsFor( c.tie, room, 1, say.piece, say.e ) : { shown: [] };
 		const w = fit.shown.length ? fit.shown[ 0 ].w : 0;
 		const f = say && i < n && w && W >= 560 && len >= 120 ? [ 0.56, 0.47, 0.65, 0.4, 0.72, 0.34 ].find( ( t ) => {
 			const x = lay.C.x + ( pos.x - lay.C.x ) * t, y = lay.C.y + ( pos.y - lay.C.y ) * t;

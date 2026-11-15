@@ -456,6 +456,35 @@ test( 'a rabbithole walk, as the graph knows it: each cut, who was followed to i
 	assert.equal( K.walkSteps( g2, [ { cid: 'QmGm' } ] )[ 0 ].piece, K.trackOn( g2, 0, 'Gm' ) );
 } );
 
+test( 'a picker\'s company is named a few to a record or show, the rest waiting till nobody else is left', () => {
+	// Justin, #connectome, 15 Nov 2026: "Priority list as described above, but only at most two 1-hop connections from
+	// any given record or show, unless there are no other connecting objects available"
+	const g = { music: [ { kind: 'record', tier: K.PERMANENT }, { kind: 'show', tier: K.PERMANENT }, { kind: 'show', tier: K.PERMANENT },
+		{ kind: 'record', tier: K.FULL } ] };
+	const REC = 0, S1 = 1, S2 = 2, FULLREC = 3;
+	const c = ( id, ...ev ) => ( { id, tie: { ev: ev.map( ( [ m, how ] ) => ( { m, how } ) ) } } );
+	// the company in priority order, as company() gives it: six from one Permanent record first, then shows
+	const comp = [ c( 'a', [ REC, K.TRACK ] ), c( 'b', [ REC, K.TRACK ] ), c( 'c', [ REC, K.TRACK ] ),
+		c( 'd', [ REC, K.TRACK ], [ FULLREC, K.TRACK ] ), c( 'e', [ REC, K.TRACK ], [ S2, K.STAGE ] ), c( 'f', [ REC, K.TRACK ] ),
+		c( 'g', [ S1, K.STAGE ] ), c( 'h', [ S1, K.STAGE ] ), c( 'i', [ S1, K.STAGE ] ) ];
+	const ids = ( r ) => r.map( ( x ) => x.id ).join( '' );
+	const r = K.fewPer( g, comp );
+	// two by the record; then by Justin's order: e by a Permanent show it shares too, g and h by theirs; d by a Full
+	// record; and the waiting after them: c, f and i, whose every shared thing has two named by it already
+	assert.equal( ids( r ), 'abeghdcfi' );
+	assert.deepEqual( r.map( ( x ) => x.by ? x.by.m : null ), [ REC, REC, S2, S1, S1, FULLREC, null, null, null ] );
+	assert.equal( ids( K.fewPer( g, comp, 3 ) ), 'abceghidf' );                 // three to a thing
+	// one who shares a Full record and, listed after it, a Permanent show: named by the show, with the shows
+	const j = K.fewPer( g, comp.concat( [ c( 'j', [ FULLREC, K.TRACK ], [ S2, K.STAGE ] ) ] ) );
+	assert.equal( ids( j ), 'abeghjdcfi' );
+	assert.equal( j[ 5 ].by.m, S2 );
+	// those the reader came by stay first, and count: two who came by the record leave it no room
+	assert.equal( ids( K.fewPer( g, [ comp[ 5 ], comp[ 2 ] ].concat( comp.filter( ( x ) => x.id !== 'f' && x.id !== 'c' ) ), 2, 2 ) ), 'fceghdabi' );
+	// nobody else to name: the waiting are named after all
+	assert.equal( ids( K.fewPer( g, comp.slice( 0, 4 ) ) ), 'abdc' );
+	assert.deepEqual( K.fewPer( g, [] ), [] );
+} );
+
 test( 'a walk runs as a snake: left to right, down a row, right to left; the names hang inward at the ends', () => {
 	// Justin, #connectome, 15 Nov 2026: "left to right, and then down a row and right-to-left, and keep going thusly"
 	const lay = K.snake( { W: 900, n: 9, room: 200, side: 78, top: 92, pitch: 186 } );
