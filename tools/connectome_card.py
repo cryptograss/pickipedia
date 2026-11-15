@@ -795,6 +795,7 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
             cards[title] = html
     graph = None
     song_cards = {}
+    cut_cards = {}
     if whole is not None:                            # the big graph's one file, from the same store and names
         # The song pages' own cuts are the source (magent, #connectome, 15 Nov 2026); the store's credits
         # and pairs stay out of songcast — a page's key is the song's real title, and the store's arthel
@@ -853,10 +854,11 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                 html = song_card(song_title, cut, cast, store, has_page, inst, play=c['cid'], icons=icons)
                 if html:
                     parts.append(html)
+                    cut_cards.setdefault(page_title, {})[f"{c['record']}|{c['number']}|{c['cid']}"] = html
             if parts:
                 song_cards[page_title] = ''.join(parts)
     return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,
-            'song_cards': song_cards,
+            'song_cards': song_cards, 'cut_cards': cut_cards,
             'pairs': store.pairs, 'names': {k: sorted(v) for k, v in sorted(store.raw.items())}}
 
 
@@ -868,6 +870,14 @@ def write(result, out_dir, built_from):
     for title, html in result.get('song_cards', {}).items():
         with open(os.path.join(out_dir, 'cards', card_file(title)), 'w') as f:
             f.write(html)
+    # Each cut its own file, named as Connectome::cutFileFor names it: the page's title and the cut's own
+    # params, as {{Studio cut}} passes them (Justin, #connectome, 15 Nov 2026: the graph lives with the block).
+    for title, cuts in result.get('cut_cards', {}).items():
+        for key, html in cuts.items():
+            record, number, cid = (key.split('|') + ['', '', ''])[:3]
+            with open(os.path.join(out_dir, 'cards',
+                                   card_file(title + '|' + record + '|' + number + '|' + cid)), 'w') as f:
+                f.write(html)
     with open(os.path.join(out_dir, 'pairs.json'), 'w') as f:
         json.dump(result['pairs'], f)
     with open(os.path.join(out_dir, 'names.json'), 'w') as f:
@@ -879,6 +889,8 @@ def write(result, out_dir, built_from):
         json.dump({'month': result['month'], 'featured': result['featured'],
                    'cards': {t: card_file(t) for t in sorted(result['cards'])},
                    'song_cards': {t: card_file(t) for t in sorted(result.get('song_cards', {}))},
+                   'cut_cards': {t: {k: card_file(t + '|' + k) for k in sorted(ks)}
+                                 for t, ks in sorted(result.get('cut_cards', {}).items())},
                    'no_card': result['skipped'], 'built_from': built_from}, f, indent=1)
 
 

@@ -36,6 +36,22 @@ check( 'no title, nothing', Connectome::cardFor( $dir, '' ) === '' );
 check( 'a file that is not a card is never put into a page', Connectome::cardFor( $dir, 'Not A Card' ) === '' );
 check( 'a missing folder is nothing', Connectome::cardFor( "$dir/nowhere", 'Kyle Tuttle' ) === '' );
 
+// A cut naming itself: {{#connectome:|record=…|number=…|cid=…}} finds the cut's own card, named as the
+// builder names it — the page's title and the block's own params (Connectome::cutFileFor).
+$cutcard = '<div class="connectome-card" data-cut="QmCutOne"><svg class="cc"></svg></div>';
+file_put_contents( "$dir/" . md5( "Song:Barlow's Jig|4masks|6|QmCutOne" ) . '.html', $cutcard );
+check( 'a cut card is named by the md5 of the title and the block\'s params',
+	Connectome::cutFileFor( $dir, "Song:Barlow's Jig", '4masks', '6', 'QmCutOne' )
+		=== "$dir/" . md5( "Song:Barlow's Jig|4masks|6|QmCutOne" ) . '.html' );
+check( 'the cut md5 matches Python\'s for the same block',
+	md5( "Song:Barlow's Jig|4masks|6|QmCutOne" ) === '7e4c313277091f2874160e2b518d987a' );
+check( 'a block that names its cut gets that cut\'s card',
+	Connectome::cardFor( $dir, "Song:Barlow's Jig", '4masks', '6', 'QmCutOne' ) === $cutcard );
+check( 'a block naming nothing gets the page\'s stack, not a cut card',
+	Connectome::cardFor( $dir, 'Kyle Tuttle', '', '', '' ) === $card );
+check( 'a cut whose card was never built gets nothing, not an empty box',
+	Connectome::cardFor( $dir, "Song:Barlow's Jig", 'Vowel Sounds', '', '' ) === '' );
+
 array_map( 'unlink', glob( "$dir/*" ) );
 rmdir( $dir );
 

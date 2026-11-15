@@ -28,12 +28,24 @@ class Connectome {
 		return rtrim( $dir, '/' ) . '/' . md5( $title ) . '.html';
 	}
 
-	/** A page's card, as HTML; '' when the store has none for it. */
-	public static function cardFor( string $dir, string $title ): string {
+	/** The file that holds one cut's card: the page's title and the cut's own params, as the block states
+	 *  them — so {{Studio cut}} can name its own card from the very params it renders, and a page with five
+	 *  cuts carries five graphs beside its five blocks. The builder (tools/connectome_card.py) derives the
+	 *  same name from the same block. */
+	public static function cutFileFor( string $dir, string $title, string $record, string $number, string $cid ): string {
+		return rtrim( $dir, '/' ) . '/' . md5( $title . '|' . $record . '|' . $number . '|' . $cid ) . '.html';
+	}
+
+	/** A page's card, as HTML; '' when the store has none for it. A cut that names itself by its block's
+	 *  record, number or cid gets that cut's own card; a bare call gets the page's whole stack. */
+	public static function cardFor( string $dir, string $title, string $record = '', string $number = '',
+		string $cid = '' ): string {
 		if ( $title === '' ) {
 			return '';
 		}
-		$file = self::fileFor( $dir, $title );
+		$file = ( $record === '' && $number === '' && $cid === '' )
+			? self::fileFor( $dir, $title )
+			: self::cutFileFor( $dir, $title, $record, $number, $cid );
 		if ( !is_file( $file ) ) {
 			return '';
 		}

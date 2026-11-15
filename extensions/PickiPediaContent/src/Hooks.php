@@ -135,13 +135,21 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		} );
 		// {{#connectome:}}: the page's connectome card, or nothing (Connectome.php). The cards are rebuilt at each
 		// deploy, without an edit to the page, so a page takes its new card within a day.
-		$parser->setFunctionHook( 'connectome', static function ( $parser, $name = '' ) {
+		$parser->setFunctionHook( 'connectome', static function ( $parser, $name = '', ...$args ) {
 			$output = $parser->getOutput();
 			$output->updateCacheExpiry( 86400 );
 			$name = trim( (string)$name );
+			// A cut naming itself ({{#connectome:|record=…|number=…|cid=…}}) gets that cut's own card:
+			// the graph lives beside the {{Studio cut}} block that states it (Justin, #connectome, 15 Nov 2026).
+			$record = $number = $cid = '';
+			foreach ( $args as $arg ) {
+				if ( preg_match( '/^\s*(record|number|cid)\s*=\s*(.*)$/s', (string)$arg, $m ) ) {
+					$$m[1] = trim( $m[2] );
+				}
+			}
 			$page = $parser->getPage();
 			$title = $name !== '' ? Title::newFromText( $name ) : ( $page ? Title::newFromPageReference( $page ) : null );
-			$html = $title ? Connectome::cardFor( Connectome::dir(), $title->getPrefixedText() ) : '';
+			$html = $title ? Connectome::cardFor( Connectome::dir(), $title->getPrefixedText(), $record, $number, $cid ) : '';
 			if ( $html === '' ) {
 				return '';
 			}
