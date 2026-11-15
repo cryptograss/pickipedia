@@ -229,6 +229,19 @@
 		border-color: var( --night-line ) !important;
 		background: var( --night-wash ) !important;
 	}
+	/* And MediaWiki's own pale grey, which templates borrow for a box of plain words: the list of what a
+	   person does, at the top of their page (Template:ThinkingEntityInfo), was a white band across night
+	   (Justin, 15 Nov 2026). The box goes dark; its words, where the template chose none, are night's, and
+	   its links night's links. */
+	[style*="background:#f8f9fa"], [style*="background:\20 #f8f9fa"],
+	[style*="background-color:#f8f9fa"], [style*="background-color:\20 #f8f9fa"] {
+		border-color: var( --night-line ) !important;
+		background: var( --night-wash ) !important;
+		&:not( [style*=" color:"] ):not( [style*=";color:"] ):not( [style^="color:"] ) { color: var( --night-ink ) !important; }
+		a:not( .new ) { color: var( --night-link ) !important; }
+		a:not( .new ):visited { color: var( --night-link-seen ) !important; }
+		a.new { color: var( --night-link-new ) !important; }
+	}
 	.ink( ~"#2b1d12", var( --night-ink ) );
 	.ink( ~"#000", var( --night-ink ) );
 	.ink( ~"#222", var( --night-ink ) );
