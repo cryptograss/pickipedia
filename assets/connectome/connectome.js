@@ -694,7 +694,7 @@ function songScene( v ) {
 	const scd = G.songcast[ v.s ], { W, H } = frame();
 	const sc = newScene();
 	const ids = scd.pickers.map( ( p ) => p[ 0 ] ).filter( ( id ) => id >= 0 && id < G.people.length );
-	const rolesOf = new Map( scd.pickers.map( ( p ) => [ p[ 0 ], p[ 1 ] ] ) );
+	const rolesOf = new Map( scd.pickers.map( ( p ) => [ p[ 0 ], { role: p[ 1 ] || '', icon: p[ 2 ] || '' } ] ) );
 	const cuts = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean );
 	const tier = cuts.length ? Math.max( ...cuts.map( ( c ) => c.tier ) ) : 0;
 	const lay = K.ego( { W, H, named: Math.min( ids.length, 12 ), dots: 0 } );
@@ -719,7 +719,7 @@ function songScene( v ) {
 		cuts } );
 	mine.forEach( ( id ) => {
 		const nm = nameAt( first( id ), seatOf.get( id ), W, FONT.named );
-		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { role: rolesOf.get( id ) || '', song: v.s, delay: 180 }, nm ) );
+		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { cutOf: rolesOf.get( id ) || { role: '', icon: '' }, song: v.s, delay: 180 }, nm ) );
 	} );
 	sc.web = lay.web;
 	sc.head = [ h( 'b', null, v.s ), cuts[ 0 ] ? playButton( G.music[ cuts[ 0 ].id ], v.s ) : null ];
@@ -826,22 +826,22 @@ const draw = {
 			gl.setAttribute( 'transform', 'scale(1.9)' );
 			g.appendChild( gl );
 			const to = G.plays[ d.title ] ? '/rabbithole/?track=' + encodeURIComponent( G.plays[ d.title ] ) : '';
-			const nm = K.clip( d.title, 30 );
+			// Bare, as a picker's subject is: the headline says the song, and the web runs where it runs.
 			g.appendChild( s( 'a', { href: G.songs[ d.title ] ? pageUrl( 'Song:' + d.title ) : address( { s: d.title } ),
-				'aria-label': 'About ' + d.title }, s( 'text', { y: 44, 'text-anchor': 'middle', 'font-weight': 'bold' }, nm ) ) );
+				'aria-label': 'About ' + d.title }, s( 'text', { y: 44, 'text-anchor': 'middle' }, '' ) ) );
 			if ( to ) {
-				g.appendChild( playChip( wide( nm, FONT.subject ) / 2 + 5, 40, to, d.title ) );
+				g.appendChild( playChip( 28, 0, to, d.title ) );
 			}
 			return;
 		}
 		const p = P( d.id );
 		// On a song's ring the instrument is the cut's own (magent, #connectome, 15 Nov 2026: Skyler Golden
 		// played bass on August, however his page says guitar); the icon tries it and falls back to a dot.
-		const onCut = d.song !== undefined && d.role;
-		const inst = onCut ? d.role.split( ';' )[ 0 ].trim() : p.inst;
+		const onCut = d.song !== undefined && d.cutOf;
+		const inst = onCut ? ( d.cutOf.icon || '' ) : p.inst;
 		g.textContent = '';
 		g.setAttribute( 'class', 'pk ' + d.kind + ( p.page ? '' : ' nopage' ) + ( d.lit ? ' lit' : '' ) );
-		g.setAttribute( 'aria-label', p.name + ( onCut && d.role ? ' · ' + d.role : instOf( d.id ) ) );
+		g.setAttribute( 'aria-label', p.name + ( onCut && d.cutOf.role ? ' · ' + d.cutOf.role : instOf( d.id ) ) );
 		( d.kind === 'dot' ? layers.dots : layers.nodes ).appendChild( g );
 		if ( d.kind === 'dot' ) {
 			g.appendChild( s( 'circle', { class: 'halo', r: coarse ? 15 : Math.max( 12, d.r + 7 ) } ) );
@@ -1561,7 +1561,7 @@ function aSong( d ) {
 
 /** A picker on a song's ring: what this cut's credits gave them, and where else they lead. */
 function aPickerOfSong( d ) {
-	const id = d.id, name = first( id ), role = d.role;
+	const id = d.id, name = first( id ), role = d.cutOf ? d.cutOf.role : '';
 	const w = { kind: 'a picker' + instOf( id ), title: name, tipTitle: name + instOf( id ), lines: [],
 		hint: 'click: go to ' + name, acts: [ act( 'Go to ' + name, () => go( { a: id } ) ) ] };
 	w.lines.push( role ? 'on this cut: ' + role : 'on this cut, and no instrument the sources name' );

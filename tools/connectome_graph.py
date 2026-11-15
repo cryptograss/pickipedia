@@ -47,6 +47,8 @@ weight: 1 / (how many were there - 1), Newman's collaboration weight (Phys. Rev.
 import re
 from collections import defaultdict
 
+
+
 PERMANENT = ('lma:', 'arthel:')
 HOW = {'track': 3, 'show': 2, 'record': 1}
 ON_STAGE = {'song', 'song?', 'show', 'stage', 'track', 'release'}   # a credit that puts the picker in the music
@@ -110,7 +112,33 @@ def weight(p, track, stage, record, show=False):
     return one(len(record[p['target']]))
 
 
-def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None, songcuts=None):
+def icon_for(roles, icons):
+    """The icon file an instrument's roles draw, or '' for none: the role as the wiki names it, then
+    without a string-count qualifier ('5-string banjo' draws banjo's), then the longest tail of the
+    role's words an icon exists for, then the store's own spellings of a few."""
+    if not roles:
+        return ''
+    for role in (r.strip() for r in roles.split(';')):
+        if not role:
+            continue
+        name = role.lower().replace(' ', '_')
+        if name in icons:
+            return name
+        name = re.sub(r'^\d+-string\s+', '', role, flags=re.I).lower().replace(' ', '_')
+        if name in icons:
+            return name
+        words = role.lower().replace('-', ' ').split()
+        for i in range(len(words)):
+            name = '_'.join(words[i:])
+            if name in icons:
+                return name
+        name = {'six-whistle': 'tin_whistle', 'tin whistle': 'tin_whistle'}.get(role.lower(), '')
+        if name and name in icons:
+            return name
+    return ''
+
+
+def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None, songcuts=None, icons=()):
     """
     pairs     the store's pairs, each name already as the wiki knows it
     targets   id -> {kind, title, date, artist, grp, formats: [..]}
@@ -138,9 +166,8 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
     # entries those cuts are (Justin, #rabbithole, 15 Nov 2026, 00:23Z: the song-centred card). The song
     # pages' own cuts ({{Studio cut}}) come first — track precedence, as the schema consensus has it, and
     # the page is what a reader checks (magent, #connectome, 15 Nov 2026: the store's arthel filenames were
-    # stale and missed pages, and grouped August under the wrong record) — the store's track-level credits
-    # fill the songs the pages don't reach. A page's cut brings its record into the music; a cut whose
-    # record the store has never heard of is left out.
+    # stale, missed pages and grouped August under the wrong record) — songcast is the pages' alone. A
+    # page's cut brings its record into the music; a cut whose record the store has never heard of is out.
     record_target = {}
     for t in sorted(targets):
         if targets[t].get('kind') == 'record' and targets[t].get('title'):
@@ -173,29 +200,9 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         songcut[title] |= ts
         for person, said in page_people[title].items():
             songpeople[title][person] = list(said)
-    for person, roles, target, scope, source in credits:
-        if scope != 'track' or not target.startswith('arthel:') or target not in mid:
-            continue
-        stem = source.rsplit('/', 1)[-1]
-        stem = stem[:-5] if stem.endswith('.yaml') else stem
-        title = song_title(target, [source, '', stem])
-        if not title or title in covered:
-            continue
-        songcut[title].add(target)
-        said = songpeople[title].setdefault(person, [])
-        for r in (roles or '').split(';'):
-            r = r.strip()
-            if r and r.lower() not in {x.lower() for x in said}:
-                said.append(r)
-    for key, people in track.items():                 # a cut the pairs put pickers on, but no credits name: their roles unsaid
-        if key[0].startswith('arthel:') and key[0] in mid:
-            title = song_title(key[0], list(key[1:]))
-            if title and title not in covered:
-                songcut[title].add(key[0])
-                for q in people:
-                    songpeople[title].setdefault(q, [])
-    names = sorted(set(names) | { p for cast in songpeople.values() for p in cast })
-    pid = {n: i for i, n in enumerate(names)}
+    # The store's credits and pairs stay out of songcast: a page's key is the song's real title, and the
+    # store's arthel slugs made ghosts beside them (magent, #connectome, 15 Nov 2026, 01:07Z: 27 keys were
+    # 20 songs and 7 stale doubles). The credits' work is the ties; a song no page states has no node.
 
     sources, cast = defaultdict(set), defaultdict(dict)
     for person, roles, target, scope, source in credits:
@@ -238,7 +245,8 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         'ties': [[a, b, sorted(ev, key=lambda e: (-e[1], -e[2], e[0]))] for (a, b), ev in sorted(ties.items())],
         'songs': dict(sorted(songs.items())),
         'songcast': { t: { 'on': sorted( mid[ x ] for x in songcut[ t ] ),
-                           'pickers': [ [ pid[ p ], '; '.join( songpeople[ t ][ p ] ) ]
+                           'pickers': [ [ pid[ p ], '; '.join( songpeople[ t ][ p ] ),
+                                          icon_for( '; '.join( songpeople[ t ][ p ] ), icons ) ]
                                         for p in sorted( songpeople[ t ] ) ] }
                      for t in sorted( songpeople ) },
         'plays': dict(sorted(played.items())),

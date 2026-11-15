@@ -51,6 +51,7 @@ from datetime import date
 from html import escape
 
 import connectome_graph
+from connectome_graph import icon_for
 
 FEATURED_PAGE = 'Cryptograss:Connectome/Featured'
 TEMPLATE = 'Template:MusicianInfo'
@@ -175,6 +176,12 @@ class Wiki:
                 if cuts:
                     out[page['title']] = cuts
         return out
+
+    def instrument_icons(self):
+        """The instruments the wiki keeps an icon for: the names after Instrument-icon-."""
+        q = self.api(action='query', list='allimages', aiprefix='Instrument-icon-', ailimit=100)
+        return {i['name'].split('Instrument-icon-')[-1].replace('.png', '')
+                for i in q.get('query', {}).get('allimages', [])}
 
 
 def studio_cuts_from(text):
@@ -612,7 +619,7 @@ def song_cut(whole, tiers, pages, target):
             'page': pages.get(d.get('title', '')) or ''}
 
 
-def song_card(title, cut, cast, store, has_page, inst, play=None):
+def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
     """The song-centred card: the song in the middle, the pickers of its cut on the ring, each labelled
     with the instrument the track-level credits gave them, and a line between two of them when the store
     knows they played together elsewhere (Justin, #rabbithole, 15 Nov 2026, 00:23Z). cut: what song_cut()
@@ -684,10 +691,9 @@ def song_card(title, cut, cast, store, has_page, inst, play=None):
         o(html)
     for n in ring:
         x, y = pos[n]
-        said = [s for s in (roles[n] or '').split(';') if s]
-        truth = next((s for s in said if s.lower() == inst.get(n, '\x00')), None)
-        if truth:                                                   # the icon, when the wiki's instrument is this cut's own
-            href = attr(ICON.format(urllib.parse.quote(truth)))
+        icon = icon_for(roles[n], icons)                            # the icon the wiki has for this cut's own roles
+        if icon:
+            href = attr(ICON.format(urllib.parse.quote(icon)))
             ic = (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="14" fill="{PAPER}" stroke="{INK}" stroke-width="2"/>'
                   f'<image href="{href}" x="{x - 10:.1f}" y="{y - 10:.1f}" width="20" height="20"></image>')
         else:
@@ -795,7 +801,10 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         song_page = {t: n[len('Song:'):] for n, (t, ok) in found.items() if ok and n.startswith('Song:')}
         heard = wiki.listens(song_page) if song_page else {}
         plays = {song_page[t]: cid for t, cid in heard.items() if t in song_page}
-        # The song pages' own cuts come first (magent, #connectome, 15 Nov 2026); the store fills the rest.
+        # The song pages' own cuts are the source (magent, #connectome, 15 Nov 2026); the store's credits
+        # and pairs stay out of songcast — a page's key is the song's real title, and the store's arthel
+        # slugs made ghosts beside them. The icons the wiki keeps decide what a role draws.
+        icons = wiki.instrument_icons() if hasattr(wiki, 'instrument_icons') else set()
         cutmap = {}
         for page_title, cs in (wiki.studio_cuts() if hasattr(wiki, 'studio_cuts') else {}).items():
             song_title = page_title[len('Song:'):] if page_title.startswith('Song:') else page_title
@@ -803,7 +812,7 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                                    'cast': {alias.get(n, n): r for n, r in c['cast'].items()}} for c in cs]
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
-            has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap)
+            has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons)
         # Song cards: the store's cut of each song with a Song: page (Justin, #rabbithole, 15 Nov 2026, 00:23Z).
         songcast = graph.get('songcast') or {}
         people = graph.get('people') or []
@@ -811,7 +820,7 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
             page_title = 'Song:' + song_title
             if page_title not in found or not found[page_title][1] or (only and only != page_title):
                 continue
-            cast = [(people[i][0], r) for i, r in sc['pickers'] if 0 <= i < len(people)]
+            cast = [(people[i][0], r) for i, r, _ in sc['pickers'] if 0 <= i < len(people)]
             if not cast:
                 continue
             targets = graph.get('music') or []
@@ -820,7 +829,7 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
             if cut is None:
                 continue
             html = song_card(song_title, cut, cast, store, has_page, inst,
-                             play=(graph.get('plays') or {}).get(song_title))
+                             play=(graph.get('plays') or {}).get(song_title), icons=icons)
             if html:
                 song_cards[page_title] = html
     return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,

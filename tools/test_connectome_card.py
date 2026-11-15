@@ -248,30 +248,29 @@ def song_whole():
             'arthel:vowel sounds': {'kind': 'record', 'title': 'Vowel Sounds', 'date': '2026', 'artist': '', 'grp': 'arthel:vowel sounds', 'formats': []}}
 
 
-def test_a_song_cast_is_what_the_track_level_credits_say():
+def test_the_store_alone_makes_no_songcast():
     import connectome_graph as cg
     pairs = [pair('Kyle Tuttle', 'Maddie Denton', 'track', 'arthel:vowel sounds', [(AUG, '', 'august')])]
     credits = [('Justin Holmes', 'guitar; vocals', 'arthel:vowel sounds', 'track', AUG),
                ('Maddie Denton', 'fiddle', 'arthel:vowel sounds', 'track', AUG),
-               ('Kyle Tuttle', '5-string banjo', 'arthel:vowel sounds', 'track', AUG),
-               ('Justin Holmes', 'guitar', 'arthel:vowel sounds', 'release', AUG)]
-    credits = [((alias_of := {'Justin Holmes': 'Justin Myles Holmes'}).get(c[0], c[0]),) + tuple(c[1:]) for c in credits]
+               ('Kyle Tuttle', '5-string banjo', 'arthel:vowel sounds', 'track', AUG)]
     g = cg.export(pairs, song_whole(), credits, lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {})
-    sc = g['songcast']['August']
-    cast = dict(sc['pickers'])
-    names = [p[0] for p in g['people']]
-    assert cast[names.index('Kyle Tuttle')] == '5-string banjo'            # the store's roles, as the source wrote them
-    assert cast[names.index('Justin Myles Holmes')] == 'guitar; vocals'    # the wiki's name; a release-scope credit stays out
-    assert [i for i, r in sc['pickers']][0] >= 0
+    assert g['songcast'] == {}                                             # a page's cut is the only source
 
 
-def test_a_track_the_pairs_know_but_no_credits_name_is_still_the_song():
+def test_the_pages_cuts_alone_are_songcast_and_carry_their_icons():
     import connectome_graph as cg
-    pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'lost-cut')])]
-    g = cg.export(pairs, song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {})
-    sc = g['songcast']['Lost Cut']
-    assert [p[1] for p in sc['pickers']] == ['', '']                       # on the song, roles unsaid
-    assert len(sc['on']) == 1
+    songcuts = {'August': [{'record': '4masks', 'number': '5', 'cid': '', 'cast': {'Kyle Tuttle': '5-string banjo', 'Justin Holmes': 'guitar; six-whistle'}}]}
+    g = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
+                  songcuts=songcuts, icons={'banjo', 'guitar', 'tin_whistle'})
+    cast = g['songcast']['August']['pickers']
+    names = [p[0] for p in g['people']]
+    by_name = {names[p]: (r, i) for p, r, i in cast}
+    assert by_name['Kyle Tuttle'] == ('5-string banjo', 'banjo')           # the qualifier goes; the icon is banjo's
+    assert by_name['Justin Holmes'] == ('guitar; six-whistle', 'guitar')   # the first role that has an icon
+    assert cg and __import__('connectome_graph').icon_for('six-whistle', {'tin_whistle'}) == 'tin_whistle'
+    g2 = cg.export([], song_whole(), [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {}, songcuts=songcuts)
+    assert [i for _, _, i in g2['songcast']['August']['pickers']] == ['', '']   # no icons known: none said
 
 
 def test_a_song_card_labels_the_cut_and_escapes_every_name():
@@ -317,7 +316,10 @@ def test_build_builds_a_song_card_for_a_song_page_and_names_it_like_the_wiki_doe
     wiki = FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
                     pages={'Justin Myles Holmes', 'Kyle Tuttle', 'Vowel Sounds', 'Song:August'},
                     musicians=['Kyle Tuttle'], inst={'Kyle Tuttle': 'banjo'},
-                    listens={'Song:August': 'QmSongCid'})
+                    listens={'Song:August': 'QmSongCid'},
+                    cuts={'Song:August': [{'record': 'Vowel Sounds', 'number': '', 'cid': '',
+                                           'cast': {'Justin Holmes': 'guitar; vocals', 'Kyle Tuttle': '5-string banjo',
+                                                    'Maddie Denton': 'fiddle'}}]})
     credits = [('Justin Holmes', 'guitar; vocals', 'arthel:vowel sounds', 'track', AUG),
                ('Kyle Tuttle', '5-string banjo', 'arthel:vowel sounds', 'track', AUG),
                ('Maddie Denton', 'fiddle', 'arthel:vowel sounds', 'track', AUG)]
@@ -362,7 +364,7 @@ def test_the_song_pages_cut_names_the_record_and_the_whole_cast(tmp_path):
     music = result['graph']['music']
     cut = music[sc['on'][0]]
     assert cut[0] == 'arthel:4masks'                                       # the page's record, not the store's grouping
-    cast = dict(sc['pickers'])
+    cast = {p[0]: p[1] for p in sc['pickers']}
     names = [p[0] for p in result['graph']['people']]
     assert cast[names.index('Justin Myles Holmes')] == 'guitar; vocals'    # the page's roles, in the store's shape
     assert cast[names.index('Lauren Luz')] == 'vocals'                     # whom the store's credits left out
@@ -377,15 +379,13 @@ def test_the_page_writes_roles_with_commas_the_store_with_semicolons():
     assert cc.studio_cuts_from('no cut here') == []
 
 
-def test_a_store_song_the_pages_dont_reach_keeps_the_stores_cast():
+def test_a_store_song_the_pages_dont_reach_has_no_songcast():
     import connectome_graph as cg
     pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'only-in-store')])]
     credits = [('A', 'fiddle', 'arthel:4masks', 'track', 'u'), ('B', 'banjo', 'arthel:4masks', 'track', 'u')]
-    g = cg.export(pairs, song_whole(), credits, lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {},
-                  songcuts={'August': [{'record': '4masks', 'number': '5', 'cid': '', 'cast': {'A': 'guitar'}}]})
-    assert dict(g['songcast']['Only In Store']['pickers'].copy()) is not None
-    assert 'August' in g['songcast'] and dict(g['songcast']['August']['pickers']) != {}
-    assert dict(g['songcast']['Only In Store']['pickers']) != {}
+    g = cg.export(pairs, song_whole(), credits, lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15', {})
+    assert 'Only In Store' not in g['songcast']                            # no page, no song node: the ties still know them
+    assert g['ties']                                                       # and the credits' work is the ties
 
 
 def test_a_cut_whose_record_the_store_doesnt_know_is_left_out():
