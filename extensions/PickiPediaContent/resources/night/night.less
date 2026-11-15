@@ -33,6 +33,11 @@
 	--night-del: #40201f;
 	--night-warn: #3d3215;
 
+	/* Codex (MediaWiki's newer form styles) reads its colours from variables of its own, with day's as the
+	   fallback: "var( --color-subtle, #54595d )" is the help text on Special:CreateAccount. If more of its
+	   forms come out dim, set its main ones here rather than chase each selector (re, 15 Nov 2026). */
+	--color-subtle: var( --night-muted );
+
 	/* ---- The page and MonoBook's frame ---- */
 
 	body {
