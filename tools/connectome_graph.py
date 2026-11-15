@@ -32,10 +32,13 @@ how:    3 the same track, 2 the same stage, 1 the same record (no source puts th
         on the same track). Only 3 and 2 are "played with".
 
 tier (PickiPedia:Release_Types), read from the source and never guessed:
-        2 Permanent Release: a Live Music Archive tape, or one of cryptograss's
-          Creative Commons records
+        2 Permanent Release: a Live Music Archive tape (archive.org's etree collection,
+          whose policy keeps a tape free to trade), or one of cryptograss's Creative
+          Commons records
         1 Full Release: the source lists it on a carrier with no DRM (a CD that isn't
-          marked copy-protected, vinyl, tape)
+          marked copy-protected, vinyl, tape), or a tape archive.org holds outside etree
+          (taperssection, audio_music, opensource_audio): free to download, but no
+          policy we've read says it stays so (Justin, #connectome, 15 Nov 2026)
         0 not known to be either: counted, and not named up front
 
 weight: 1 / (how many were there - 1), Newman's collaboration weight (Phys. Rev. E 64,
@@ -51,7 +54,8 @@ from collections import defaultdict
 
 
 
-PERMANENT = ('lma:', 'arthel:')
+PERMANENT = ('arthel:',)
+ETREE = 'archive.org collection: etree'
 HOW = {'track': 3, 'show': 2, 'record': 1}
 ON_STAGE = {'song', 'song?', 'show', 'stage', 'track', 'release'}   # a credit that puts the picker in the music
 
@@ -69,6 +73,8 @@ def tier(target_id, formats=()):
     """2 Permanent, 1 Full, 0 not known: see the module's notes."""
     if target_id.startswith(PERMANENT):
         return 2
+    if target_id.startswith('lma:'):
+        return 2 if ETREE in (formats or ()) else 1
     for f in formats or ():
         name, _, said = f.partition(' (')
         name = name.strip().lower()

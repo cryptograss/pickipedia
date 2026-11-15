@@ -241,3 +241,35 @@ def test_narrowed_asks_only_about_names_in_the_item():
         L.mentions = real
     assert set(asked) == {"Kyle Tuttle"}                   # not 10 names on 200-odd strings
     assert len(asked) < 300
+
+
+@pytest.mark.parametrize("line, name", [
+    ("28: E.M.D.#~ (The David Grisman Quintet cover)", "David Grisman"),   # billystrings2025-06-14
+    ("[3] David Grisman cover", "David Grisman"),                          # smoothkentucky2009-05-30
+    ("14. I’m Yours (Jason Mraz cover)", "Jason Mraz"),                    # josie-sanken-2023-05-05
+    ("4 Rich Gal (Jeff White Country Version)", "Jeff White"),             # ymsb2001-10-14
+    ("Dawg After Dark (David Grisman Quintet)", "David Grisman"),          # SGP2025-02-16
+])
+def test_a_cover_is_not_a_sit_in(line, name):
+    # Justin, #connectome, 15 Nov 2026: "obviously a cover is not a sit-in"
+    assert L.classify([line], 0, name)[1] == "none"
+
+
+@pytest.mark.parametrize("line, name, scope", [
+    ("* Let's Go Hunting (Tim O'Brien sings lead on a Tim-written song)", "Tim O'Brien", "song?"),   # donna2011-08-12
+    ("13. Nashville Cats (Lovin' Spoonful cover) w/ Kyle Tuttle", "Kyle Tuttle", "song"),
+    ("w/ Kyle Tuttle on the Nashville Cats cover", "Kyle Tuttle", "show"),                          # the cover is someone else's
+    ("Kyle Tuttle (Kyle Tuttle Band, Jeff Austin Band, banjo, vocals)", "Kyle Tuttle", "song?"),     # jab2021-05-15
+    ("Sing Me Back Home (w Jim Lauderdale)", "Jim Lauderdale", "song?"),                            # SGP2024-03-28
+    ("8.  Cody Kilby tune", "Cody Kilby", "song?"),                       # travelinmccourys2022-08-06: his own, and he plays it
+    ("3.  unknown3 (Alison Brown song)", "Alison Brown", "song?"),         # cc2019-06-19
+])
+def test_a_player_beside_the_word_cover_still_plays(line, name, scope):
+    assert L.classify([line], 0, name)[1] == scope
+
+
+def test_a_cover_in_a_file_title_is_not_a_sit_in():
+    item = {"metadata": {"identifier": "billystrings2025-06-14", "creator": "Billy Strings"},
+            "files": [{"name": "t28.flac", "title": "E.M.D.#~ (The David Grisman Quintet cover)"}]}
+    assert {r[2] for r in L.read_item(item, ["David Grisman"])["David Grisman"]} == {"none"}
+

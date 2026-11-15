@@ -11,9 +11,18 @@ def pair(a, b, kind, target, tracks=()):
     return {'a': a, 'b': b, 'kind': kind, 'target': target, 'tracks': [list(t) for t in tracks]}
 
 
-def test_a_tape_or_a_cryptograss_record_is_permanent():
-    assert cg.tier('lma:SGP2025-07-05') == 2
+def test_an_etree_tape_or_a_cryptograss_record_is_permanent():
+    assert cg.tier('lma:SGP2025-07-05', ['archive.org collection: etree']) == 2
+    assert cg.tier('lma:x', ['archive.org collection: stringcheeseincident', 'archive.org collection: etree']) == 2
     assert cg.tier('arthel:4masks', []) == 2
+
+
+def test_a_tape_outside_etree_is_full():
+    # Justin, #connectome, 15 Nov 2026: Frank Evans's and Luke Munday's tapes, full but not permanent
+    assert cg.tier('lma:slocanramblers-2025-06-22', ['archive.org collection: taperssection']) == 1
+    assert cg.tier('lma:ENG2018-03-05.kel.MP3', ['archive.org collection: opensource_audio']) == 1
+    assert cg.tier('lma:x', []) == 1                                         # no collection said: not etree
+    assert cg.tier('lma:x') == 1
 
 
 def test_a_record_is_full_only_when_its_source_lists_a_carrier_with_no_drm():
@@ -55,9 +64,9 @@ def test_a_show_counts_once_however_many_songs_they_share_and_a_record_by_its_tr
 TARGETS = {
     'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []},
     'lma:tape1': {'kind': 'show', 'title': 'SGP Live at Grassfire on 2025-07-05', 'date': '2025-07-05',
-                  'artist': 'Sam Grisman Project', 'grp': 'lma-show:SGP|2025-07-05', 'formats': []},
+                  'artist': 'Sam Grisman Project', 'grp': 'lma-show:SGP|2025-07-05', 'formats': ['archive.org collection: etree']},
     'lma:tape2': {'kind': 'show', 'title': 'SGP Live at Grassfire on 2025-07-05 (aud)', 'date': '2025-07-05',
-                  'artist': 'Sam Grisman Project', 'grp': 'lma-show:SGP|2025-07-05', 'formats': []},
+                  'artist': 'Sam Grisman Project', 'grp': 'lma-show:SGP|2025-07-05', 'formats': ['archive.org collection: etree']},
     'discogs:7': {'kind': 'record', 'title': 'Safe, Sensible And Sane', 'date': '2025', 'artist': 'Alison Brown',
                   'grp': 'discogs-master:9', 'formats': ['CD (Album)']},
     'discogs:8': {'kind': 'record', 'title': 'Streamed Only', 'date': '2024', 'artist': 'X', 'grp': 'discogs:8',

@@ -16,7 +16,8 @@ The atom is a credit:
   mbid        MusicBrainz's id for the person, when the source gives one
   roles       instruments or parts, as written
   target      {"kind": "record" | "show", "id", "title", "date"}; a record also carries
-              "formats", what the source says it came out on ("CD (Album)", "Vinyl (LP)"),
+              "formats", what the source says it came out on ("CD (Album)", "Vinyl (LP)"; for a tape,
+              "archive.org collection: etree"),
               as written: the release tier is read from this, and nothing is guessed
   scope       how far the credit reaches: track | release (records);
               song | song? | show | stage | bill | festival | none (LMA shows)
@@ -137,8 +138,13 @@ def from_lma(item, names):
     ident = m.get("identifier", "")
     creator = m.get("creator")
     creator = creator[0] if isinstance(creator, list) else (creator or "")
+    collections = m.get("collection")
+    collections = collections if isinstance(collections, list) else [collections] if collections else []
+    # The tape's collections, as archive.org lists them: the release tier is read from these (etree's
+    # policy makes a tape a Permanent Release; connectome_graph.tier).
     target = {"kind": "show", "id": f"lma:{ident}", "title": m.get("title", ""), "date": m.get("date", ""),
-              "artist": creator, "group": f"lma-show:{creator}|{m.get('date', '')}"}
+              "artist": creator, "group": f"lma-show:{creator}|{m.get('date', '')}",
+              "formats": [f"archive.org collection: {c}" for c in collections]}
     rows = []
     for name, readings in lma_lineup.read_item(item, names).items():
         for where, shape, scope, detail in readings:

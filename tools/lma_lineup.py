@@ -86,6 +86,29 @@ def mentions(name, text, known=()):
     return False
 
 
+# Whose song it is, not who played it (Justin, #connectome, 15 Nov 2026: "obviously a cover is not a
+# sit-in"). A cover, a version, or an act as a whole: "(The David Grisman Quintet cover)", "[3] David
+# Grisman cover", "(Jeff White Country Version)", "Dawg After Dark (David Grisman Quintet)": not on stage.
+# "Cody Kilby tune" is his own tune, and on a Travelin' McCourys tape he is playing it: a writer who may
+# be on the stage too, as "Song (Name)" already is. The name and the word that says so sit together:
+# "Tim O'Brien sings lead on a Tim-written song" is Tim O'Brien singing, and "(Lovin' Spoonful cover)
+# w/ Kyle Tuttle" is Kyle Tuttle playing.
+ACT = r"(?:quintet|quartet|trio|band|project|orchestra|ensemble)"
+
+
+def credited_as_source(name, text):
+    """None, or how text names this person as the song's own artist rather than a player:
+    "cover" (a cover, their version, their act), off the stage; "writer" (their tune, their song), maybe on it."""
+    n = re.escape(name)
+    lead = rf"(?i)(?<![\w])(?:the\s+)?{n}(?:['’]s)?(?:\s+{ACT})?(?:['’]s)?\s+"
+    if re.search(lead + r"(?:cover|(?:[\w-]+\s+)?version)\b", text) \
+            or re.search(rf"(?i)\(\s*(?:the\s+)?{n}\s+{ACT}\s*\)", text):
+        return "cover"
+    if re.search(lead + r"(?:song|tune)\b", text):
+        return "writer"
+    return None
+
+
 def lines_of(value):
     s = value if isinstance(value, str) else "\n".join(value or [])
     s = re.sub(r"(?i)<br\s*/?>|</p>|</div>|<p[^>]*>|<div[^>]*>|</li>|<li[^>]*>|</tr>", "\n", s)
@@ -132,6 +155,11 @@ def classify(lines, i, name="", creator=""):
         return ("same bill", "bill", l)
     if re.search(r"(?i)\b(written|composed|penned)\s+by\b|original artist|\bcover(?:ed)? of\b", l):
         return ("songwriter", "none", l)
+    said = name and credited_as_source(name, l)
+    if said == "cover":
+        return ("the song's own artist (a cover, their version, their act)", "none", l)
+    if said == "writer":
+        return ("the song's writer (on the stage too?)", "song?", l)
     if re.search(r"(?i)\b(check out|online at|buy one of|support (?:the|this) (?:band|artist)|free .* concerts|available for download)\b", l):
         return ("promotion", "none", l)
     if re.search(r"(?i)\b(filler|bonus)\b.*\bfrom\b|\(on bt\.etree\.org\)|^barn\d+", l):
@@ -256,6 +284,12 @@ def read_item(j, names):
     for f, key, v in files:
         for n in worth(v):
             if mentions(n, v, names):
+                said = credited_as_source(n, v)
+                if said:
+                    out.setdefault(n, []).append(("files", f"file {key}: the song's " +
+                                                  ("own artist (a cover)" if said == "cover" else "writer"),
+                                                  "none" if said == "cover" else "song?", v))
+                    continue
                 shape = ("file comment", "song", f.get("title") or f["name"]) if key == "comment" else \
                         ("file " + key, "song" if " ft. " in v or " feat" in v.lower() else "show", v)
                 out.setdefault(n, []).append(("files", *shape))
