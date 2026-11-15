@@ -281,21 +281,13 @@
 	/* A primary button's words are its own white, and a button that can't be pressed keeps its muted ones. */
 	.oo-ui-buttonElement-framed.oo-ui-flaggedElement-primary .oo-ui-labelElement-label,
 	.oo-ui-buttonElement-framed.oo-ui-widget-disabled .oo-ui-labelElement-label { color: inherit; }
-	/* The wiki's mark (assets/logo.png, 135px square) is drawn on white that is only partly taken out, with
-	   its name in black: on the dark it is a grey haze and the name is lost (Justin, 15 Nov 2026). So by
-	   night it sits on a card of day's paper, where it looks as it does by day. The card is under the
-	   picture, where MonoBook puts it: 35% across its link, and in the middle of its 155px. */
-	#p-logo::before {
-		content: "";
-		position: absolute;
-		z-index: -1;
-		top: 10px;
-		left: 7px;
-		width: 135px;
-		height: 135px;
-		border-radius: 22px;
-		background: #f4ecdf;
-		box-shadow: 0 0 10px 2px rgba( 244, 236, 223, 0.45 );
+	/* The wiki's mark by day (assets/logo.png) is drawn on white that is only partly taken out, with its
+	   name in black: on the dark it is a grey haze and the name is lost (Justin, 15 Nov 2026). By night
+	   it is assets/logo-night.png, made from the art on a clear ground (File:Pickipedia-quarter-transparent.png
+	   on the wiki): the name in night's ink, the floor's haze thinned. 270px, drawn at 135. */
+	#p-logo a.mw-wiki-logo {
+		background-image: url( /assets/logo-night.png ) !important;
+		background-size: 135px 135px;
 	}
 
 	/* A Show page is drawn by a gadget from a handful of colours of its own, set on <body>
