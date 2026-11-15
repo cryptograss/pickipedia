@@ -67,5 +67,8 @@
 	"broadside-desc": "The skin a post is read in",
 	"apihelp-pagecard-summary": "A page in brief: its opening words and picture, for the card shown on a link to it.",
 	"apihelp-pagecard-param-titles": "The pages to describe.",
-	"apihelp-pagecard-example-1": "The front page, in brief"
+	"apihelp-pagecard-example-1": "The front page, in brief",
+	"pickipediacontent-night-switch": "Read the wiki by day or by night",
+	"pickipediacontent-night-night": "☾ Night",
+	"pickipediacontent-night-day": "☼ Day"
 }

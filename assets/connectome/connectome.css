@@ -8,7 +8,7 @@
  * wiki's own green for it, as on a song page's "On the record" row).
  */
 :root {
-	color-scheme: light;
+	color-scheme: light dark;
 	--surface: #fcfcfb;
 	--plane: #f9f9f7;
 	--ink: #0b0b0b;
@@ -23,7 +23,37 @@
 	--play-on: #3c6749;
 	--ui: system-ui, -apple-system, "Segoe UI", sans-serif;
 	--name: Georgia, "Times New Roman", serif;
+	--hover: #f0efec;
+	--halo: rgba( 11, 11, 11, 0.07 );
+	--lift: rgba( 11, 11, 11, 0.14 );
 }
+
+/*
+ * By night: the reader's system, unless they chose on the wiki (the cookie "pickipedia-mode", which
+ * index.html reads into pp-dark or pp-light on <html> before anything paints; the wiki's own pages and
+ * Rabbithole read the same one). The night's paper and ink are the wiki's
+ * (extensions/PickiPediaContent/resources/night/night.less). Gold stays gold: it is the one mark that
+ * means something, and it is as bright on dark paper as on light. A browser without light-dark() gets
+ * the day, written out above.
+ */
+@supports ( color: light-dark( #000, #fff ) ) {
+	:root {
+		--surface: light-dark( #fcfcfb, #211c22 );
+		--plane: light-dark( #f9f9f7, #18151a );
+		--ink: light-dark( #0b0b0b, #ece3d8 );
+		--ink2: light-dark( #52514e, #cfc4b8 );
+		--muted: light-dark( #898781, #a2978c );
+		--hair: light-dark( #e1e0d9, #3a323b );
+		--axis: light-dark( #c3c2b7, #5a4f5c );
+		--gold-wash: light-dark( #fdf1cf, #4a3a12 );
+		--link: light-dark( #0645ad, #8fb1f2 );
+		--hover: light-dark( #f0efec, #2f2832 );
+		--halo: light-dark( rgba( 11, 11, 11, 0.07 ), rgba( 236, 227, 216, 0.12 ) );
+		--lift: light-dark( rgba( 11, 11, 11, 0.14 ), rgba( 0, 0, 0, 0.5 ) );
+	}
+}
+:root.pp-dark { color-scheme: dark; }
+:root.pp-light { color-scheme: light; }
 
 * { box-sizing: border-box; }
 
@@ -338,7 +368,7 @@ main {
 	border: 1px solid var( --axis );
 	border-radius: 6px;
 	background: var( --surface );
-	box-shadow: 0 3px 12px rgba( 11, 11, 11, 0.14 );
+	box-shadow: 0 3px 12px var( --lift );
 	color: var( --ink2 );
 	font-size: 12.5px;
 	pointer-events: none;
@@ -418,7 +448,7 @@ main {
 
 #panel li + li { border-top: 1px solid var( --hair ); }
 #panel li.go { cursor: pointer; }
-#panel li.go:hover, #panel li.hot { background: #f0efec; }
+#panel li.go:hover, #panel li.hot { background: var( --hover ); }
 #panel li .mark { flex: none; width: 18px; margin-top: 2px; }
 #panel li .body { flex: 1 1 auto; min-width: 0; }
 #panel li .t { font-weight: 600; }
@@ -462,7 +492,7 @@ main {
 
 .acts a.page { border-color: var( --link ); color: var( --link ); }
 .acts a.page.new { border-color: var( --axis ); color: var( --ink ); }
-.acts a:hover, .acts button:hover { background: #f0efec; }
+.acts a:hover, .acts button:hover { background: var( --hover ); }
 
 #panel .foot {
 	margin-top: 18px;
@@ -474,7 +504,7 @@ main {
 #panel td { padding: 4px 6px; border-top: 1px solid var( --hair ); }
 #panel td.num { width: 3em; font-weight: 700; text-align: center; }
 #panel tr.go { cursor: pointer; }
-#panel tr.go:hover { background: #f0efec; }
+#panel tr.go:hover { background: var( --hover ); }
 
 /* ---- the way into Rabbithole: a rabbit and a play mark, green, beside a track's name ---- */
 #g a.play rect {
@@ -527,7 +557,7 @@ a.play:focus {
 	border: 1px solid var( --axis );
 	border-radius: 12px;
 	background: var( --surface );
-	box-shadow: 0 6px 24px rgba( 11, 11, 11, 0.22 );
+	box-shadow: 0 6px 24px var( --lift );
 	color: var( --ink2 );
 	font-size: 14px;
 }
@@ -607,7 +637,7 @@ a.play:focus {
 
 /* The mark the sheet is about. */
 .held .halo {
-	fill: rgba( 11, 11, 11, 0.07 );
+	fill: var( --halo );
 	stroke: var( --ink );
 	stroke-width: 1.5;
 }
