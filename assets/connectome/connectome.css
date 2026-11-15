@@ -273,6 +273,22 @@ main {
 .ln.fine.hot .thread,
 .ln.fine.hot .core { stroke-width: 2.6px; }
 
+/* A picker's own picture in their circle: the ring is drawn again over its edge. */
+.pk .ring.rim { fill: none; }
+.pk image.face { pointer-events: none; }
+
+/* What a line is, said only while its far end is pointed at or touched. */
+.pill.shy { pointer-events: none; }
+.pill.shy.hot { opacity: 1; }
+
+/* The one in the middle is named over whatever runs under the name: more paper round the letters. */
+.pk.subject text,
+.pk.song text { stroke-width: 6px; }
+.pk.song text { font-size: 17px; }
+
+/* What kind of thing a headline names, when it isn't a picker. */
+#say .kind svg { vertical-align: -2px; margin-right: 6px; }
+
 /* A picker a step further out: a small dot, and a name in lighter type than the company's. */
 .pk.far text { font-weight: 400; font-size: 13px; }
 
@@ -560,6 +576,7 @@ a.play:focus {
 	box-shadow: 0 6px 24px var( --lift );
 	color: var( --ink2 );
 	font-size: 14px;
+	overflow: auto;                 /* never taller than the room beside what it's about (openSheet) */
 }
 
 #sheet[ hidden ] { display: none; }

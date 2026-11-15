@@ -55,6 +55,8 @@ from connectome_graph import icon_for
 
 FEATURED_PAGE = 'Cryptograss:Connectome/Featured'
 TEMPLATE = 'Template:MusicianInfo'
+# The picture a musician's page gives for them: {{MusicianInfo|image=Some file.jpg|...}}, with or without "File:".
+PORTRAIT = re.compile(r'\{\{\s*MusicianInfo\b[^{}]*?\|\s*image\s*=\s*(?:File:|Image:)?\s*([^|{}\[\]<>\n]+)', re.S | re.I)
 VIEWER = '/assets/connectome/'          # the big graph, served beside the wiki
 ICON = '/index.php?title=Special:Redirect/file/Instrument-icon-{}.png'
 UA = 'PickiPedia-connectome-card/1.0'
@@ -143,6 +145,21 @@ class Wiki:
             if 'continue' not in q:
                 return out
             cont = {'eicontinue': q['continue']['eicontinue']}
+
+    def portraits(self, titles):
+        """title -> the file its {{MusicianInfo}} gives as image=, for the pages that give one. The page says which
+        picture is the picker's; nothing here chooses one."""
+        out = {}
+        titles = sorted(set(titles))
+        for i in range(0, len(titles), 50):
+            q = self.api(action='query', titles='|'.join(titles[i:i + 50]), prop='revisions', rvprop='content',
+                         rvslots='main', formatversion=2)['query']
+            for page in q.get('pages', []):
+                revs = page.get('revisions') or []
+                m = PORTRAIT.search(revs[0]['slots']['main'].get('content', '') if revs else '')
+                if m and m.group(1).strip():
+                    out[page['title']] = m.group(1).strip()
+        return out
 
     def instruments(self):
         q = self.api(action='ask', query='[[Primary instrument::+]]|?Primary instrument|limit=1000')
@@ -546,7 +563,10 @@ def card(center, store, featured, has_page, inst):
     o(f'<svg xmlns="http://www.w3.org/2000/svg" class="cc" viewBox="{x0:.0f} {y0:.0f} {x1 - x0:.0f} {y1 - y0:.0f}" '
       f'width="100%" font-family="Georgia, serif" font-size="{FS:g}" role="img" '
       f'aria-label="{attr("Who " + center + " has played with")}">')
-    o(f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/>')
+    # The paper itself is a way in: a click that lands on nothing else opens the big graph on this picker
+    # (Justin, #connectome, 15 Nov 2026: "too easy to click ... and not hit anything").
+    o(f'<a class="cc-bg" href="{attr(viewer(p=center))}" aria-label="{attr("Explore " + center + " in the connectome")}">'
+      f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/></a>')
     for n in placed:                                 # the crowd: thin spokes
         o(strokes(C, pos[n], nb[n]['tier'], False, False))
     for a, b, ev in fedges:
@@ -701,7 +721,9 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
     o(f'<svg xmlns="http://www.w3.org/2000/svg" class="cc" viewBox="{x0:.0f} {y0:.0f} {x1 - x0:.0f} {y1 - y0:.0f}" '
       f'width="100%" font-family="Georgia, serif" font-size="{FS:g}" role="img" '
       f'aria-label="{attr("Who played " + title)}">')
-    o(f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/>')
+    whole = viewer(cut=cut["key"]) if cut.get("key") else viewer(s=title)
+    o(f'<a class="cc-bg" href="{attr(whole)}" aria-label="{attr("Explore " + title + " in the connectome")}">'    # the paper is a way in, too
+      f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/></a>')
     for _, _, html, _, _ in edges:
         o(html)
     for n in ring:
@@ -801,6 +823,7 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         return n in exists
 
     pages = [only] if only and not only.startswith('Song:') else ([] if only else wiki.musician_pages())
+    pics = wiki.portraits(pages) if pages else {}        # each musician page's own picture, for the big graph
     cards, skipped = {}, []
     for title in pages:
         html = card(title, store, featured, has_page, inst) if title in store.by else None
@@ -849,7 +872,8 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         plays = {song_page[t]: cid for t, cid in heard.items() if t in song_page}
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
-            has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons)
+            has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons,
+            pics=pics)
         # Song cards: one graph per cut, the page's file carrying each of its cuts in the page's own order
         # (Justin, #connectome, 15 Nov 2026, 01:58Z: each cut displays its own graph).
         songcast = graph.get('songcast') or {}

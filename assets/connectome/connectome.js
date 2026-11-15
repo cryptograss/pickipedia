@@ -40,6 +40,7 @@ import * as K from './connectome-core.js';
 const NS = 'http://www.w3.org/2000/svg';
 const HOME = /(^|\.)pickipedia\.xyz$/.test( location.hostname ) ? '' : 'https://pickipedia.xyz';
 const ICON = HOME + '/index.php?title=Special:Redirect/file/Instrument-icon-';
+const FACE = HOME + '/index.php?title=Special:Redirect/file/';       // a picker's own picture, by its file's name on the wiki
 const FONT = { named: '700 14px Georgia, "Times New Roman", serif', subject: '700 17px Georgia, "Times New Roman", serif',
 	far: '400 13px Georgia, "Times New Roman", serif',
 	pill: '600 12.5px system-ui, -apple-system, "Segoe UI", sans-serif', tag: '700 12.5px Georgia, "Times New Roman", serif',
@@ -177,10 +178,11 @@ function address( v ) {
 		if ( ( v.keep || [] ).length ) {
 			q.keep = v.keep.map( ( x ) => first( x ) ).join( ',' );
 		}
-		if ( v.by !== undefined && v.by !== null ) {
-			q.by = G.music[ typeof v.by === 'object' ? v.by.m : v.by ].key;
-			if ( typeof v.by === 'object' ) {
-				q.on = v.by.song;
+		const by = v.by !== undefined && v.by !== null ? M( v.by ) : null;   // the piece come by: a show, a record, or one track of a record
+		if ( by ) {
+			q.by = G.music[ by.m ].key;                                   // (a track's number is not a record's: read as one, this threw, and the address stayed behind)
+			if ( by.song ) {
+				q.on = by.song;
 			}
 		}
 		if ( v.via !== undefined && v.via !== null ) {
@@ -334,15 +336,15 @@ function pillsFor( tie, room, most, prefer ) {
 	return { shown, more: tie.ev.length - shown.length, used: Math.max( 0, used - 8 ) };
 }
 
-function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer ) {
+function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more ) {
 	const room = Math.abs( x2 - x1 );
 	const fit = pillsFor( tie, room - ( most > 1 ? 52 : 0 ), most, prefer );
 	const moreW = fit.more > 0 && most > 1 ? 16 + wide( '+' + fit.more + ' more', FONT.pill ) : 0;
 	let x = ( x1 + x2 ) / 2 - ( fit.used + ( moreW ? moreW + 8 : 0 ) ) / 2;
 	for ( const p of fit.shown ) {
 		const piece = K.pieceFor( G, p.e );
-		sc.pills.set( 'm' + lineKey( u, v ) + '.' + p.e.m, { stands: 'piece', piece, is: 'm' + piece, x: x + p.w / 2, y, w: p.w, label: p.label,
-			glyph: p.glyph, tier: p.tier, e: p.e, u, v, o, delay, play: p.play, song: p.song } );
+		sc.pills.set( 'm' + lineKey( u, v ) + '.' + p.e.m, Object.assign( { stands: 'piece', piece, is: 'm' + piece, x: x + p.w / 2, y, w: p.w, label: p.label,
+			glyph: p.glyph, tier: p.tier, e: p.e, u, v, o, delay, play: p.play, song: p.song }, more ) );
 		x += p.w + 8;
 	}
 	if ( moreW ) {
@@ -535,6 +537,8 @@ function further( v, lay, mine, seats, seatOf, web, W, H ) {
 	const clear = ( l, of, pad ) => K.clearOf( l, of, pad ).length === l.length;
 	const on = K.beyond( G, v.a, mine.map( ( c ) => c.id ), 2, v.keep || [] ), fars = [];
 	disc( lay.C, 26 );
+	const mid = wide( cut( first( v.a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
+	discs.push( { x1: lay.C.x - mid, y1: lay.C.y + 28, x2: lay.C.x + mid, y2: lay.C.y + 50 } );   // the middle's own name, under it
 	mine.forEach( ( c, i ) => {
 		const from = seatOf.get( c.id );
 		line( lay.C, from );
@@ -600,7 +604,8 @@ function egoScene( v ) {
 	} ), 10 );
 	const shown = n + spots.length;
 	const beads = K.seat( spots, ring.slice( n, shown ).map( ( c ) => wanted( 'p' + c.id, pan ) ) );
-	addNode( sc, a, lay.C, 'subject', { rabbit: true, bare: true } );
+	// The one in the middle is named there too, as on the cards, though the headline says who it is (Justin, #connectome, 15 Nov 2026).
+	addNode( sc, a, lay.C, 'subject', { rabbit: true, label: cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ) } );
 	ring.slice( 0, shown ).forEach( ( c, i ) => {
 		const named = i < n;
 		const pos = named ? lay.named[ seats[ i ] ] : spots[ beads[ i - n ] ];
@@ -631,6 +636,51 @@ function egoScene( v ) {
 			placePills( sc, a, homeId, { ev: [ { m: rec, how: K.TRACK, songs: [ home.song ] } ] },
 				at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, undefined );
 		}
+	}
+	// A line says what it is wherever there's room for it to (Justin, #connectome, 15 Nov 2026: "almost always
+	// label lines"): the first thing the two share, by what comes first (K.standing). Where there isn't room, and
+	// on the lines to those further off, it's said when the far end is pointed at or touched.
+	const said = new Set( [ ...sc.pills.values() ].map( ( p ) => lineKey( p.u, p.v ) ) );
+	const taken = [ ...sc.pills.values() ].map( ( p ) => ( { x1: p.x - p.w / 2, y1: p.y - 12, x2: p.x + p.w / 2, y2: p.y + 12 } ) )
+		.concat( [ { x1: lay.C.x - 30, y1: lay.C.y - 30, x2: lay.C.x + 30, y2: lay.C.y + 30 } ],
+			mine.map( ( c ) => seatOf.get( c.id ) ).map( ( p ) => ( { x1: p.x - 17, y1: p.y - 17, x2: p.x + 17, y2: p.y + 17 } ) ) );
+	const midName = wide( cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
+	taken.push( { x1: lay.C.x - midName, y1: lay.C.y + 28, x2: lay.C.x + midName, y2: lay.C.y + 50 } );
+	const onLine = ( from, to, f, room ) => ( { x1: from.x + ( to.x - from.x ) * f - room / 2, x2: from.x + ( to.x - from.x ) * f + room / 2, y: from.y + ( to.y - from.y ) * f } );
+	const whisper = ( u, id, tie, from, to, f ) => {                // said only when the far end is pointed at
+		const at = onLine( from, to, f, Math.min( 200, W * 0.32 ) );
+		placePills( sc, u, id, tie, at.x1, at.x2, at.y, 1, 0, 0, undefined, { shy: true, owner: 'p' + id, is: undefined } );
+	};
+	// Of the things two share that come first alike, a line says one no other line here has said yet: eight
+	// lines that all say "August" say less than eight that say what else there is.
+	const heard = new Set( [ ...sc.pills.values() ].map( ( p ) => p.piece ) );
+	const fresh = ( tie ) => {
+		const top = tie.ev.length ? K.standing( G.music[ tie.ev[ 0 ].m ], tie.ev[ 0 ].how ) : 0;
+		const e = tie.ev.find( ( x ) => K.standing( G.music[ x.m ], x.how ) === top && !heard.has( K.pieceFor( G, x ) ) );
+		return e ? K.pieceFor( G, e ) : undefined;
+	};
+	ring.slice( 0, shown ).forEach( ( c, i ) => {
+		const pos = i < n ? seatOf.get( c.id ) : spots[ beads[ i - n ] ], len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y );
+		if ( said.has( lineKey( a, c.id ) ) ) {
+			return;
+		}
+		// A label lies across its line, not along it: it may be wider than the line is long, if nothing else is there.
+		const room = Math.min( out ? 150 : 190, W * 0.3 ), say = fresh( c.tie ), fit = pillsFor( c.tie, room, 1, say ), w = fit.shown.length ? fit.shown[ 0 ].w : 0;
+		const f = i < n && w && W >= 560 && len >= 120 ? [ 0.56, 0.47, 0.65, 0.4, 0.72, 0.34 ].find( ( t ) => {
+			const x = lay.C.x + ( pos.x - lay.C.x ) * t, y = lay.C.y + ( pos.y - lay.C.y ) * t;
+			return !taken.some( ( b ) => x - w / 2 < b.x2 + 2 && b.x1 < x + w / 2 + 2 && y - 12 < b.y2 + 2 && b.y1 < y + 12 + 2 );
+		} ) : undefined;
+		if ( f === undefined ) {
+			whisper( a, c.id, c.tie, lay.C, pos, 0.58 );
+			return;
+		}
+		const at = onLine( lay.C, pos, f, room );
+		placePills( sc, a, c.id, c.tie, at.x1, at.x2, at.y, 1, 1, 200 + i * 40, say );
+		heard.add( K.pieceFor( G, fit.shown[ 0 ].e ) );
+		taken.push( { x1: ( at.x1 + at.x2 ) / 2 - w / 2, y1: at.y - 12, x2: ( at.x1 + at.x2 ) / 2 + w / 2, y2: at.y + 12 } );
+	} );
+	for ( const f of out ? out.fars : [] ) {
+		whisper( f.by, f.id, f.tie, seatOf.get( f.by ), f.at, 0.5 );
 	}
 	// Between two the reader came by, a line of the web is the way they came, and stays as plain as it was.
 	for ( const t of web ) {
@@ -693,7 +743,7 @@ function pieceScene( v ) {
 	} ), 10 );
 	const all = L.named.concat( L.rest ).slice( 0, n + spots.length );
 	const beads = K.seat( spots, all.slice( n ).map( ( x ) => wanted( 'm' + x.id, pan ) ) );
-	addPiece( sc, v.m, lay.C, 'subject', { bare: true } );
+	addPiece( sc, v.m, lay.C, 'subject', Object.assign( { below: true }, pieceLabel( v.m, { x: lay.C.x, y: lay.C.y }, W ) ) );
 	all.forEach( ( x, i ) => {
 		const named = i < n;
 		const pos = named ? lay.named[ seats[ i ] ] : spots[ beads[ i - n ] ];
@@ -732,7 +782,7 @@ function pieceScene( v ) {
 	sc.leads = L;
 	sc.tagged = [ ...new Set( L.named.flatMap( ( x ) => x.via ) ) ];
 	const kind = me.kind === 'track' ? 'A track on ' + nm.sub : ( me.kind === 'show' ? 'A show' : 'A record' ) + ( nm.sub ? ' · ' + nm.sub : '' );
-	sc.head = [ nm.name, playButton( G.music[ me.m ], me.song ) ];
+	sc.head = [ h( 'span', { class: 'kind' }, glyphBox( nm.glyph ) ), nm.name + ( me.kind === 'show' && nm.sub ? ' · ' + nm.sub : '' ), playButton( G.music[ me.m ], me.song ) ];
 	sc.sub = [ kind, ' · ', h( 'b', null, K.plural( L.cast.length, 'picker' ) ), L.named.length ?
 		' on it: each line is one of them, and where else they lead' : ' on it, and none of them on anything else the sources here know' ];
 	return sc;
@@ -921,9 +971,9 @@ const draw = {
 			gl.setAttribute( 'transform', 'scale(1.9)' );
 			g.appendChild( gl );
 			const to = d.cut ? '/rabbithole/?track=' + encodeURIComponent( d.cut ) : '';
-			// Bare, as a picker's subject is: the headline says the song, and the web runs where it runs.
+			// Named, as every middle is (Justin, #connectome, 15 Nov 2026), over whatever of the web runs under the name.
 			g.appendChild( s( 'a', { href: G.songs[ d.title ] ? pageUrl( 'Song:' + d.title ) : address( { s: d.title, cut: d.cut } ),
-				'aria-label': 'About ' + d.title }, s( 'text', { y: 44, 'text-anchor': 'middle' }, '' ) ) );
+				'aria-label': 'About ' + d.title }, s( 'text', { y: 46, 'text-anchor': 'middle' }, K.clip( d.title, 30 ) ) ) );
 			if ( to ) {
 				g.appendChild( playChip( 28, 0, to, d.title ) );
 			}
@@ -943,10 +993,24 @@ const draw = {
 			g.appendChild( s( 'circle', { class: 'dot' + ( p.page ? '' : ' hollow' ), r: d.r } ) );
 			return;
 		}
-		const marked = d.kind !== 'far' && ( d.rabbit || inst );	// a ring with something in it, or a plain dot
-		const R = d.kind === 'subject' ? ( marked ? 22 : 13 ) : ( d.kind === 'far' ? 5.5 : ( marked ? 14 : 9 ) );
+		// Their own picture, where their page gives one, in place of the rabbit or the instrument (Justin,
+		// #connectome, 15 Nov 2026); the note still says what they play. A picture that won't load gives way
+		// to what would have been there.
+		const face = d.kind !== 'far' && p.img ? p.img : '';
+		const marked = d.kind !== 'far' && ( d.rabbit || inst || face );	// a ring with something in it, or a plain dot
+		const R = d.kind === 'subject' ? ( face ? 26 : ( marked ? 22 : 13 ) ) : ( d.kind === 'far' ? 5.5 : ( face ? 16 : ( marked ? 14 : 9 ) ) );
 		g.appendChild( s( 'circle', { class: 'halo', r: R + 8 } ) );
-		if ( d.rabbit ) {
+		if ( face ) {
+			const img = s( 'image', { class: 'face', href: FACE + encodeURIComponent( face.replace( / /g, '_' ) ) + '&width=120', x: -R, y: -R, width: 2 * R, height: 2 * R,
+				preserveAspectRatio: 'xMidYMid slice', 'clip-path': `circle(${ R }px at ${ R }px ${ R }px)`, 'aria-hidden': 'true' } );
+			img.addEventListener( 'error', () => {
+				p.img = '';
+				draw.node( g, d );
+			} );
+			g.appendChild( s( 'circle', { class: 'ring', r: R } ) );
+			g.appendChild( img );
+			g.appendChild( s( 'circle', { class: 'ring rim', r: R } ) );
+		} else if ( d.rabbit ) {
 			g.appendChild( s( 'circle', { class: 'ring', r: R } ) );
 			g.appendChild( rabbit( 0.95 ) );
 		} else if ( inst ) {
@@ -1012,7 +1076,7 @@ const draw = {
 			return;
 		}
 		g.textContent = '';
-		g.setAttribute( 'class', 'pill ' + ( d.more ? 'more' : 't' + d.tier ) + ( d.lit ? ' lit' : '' ) );
+		g.setAttribute( 'class', 'pill ' + ( d.more ? 'more' : 't' + d.tier ) + ( d.lit ? ' lit' : '' ) + ( d.shy ? ' shy' : '' ) );
 		layers.pills.appendChild( g );
 		if ( coarse ) {                                              // more to land on than can be seen
 			g.appendChild( s( 'rect', { class: 'reach', x: -d.w / 2 - 4, y: -21, width: d.w + 8, height: 42 } ) );
@@ -1051,7 +1115,7 @@ const sig = {
 		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '' ].join( '|' ),
 	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role === 'web' ] :
 		[ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
-	pill: ( d ) => [ d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play ].join( '|' )
+	pill: ( d ) => [ d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy ].join( '|' )
 };
 
 function sync( kind, next, now ) {
@@ -1401,7 +1465,8 @@ function label( v ) {
 		return v.s;
 	}
 	if ( v.m !== undefined ) {
-		return K.called( G, M( v.m ) ).name;
+		const c = K.called( G, M( v.m ) );
+		return c.name + ( c.glyph === 'show' && c.sub ? ' · ' + c.sub : '' );
 	}
 	return v.b === undefined ? first( v.a ) : first( v.a ) + ' ⟷ ' + first( v.b );
 }
@@ -1489,13 +1554,13 @@ function show( quick, again ) {
  * of the line it was on, and the other pieces named in sight; from one piece to the next, the one left behind.
  */
 function carry( v ) {
-	if ( !view || !scene || v.b !== undefined ) {
-		return v;
+	if ( !view || !scene || v.b !== undefined || v.cut !== undefined || v.s !== undefined ) {
+		return v;                                                    // two pickers, or a cut: a view of its own, with nothing brought along
 	}
 	// Out of a cut's graph (Justin, #connectome, 15 Nov 2026, 04:53Z): the way back is the cut itself — the
 	// record's artist first, then who else the page puts on this cut; the line says the song, and plays it
 	// where the cut states a track.
-	if ( view.cut !== undefined && G.songcast && G.songcast[ view.cut ] ) {
+	if ( v.a !== undefined && view.cut !== undefined && G.songcast && G.songcast[ view.cut ] ) {
 		const entry = G.songcast[ view.cut ];
 		const others = entry.pickers.map( ( p ) => p[ 0 ] ).filter( ( x ) => x >= 0 && x !== v.a );
 		const artist = entry.artist;
@@ -1509,7 +1574,7 @@ function carry( v ) {
 		const keep = [ ...new Set( ( v.keep || [] ).concat( here ) ) ].filter( ( x ) => x !== v.a ).slice( 0, 3 );
 		return { a: v.a, keep, by: view.m };
 	}
-	const pills = [ ...scene.pills.values() ].filter( ( p ) => p.stands === 'piece' && !p.more && p.piece !== v.m ).map( ( p ) => p.piece );
+	const pills = [ ...scene.pills.values() ].filter( ( p ) => p.stands === 'piece' && !p.more && !p.shy && p.piece !== v.m ).map( ( p ) => p.piece );
 	return { m: v.m, hand: v.hand || here, keep: view.m !== undefined ? [ view.m ] : [ ...new Set( pills ) ].slice( 0, 2 ) };
 }
 
@@ -1608,6 +1673,11 @@ function warm( key, on ) {
 	for ( const [ , ln ] of live.line ) {
 		if ( !ln.dead && ( ln.d.a === key || ln.d.b === key ) && ( ln.d.role !== 'direct' ) ) {
 			ln.el.classList.toggle( 'hot', on );
+		}
+	}
+	for ( const [ , pl ] of live.pill ) {                           // and what the line to them is, where it isn't said already
+		if ( !pl.dead && pl.d.shy && pl.d.owner === key ) {
+			pl.el.classList.toggle( 'hot', on );
 		}
 	}
 }
@@ -1877,8 +1947,16 @@ function openSheet( g ) {
 			} }, a.label ) ) ),
 		go1 && go1.run ? h( 'div', { class: 'again' }, 'or touch it again' ) : null ].filter( Boolean ) );
 	const at = g.getBoundingClientRect(), box = stage.getBoundingClientRect();
-	sheet.classList.toggle( 'up', at.top + at.height / 2 > box.top + box.height * 0.58 );    // out of the way of what it's about
+	// Out of the way of what it's about: on the other half of the frame, and no taller than the room there, or
+	// "touch it again" would have nothing left to touch (seen at phone size, 15 Nov 2026: a tall sheet lay on its own mark).
+	const up = at.top + at.height / 2 > box.top + box.height / 2;
+	sheet.classList.toggle( 'up', up );
+	sheet.style.maxHeight = '';
 	sheet.hidden = false;
+	const space = ( up ? at.top - box.top : box.bottom - at.bottom ) - 18;
+	if ( sheet.offsetHeight > space ) {
+		sheet.style.maxHeight = Math.max( 110, space ) + 'px';
+	}
 }
 
 function closeSheet() {
@@ -1995,14 +2073,33 @@ document.addEventListener( 'keydown', ( e ) => {
 
 $( 'back' ).addEventListener( 'click', back );
 
-function typed() {
-	const a = K.find( G, $( 'pa' ).value ), b = K.find( G, $( 'pb' ).value );
+let finder = new Map();          // everything the boxes can find, by its name in small letters (K.catalogue)
+
+/** What a box holds: a picker, a song's cut, a show, a record, a track; or nothing the graph knows. */
+function found( box ) {
+	const hit = finder.get( $( box ).value.trim().toLowerCase() );
+	return hit ? hit.view : null;
+}
+
+/**
+ * A box was filled. A song, a show or a record has the view to itself, whichever box it was typed in; two pickers
+ * are shown together; one picker alone.
+ */
+function typed( ev ) {
+	const here = found( ev.target.id ), x = found( 'pa' ), y = found( 'pb' );
+	if ( here && here.a === undefined ) {
+		if ( !same( view, here ) ) {
+			go( here );
+		}
+		return;
+	}
+	const a = x && x.a !== undefined ? x.a : null, b = y && y.a !== undefined ? y.a : null;
 	if ( a === null && b === null ) {
 		$( 'pa' ).value = view && view.a !== undefined ? first( view.a ) : '';
 		return;
 	}
 	const next = a === null || b === null || b === a ? { a: a === null ? b : a } : { a, b };
-	if ( !view || next.a !== view.a || next.b !== view.b ) {
+	if ( !view || next.a !== view.a || next.b !== view.b || view.m !== undefined || view.s !== undefined ) {
 		go( next );
 	}
 }
@@ -2032,7 +2129,9 @@ fetch( 'graph.json' ).then( ( r ) => {
 	return r.json();
 } ).then( ( g ) => {
 	G = K.build( g );
-	$( 'names' ).replaceChildren( ...G.people.map( ( p ) => h( 'option', { value: p.name } ) ) );
+	const all = K.catalogue( G );
+	finder = new Map( all.map( ( x ) => [ x.label.toLowerCase(), x ] ) );
+	$( 'names' ).replaceChildren( ...all.map( ( x ) => h( 'option', { value: x.label } ) ) );
 	$( 'wait' ).remove();
 	const q = new URLSearchParams( location.search );
 	const asked = q.get( 'm' ) || q.get( 'a' ) || q.get( 'from' ) || q.get( 'p' );
