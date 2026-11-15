@@ -791,6 +791,7 @@ function egoScene( v ) {
 
 let walkHops = null;                    // the walk, as Rabbithole keeps it: [{ cid, song, via, at }], oldest first
 let walkNow = { cid: null, playing: false };
+let walkChasing = null;                 // who is chased, by name (Justin, 15 Nov 2026: "very super bigly highlighted")
 let walkFoot = true;                    // the reader is at the foot of the walk: a new song keeps them there
 let road = null;                        // a road from the song on now, gone to: { cid, via }; played from there, it's that picker followed
 // The snake's measures: a song's circle; the room at each side for a turn, and how far out it bows; the first row,
@@ -798,11 +799,22 @@ let road = null;                        // a road from the song on now, gone to:
 // a road's bead sits.
 const WALK = { R: 15, side: 78, bend: 58, top: 92, pitch: 186, reach: 54 };
 
-/** The walk as a browser keeps it for Rabbithole (localStorage "rabbithole-walk"), junk tolerated. */
+/** Why a line of the walk connects, said on it (Justin, 15 Nov 2026: every single line). The word rides the
+ *  hop; the one you followed yourself says so by being a name alone. In the dock, too tight, the name says it. */
+const WORDS = { chase: 'chased', quest: 'quested', trail: 'on the trail', next: 'queued next', record: 'next on the record', road: 'down the road' };
+function whyWord( why ) {
+	return ( !MINI && why && WORDS[ why ] ) || '';
+}
+
+/** The walk as a browser keeps it for Rabbithole (localStorage "rabbithole-walk"), junk tolerated. The walk
+ *  is one chain of connected songs (rabbithole:blu/walk-reset, 15 Nov 2026: { current, past } — a song played
+ *  cold closed the one before); an older page kept a bare array. Either way, the songs of the rabbithole you
+ *  are on. */
 function storedWalk() {
 	try {
 		const v = JSON.parse( window.localStorage.getItem( 'rabbithole-walk' ) || '[]' );
-		return Array.isArray( v ) ? v.filter( ( h ) => h && typeof h.cid === 'string' && h.cid ) : [];
+		const hops = Array.isArray( v ) ? v : ( v && typeof v === 'object' ? v.current : null );
+		return Array.isArray( hops ) ? hops.filter( ( h ) => h && typeof h.cid === 'string' && h.cid ) : [];
 	} catch ( e ) {
 		return [];
 	}
@@ -845,8 +857,9 @@ function walkScene() {
 		if ( lay.cols < 2 && !MINI ) {                               // no room for two to a row: one column, names beside
 			lay = K.snake( { W, n: shown.length, room: W, side: Math.min( 120, Math.max( 86, W * 0.16 ) ), top: 30, pitch: 76 } );
 		}
-		// a long walk scrolls: the frame is as tall as the walk, and the stage scrolls it
-		const need = !lay.rows ? 60 : lay.at[ lay.at.length - 1 ].y + ( lay.cols > 1 ? R + 15 + 28 + 26 : 50 );
+		// a long walk scrolls: the frame is as tall as the walk, and the stage scrolls it; the ensemble of the
+		// song on now hangs under the last circle, and wants its room
+		const need = !lay.rows ? 60 : lay.at[ lay.at.length - 1 ].y + ( lay.cols > 1 ? R + 15 + 28 + 26 : 50 ) + ( !MINI && steps.length ? 48 : 0 );
 		svg.style.height = MINI ? '' : Math.max( need, stage.clientHeight - ( $( 'say' ).offsetHeight || 0 ) - ( $( 'legend' ).offsetHeight || 0 ) ) + 'px';
 		return { shown, lay, W };
 	};
@@ -887,15 +900,19 @@ function walkScene() {
 			sc.lines.set( 'wl' + st.i, { a: 'w' + prev.i, b: 'w' + st.i, stands: 'thread', who: st.via !== null ? [ st.via ] : [], w: st.viaName ? 2.6 : 1.4,
 				o: st.viaName ? 0.95 : 0.5, quiet: !st.viaName, emph: now, delay: 60 + i * 20, step: st.i, id: st.via,
 				label: st.via !== null ? first( st.via ) : st.viaName, bend: turn ? { x: a.dir * WALK.bend, y: 0 } : null } );
-			if ( st.viaName ) {
-				const name = st.via !== null ? first( st.via ) : st.viaName;
-				const label = cut( name, FONT.tag, ( turn ? 170 : ( snaking ? lay.S - 2 * R + 6 : Math.max( 60, W - p.x - 60 ) ) ) - 28 );
+			const word = whyWord( st.why );
+			const name = st.via !== null ? first( st.via ) : st.viaName;
+			if ( name || word ) {
+				const label = cut( name ? name + ( word ? ' · ' + word : '' ) : word, FONT.tag, ( turn ? 170 : ( snaking ? lay.S - 2 * R + 6 : Math.max( 60, W - p.x - 60 ) ) ) - 28 );
 				const w = 28 + wide( label, FONT.tag );
 				// on a turn, where it bows out furthest, kept in the frame; in a row, halfway; in a column, between the two
 				const at = turn ? { x: Math.min( Math.max( a.x + a.dir * 0.75 * WALK.bend, w / 2 + 4 ), W - w / 2 - 4 ), y: ( a.y + p.y ) / 2 } :
 					( snaking ? { x: ( a.x + p.x ) / 2, y: p.y } : { x: p.x, y: ( a.y + p.y ) / 2 } );
-				sc.pills.set( 'wv' + st.i, { id: st.via, who: st.via !== null ? [ st.via ] : [], stands: 'picker', is: st.via !== null ? 'p' + st.via : undefined,
-					tag: true, step: st.i, x: Math.round( at.x ), y: Math.round( at.y ), w, label, extra: '', o: 1, delay: 80 + i * 20 } );
+				// a word with no one behind it (queued next, next on the record): the word alone, on the line
+				sc.pills.set( 'wv' + st.i, { id: st.via, who: st.via !== null ? [ st.via ] : [],
+					stands: st.viaName ? 'picker' : 'roadname', tag: true, step: st.viaName ? st.i : undefined,
+					is: st.via !== null ? 'p' + st.via : undefined,
+					x: Math.round( at.x ), y: Math.round( at.y ), w, label, extra: '', lit: !!name && name === walkChasing, o: 1, delay: 80 + i * 20 } );
 			}
 		}
 		// The roads it didn't take, fanned over it. The song on now's are a little plainer and named, being the ones
@@ -918,6 +935,36 @@ function walkScene() {
 				x: Math.round( side === 'middle' ? bx : bx + ( side === 'end' ? -gap2 : gap2 ) ), y: Math.round( side === 'middle' ? by - 11 : by + 4 ),
 				o: now ? 1 : 0, delay: 320 + i * 12 } );
 		} );
+		// The ensemble of the song on now, under it (Justin, #rabbithole, 15 Nov 2026, item 5): who is on it, each
+		// with what they played, and the way on — to their constellation, and, where a road not taken runs by them,
+		// the play they lead to. The chased picker, if they are here, glows with them.
+		if ( now && !MINI && st.cut && st.cut.pickers ) {
+			const band = st.cut.pickers.filter( ( b ) => b[ 0 ] >= 0 && b[ 0 ] < G.people.length );
+			const rs = roads[ st.i ] || [];
+			const labels = band.map( ( b ) => cut( first( b[ 0 ] ) + ( b[ 2 ] ? ' · ' + b[ 2 ] : '' ), FONT.tag, 110 ) );
+			const ws = labels.map( ( l ) => 28 + wide( l, FONT.tag ) );
+			const gap = 8;
+			const total = ws.reduce( ( s, w0 ) => s + w0, 0 ) + gap * Math.max( 0, band.length - 1 );
+			let bx0 = p.x - total / 2;
+			band.forEach( ( b, k ) => {
+				const id = b[ 0 ], w = ws[ k ];
+				const x = Math.min( Math.max( bx0 + w / 2, w / 2 + 4 ), W - w / 2 - 4 );
+				bx0 += w + gap;
+				const r = rs.find( ( q ) => q.by === id );
+				let next = null;
+				if ( r && HOST ) {                                   // a road the walk can still take: it plays, by this picker
+					const pc = M( r.id );
+					const play = pc.kind === 'track' ? K.playOf( G, G.music[ pc.m ], pc.song ) : '';
+					const cid = play ? new URL( play, location.href ).searchParams.get( 'track' ) : '';
+					if ( cid ) {
+						next = { cid, song: pc.song, via: { name: first( id ), instrument: b[ 2 ] || b[ 1 ] || null } };
+					}
+				}
+				sc.pills.set( 'wb' + st.i + '.' + id, { id, who: [ id ], song: st.song, cutOf: { role: b[ 1 ] || '', icon: b[ 2 ] || '' },
+					stands: 'picker', is: 'p' + id, tag: true, x: Math.round( x ), y: p.y + R + 64, w, label: labels[ k ], extra: '',
+					lit: first( id ) === walkChasing, o: 1, delay: 140 + k * 24, next } );
+			} );
+		}
 	} );
 	if ( !MINI && walkFoot ) {
 		requestAnimationFrame( () => {
@@ -937,7 +984,8 @@ function walkScene() {
 	sc.sub = steps.length ?
 		[ h( 'b', null, K.plural( sum.songs, 'song' ) ), sum.since ? ' since ' + dayOf( sum.since ) : '',
 			sum.followed ? [ '; to ', h( 'b', null, String( sum.followed ) ), ' of them by way of someone on the one before' ] : '',
-			'. A click on a song plays it again; on a name, goes to who they played with; on a faint bead, down a road not taken.' ].flat() :
+			'. A click on a song plays it again; on a name, goes to who they played with; on a faint bead, down a road not taken.',
+			MINI ? '' : ' Under the song on now: who is on it, each to their constellation.' ].flat() :
 		[ 'Nothing yet. Play a song in Rabbithole, then follow someone on it to the next.' ];
 	return sc;
 }
@@ -958,6 +1006,9 @@ function aStep( d ) {
 	w.acts.push( HOST ? act( 'Play it again', () => tell( { play: d.cid } ) ) : link( 'Play it in Rabbithole', HOME + to, 'play' ) );
 	if ( d.piece !== undefined ) {
 		w.acts.push( act( "Who's on it, and where they lead", () => go( { m: d.piece } ) ) );
+	}
+	if ( d.now && G.songcast && G.songcast[ d.cid ] ) {          // the song on now: its card (Justin, item 5)
+		w.acts.push( act( "The song's card: its ensemble, and where they lead", () => go( { cut: d.cid } ) ) );
 	}
 	if ( G.songs[ d.label ] || G.songs[ walkSong( d ) ] ) {
 		w.acts.push( link( "The song's page", pageUrl( 'Song:' + walkSong( d ) ), 'page' ) );
@@ -1022,6 +1073,7 @@ window.addEventListener( 'message', ( ev ) => {
 	}
 	walkHops = Array.isArray( d.hops ) ? d.hops : walkHops;
 	walkNow = { cid: d.now || null, playing: !!d.playing };
+	walkChasing = d.chasing || null;
 	const mini = d.mode === 'mini';
 	if ( mini !== MINI ) {
 		MINI = mini;
@@ -1056,7 +1108,17 @@ if ( HOST ) {
 			ev.preventDefault();
 			ev.stopPropagation();
 			const cid = u.searchParams.get( 'track' );
-			tell( road && road.cid === cid ? { play: cid, via: road.via } : { play: cid } );
+			if ( road && road.cid === cid ) {
+				tell( { play: cid, via: road.via } );
+			} else if ( view && view.walk === undefined && view.b === undefined && view.a !== undefined && view.a >= 0 && view.a < G.people.length ) {
+				// In one picker's constellation, a play is that picker followed: they led you here (the
+				// ensemble of the song on now, Justin, #rabbithole, 15 Nov 2026, item 5), and the walk
+				// says so on the hop. Two pickers in view is the two-picker view; its roads say who.
+				const on = G.songcast[ cid ] && G.songcast[ cid ].pickers.find( ( x ) => x[ 0 ] === view.a );
+				tell( { play: cid, via: { name: first( view.a ), instrument: on ? ( on[ 2 ] || on[ 1 ] || null ) : null } } );
+			} else {
+				tell( { play: cid } );
+			}
 		} else if ( u.pathname.indexOf( '/wiki/' ) === 0 || ( u.pathname.indexOf( '/index.php' ) === 0 && u.searchParams.get( 'title' ) ) ) {
 			ev.preventDefault();
 			ev.stopPropagation();
@@ -1336,7 +1398,7 @@ function drawPiece( g, d ) {
 function drawTag( g, d ) {
 	const p = d.id !== null && d.id >= 0 ? P( d.id ) : { name: d.label, page: '' };
 	g.textContent = '';
-	g.setAttribute( 'class', 'pill tag' + ( p.page ? '' : ' nopage' ) );
+	g.setAttribute( 'class', 'pill tag' + ( d.lit ? ' lit' : '' ) + ( p.page ? '' : ' nopage' ) );
 	g.setAttribute( 'aria-label', p.name + ( d.id !== null && d.id >= 0 ? instOf( d.id ) : '' ) + ( d.who.length > 1 ? ' and ' + K.plural( d.who.length - 1, 'other' ) : '' ) );
 	layers.pills.appendChild( g );
 	if ( coarse ) {
@@ -1543,7 +1605,7 @@ const sig = {
 		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '' ].join( '|' ),
 	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role ] :
 		[ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
-	pill: ( d ) => [ d.stands, d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy, d.anchor ].join( '|' )
+	pill: ( d ) => [ d.stands, d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy, d.anchor, !!d.lit ].join( '|' )
 };
 
 function sync( kind, next, now ) {
@@ -2175,6 +2237,9 @@ function aPickerOfSong( d ) {
 	const id = d.id, name = first( id ), role = d.cutOf ? d.cutOf.role : '';
 	const w = { kind: 'a picker' + instOf( id ), title: name, tipTitle: name + instOf( id ), lines: [],
 		hint: 'click: go to ' + name, acts: [ act( 'Go to ' + name, () => go( { a: id } ) ) ] };
+	if ( d.next ) {                                              // a road the walk can take from the song on now
+		w.acts.push( act( 'Follow ' + name + ' to ' + K.clip( d.next.song, 28 ), () => tell( { play: d.next.cid, via: d.next.via } ) ) );
+	}
 	w.lines.push( role ? 'on this cut: ' + role : 'on this cut, and no instrument the sources name' );
 	const web = webFrom( ( l ) => ( l.u === id ? l.v : ( l.v === id ? l.u : undefined ) ) );
 	if ( web.length ) {
