@@ -226,12 +226,11 @@
 	.oo-ui-panelLayout, .oo-ui-panelLayout-padded, #userloginForm, .mw-userlogin-content, #mw-createaccount-join,
 	.mw-rcfilters-ui-filterTagMultiselectWidget, .mw-rcfilters-ui-changesLimitAndDateButtonWidget,
 	.mw-rcfilters-ui-liveUpdateButtonWidget, .mw-rcfilters-ui-filterWrapperWidget,
-	.oo-ui-tagItemWidget.oo-ui-widget-enabled, .mw-rcfilters-ui-filterTagMultiselectWidget-views {
+	.mw-rcfilters-ui-filterTagMultiselectWidget-views {
 		border-color: var( --night-line );
 		background-color: var( --night-panel );
 		color: var( --night-ink );
 	}
-	.oo-ui-tagItemWidget.oo-ui-widget-enabled { background-color: var( --night-wash ); }
 	/* A box of ours that stays pale by night keeps day's ink and day's links on it. */
 	.pv-proposed, .bot-proposal, .claim-unverified, .pp-record-box, .pp-record-box .pp-record-meta,
 	.pp-song-card, .pp-connectome-card { color: #261c15; }
@@ -261,14 +260,22 @@
 	.oo-ui-buttonElement-frameless.oo-ui-flaggedElement-progressive.oo-ui-widget-enabled > .oo-ui-buttonElement-button > .oo-ui-labelElement-label,
 	.release-raw-yaml > summary, details > summary a { color: var( --night-link ); }
 
+	/* MonoBook's button theme paints a pale gradient as a picture behind a framed button: without taking it
+	   off, night's ground never shows and its pale words are on near-white. A chip is written as the theme
+	   writes it ("-outlined"), which is what it takes to outrank it; and the date field is the theme's too. */
 	.oo-ui-buttonElement-framed > .oo-ui-buttonElement-button,
 	.oo-ui-tagItemWidget, .mw-rcfilters-ui-tagItemWidget,
-	.mw-rcfilters-ui-filterTagMultiselectWidget .oo-ui-tagItemWidget.oo-ui-widget-enabled {
+	.oo-ui-tagMultiselectWidget.oo-ui-tagMultiselectWidget-outlined .oo-ui-tagItemWidget.oo-ui-widget-enabled,
+	.mw-widget-dateInputWidget-handle {
+		background-image: none;
 		border-color: var( --night-line );
 		background-color: var( --night-wash );
 		color: var( --night-ink );
 	}
 	.oo-ui-tagItemWidget .oo-ui-labelElement-label, .oo-ui-buttonElement-framed .oo-ui-labelElement-label { color: var( --night-ink ); }
+	/* A primary button's words are its own white, and a button that can't be pressed keeps its muted ones. */
+	.oo-ui-buttonElement-framed.oo-ui-flaggedElement-primary .oo-ui-labelElement-label,
+	.oo-ui-buttonElement-framed.oo-ui-widget-disabled .oo-ui-labelElement-label { color: inherit; }
 	/* The wiki's name under its mark is drawn in black: a little light behind it, so it can be read. */
 	#p-logo a { filter: drop-shadow( 0 0 1px rgba( 255, 248, 235, 0.9 ) ) drop-shadow( 0 0 6px rgba( 255, 248, 235, 0.35 ) ); }
 
