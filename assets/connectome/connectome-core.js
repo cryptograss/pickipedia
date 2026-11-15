@@ -31,10 +31,9 @@
  *
  * A step further. With more room still, each of the company has their own way on drawn straight out from them,
  * directly away from the picker in the middle: who they have played with that the one in the middle has not,
- * a couple each, one of them named (Justin, #connectome, 14 Nov 2026, 02:18Z; the cards on the musicians' pages
- * do the same toward the featured pickers). Then the rest of the company are small dots on thin lines from the
- * middle, as on the cards, so every dot in sight says how it is reached: a line from the middle is one hop, a
- * line from one of the company is two.
+ * a couple each, one of them named (Justin, #connectome, 14 Nov 2026, 02:18Z). Then the rest of the company are
+ * small dots on thin lines from the middle, as on the cards, so every dot in sight says how it is reached: a line
+ * from the middle is one hop, a line from one of the company is two.
  */
 
 export const TRACK = 3, STAGE = 2, RECORD = 1;     // how two pickers are on one record or show
@@ -237,6 +236,23 @@ export function company( G, id, loose = false ) {
 	}
 	return out.sort( ( x, y ) => ( loudness( y.tie ) - loudness( x.tie ) ) || ( y.tie.w - x.tie.w ) ||
 		G.people[ x.id ].name.localeCompare( G.people[ y.id ].name ) );
+}
+
+/**
+ * Where the graph opens when the address names nothing: whoever with a page has played with the most. It opened on
+ * the month's first featured picker; the featured pickers are set aside for now (Justin, #connectome, 15 Nov 2026:
+ * "something that needs to be revisited later").
+ */
+export function landing( G ) {
+	let best = 0, most = -1;
+	G.people.forEach( ( p, i ) => {
+		const n = p.page ? company( G, i ).length : -1;
+		if ( n > most ) {
+			best = i;
+			most = n;
+		}
+	} );
+	return best;
 }
 
 /**

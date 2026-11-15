@@ -133,22 +133,43 @@ def _store():
     return cc.Store(pairs, TARGETS, GROUPS, alias)
 
 
-def test_a_card_draws_the_featured_paths_and_escapes_every_name():
+def test_a_card_names_their_closest_and_escapes_every_name():
+    # the featured pickers set aside (Justin, #connectome, 15 Nov 2026): a card names who its picker played with
     store = _store()
-    html = cc.card('Kyle Tuttle', store, ['Justin Myles Holmes', 'Gaven Largent', 'Kyle Tuttle'],
-                   lambda n: n in ('Justin Myles Holmes', 'Kyle Tuttle'), {'Justin Myles Holmes': 'guitar'})
+    html = cc.card('Kyle Tuttle', store, lambda n: n in ('Justin Myles Holmes', 'Kyle Tuttle'), {'Justin Myles Holmes': 'guitar'})
     assert html.startswith('<div class="connectome-card"')
     assert '<script>' not in html and '&lt;script&gt;alert(1)&lt;/script&gt;' in html
-    assert '>Justin Myles Holmes</a>' in html                            # the featured picker, linked
+    assert '>Justin Myles Holmes</text></a>' in html and '>Molly Tuttle</text></a>' in html   # named round them, linked
     assert 'Instrument-icon-guitar.png' in html
-    # the table: one hop to Justin, two to Gaven through Molly; the picker isn't listed against themselves
-    assert ('title="Kyle Tuttle → Justin Myles Holmes: “Silver 44”, 4masks">'
-            '<a href="/assets/connectome/?a=Kyle+Tuttle&amp;b=Justin+Myles+Holmes">1</a></td>') in html   # the number opens the path
-    assert 'Molly Tuttle → Gaven Largent: Some Record, 2015"><a href="/assets/connectome/?a=Kyle+Tuttle&amp;b=Gaven+Largent">2</a></td>' in html
-    assert html.count('<tr>') == 3
-    # a click opens the big graph on the connection, or on the path
-    assert '/assets/connectome/?a=Kyle+Tuttle&amp;b=Justin+Myles+Holmes' in html
-    assert '/assets/connectome/?from=Kyle+Tuttle&amp;to=Gaven+Largent' in html
+    assert '<table' not in html and 'Featured' not in html and 'Bacon' not in html   # no table of paths to anyone
+    assert '/assets/connectome/?a=Kyle+Tuttle&amp;b=Justin+Myles+Holmes' in html     # a click opens the two of them
+    assert 'Gaven Largent' not in html                                               # two hops off: not on a card now
+
+
+def test_a_card_names_two_at_most_by_any_one_record_or_show_by_justins_order():
+    # Justin, #connectome, 15 Nov 2026: "Priority list as described above, but only at most two 1-hop connections
+    # from any given record or show, unless there are no other connecting objects available"
+    targets = {'r': ('Ours', '2025', 'K'), 's': ('Live', '2025-01-01', 'K'), 'f': ('Theirs', '2024', 'Z')}
+    pairs = ([pair('K', n, 'track', 'r', [('u', '1', 'Song')]) for n in ('A', 'B', 'C')]
+             + [pair('K', n, 'show', 's') for n in ('D', 'E', 'F')]
+             + [pair('K', 'G', 'track', 'f', [('u', '1', 'Other')])])
+    store = cc.Store(pairs, targets, {t: t for t in targets}, {}, {'r': 2, 's': 2, 'f': 1})
+    nb = store.evidence('K')
+    # a Creative Commons record's two, then the show's two, then the DRM-free record; and only then a third of the record
+    assert cc.closest(store, 'K', nb, want=6) == ['A', 'B', 'D', 'E', 'G', 'C']
+    assert cc.closest(store, 'K', nb, want=4) == ['A', 'B', 'D', 'E']
+    assert cc.closest(store, 'K', nb, want=7, cap=3) == ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+    html = cc.card('K', store, lambda n: True, {})
+    assert all(f'>{n}</text></a>' in html for n in 'ABDE') and '>C</text></a>' not in html   # the card names four
+
+
+def test_a_sit_in_on_one_song_of_a_tape_is_a_show_not_a_studio_track():
+    # a tape's track-level sit-in ranked as a Creative Commons studio track filled Kyle Tuttle's card with shows
+    targets = {'r': ('Ours', '2025', 'K'), 'tape': ('Live', '2025-01-01', 'Band')}
+    pairs = [pair('K', 'Studio', 'track', 'r', [('u', '1', 'Song')]), pair('K', 'Sitin', 'track', 'tape', [('u', '1', 'Tune')])]
+    store = cc.Store(pairs, targets, {t: t for t in targets}, {}, {'r': 2, 'tape': 2}, shows={'tape'})
+    assert cc.closest(store, 'K', store.evidence('K')) == ['Studio', 'Sitin']
+    assert cc.standing('track', 2, show=True) == cc.standing('show', 2) == 4 and cc.standing('track', 2) == 5
 
 
 def test_a_card_is_gold_for_permanent_ink_for_full_and_dotted_for_the_rest():
@@ -164,9 +185,9 @@ def test_a_card_is_gold_for_permanent_ink_for_full_and_dotted_for_the_rest():
 
     for name, colour in (('Tape', cc.GOLD), ('Disc', cc.INK2)):
         html = cc.card('K', cc.Store([p for p in pairs if name in (p['a'], p['b'])], targets, {t: t for t in targets}, {}, tiers),
-                       [], lambda n: True, {})
+                       lambda n: True, {})
         assert f'stroke="{colour}"' in html and 'stroke-dasharray="1 5"' not in html
-    html = cc.card('K', cc.Store(pairs[2:], targets, {t: t for t in targets}, {}, tiers), [], lambda n: True, {})
+    html = cc.card('K', cc.Store(pairs[2:], targets, {t: t for t in targets}, {}, tiers), lambda n: True, {})
     assert 'stroke-dasharray="1 5"' in html and f'stroke="{cc.GOLD}"' not in html
     assert 'Permanent Release' in html and 'Full Release' in html         # the legend names the tiers
 
@@ -201,7 +222,7 @@ def test_build_writes_the_big_graphs_file_beside_the_cards(tmp_path):
 
 def test_no_card_for_someone_who_played_with_nobody():
     store = cc.Store([pair('A', 'B', 'record', 'discogs:1')], TARGETS, GROUPS, {})
-    assert cc.card('A', store, ['B'], lambda n: True, {}) is None
+    assert cc.card('A', store, lambda n: True, {}) is None
 
 
 def test_card_file_is_the_md5_the_wiki_looks_for():
@@ -506,7 +527,7 @@ def test_cryptograss_records_carry_their_pages_artist_and_art():
 
 def test_the_cards_paper_is_a_way_in_and_lies_under_everything_else():
     # Justin, #connectome, 15 Nov 2026: a click on whitespace opens the big graph on the picker, or the cut.
-    html = cc.card('Kyle Tuttle', _store(), ['Justin Myles Holmes', 'Kyle Tuttle'], lambda n: True, {})
+    html = cc.card('Kyle Tuttle', _store(), lambda n: True, {})
     svg = html[html.index('<svg'):]
     first = svg[svg.index('>') + 1:]
     assert first.startswith('<a class="cc-bg" href="/assets/connectome/?p=Kyle+Tuttle" aria-label="Explore Kyle Tuttle in the connectome"><rect ')

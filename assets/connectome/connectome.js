@@ -27,8 +27,8 @@
  *
  * A step further (Justin, #connectome, 14 Nov 2026, 02:18Z): with more room still, each of a picker's company has
  * their own way on drawn straight out from them, directly away from the picker in the middle, to a couple of
- * pickers they have played with and the one in the middle hasn't, one of them named: as the cards on the
- * musicians' pages do toward the featured pickers. A click on one goes to them, and the way there stays drawn.
+ * pickers they have played with and the one in the middle hasn't, one of them named. A click on one goes to them,
+ * and the way there stays drawn.
  *
  * what() says what any mark stands for and the ways on from it; a pointer gets that as a note and a click, a
  * finger as a sheet of buttons. A thing that is in two views running keeps its place or slides to its new one,
@@ -1805,16 +1805,6 @@ function piecePanel() {
 	];
 }
 
-function baconTable( a ) {
-	const dist = K.distances( G, a );
-	const rows = G.featured.filter( ( f ) => f !== a ).map( ( f ) => h( 'tr', { class: 'go', onclick: ( ev ) => {
-		if ( !ev.target.closest( 'a' ) ) {
-			go( { a, b: f } );
-		}
-	} }, h( 'td', null, nameLink( f ) ), h( 'td', { class: 'num' }, dist[ f ] < 0 ? '–' : String( dist[ f ] ) ) ) );
-	return rows.length ? [ h( 'h3', null, 'Featured this month · Bacon number' ), h( 'table', null, rows ) ] : [];
-}
-
 function fillPanel() {
 	const out = [];
 	if ( view.walk ) {
@@ -1848,7 +1838,6 @@ function fillPanel() {
 			out.push( h( 'h3', null, `A step further · ${ scene.far.length }` ),
 				h( 'ul', null, scene.far.map( ( f ) => personRow( f.id, K.times( f.tie ), () => go( { a, b: f.id } ), 'by way of ' + first( f.by ) ) ) ) );
 		}
-		out.push( ...baconTable( a ) );
 	} else {
 		const { a, b } = view;
 		const c = scene.chain ? null : scene.lit;
@@ -2612,7 +2601,7 @@ fetch( 'graph.json' ).then( ( r ) => {
 	if ( v ) {
 		go( v );
 	} else {
-		const start = G.featured.length ? G.featured[ 0 ] : 0;
+		const start = K.landing( G );
 		lost = asked ? `The connectome doesn't know “${ asked }” yet. Here is ${ first( start ) } instead.` : '';
 		go( { a: start } );
 	}
