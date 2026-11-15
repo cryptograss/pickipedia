@@ -416,6 +416,16 @@ test( 'a tag on a line keeps off a name it is told of', () => {
 	assert.equal( K.tagAt( a, { x: 400, y: 380 }, 24, 15, 150, 23, [ name ], 120 ).room, 0 );   // nowhere clear: no room
 } );
 
+test( 'another turn of the company: the next ones round, those the reader came by staying', () => {
+	const ring = [ 'k', 'a', 'b', 'c', 'd', 'e' ].map( ( id ) => ( { id } ) );
+	const ids = ( r ) => r.map( ( c ) => c.id ).join( '' );
+	assert.equal( ids( K.turned( ring, 1, 2, 0 ) ), 'kabcde' );
+	assert.equal( ids( K.turned( ring, 1, 2, 1 ) ), 'kcdeab' );         // the next two named; the first two after the rest
+	assert.equal( ids( K.turned( ring, 1, 2, 2 ) ), 'keabcd' );
+	assert.equal( ids( K.turned( ring, 1, 2, 5 ) ), 'kabcde' );         // round to the start
+	assert.equal( ids( K.turned( ring, 0, 6, 1 ) ), 'kabcde' );         // all of them in sight already: no turn
+} );
+
 test( 'those the reader came by stay in the company, first, whatever their rank; a stranger does not join it', () => {
 	const comp = K.company( G, KYLE );
 	const ring = K.keeping( G, KYLE, comp, [ CHOIR, JUSTIN, LONE, KYLE ] );
@@ -611,6 +621,9 @@ test( 'with room for it, a second oval for those a step further: each straight o
 	assert.equal( lay.far.length, 8 );
 	assert.equal( lay.web, true );
 	assert.ok( lay.rx < plain.rx && lay.ry < plain.ry && lay.rx >= 170 && lay.ry >= 130 );      // the first oval gives way, but keeps room for its web
+	// a little closer in than it first came (Justin, #connectome, 15 Nov 2026): at 750 by 500 too, web and all
+	const near = K.ego( { W: 750, H: 500, named: 8, dots: 12, far: true } );
+	assert.ok( near.far && near.far.length === 8 && near.web );
 	const from = ( p ) => ( { x: p.x - lay.C.x, y: p.y - lay.C.y } ), cross = ( a, b ) => a.x * b.y - a.y * b.x, long = ( a ) => Math.hypot( a.x, a.y );
 	lay.named.forEach( ( seat, i ) => {
 		const s = from( seat ), m = from( lay.far[ i ].main ), [ before, after ] = lay.far[ i ].sides.map( from );
@@ -627,7 +640,7 @@ test( 'with room for it, a second oval for those a step further: each straight o
 	assert.equal( lay.dots.length, 48 );
 	assert.ok( lay.dots.every( ( p ) => Math.abs( Math.hypot( ( p.x - lay.C.x ) / lay.rx, ( p.y - lay.C.y ) / lay.ry ) - 1.36 ) < 0.02 ) );
 	// Without the room, asking changes nothing.
-	for ( const [ W, H, n ] of [ [ 694, 597, 6 ], [ 390, 550, 6 ], [ 950, 500, 6 ], [ 840, 648, 8 ] ] ) {
+	for ( const [ W, H, n ] of [ [ 694, 597, 6 ], [ 390, 550, 6 ], [ 950, 470, 6 ], [ 720, 648, 8 ] ] ) {
 		assert.deepEqual( K.ego( { W, H, named: n, dots: 9, far: true } ), K.ego( { W, H, named: n, dots: 9 } ), `${ W }x${ H }` );
 	}
 	assert.equal( K.ego( { W: 950, H: 648, named: 1, dots: 0, far: true } ).far, null );          // one in the company: nothing to set out

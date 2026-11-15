@@ -787,6 +787,20 @@ a.out {
 	white-space: nowrap;
 }
 
+/* Another turn of the company (Justin, #connectome, 15 Nov 2026). */
+#say h1 button.turn {
+	margin-left: 10px;
+	padding: 1px 8px;
+	border: 1px solid var( --axis );
+	border-radius: 11px;
+	background: var( --surface );
+	color: var( --ink2 );
+	font: 600 12px var( --ui );
+	vertical-align: 3px;
+	cursor: pointer;
+}
+#say h1 button.turn:hover { background: var( --hover ); color: var( --ink ); }
+
 #say h1 a.out {
 	margin-left: 10px;
 	color: var( --link );
@@ -848,6 +862,7 @@ a.out:focus { text-decoration: underline; }
 	#panel a.out { display: inline-block; margin: -9px 0 -9px 2px; padding: 9px 12px; font-size: 14px; }
 	#say h1 a.out { display: inline-block; padding: 6px 4px; }
 	.ln .hit { stroke-width: 24; }
+	#say h1 button.turn { padding: 5px 12px; font-size: 13px; }
 }
 @media ( pointer: coarse ) and ( min-width: 761px ) {
 	#drawer { width: 32px; }                               /* beside the graph: wide enough for a fingertip */

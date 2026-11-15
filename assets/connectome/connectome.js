@@ -190,6 +190,9 @@ function address( v ) {
 		if ( v.via !== undefined && v.via !== null ) {
 			q.via = v.via;
 		}
+		if ( v.turn ) {
+			q.turn = v.turn;
+		}
 		return '?' + new URLSearchParams( q );
 	}
 	return '?' + new URLSearchParams( { a: first( v.a ), b: first( v.b ) } );
@@ -222,8 +225,8 @@ function parse( q ) {
 		const keep = ( q.get( 'keep' ) || '' ).split( ',' ).map( ( n ) => K.find( G, n ) ).filter( ( x ) => x !== null && x !== a );
 		const byRaw = q.get( 'by' );
 		const by = byRaw ? K.findPiece( G, byRaw, q.get( 'on' ) ) : undefined;
-		const via = q.get( 'via' );
-		return { a, keep, by: by === null ? undefined : by, via: via || undefined };
+		const via = q.get( 'via' ), turn = parseInt( q.get( 'turn' ) || '', 10 );
+		return { a, keep, by: by === null ? undefined : by, via: via || undefined, turn: turn > 0 ? turn : undefined };
 	}
 	return { a, b };
 }
@@ -589,9 +592,12 @@ function egoScene( v ) {
 		comp = K.company( G, a, true );
 	}
 	// Those the reader came by stay, whatever their rank, and the line to each says what it is; then the closest.
-	const ring = K.keeping( G, a, comp, v.keep );
 	const came = new Set( ( v.keep || [] ).filter( ( k ) => G.adj[ a ].has( k ) ) );
-	const want = Math.min( ring.length, H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 ) );
+	const kept = K.keeping( G, a, comp, v.keep );
+	const want = Math.min( kept.length, H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 ) );
+	// another turn of the company, where there are more than one view names; those the reader came by stay
+	const stay = kept.filter( ( c ) => came.has( c.id ) ).length;
+	const ring = K.turned( kept, stay, Math.max( 1, want - stay ), v.turn || 0 );
 	const lay = K.ego( { W, H, named: want, dots: ring.length - want, far: true } );
 	const n = lay.named.length, mine = ring.slice( 0, n );
 	const pan = slide( 'p' + a, lay.C );
@@ -732,14 +738,17 @@ function egoScene( v ) {
 	for ( const f of out ? out.fars : [] ) {
 		const walked = came.has( f.by ) && ( v.keep || [] ).includes( f.id );
 		addNode( sc, f.id, f.at, f.named ? 'far' : 'dot', Object.assign( { r: 3.8, by: f.by, tie: f.tie, delay: 360 }, f.name ) );
-		addLine( sc, f.by, f.id, f.tie, { o: walked ? 0.95 : ( f.named ? 0.78 : 0.45 ), quiet: true, role: 'far', c: f.id, delay: 360 } );
+		// a line a step out answers a click with the two-hop view, middle and far end (Justin, #connectome, 15 Nov 2026)
+		addLine( sc, f.by, f.id, f.tie, { o: walked ? 0.95 : ( f.named ? 0.78 : 0.45 ), role: 'far', c: f.id, delay: 360 } );
 	}
 	sc.web = lay.web;
 	sc.deep = !!out;
 	sc.far = out ? out.fars : [];
 	sc.company = comp;
 	sc.shown = shown;
-	sc.head = [ first( a ), pageMark( a, true ) ];
+	sc.head = [ first( a ), pageMark( a, true ), ring.length > n ? h( 'button', { type: 'button', class: 'turn',
+		title: `Others ${ first( a ) } has played with: ${ n - stay } more of the ${ ring.length - stay }`,
+		onclick: () => go( { a, turn: ( v.turn || 0 ) + 1 } ) }, '↻ others' ) : null ];
 	sc.sub = comp.length ?
 		[ looseOnly ? 'On a record with ' : 'Has played with ', h( 'b', null, K.plural( comp.length, 'picker' ) ), ' the sources here know' +
 			( looseOnly ? ', though none on the same track' : '' ) ] :
@@ -1648,6 +1657,9 @@ function carry( v ) {
 		const track = rec !== undefined ? K.trackOn( G, rec, entry.song ) : undefined;
 		return { a: v.a, keep, by: track !== undefined ? track : rec, via: view.cut };
 	}
+	if ( v.turn !== undefined && v.a === view.a && view.b === undefined && view.m === undefined ) {
+		return { a: v.a, turn: v.turn, keep: view.keep, by: view.by, via: view.via };   // another turn: the same way in
+	}
 	const here = view.m !== undefined ? ( scene.tagged || [] ) : [ view.a, view.b ].filter( ( x ) => x !== undefined );
 	if ( v.m === undefined ) {
 		const keep = [ ...new Set( ( v.keep || [] ).concat( here ) ) ].filter( ( x ) => x !== v.a ).slice( 0, 3 );
@@ -1925,6 +1937,14 @@ function aPieceAmong( d ) {
 	return w;
 }
 
+/** A line a step out from the middle: how the far one is reached, and the way to see them and the middle together. */
+function aFarLine( d ) {
+	const t = d.tie, top = K.naming( G, t.ev[ 0 ] );
+	return { kind: 'two hops', title: `${ first( view.a ) } ⟷ ${ first( d.c ) }`,
+		lines: [ `by way of ${ first( d.u ) }: ${ K.together( t ) }`, K.clip( top.short, 44 ) ], hint: 'click: open these two',
+		acts: [ act( 'Open these two', () => go( { a: view.a, b: d.c } ) ) ] };
+}
+
 function aTie( d ) {
 	const t = d.tie, top = K.naming( G, t.ev[ 0 ] );
 	const w = { kind: 'two pickers', title: `${ first( d.u ) } & ${ first( d.v ) }`,
@@ -1962,7 +1982,7 @@ function what( g ) {
 		case 'thread':
 			return d.quiet ? null : aPickerBetween( d );
 		default:
-			return d.quiet ? null : aTie( d );
+			return d.quiet ? null : ( d.role === 'far' ? aFarLine( d ) : aTie( d ) );
 	}
 }
 

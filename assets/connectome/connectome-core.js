@@ -240,6 +240,20 @@ export function company( G, id, loose = false ) {
 }
 
 /**
+ * Another turn of a picker's company (Justin, #connectome, 15 Nov 2026: "a button to cycle connections"): those
+ * the reader came by stay first (`kept` of them), and the rest come round `per` at a time, so turn 1 names the
+ * next `per` of them, and so on round to the start. Returns the ring in its new order.
+ */
+export function turned( ring, kept, per, turn ) {
+	const rest = ring.slice( kept );
+	if ( !turn || per <= 0 || rest.length <= per ) {
+		return ring;
+	}
+	const k = ( turn * per ) % rest.length;
+	return ring.slice( 0, kept ).concat( rest.slice( k ), rest.slice( 0, k ) );
+}
+
+/**
  * Who both have played with, other than each other: the two-hop routes between them. A route is as free as its
  * less free leg, and as strong as its weaker one. Those who played with both come first, and one who only shares
  * a record with either comes after; then the freest routes, so one that's Permanent on both legs is never passed
@@ -1004,10 +1018,12 @@ export function beside( at, r, w, h, pts, boxes, frame, out = { x: 0, y: -1 }, e
 export function ego( { W, H, named, dots, far = false } ) {
 	const C = { x: Math.round( W / 2 ), y: Math.round( H / 2 ) };
 	const n = Math.max( 0, named );
-	const deep = !!far && n > 1 && ( W / 2 - 130 ) / DEEP >= 170 && ( H / 2 - 62 ) / DEEP >= 130;
+	// a step further shows in a frame a little smaller than it first did (Justin, #connectome, 15 Nov 2026):
+	// from about 740 by 490, where it was 855 by 580; the web inside it with it
+	const deep = !!far && n > 1 && ( W / 2 - 130 ) / DEEP >= 136 && ( H / 2 - 62 ) / DEEP >= 104;
 	const ry = deep ? Math.min( ( H / 2 - 62 ) / DEEP, 230 ) : Math.max( 84, Math.min( H * 0.29, 230 ) );
 	const rx = deep ? Math.min( ( W / 2 - 130 ) / DEEP, ry * 1.9 ) : Math.max( 110, Math.min( W * 0.3, ry * 1.9 ) );
-	const out = { C, named: [], dots: [], rx, ry, web: n > 1 && rx >= 170 && ry >= 130, far: deep ? [] : null };
+	const out = { C, named: [], dots: [], rx, ry, web: n > 1 && ( deep || ( rx >= 170 && ry >= 130 ) ), far: deep ? [] : null };
 	const on = ( deg, f ) => ( { x: Math.round( C.x + rx * f * Math.cos( deg * Math.PI / 180 ) ), y: Math.round( C.y + ry * f * Math.sin( deg * Math.PI / 180 ) ) } );
 	for ( let i = 0; i < n; i++ ) {
 		const deg = -90 + 360 / n / 4 + ( 360 / n ) * i;
