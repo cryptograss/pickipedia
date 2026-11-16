@@ -798,7 +798,8 @@ export function walkSteps( G, hops ) {
 		seen.set( key, again + 1 );
 		const viaName = h.via && h.via.name ? h.via.name : null;
 		return { i, cid: h.cid, cut, piece, song, rec, via: viaName ? walker( G, viaName, cut ) : null, viaName,
-			instrument: h.via && h.via.instrument ? h.via.instrument : '', at: typeof h.at === 'number' ? h.at : null, again };
+			instrument: h.via && h.via.instrument ? h.via.instrument : '', why: h.why || null,
+			at: typeof h.at === 'number' ? h.at : null, again };
 	} );
 }
 

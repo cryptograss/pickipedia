@@ -170,6 +170,18 @@ function listNames( ids ) {
 
 /** A view's address: what the bar shows, and what a link to somewhere in the graph points at. */
 function address( v ) {
+	const raw = rawAddress( v );
+	if ( ! HOST ) {
+		return raw;
+	}
+	// Inside Rabbithole, every step carries who it is, so a frame that reloads on an address comes back
+	// hosted (a pushed step lives in the browser's history, and a reload can land on any of them).
+	const q = new URLSearchParams( raw.slice( 1 ) );
+	q.set( 'host', HOST );
+	return '?' + q;
+}
+
+function rawAddress( v ) {
 	if ( v.walk ) {
 		return '?' + new URLSearchParams( Object.assign( { walk: MINI ? 'mini' : '' }, HOST ? { host: HOST } : null ) );
 	}
@@ -787,18 +799,32 @@ function egoScene( v ) {
 
 let walkHops = null;                    // the walk, as Rabbithole keeps it: [{ cid, song, via, at }], oldest first
 let walkNow = { cid: null, playing: false };
+let walkAt = null;                      // where the walk stands, the player's `at` (magent, 16 Nov): null when it doesn't say
+let walkChasing = null;                 // who is chased, by name (Justin, 15 Nov 2026: "very super bigly highlighted")
 let walkFoot = true;                    // the reader is at the foot of the walk: a new song keeps them there
 let road = null;                        // a road from the song on now, gone to: { cid, via }; played from there, it's that picker followed
+let walkGlint = null;                   // the walk moved on its own, once: { from, to, back, t }, shown as it moves, then gone
 // The snake's measures: a song's circle; the room at each side for a turn, and how far out it bows; the first row,
 // from a row to the next (its names, the gap a turn's name sits in, the roads over the next row), and how far out
 // a road's bead sits.
 const WALK = { R: 15, side: 78, bend: 58, top: 92, pitch: 186, reach: 54 };
 
-/** The walk as a browser keeps it for Rabbithole (localStorage "rabbithole-walk"), junk tolerated. */
+/** Why a line of the walk connects, said on it (Justin, 15 Nov 2026: every single line). The word rides the
+ *  hop; the one you followed yourself says so by being a name alone. In the dock, too tight, the name says it. */
+const WORDS = { chase: 'chased', quest: 'quested', trail: 'on the trail', next: 'queued next', record: 'next on the record', road: 'down the road' };
+function whyWord( why ) {
+	return ( !MINI && why && WORDS[ why ] ) || '';
+}
+
+/** The walk as a browser keeps it for Rabbithole (localStorage "rabbithole-walk"), junk tolerated. The walk
+ *  is one chain of connected songs (rabbithole:blu/walk-reset, 15 Nov 2026: { current, past } — a song played
+ *  cold closed the one before); an older page kept a bare array. Either way, the songs of the rabbithole you
+ *  are on. */
 function storedWalk() {
 	try {
 		const v = JSON.parse( window.localStorage.getItem( 'rabbithole-walk' ) || '[]' );
-		return Array.isArray( v ) ? v.filter( ( h ) => h && typeof h.cid === 'string' && h.cid ) : [];
+		const hops = Array.isArray( v ) ? v : ( v && typeof v === 'object' ? v.current : null );
+		return Array.isArray( hops ) ? hops.filter( ( h ) => h && typeof h.cid === 'string' && h.cid ) : [];
 	} catch ( e ) {
 		return [];
 	}
@@ -831,18 +857,25 @@ function walkScene() {
 	const sc = newScene();
 	const steps = K.walkSteps( G, walkHops || storedWalk() );
 	const sum = K.walkSum( steps );
+	// Where the walk stands (magent, 16 Nov: `at` rides the walk word beside `night`): the step you are on, not
+	// the newest one — a walk can stand on a song it has heard before. Where the player doesn't say, the newest
+	// step is where you stand, as it has always been drawn.
+	const standing = walkAt !== null ? Math.max( 0, Math.min( walkAt, steps.length - 1 ) ) : steps.length - 1;
 	const R = WALK.R;
 	// Where every song goes, in a frame W wide (H tall, for the dock).
 	const place = ( W, H ) => {
-		const shown = MINI ? steps.slice( W < 330 ? -2 : -3 ) : steps;  // the dock: the song on now and two before it; one, in a narrow sidebar
+		// the dock: where you stand and one or two before it; one, in a narrow sidebar
+		const few = W < 330 ? 2 : 3;
+		const shown = MINI ? steps.slice( Math.max( 0, standing + 1 - few ), standing + 1 ) : steps;
 		let lay = MINI ? K.snake( { W, n: shown.length, room: 70, side: R + 4, top: shown.length > 2 ? 64 : Math.max( 34, Math.round( ( H - 80 ) / 2 ) + R ),
 			pitch: 0, most: Math.max( 1, shown.length ) } ) :
 			K.snake( { W, n: shown.length, room: W >= 700 ? 200 : 150, side: WALK.side, top: WALK.top, pitch: WALK.pitch } );
 		if ( lay.cols < 2 && !MINI ) {                               // no room for two to a row: one column, names beside
 			lay = K.snake( { W, n: shown.length, room: W, side: Math.min( 120, Math.max( 86, W * 0.16 ) ), top: 30, pitch: 76 } );
 		}
-		// a long walk scrolls: the frame is as tall as the walk, and the stage scrolls it
-		const need = !lay.rows ? 60 : lay.at[ lay.at.length - 1 ].y + ( lay.cols > 1 ? R + 15 + 28 + 26 : 50 );
+		// a long walk scrolls: the frame is as tall as the walk, and the stage scrolls it; the ensemble of the
+		// song on now hangs under the last circle, and wants its room
+		const need = !lay.rows ? 60 : lay.at[ lay.at.length - 1 ].y + ( lay.cols > 1 ? R + 15 + 28 + 26 : 50 ) + ( !MINI && steps.length ? 48 : 0 );
 		svg.style.height = MINI ? '' : Math.max( need, stage.clientHeight - ( $( 'say' ).offsetHeight || 0 ) - ( $( 'legend' ).offsetHeight || 0 ) ) + 'px';
 		return { shown, lay, W };
 	};
@@ -863,10 +896,10 @@ function walkScene() {
 	shown.forEach( ( st, i ) => {
 		const p = lay.at[ i ];
 		const up = MINI && snaking && lay.cols === 3 && p.col === 1;   // the dock's middle song is named over it: the room is there
-		const now = st.i === steps.length - 1;
+		const now = st.i === standing;                             // the stand: where you are, not the newest step
 		const whose = st.piece !== undefined ? K.called( G, M( st.piece ) ).sub : '';
 		const fresh = !MINI && st.at !== null && ( !i || dayOf( st.at ) !== dayOf( shown[ i - 1 ].at ) );   // each day says itself once
-		const note = [ now ? ( walkNow.cid === st.cid && walkNow.playing ? '▶ on now' : 'on now, paused' ) : ( st.again ? 'again' : '' ),
+		const note = [ now ? ( walkNow.playing ? '▶ on now' : 'on now, paused' ) : ( st.again ? 'again' : '' ),
 			fresh ? dayOf( st.at ) : '' ].filter( Boolean ).join( ' · ' );
 		const most = room( p, up );
 		const common = { step: st.i, cid: st.cid, side: snaking ? null : 'right', anchor: snaking ? ( up ? 'middle' : p.anchor ) : null, up,
@@ -883,15 +916,19 @@ function walkScene() {
 			sc.lines.set( 'wl' + st.i, { a: 'w' + prev.i, b: 'w' + st.i, stands: 'thread', who: st.via !== null ? [ st.via ] : [], w: st.viaName ? 2.6 : 1.4,
 				o: st.viaName ? 0.95 : 0.5, quiet: !st.viaName, emph: now, delay: 60 + i * 20, step: st.i, id: st.via,
 				label: st.via !== null ? first( st.via ) : st.viaName, bend: turn ? { x: a.dir * WALK.bend, y: 0 } : null } );
-			if ( st.viaName ) {
-				const name = st.via !== null ? first( st.via ) : st.viaName;
-				const label = cut( name, FONT.tag, ( turn ? 170 : ( snaking ? lay.S - 2 * R + 6 : Math.max( 60, W - p.x - 60 ) ) ) - 28 );
+			const word = whyWord( st.why );
+			const name = st.via !== null ? first( st.via ) : st.viaName;
+			if ( name || word ) {
+				const label = cut( name ? name + ( word ? ' · ' + word : '' ) : word, FONT.tag, ( turn ? 170 : ( snaking ? lay.S - 2 * R + 6 : Math.max( 60, W - p.x - 60 ) ) ) - 28 );
 				const w = 28 + wide( label, FONT.tag );
 				// on a turn, where it bows out furthest, kept in the frame; in a row, halfway; in a column, between the two
 				const at = turn ? { x: Math.min( Math.max( a.x + a.dir * 0.75 * WALK.bend, w / 2 + 4 ), W - w / 2 - 4 ), y: ( a.y + p.y ) / 2 } :
 					( snaking ? { x: ( a.x + p.x ) / 2, y: p.y } : { x: p.x, y: ( a.y + p.y ) / 2 } );
-				sc.pills.set( 'wv' + st.i, { id: st.via, who: st.via !== null ? [ st.via ] : [], stands: 'picker', is: st.via !== null ? 'p' + st.via : undefined,
-					tag: true, step: st.i, x: Math.round( at.x ), y: Math.round( at.y ), w, label, extra: '', o: 1, delay: 80 + i * 20 } );
+				// a word with no one behind it (queued next, next on the record): the word alone, on the line
+				sc.pills.set( 'wv' + st.i, { id: st.via, who: st.via !== null ? [ st.via ] : [],
+					stands: st.viaName ? 'picker' : 'roadname', tag: true, step: st.viaName ? st.i : undefined,
+					is: st.via !== null ? 'p' + st.via : undefined,
+					x: Math.round( at.x ), y: Math.round( at.y ), w, label, extra: '', lit: !!name && name === walkChasing, o: 1, delay: 80 + i * 20 } );
 			}
 		}
 		// The roads it didn't take, fanned over it. The song on now's are a little plainer and named, being the ones
@@ -914,10 +951,63 @@ function walkScene() {
 				x: Math.round( side === 'middle' ? bx : bx + ( side === 'end' ? -gap2 : gap2 ) ), y: Math.round( side === 'middle' ? by - 11 : by + 4 ),
 				o: now ? 1 : 0, delay: 320 + i * 12 } );
 		} );
+		// The ensemble of the song on now, under it (Justin, #rabbithole, 15 Nov 2026, item 5): who is on it, each
+		// with what they played, and the way on — to their constellation, and, where a road not taken runs by them,
+		// the play they lead to. The chased picker, if they are here, glows with them.
+		if ( now && !MINI && st.cut && st.cut.pickers ) {
+			const band = st.cut.pickers.filter( ( b ) => b[ 0 ] >= 0 && b[ 0 ] < G.people.length );
+			const rs = roads[ st.i ] || [];
+			const labels = band.map( ( b ) => cut( first( b[ 0 ] ) + ( b[ 2 ] ? ' · ' + b[ 2 ] : '' ), FONT.tag, 110 ) );
+			const ws = labels.map( ( l ) => 28 + wide( l, FONT.tag ) );
+			const gap = 8;
+			const total = ws.reduce( ( s, w0 ) => s + w0, 0 ) + gap * Math.max( 0, band.length - 1 );
+			let bx0 = p.x - total / 2;
+			band.forEach( ( b, k ) => {
+				const id = b[ 0 ], w = ws[ k ];
+				const x = Math.min( Math.max( bx0 + w / 2, w / 2 + 4 ), W - w / 2 - 4 );
+				bx0 += w + gap;
+				const r = rs.find( ( q ) => q.by === id );
+				let next = null;
+				if ( r && HOST ) {                                   // a road the walk can still take: it plays, by this picker
+					const pc = M( r.id );
+					const play = pc.kind === 'track' ? K.playOf( G, G.music[ pc.m ], pc.song ) : '';
+					const cid = play ? new URL( play, location.href ).searchParams.get( 'track' ) : '';
+					if ( cid ) {
+						next = { cid, song: pc.song, via: { name: first( id ), instrument: b[ 2 ] || b[ 1 ] || null } };
+					}
+				}
+				sc.pills.set( 'wb' + st.i + '.' + id, { id, who: [ id ], song: st.song, cutOf: { role: b[ 1 ] || '', icon: b[ 2 ] || '' },
+					stands: 'picker', is: 'p' + id, tag: true, x: Math.round( x ), y: p.y + R + 64, w, label: labels[ k ], extra: '',
+					lit: first( id ) === walkChasing, o: 1, delay: 140 + k * 24, next } );
+			} );
+		}
 	} );
+	if ( walkGlint && performance.now() - walkGlint.t < 1500 ) { // the walk moved: the lines it took run a bead of
+		                                                     // light, the way it went, and the step arrived at glows
+		                                                     // (Justin, item 7). Once: the marks go with this draw only.
+		const lo = Math.min( walkGlint.from, walkGlint.to ), hi = Math.max( walkGlint.from, walkGlint.to );
+		for ( let k = lo + 1; k <= hi; k++ ) {
+			const l = sc.lines.get( 'wl' + k );
+			if ( l ) {
+				l.glint = { back: walkGlint.back, order: k - lo - 1 };
+			}
+		}
+		const arrived = sc.nodes.get( 'w' + walkGlint.to );
+		if ( arrived ) {
+			arrived.glintTo = true;
+		}
+	}
+	walkGlint = null;
 	if ( !MINI && walkFoot ) {
 		requestAnimationFrame( () => {
-			stage.scrollTop = stage.scrollHeight;                    // the song on now is at the foot: in sight
+			if ( standing >= steps.length - 1 ) {
+				stage.scrollTop = stage.scrollHeight;                // the song on now is at the foot: in sight
+			} else {
+				const el = svg.querySelector( '[data-k="w' + standing + '"]' );
+				if ( el ) {
+					el.scrollIntoView( { block: 'nearest' } );       // the stand, wherever it is: in sight
+				}
+			}
 		} );
 	}
 	sc.head = [ 'Your rabbithole', steps.length ? h( 'button', { type: 'button', class: 'turn',
@@ -933,7 +1023,8 @@ function walkScene() {
 	sc.sub = steps.length ?
 		[ h( 'b', null, K.plural( sum.songs, 'song' ) ), sum.since ? ' since ' + dayOf( sum.since ) : '',
 			sum.followed ? [ '; to ', h( 'b', null, String( sum.followed ) ), ' of them by way of someone on the one before' ] : '',
-			'. A click on a song plays it again; on a name, goes to who they played with; on a faint bead, down a road not taken.' ].flat() :
+			'. A click on a song plays it again; on a name, goes to who they played with; on a faint bead, down a road not taken.',
+			MINI ? '' : ' Under the song on now: who is on it, each to their constellation.' ].flat() :
 		[ 'Nothing yet. Play a song in Rabbithole, then follow someone on it to the next.' ];
 	return sc;
 }
@@ -943,7 +1034,10 @@ function dayOf( t ) {
 	return typeof t === 'number' ? new Date( t ).toLocaleDateString( undefined, { day: 'numeric', month: 'short' } ) : '';
 }
 
-/** A step of the walk: play it again; turn it inside out; its page. */
+/** A step of the walk: play it again; turn it inside out; its page. Every step is a song already in the walk,
+ *  so the play says where it sits (the contract of 15 Nov 2026: the graph sends { play, step }; the player
+ *  marks that hop back and keeps its mode and picker — going back in the rabbithole, not starting a new one,
+ *  Justin, #rabbithole, item 10). */
 function aStep( d ) {
 	if ( MINI ) {
 		return { kind: 'your rabbithole', title: d.label, lines: [ d.sub, d.note ].filter( Boolean ), hint: 'click: open your rabbithole',
@@ -951,9 +1045,13 @@ function aStep( d ) {
 	}
 	const to = '/rabbithole/?track=' + encodeURIComponent( d.cid );
 	const w = { kind: 'a song you heard', title: d.label, lines: [ d.sub, d.note ].filter( Boolean ), hint: HOST ? 'click: play it again' : 'click: play it in Rabbithole', acts: [] };
-	w.acts.push( HOST ? act( 'Play it again', () => tell( { play: d.cid } ) ) : link( 'Play it in Rabbithole', HOME + to, 'play' ) );
+	w.acts.push( HOST ? act( 'Play it again', () => tell( { play: d.cid, step: d.step } ) )
+		             : link( 'Play it in Rabbithole', HOME + to, 'play' ) );
 	if ( d.piece !== undefined ) {
 		w.acts.push( act( "Who's on it, and where they lead", () => go( { m: d.piece } ) ) );
+	}
+	if ( d.now && G.songcast && G.songcast[ d.cid ] ) {          // the song on now: its card (Justin, item 5)
+		w.acts.push( act( "The song's card: its ensemble, and where they lead", () => go( { cut: d.cid } ) ) );
 	}
 	if ( G.songs[ d.label ] || G.songs[ walkSong( d ) ] ) {
 		w.acts.push( link( "The song's page", pageUrl( 'Song:' + walkSong( d ) ), 'page' ) );
@@ -1017,7 +1115,34 @@ window.addEventListener( 'message', ( ev ) => {
 		road = null;
 	}
 	walkHops = Array.isArray( d.hops ) ? d.hops : walkHops;
+	walkChasing = d.chasing || null;
+	if ( typeof d.night === 'boolean' ) {                        // night as the player has it (Justin, #rabbithole, 15 Nov 2026,
+		                                                     // item 5: the drawer "in dark mode even if the page is light"):
+		                                                     // in the frame the player says, not this page's own reading
+		document.documentElement.classList.toggle( 'pp-dark', d.night );
+		document.documentElement.classList.toggle( 'pp-light', !d.night );
+	}
+	const wasAt = walkAt, wasCid = walkNow.cid;
 	walkNow = { cid: d.now || null, playing: !!d.playing };
+	walkAt = typeof d.at === 'number' ? d.at : null;
+	if ( G && ( wasCid || wasAt !== null ) ) {                   // the walk moved on its own (Justin, item 7: webamp's back
+		                                                     // and forth "need to trigger an animation in the 'Your
+		                                                     // Rabbithole' bacon graph area"): the line it took shows
+		                                                     // it. The stand (`at`) says where; by cid when the player
+		                                                     // is one that doesn't send it yet.
+		const steps = K.walkSteps( G, walkHops || [] );
+		let from = null, to = null;
+		if ( typeof wasAt === 'number' && typeof walkAt === 'number' && wasAt !== walkAt ) {
+			from = wasAt;
+			to = walkAt;
+		} else if ( walkAt === null && wasCid && d.now && wasCid !== d.now ) {
+			from = steps.findIndex( ( st ) => st.cid === wasCid );
+			to = steps.findIndex( ( st ) => st.cid === d.now );
+		}
+		if ( from !== null && to !== null && from >= 0 && to >= 0 && from !== to ) {
+			walkGlint = { from, to, back: to < from, t: performance.now() };
+		}
+	}
 	const mini = d.mode === 'mini';
 	if ( mini !== MINI ) {
 		MINI = mini;
@@ -1052,7 +1177,17 @@ if ( HOST ) {
 			ev.preventDefault();
 			ev.stopPropagation();
 			const cid = u.searchParams.get( 'track' );
-			tell( road && road.cid === cid ? { play: cid, via: road.via } : { play: cid } );
+			if ( road && road.cid === cid ) {
+				tell( { play: cid, via: road.via } );
+			} else if ( view && view.walk === undefined && view.b === undefined && view.a !== undefined && view.a >= 0 && view.a < G.people.length ) {
+				// In one picker's constellation, a play is that picker followed: they led you here (the
+				// ensemble of the song on now, Justin, #rabbithole, 15 Nov 2026, item 5), and the walk
+				// says so on the hop. Two pickers in view is the two-picker view; its roads say who.
+				const on = G.songcast[ cid ] && G.songcast[ cid ].pickers.find( ( x ) => x[ 0 ] === view.a );
+				tell( { play: cid, via: { name: first( view.a ), instrument: on ? ( on[ 2 ] || on[ 1 ] || null ) : null } } );
+			} else {
+				tell( { play: cid } );
+			}
 		} else if ( u.pathname.indexOf( '/wiki/' ) === 0 || ( u.pathname.indexOf( '/index.php' ) === 0 && u.searchParams.get( 'title' ) ) ) {
 			ev.preventDefault();
 			ev.stopPropagation();
@@ -1332,7 +1467,7 @@ function drawPiece( g, d ) {
 function drawTag( g, d ) {
 	const p = d.id !== null && d.id >= 0 ? P( d.id ) : { name: d.label, page: '' };
 	g.textContent = '';
-	g.setAttribute( 'class', 'pill tag' + ( p.page ? '' : ' nopage' ) );
+	g.setAttribute( 'class', 'pill tag' + ( d.lit ? ' lit' : '' ) + ( p.page ? '' : ' nopage' ) );
 	g.setAttribute( 'aria-label', p.name + ( d.id !== null && d.id >= 0 ? instOf( d.id ) : '' ) + ( d.who.length > 1 ? ' and ' + K.plural( d.who.length - 1, 'other' ) : '' ) );
 	layers.pills.appendChild( g );
 	if ( coarse ) {
@@ -1539,8 +1674,63 @@ const sig = {
 		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '' ].join( '|' ),
 	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role ] :
 		[ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
-	pill: ( d ) => [ d.stands, d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy, d.anchor ].join( '|' )
+	pill: ( d ) => [ d.stands, d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy, d.anchor, !!d.lit ].join( '|' )
 };
+
+/**
+ * The walk moving, said on the line it took: a bead of light runs it, the way it went (Justin, #rabbithole,
+ * 15 Nov 2026, item 7: webamp's back and forth "need to trigger an animation in the 'Your Rabbithole' bacon
+ * graph area, show advancing through a picker or going back to the previous track"). One draw carries the
+ * ask; a redraw takes the bead with it, and the run stops on its own.
+ */
+function spark( it, glint ) {
+	const dot = s( 'circle', { class: 'spark', r: 3.2, opacity: 0 } );
+	it.el.appendChild( dot );
+	const t0 = performance.now() + ( glint.order || 0 ) * 430, ms = 620;
+	const tick = ( t ) => {
+		if ( ! dot.isConnected ) {
+			return;                                                  // redrawn: the line it rode on is gone
+		}
+		const path = it.el.querySelector( '.core' );
+		const u = ( t - t0 ) / ms;
+		if ( ! path || u < 0 ) {
+			requestAnimationFrame( tick );
+			return;
+		}
+		if ( u >= 1 ) {
+			dot.remove();
+			return;
+		}
+		const e = u * u * ( 3 - 2 * u );
+		const at = path.getPointAtLength( ( glint.back ? 1 - e : e ) * path.getTotalLength() );
+		dot.setAttribute( 'cx', at.x.toFixed( 1 ) );
+		dot.setAttribute( 'cy', at.y.toFixed( 1 ) );
+		dot.setAttribute( 'opacity', ( Math.sin( Math.PI * u ) * 0.95 ).toFixed( 2 ) );
+		requestAnimationFrame( tick );
+	};
+	requestAnimationFrame( tick );
+}
+
+/** The step arrived at glows once: here you are. */
+function pulse( g ) {
+	const ring = s( 'circle', { class: 'spark-ring', r: 4 } );
+	g.appendChild( ring );
+	const t0 = performance.now(), ms = 750;
+	const tick = ( t ) => {
+		if ( ! ring.isConnected ) {
+			return;
+		}
+		const u = ( t - t0 ) / ms;
+		if ( u >= 1 ) {
+			ring.remove();
+			return;
+		}
+		ring.setAttribute( 'r', ( 4 + 22 * u ).toFixed( 1 ) );
+		ring.setAttribute( 'opacity', ( 0.9 * ( 1 - u ) ).toFixed( 2 ) );
+		requestAnimationFrame( tick );
+	};
+	requestAnimationFrame( tick );
+}
 
 function sync( kind, next, now ) {
 	const have = live[ kind ];
@@ -1561,6 +1751,11 @@ function sync( kind, next, now ) {
 		}
 		Object.assign( it, { d, fx: it.x, fy: it.y, fo: it.o, fq: it.q || null, tx: d.x, ty: d.y, to: d.o === undefined ? 1 : d.o, t0: now,
 			delay: fresh && !it.born ? ( d.delay || 0 ) : 0, dead: false } );
+		if ( kind === 'line' && d.glint ) {
+			spark( it, d.glint );
+		} else if ( kind === 'node' && d.glintTo ) {
+			pulse( it.el );
+		}
 	}
 	for ( const [ key, it ] of have ) {
 		if ( !next.has( key ) && !it.dead ) {
@@ -2008,9 +2203,12 @@ function carry( v ) {
 	return { m: v.m, hand: v.hand || here, keep: view.m !== undefined ? [ view.m ] : [ ...new Set( pills ) ].slice( 0, 2 ) };
 }
 
-/** The bar's address follows the view. On a page of its own each step is one of the browser's too, so its Back comes back. */
+/** The bar's address follows the view. Each step forward is one of the browser's too, so its Back comes back —
+ *  the graph on a wiki page and the walk in Rabbithole's drawer alike (Justin, #rabbithole, 15 Nov 2026,
+ *  item 4: after exploring from "your rabbithole", the back button "needs to take you back to your
+ *  rabbithole graph"). A step back is the browser's as well: popstate, below, shows it. */
 function stamp( step ) {
-	history[ step && alone ? 'pushState' : 'replaceState' ]( null, '', address( view ) );
+	history[ step ? 'pushState' : 'replaceState' ]( null, '', address( view ) );
 }
 
 function go( v ) {
@@ -2037,15 +2235,8 @@ function back() {
 	if ( trail.length < 2 ) {
 		return;
 	}
-	if ( alone ) {
-		history.back();                                              // the browser's step; popstate, below, shows it
-		return;
-	}
-	trail.pop();
-	view = trail[ trail.length - 1 ];
-	sel = { picker: null };
-	show();
-	stamp( false );
+	history.back();                          // the browser's step, wherever the graph lives: popstate, below, shows it.
+	                                         // One history, one way back — the ← here and the browser's Back agree.
 }
 
 window.addEventListener( 'popstate', () => {
@@ -2171,6 +2362,9 @@ function aPickerOfSong( d ) {
 	const id = d.id, name = first( id ), role = d.cutOf ? d.cutOf.role : '';
 	const w = { kind: 'a picker' + instOf( id ), title: name, tipTitle: name + instOf( id ), lines: [],
 		hint: 'click: go to ' + name, acts: [ act( 'Go to ' + name, () => go( { a: id } ) ) ] };
+	if ( d.next ) {                                              // a road the walk can take from the song on now
+		w.acts.push( act( 'Follow ' + name + ' to ' + K.clip( d.next.song, 28 ), () => tell( { play: d.next.cid, via: d.next.via } ) ) );
+	}
 	w.lines.push( role ? 'on this cut: ' + role : 'on this cut, and no instrument the sources name' );
 	const web = webFrom( ( l ) => ( l.u === id ? l.v : ( l.v === id ? l.u : undefined ) ) );
 	if ( web.length ) {
@@ -2580,6 +2774,25 @@ new ResizeObserver( () => {
 
 /* ------------------------------------------------------------------------------------------------------------ */
 
+// While the graph's data is on its way, the walk still says itself out of the browser's own store (Justin,
+// #rabbithole, 15 Nov 2026, item 5: the dock "seems to be blank"): the songs it holds, named, the one followed
+// named between. Gone once the graph is read — the drawn walk takes over.
+if ( new URLSearchParams( location.search ).has( 'walk' ) ) {
+	const all = storedWalk();
+	const hops = all.slice( -4 );
+	const boot = h( 'div', { class: 'walk-boot', id: 'walk-boot' } );
+	if ( all.length > hops.length ) {
+		boot.appendChild( h( 'span', { class: 'arrow' }, '…' ) );
+	}
+	hops.forEach( ( hop, i ) => {
+		if ( i ) {
+			boot.appendChild( h( 'span', { class: 'arrow' }, hop.via && hop.via.name ? hop.via.name + ' →' : '→' ) );
+		}
+		boot.appendChild( h( 'b', null, hop.song || hop.cid.slice( 0, 8 ) ) );
+	} );
+	stage.insertBefore( boot, stage.firstChild );
+}
+
 fetch( 'graph.json' ).then( ( r ) => {
 	if ( !r.ok ) {
 		throw new Error( r.status );
@@ -2591,6 +2804,10 @@ fetch( 'graph.json' ).then( ( r ) => {
 	finder = new Map( all.map( ( x ) => [ x.label.toLowerCase(), x ] ) );
 	$( 'names' ).replaceChildren( ...all.map( ( x ) => h( 'option', { value: x.label } ) ) );
 	$( 'wait' ).remove();
+	const bootPills = $( 'walk-boot' );
+	if ( bootPills ) {
+		bootPills.remove();
+	}
 	const q = new URLSearchParams( location.search );
 	const asked = q.get( 'm' ) || q.get( 'a' ) || q.get( 'from' ) || q.get( 'p' );
 	const v = parse( q );
