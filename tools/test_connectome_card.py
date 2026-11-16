@@ -142,7 +142,7 @@ def test_a_card_names_their_closest_and_escapes_every_name():
     assert '>Justin Myles Holmes</text></a>' in html and '>Molly Tuttle</text></a>' in html   # named round them, linked
     assert 'Instrument-icon-guitar.png' in html
     assert '<table' not in html and 'Featured' not in html and 'Bacon' not in html   # no table of paths to anyone
-    assert '/assets/connectome/?a=Kyle+Tuttle&amp;b=Justin+Myles+Holmes' in html     # a click opens the two of them
+    assert '"/bacon?a=Kyle+Tuttle&amp;b=Justin+Myles+Holmes"' in html     # a click opens the two of them
     assert 'Gaven Largent' not in html                                               # two hops off: not on a card now
 
 
@@ -569,12 +569,12 @@ def test_the_cards_paper_is_a_way_in_and_lies_under_everything_else():
     html = cc.card('Kyle Tuttle', _store(), lambda n: True, {})
     svg = html[html.index('<svg'):]
     first = svg[svg.index('>') + 1:]
-    assert first.startswith('<a class="cc-bg" href="/assets/connectome/?p=Kyle+Tuttle" aria-label="Explore Kyle Tuttle in the connectome"><rect ')
+    assert first.startswith('<a class="cc-bg" href="/bacon?p=Kyle+Tuttle" aria-label="Explore Kyle Tuttle in the connectome"><rect ')
     assert svg.count('class="cc-bg"') == 1 and svg.index('cc-bg') < svg.index('<line')        # under every line and dot
     cut = cc.song_cut(song_whole(), {}, {'4masks': '/wiki/4masks'}, 'arthel:4masks')
     song = cc.song_card('<b>Silver 44</b>', cut, [('Kyle Tuttle', 'banjo'), ('Molly Tuttle', '')], _store(), lambda n: True, {})
     svg = song[song.index('<svg'):]
-    assert svg[svg.index('>') + 1:].startswith('<a class="cc-bg" href="/assets/connectome/?')
+    assert svg[svg.index('>') + 1:].startswith('<a class="cc-bg" href="/bacon?')
     assert 'aria-label="Explore &lt;b&gt;Silver 44&lt;/b&gt; in the connectome"' in svg and '<b>' not in song
 
 
