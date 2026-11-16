@@ -83,6 +83,38 @@ def test_song_key_meets_across_footnote_inline_and_file_title():
     assert L.song_key("My Mountain so High $@") == "mymountainsohigh"
 
 
+def test_a_line_about_a_player_puts_nobody_on_the_stage():
+    # The Arabesque tapes of 1980: their notes liken Mike Scap to two players and list his bassist's career
+    likened = ("Former band mate Tim O\u2019Brien places Scap \u201cin a class with David Grier, or Bryan Sutton, "
+               "or any of the top players in bluegrass\u201d. Pete Wernick says, \u201chis sound was different\u201d.")
+    for n in ("David Grier", "Bryan Sutton", "Tim O'Brien"):
+        assert L.classify([likened], 0, n)[1] == "none", n
+    career = ("In 1980 he moved to Colorado with the band Arabesque, and has since been a sought after sideman on "
+              "over 100 albums, including Grammy award winner Tim O'Brien, Tim and Mollie O'Brien.")
+    assert L.classify([career], 0, "Tim O'Brien")[1] == "none"
+    bio = "Reminiscent of genre-benders like Jack White, Chris Thile, and Sam Bush, Dead Winter Carpenters blends"
+    assert L.classify([bio], 0, "Sam Bush")[1] == "none"
+    # Larry Keel, 2019-06-30; Tyler Grant, 2017-11-10; a festival's Friday in a Saturday tape's notes
+    assert L.classify(["\u201cI love jamming with Keel. Larry does.\u201d \u2014 Sam Bush"], 0, "Sam Bush")[1] == "none"
+    assert L.classify(["Bill Monroe, Peter Rowan, and Danny Barnes to name a few."], 0, "Peter Rowan")[1] == "none"
+    assert L.classify(["In 2004 he joined Casey and Chris Henry and the Two-Stringers."], 0, "Chris Henry")[1] == "none"
+    day = ("Friday: the Wailers (4:30pm-5:45pm);  Peter Rowan w/ Sam Grisman Project (6:15pm-7:45pm);  "
+           "Dark Star Orchestra (8:30pm-10:30pm)")
+    assert L.classify([day], 0, "Sam Grisman")[1] == "festival"
+    assert L.classify(["Start of 1st song missing (I was at the Peter Rowan show)"], 0, "Peter Rowan")[1] == "none"
+
+
+def test_a_song_called_the_likes_of_me_is_not_a_comparison():
+    # Billy Strings, 2021-12-11: a description with no stops, a setlist with that song, then the lineup
+    line = ("02 The Likes Of Me >03 Meet Me At The Creek08 Wharf Rat >09 All Fall DownRoyal Masat - Bass And Vocals"
+            "Jarrod Walker - Mandolin And VocalsBilly Failing - BanJo And VocalsJohn Mailander - Fiddle")
+    assert L.about_a_player(line, "John Mailander") is None
+    assert L.classify(["William Apostle - Acoustic Guitar And Vocals", "John Mailander - Fiddle"], 1,
+                      "John Mailander")[1] == "show"
+    assert L.classify(["Peter Rowan-Guitar, Vocals Chris Henry-Mandolin, Vocals David Grier-Guitar"], 0,
+                      "David Grier")[1] == "show"
+
+
 def test_pairs_song_show_and_apart():
     found = {
         # SGP2025-07-05: "My Mountain so High $@", "$ with Kyle Tuttle", "@ With Molly Tuttle"
