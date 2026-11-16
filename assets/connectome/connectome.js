@@ -2142,6 +2142,7 @@ function steady() {
 	const tall = legend.offsetHeight;
 	stage.classList.remove( 'webbed', 'deep' );                      // show() says which of them the view has, once it knows
 	legend.style.minHeight = tall + 'px';
+	stage.style.setProperty( '--legend', tall + 'px' );             // the QR code sits just above it
 }
 
 /** Show the view. again: the same view, laid out afresh because the frame changed; everyone keeps the seat they had. */
@@ -2161,6 +2162,7 @@ function show( quick, again ) {
 	$( 'say' ).lastElementChild.replaceChildren( ...( lost && trail.length < 2 ? [ lost ] : scene.sub ) );
 	put( scene, quick );
 	keptSay();
+	qrSay();
 	fillPanel();
 	$( 'pa' ).value = view.walk || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
 	$( 'pb' ).value = view.walk || view.m !== undefined || view.b === undefined ? '' : first( view.b );
@@ -2412,6 +2414,32 @@ async function openKept( id ) {
 	lost = '';
 	show();
 	history.replaceState( null, '', '/bacon/' + id + ( HOST ? '?host=' + HOST : '' ) );
+}
+
+/**
+ * The QR code in the corner (Justin, #connectome, 16 Nov 2026: "always a QR code visible. So if I'm showing someone
+ * one, they can take a QR code of it with their phone and pick up right where I left off"): this view's own
+ * address, or a kept graph's, as a reader would open it, not as Rabbithole frames it. Not for the walk, which
+ * lives in the browser it was walked in.
+ */
+let qrFor = '';
+function qrSay() {
+	const box = $( 'qr' );
+	box.hidden = MINI || !view || !!view.walk;
+	if ( box.hidden ) {
+		return;
+	}
+	const here = /^\/bacon(\/|$)/.test( location.pathname ) ? '/bacon' : location.pathname.replace( /[^/]*$/, '' );
+	const url = location.origin + ( KEPT ? '/bacon/' + KEPT.id : here + rawAddress( view ) );
+	if ( url === qrFor ) {
+		return;
+	}
+	qrFor = url;
+	const p = K.qrPath( K.qrCode( url, 'L' ) );
+	const pic = box.querySelector( 'svg' );
+	pic.setAttribute( 'viewBox', `0 0 ${ p.side } ${ p.side }` );
+	pic.firstElementChild.setAttribute( 'd', p.d );
+	box.setAttribute( 'aria-label', 'A QR code of this view, ' + url + ': scan it to pick up here on a phone' );
 }
 
 /** What a kept graph says of itself, above it, and its lines marked where a source has gone since. */
@@ -2925,6 +2953,7 @@ document.addEventListener( 'keydown', ( e ) => {
 
 $( 'back' ).addEventListener( 'click', back );
 $( 'share' ).addEventListener( 'click', onShare );
+$( 'qr' ).addEventListener( 'click', () => $( 'qr' ).classList.toggle( 'big' ) );
 
 let finder = new Map();          // everything the boxes can find, by its name in small letters (K.catalogue)
 
