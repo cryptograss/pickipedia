@@ -2793,7 +2793,8 @@ if ( new URLSearchParams( location.search ).has( 'walk' ) ) {
 	stage.insertBefore( boot, stage.firstChild );
 }
 
-fetch( 'graph.json' ).then( ( r ) => {
+// graph.json is beside this script, wherever the page is: /bacon, or the old address.
+fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	if ( !r.ok ) {
 		throw new Error( r.status );
 	}
