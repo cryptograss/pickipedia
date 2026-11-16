@@ -138,6 +138,19 @@ $wgNamespaceAliases['VC'] = NS_VERSIONCONTROL;
 $wgNamespaceAliases['VC_talk'] = NS_VERSIONCONTROL_TALK;
 $wgNamespacesWithSubpages[NS_VERSIONCONTROL] = true;
 
+# The Bacon namespace: bacon graphs kept as shared (Justin, #connectome, 16 Nov
+# 2026: "a permalink that I can copy and paste to someone and share that exact
+# thing"). A signed-in reader's 🔗 on the big graph keeps the view in sight
+# here, as Bacon:<its ID>, and /bacon/<its ID> draws it from the page
+# (assets/connectome/connectome.js). Each page links the pickers in it, so
+# their pages know. Made by the graph, not written: kept out of search
+# engines' indexes, and out of the wiki's own search unless asked for.
+define( "NS_BACON", 3018 );
+define( "NS_BACON_TALK", 3019 );
+$wgExtraNamespaces[NS_BACON] = "Bacon";
+$wgExtraNamespaces[NS_BACON_TALK] = "Bacon_talk";
+$wgNamespaceRobotPolicies[NS_BACON] = 'noindex,follow';
+
 # Make Cryptograss namespace searchable by default
 $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
 $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;

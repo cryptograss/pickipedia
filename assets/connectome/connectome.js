@@ -56,6 +56,8 @@ const $ = ( id ) => document.getElementById( id );
 const svg = $( 'g' ), stage = $( 'stage' ), tip = $( 'tip' ), panel = $( 'panel' ), sheet = $( 'sheet' );
 
 let G = null;
+let RAW = null;                   // graph.json as read: what a kept graph is cut from
+let KEPT = null;                  // a kept graph in sight: { id, doc, kept, live, since, edited } (keptSay, below)
 // The view: { a } one picker and their company; { a, b } two pickers and what's between; { m } one piece of music
 // and where its pickers lead. With it, what the reader came by, so it stays in sight: keep (pickers, or pieces),
 // hand (the pickers a piece was reached by), by (the piece a picker was reached by).
@@ -2158,6 +2160,7 @@ function show( quick, again ) {
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
 	$( 'say' ).lastElementChild.replaceChildren( ...( lost && trail.length < 2 ? [ lost ] : scene.sub ) );
 	put( scene, quick );
+	keptSay();
 	fillPanel();
 	$( 'pa' ).value = view.walk || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
 	$( 'pb' ).value = view.walk || view.m !== undefined || view.b === undefined ? '' : first( view.b );
@@ -2208,10 +2211,16 @@ function carry( v ) {
  *  item 4: after exploring from "your rabbithole", the back button "needs to take you back to your
  *  rabbithole graph"). A step back is the browser's as well: popstate, below, shows it. */
 function stamp( step ) {
-	history[ step ? 'pushState' : 'replaceState' ]( null, '', address( view ) );
+	// Out of a kept graph, at /bacon/<id>, the address is the page's own again: a bare ?p= would stay under the id.
+	const at = KEPT ? '/bacon/' + KEPT.id : ( keptAt() ? '/bacon' : '' ) + address( view );
+	history[ step ? 'pushState' : 'replaceState' ]( null, '', at );
 }
 
 function go( v ) {
+	const left = !!KEPT && !!view;
+	if ( left ) {
+		v = leaveKept( v );                  // a click that goes further goes into today's graph
+	}
 	if ( !v.walk && v.m === undefined && v.s === undefined && v.b === v.a ) {
 		v = { a: v.a };
 	}
@@ -2222,7 +2231,7 @@ function go( v ) {
 		trail.shift();
 	}
 	show();
-	stamp( trail.length > 1 );
+	stamp( trail.length > 1 || left );
 	// The page stays where the reader has it (Justin, #connectome, 15 Nov 2026: not to the top on every click).
 }
 
@@ -2239,7 +2248,219 @@ function back() {
 	                                         // One history, one way back — the ← here and the browser's Back agree.
 }
 
+/* ------------------------------------------------------------------------------------------------------------
+ * A bacon graph kept as shared (Justin, #connectome, 16 Nov 2026): "a permalink that I can copy and paste to
+ * someone and share that exact thing so they can explore all the same nodes, all the same connections". 🔗
+ * keeps the view on the wiki as a page, Bacon:<id> (K.keep: the part of graph.json it stands on), and copies
+ * /bacon/<id>. Opened, it is drawn from what was kept, by the same scenes; today's graph says what has changed
+ * since, and a click that goes further goes into today's graph.
+ * --------------------------------------------------------------------------------------------------------- */
+
+/** The kept graph this address names, or ''. */
+function keptAt() {
+	const m = /^\/bacon\/([0-9a-z]{11})\/?$/.exec( location.pathname );
+	return m && K.KEPT_ID.test( m[ 1 ] ) ? m[ 1 ] : '';
+}
+
+/** Everything drawn goes, at once: the next view is of another graph, whose numbers are not this one's. */
+function forget() {
+	for ( const kind of Object.keys( live ) ) {
+		for ( const it of live[ kind ].values() ) {
+			it.el.remove();
+		}
+		live[ kind ].clear();
+	}
+	was = new Map();
+	scene = null;
+	view = null;
+	trail.length = 0;
+}
+
+/** The view to keep, as its page will hold it: who's in sight, the view's address, and the graph under them. */
+function keptDoc( kind ) {
+	const nodes = [ ...scene.nodes.values() ], tags = [ ...scene.pills.values() ].filter( ( p ) => p.stands === 'picker' );
+	const pickers = [ ...new Set( nodes.filter( ( n ) => n.stands === 'picker' ).map( ( n ) => n.id )
+		.concat( tags.flatMap( ( p ) => [ p.id, ...( p.who || [] ) ] ) ).filter( ( id ) => typeof id === 'number' ) ) ];
+	const musics = [];
+	const piece = ( id ) => {
+		if ( id !== undefined && id !== null && M( id ) ) {
+			musics.push( M( id ).m, ...( M( id ).also || [] ) );
+		}
+	};
+	nodes.filter( ( n ) => n.stands === 'piece' ).forEach( ( n ) => piece( n.piece ) );
+	[ view.m, view.by ].forEach( piece );
+	[ view.cut, view.via ].forEach( ( cid ) => cid && G.songcast && G.songcast[ cid ] && musics.push( ...( G.songcast[ cid ].on || [] ) ) );
+	const q = new URLSearchParams( rawAddress( view ).slice( 1 ) );
+	q.delete( 'turn' );                          // the kept graph holds only who was in sight: its first turn is them
+	// Whose every tie is kept: a constellation's middle, since who of their company is drawn is chosen from all of
+	// it; a record's or a show's own pickers, since what else of theirs is drawn is chosen from all they're on.
+	const hubs = kind === 'c' ? [ view.a ] : ( view.m !== undefined && M( view.m ) ? M( view.m ).cast : [] );
+	return { bacon: 1, kind, view: '?' + q, built: RAW.built || '', on: pickers.map( first ), graph: K.keep( RAW, pickers, musics, hubs ) };
+}
+
+/** The kept graph's page: who's in it, as links (so each picker's page knows), and what was kept, unseen. */
+function keptPage( id, doc, text ) {
+	const named = doc.on.map( ( n ) => '* ' + ( /^[^#<>[\]{}|]+$/.test( n ) ? '[[:' + n + ']]' : n.replace( /[#<>[\]{}|]/g, '' ) ) );
+	return `{{Bacon graph|kind=${ doc.kind }|id=${ id }|built=${ doc.built }|view=${ doc.view }}}\n${ named.join( '\n' ) }\n` +
+		`<pre class="bacon-graph-data" style="display:none">${ text }</pre>\n`;
+}
+
+async function wiki( params, post ) {
+	const q = new URLSearchParams( Object.assign( { format: 'json', formatversion: 2 }, params ) );
+	const r = await fetch( '/api.php' + ( post ? '' : '?' + q ), post ? { method: 'POST', body: q, credentials: 'same-origin' } :
+		{ credentials: 'same-origin', cache: 'no-store' } );
+	if ( !r.ok ) {
+		throw new Error( 'the wiki answered ' + r.status );
+	}
+	return r.json();
+}
+
+/** Keep the view in sight, and its link: { url, how }, how being 'kept', 'again' (a kept graph's own) or 'today' (not signed in). */
+async function share() {
+	if ( KEPT ) {
+		return { url: location.origin + '/bacon/' + KEPT.id, how: 'again' };
+	}
+	const kind = K.kindOf( view );
+	const doc = keptDoc( kind ), text = K.keptText( doc ), id = await K.keptId( kind, text );
+	const who = await wiki( { action: 'query', meta: 'userinfo|tokens', type: 'csrf' } );
+	if ( who.query.userinfo.anon ) {
+		return { url: location.origin + '/bacon' + doc.view, how: 'today' };
+	}
+	const r = await wiki( { action: 'edit', title: 'Bacon:' + id, text: keptPage( id, doc, text ), summary: 'A bacon graph, kept as shared',
+		createonly: 1, assert: 'user', token: who.query.tokens.csrftoken }, true );
+	if ( !( r.edit && r.edit.result === 'Success' ) && !( r.error && r.error.code === 'articleexists' ) ) {
+		throw new Error( r.error ? r.error.info || r.error.code : 'the wiki kept nothing' );
+	}
+	return { url: location.origin + '/bacon/' + id, how: 'kept' };
+}
+
+const SHARED = {
+	kept: [ 'Kept as it is now, and the link copied.', 'Kept as it is now. Its link:' ],
+	again: [ 'Copied: the link to this graph as it was kept.', 'The link to this graph as it was kept:' ],
+	today: [ 'Copied a link to this view as it stands today. Sign in to the wiki to keep it as it is now.',
+		'Sign in to the wiki to keep this graph as it is now. A link to it as it stands today:' ]
+};
+
+/** 🔗: the link goes to the clipboard as the click asked (a promise of it, which Safari needs), and is shown, to copy by hand. */
+function onShare() {
+	const btn = $( 'share' ), box = $( 'shared' );
+	btn.disabled = true;
+	const job = share();
+	let copied = null;
+	if ( window.ClipboardItem && navigator.clipboard && navigator.clipboard.write ) {
+		copied = navigator.clipboard.write( [ new ClipboardItem( { 'text/plain': job.then( ( r ) => new Blob( [ r.url ], { type: 'text/plain' } ) ) } ) ] );
+	} else if ( navigator.clipboard && navigator.clipboard.writeText ) {
+		copied = job.then( ( r ) => navigator.clipboard.writeText( r.url ) );
+	}
+	Promise.allSettled( [ job, copied ] ).then( ( [ done, clip ] ) => {
+		btn.disabled = false;
+		if ( done.status === 'rejected' ) {
+			console.error( done.reason );
+			box.replaceChildren( h( 'span', null, "Couldn't keep this graph: " + ( ( done.reason && done.reason.message ) || done.reason ) + '.' ) );
+		} else {
+			const ok = !!copied && clip.status === 'fulfilled';
+			box.replaceChildren( h( 'span', null, SHARED[ done.value.how ][ ok ? 0 : 1 ] ),
+				h( 'input', { readonly: true, value: done.value.url, 'aria-label': 'The link', onfocus: ( e ) => e.target.select() } ) );
+		}
+		box.hidden = false;
+		clearTimeout( onShare.t );
+		onShare.t = setTimeout( () => {
+			box.hidden = true;
+		}, 15000 );
+	} );
+}
+
+/** Out of a kept graph, into today's: the view asked for, said as an address in the kept graph, read in today's. */
+function leaveKept( v ) {
+	const there = new URLSearchParams( rawAddress( carry( v ) ).slice( 1 ) );
+	G = KEPT.live;
+	KEPT = null;
+	forget();
+	return parse( there ) || { a: K.landing( G ) };
+}
+
+/** A kept graph, opened: drawn from what was kept, with today's graph kept aside to say what has changed since. */
+async function openKept( id ) {
+	const live = KEPT ? KEPT.live : G;
+	let doc = null, edited = false;
+	try {
+		const r = await fetch( '/index.php?' + new URLSearchParams( { title: 'Bacon:' + id, action: 'raw' } ), { cache: 'no-cache' } );
+		const m = r.ok ? /<pre class="bacon-graph-data"[^>]*>([\s\S]*?)<\/pre>/.exec( await r.text() ) : null;
+		if ( m ) {
+			doc = JSON.parse( m[ 1 ].trim() );
+			edited = await K.keptId( id[ 0 ], m[ 1 ].trim() ) !== id;
+		}
+	} catch ( err ) {
+		console.error( err );
+	}
+	G = live;
+	KEPT = null;
+	forget();
+	if ( !doc || !doc.graph ) {
+		const start = K.landing( G );
+		lost = `No bacon graph is kept as “${ id }”. Here is ${ first( start ) } instead.`;
+		history.replaceState( null, '', '/bacon' );
+		go( { a: start } );
+		return;
+	}
+	const kept = K.build( doc.graph );
+	KEPT = { id, doc, kept, live, since: K.since( kept, live, doc.on || [] ), edited };
+	G = kept;
+	view = parse( new URLSearchParams( doc.view ) ) || { a: 0 };
+	trail.push( view );
+	sel = { picker: null };
+	lost = '';
+	show();
+	history.replaceState( null, '', '/bacon/' + id + ( HOST ? '?host=' + HOST : '' ) );
+}
+
+/** What a kept graph says of itself, above it, and its lines marked where a source has gone since. */
+function keptSay() {
+	const box = $( 'kept' );
+	box.hidden = !KEPT;
+	$( 'share' ).hidden = MINI || !K.kindOf( view );
+	for ( const it of live.line.values() ) {
+		const d = it.d, st = KEPT && d && d.stands === 'tie' ? KEPT.since.state.get( K.pairName( first( d.u ), first( d.v ) ) ) : '';
+		it.el.classList.toggle( 'kept-changed', st === 'changed' );
+		it.el.classList.toggle( 'kept-gone', st === 'gone' );
+	}
+	if ( !KEPT ) {
+		return;
+	}
+	const { since: n, doc } = KEPT;
+	const lines = [];
+	if ( n.changed || n.gone ) {
+		lines.push( [ n.changed && K.plural( n.changed, 'line has', 'lines have' ) + ' lost a source since (dashed)',
+			n.gone && K.plural( n.gone, 'line has', 'lines have' ) + ' lost every source (dotted)' ].filter( Boolean ).join( ', and ' ) + '.' );
+	} else {
+		lines.push( 'Every line in it still stands.' );
+	}
+	if ( n.grown ) {
+		lines.push( K.plural( n.grown, 'new tie', 'new ties' ) + ' among these pickers since.' );
+	}
+	if ( KEPT.edited ) {
+		lines.push( 'Its page has been edited since it was kept.' );
+	}
+	const today = new URLSearchParams( doc.view.slice( 1 ) );
+	if ( HOST ) {
+		today.set( 'host', HOST );                   // inside Rabbithole, the graph stays Rabbithole's
+	}
+	box.replaceChildren( h( 'b', null, `A ${ K.KINDS[ KEPT.id[ 0 ] ] }, kept as shared` ), doc.built ? ` from the graph of ${ doc.built }. ` : '. ',
+		lines.join( ' ' ) + ' ', h( 'a', { href: '/bacon?' + today }, 'See it as it is today →' ) );
+}
+
 window.addEventListener( 'popstate', () => {
+	if ( keptAt() ) {                           // back to a kept graph
+		if ( G && ( !KEPT || KEPT.id !== keptAt() ) ) {
+			openKept( keptAt() );
+		}
+		return;
+	}
+	if ( KEPT ) {                               // forward again, out of one
+		G = KEPT.live;
+		KEPT = null;
+		forget();
+	}
 	const v = G && parse( new URLSearchParams( location.search ) );
 	if ( !v ) {
 		return;
@@ -2703,6 +2924,7 @@ document.addEventListener( 'keydown', ( e ) => {
 } );
 
 $( 'back' ).addEventListener( 'click', back );
+$( 'share' ).addEventListener( 'click', onShare );
 
 let finder = new Map();          // everything the boxes can find, by its name in small letters (K.catalogue)
 
@@ -2800,6 +3022,7 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	}
 	return r.json();
 } ).then( ( g ) => {
+	RAW = g;
 	G = K.build( g );
 	const all = K.catalogue( G );
 	finder = new Map( all.map( ( x ) => [ x.label.toLowerCase(), x ] ) );
@@ -2808,6 +3031,10 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	const bootPills = $( 'walk-boot' );
 	if ( bootPills ) {
 		bootPills.remove();
+	}
+	if ( keptAt() ) {
+		openKept( keptAt() );
+		return;
 	}
 	const q = new URLSearchParams( location.search );
 	const asked = q.get( 'm' ) || q.get( 'a' ) || q.get( 'from' ) || q.get( 'p' );

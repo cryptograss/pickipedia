@@ -35,6 +35,9 @@ RewriteRule ^wiki$ index.php?title=Main_Page [QSA,L]
 # The bacon graph's page is /bacon (Justin, #connectome, 16 Nov 2026). Its files stay in assets/connectome/,
 # where the build writes them, and the page asks for them there. [END]: no rule here sees the rewrite again.
 RewriteRule ^bacon/?$ assets/connectome/index.html [END]
+# A bacon graph kept as shared: /bacon/ and its ID (a letter for its kind, ten of Crockford's base 32). The same
+# page, which reads the ID from the address and the graph from the wiki page Bacon:<ID>.
+RewriteRule ^bacon/[cfmr][0-9a-hjkmnp-tv-z]{10}/?$ assets/connectome/index.html [END]
 
 # Its old address still works, and says where the page lives now, with the query (?p=, ?walk=, ?host=).
 # THE_REQUEST is the request line as the reader sent it, so only a reader's own request is sent on. Caddy ends
