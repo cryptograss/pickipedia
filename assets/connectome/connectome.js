@@ -803,6 +803,7 @@ function egoScene( v ) {
 
 let walkHops = null;                    // the walk, as Rabbithole keeps it: [{ cid, song, via, at }], oldest first
 let walkNow = { cid: null, playing: false };
+let walkAt = null;                      // where the walk stands, the player's `at` (magent, 16 Nov): null when it doesn't say
 let walkChasing = null;                 // who is chased, by name (Justin, 15 Nov 2026: "very super bigly highlighted")
 let walkFoot = true;                    // the reader is at the foot of the walk: a new song keeps them there
 let road = null;                        // a road from the song on now, gone to: { cid, via }; played from there, it's that picker followed
@@ -860,10 +861,16 @@ function walkScene() {
 	const sc = newScene();
 	const steps = K.walkSteps( G, walkHops || storedWalk() );
 	const sum = K.walkSum( steps );
+	// Where the walk stands (magent, 16 Nov: `at` rides the walk word beside `night`): the step you are on, not
+	// the newest one — a walk can stand on a song it has heard before. Where the player doesn't say, the newest
+	// step is where you stand, as it has always been drawn.
+	const standing = walkAt !== null ? Math.max( 0, Math.min( walkAt, steps.length - 1 ) ) : steps.length - 1;
 	const R = WALK.R;
 	// Where every song goes, in a frame W wide (H tall, for the dock).
 	const place = ( W, H ) => {
-		const shown = MINI ? steps.slice( W < 330 ? -2 : -3 ) : steps;  // the dock: the song on now and two before it; one, in a narrow sidebar
+		// the dock: where you stand and one or two before it; one, in a narrow sidebar
+		const few = W < 330 ? 2 : 3;
+		const shown = MINI ? steps.slice( Math.max( 0, standing + 1 - few ), standing + 1 ) : steps;
 		let lay = MINI ? K.snake( { W, n: shown.length, room: 70, side: R + 4, top: shown.length > 2 ? 64 : Math.max( 34, Math.round( ( H - 80 ) / 2 ) + R ),
 			pitch: 0, most: Math.max( 1, shown.length ) } ) :
 			K.snake( { W, n: shown.length, room: W >= 700 ? 200 : 150, side: WALK.side, top: WALK.top, pitch: WALK.pitch } );
@@ -893,10 +900,10 @@ function walkScene() {
 	shown.forEach( ( st, i ) => {
 		const p = lay.at[ i ];
 		const up = MINI && snaking && lay.cols === 3 && p.col === 1;   // the dock's middle song is named over it: the room is there
-		const now = st.i === steps.length - 1;
+		const now = st.i === standing;                             // the stand: where you are, not the newest step
 		const whose = st.piece !== undefined ? K.called( G, M( st.piece ) ).sub : '';
 		const fresh = !MINI && st.at !== null && ( !i || dayOf( st.at ) !== dayOf( shown[ i - 1 ].at ) );   // each day says itself once
-		const note = [ now ? ( walkNow.cid === st.cid && walkNow.playing ? '▶ on now' : 'on now, paused' ) : ( st.again ? 'again' : '' ),
+		const note = [ now ? ( walkNow.playing ? '▶ on now' : 'on now, paused' ) : ( st.again ? 'again' : '' ),
 			fresh ? dayOf( st.at ) : '' ].filter( Boolean ).join( ' · ' );
 		const most = room( p, up );
 		const common = { step: st.i, cid: st.cid, side: snaking ? null : 'right', anchor: snaking ? ( up ? 'middle' : p.anchor ) : null, up,
@@ -997,7 +1004,14 @@ function walkScene() {
 	walkGlint = null;
 	if ( !MINI && walkFoot ) {
 		requestAnimationFrame( () => {
-			stage.scrollTop = stage.scrollHeight;                    // the song on now is at the foot: in sight
+			if ( standing >= steps.length - 1 ) {
+				stage.scrollTop = stage.scrollHeight;                // the song on now is at the foot: in sight
+			} else {
+				const el = svg.querySelector( '[data-k="w' + standing + '"]' );
+				if ( el ) {
+					el.scrollIntoView( { block: 'nearest' } );       // the stand, wherever it is: in sight
+				}
+			}
 		} );
 	}
 	sc.head = [ 'Your rabbithole', steps.length ? h( 'button', { type: 'button', class: 'turn',
@@ -1112,14 +1126,24 @@ window.addEventListener( 'message', ( ev ) => {
 		document.documentElement.classList.toggle( 'pp-dark', d.night );
 		document.documentElement.classList.toggle( 'pp-light', !d.night );
 	}
-	const was = walkNow.cid;
+	const wasAt = walkAt, wasCid = walkNow.cid;
 	walkNow = { cid: d.now || null, playing: !!d.playing };
-	if ( G && was && d.now && was !== d.now ) {                  // the walk moved on its own (Justin, item 7: webamp's back
+	walkAt = typeof d.at === 'number' ? d.at : null;
+	if ( G && ( wasCid || wasAt !== null ) ) {                   // the walk moved on its own (Justin, item 7: webamp's back
 		                                                     // and forth "need to trigger an animation in the 'Your
-		                                                     // Rabbithole' bacon graph area"): the line it took shows it
+		                                                     // Rabbithole' bacon graph area"): the line it took shows
+		                                                     // it. The stand (`at`) says where; by cid when the player
+		                                                     // is one that doesn't send it yet.
 		const steps = K.walkSteps( G, walkHops || [] );
-		const from = steps.findIndex( ( st ) => st.cid === was ), to = steps.findIndex( ( st ) => st.cid === d.now );
-		if ( from >= 0 && to >= 0 && from !== to ) {
+		let from = null, to = null;
+		if ( typeof wasAt === 'number' && typeof walkAt === 'number' && wasAt !== walkAt ) {
+			from = wasAt;
+			to = walkAt;
+		} else if ( walkAt === null && wasCid && d.now && wasCid !== d.now ) {
+			from = steps.findIndex( ( st ) => st.cid === wasCid );
+			to = steps.findIndex( ( st ) => st.cid === d.now );
+		}
+		if ( from !== null && to !== null && from >= 0 && to >= 0 && from !== to ) {
 			walkGlint = { from, to, back: to < from, t: performance.now() };
 		}
 	}
