@@ -1,0 +1,32 @@
+{
+	"name": "PickiPediaConnectionNotes",
+	"version": "0.1.0",
+	"author": [
+		"Re"
+	],
+	"url": "https://github.com/cryptograss/pickipedia",
+	"descriptionmsg": "connectionnotes-desc",
+	"license-name": "GPL-2.0-or-later",
+	"type": "other",
+	"requires": {
+		"MediaWiki": ">= 1.43.0"
+	},
+	"AutoloadNamespaces": {
+		"MediaWiki\\Extension\\PickiPediaConnectionNotes\\": "src/"
+	},
+	"APIModules": {
+		"connectionnote": "MediaWiki\\Extension\\PickiPediaConnectionNotes\\ApiConnectionNote"
+	},
+	"Hooks": {
+		"LoadExtensionSchemaUpdates": "main"
+	},
+	"HookHandlers": {
+		"main": {
+			"class": "MediaWiki\\Extension\\PickiPediaConnectionNotes\\Hooks"
+		}
+	},
+	"MessagesDirs": {
+		"PickiPediaConnectionNotes": [ "i18n" ]
+	},
+	"manifest_version": 2
+}

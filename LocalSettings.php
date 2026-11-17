@@ -518,6 +518,12 @@ if ( getenv('DELIVERY_KID_API_KEY') ) {
 	$wgDeliveryKidApiKey = getenv('DELIVERY_KID_API_KEY');
 }
 
+# PickiPediaConnectionNotes - the connection box: a visitor's note about an
+# unrecorded connection, saved as plain text to Cryptograss talk:Connection
+# inbox by a system user (created on update.php), so a signed-out visitor
+# publishes no IP. Docs: Cryptograss:Bacon graphs/Discovery.
+wfLoadExtension( 'PickiPediaConnectionNotes' );
+
 # PickiPediaRecordingMetadata - per-recording timeline + ensemble editor.
 # Routes Release:*\/Metadata pages to the recording-metadata-yaml content
 # model; loaded after PickiPediaReleases so NS_RELEASE is available.

@@ -1,0 +1,11 @@
+{
+	"@metadata": {
+		"authors": [ "Re" ]
+	},
+	"connectionnotes-desc": "The connection box: a visitor's note about an unrecorded connection, saved as text for a person to verify",
+	"connectionnote-help": "Saves a plain-text note about a connection to Cryptograss talk:Connection inbox. Parameters: about (who it is about), from (where you came from), note (the connection, up to 2000 characters).",
+	"apierror-connectionnote-invalid": "A field is missing or too long (note: at most $1 characters).",
+	"apierror-connectionnote-nouser": "The note-writer system user does not exist yet; run update.php.",
+	"apierror-connectionnote-notitle": "The connection inbox page title is invalid.",
+	"apierror-connectionnote-savefailed": "Saving the note failed: $1"
+}
