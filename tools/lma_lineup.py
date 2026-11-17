@@ -140,6 +140,35 @@ def songs_marked(lines, mark):
     return out
 
 
+# A sentence about a player, not about this music: who someone is likened to or learned from, what a peer
+# or a critic says of them, their career. Names in it are not on the stage. The Arabesque tapes of 1980
+# put David Grier, Bryan Sutton and Tim O'Brien on stage with Mike Scap (16 Nov 2026) from a line of their
+# notes: "Former band mate Tim O'Brien places Scap “in a class with David Grier, or Bryan Sutton”", and from
+# their bassist's biography: "a sought after sideman on over 100 albums, including ... Tim O'Brien".
+ABOUT = re.compile(r"\b(?:[Ii]n (?:a|the same) (?:class|league) (?:with|as)|[Cc]ompar(?:ed|es|ing|isons?) (?:\w+ ){0,2}(?:to|with)"
+                   r"|(?:[Tt]he )?likes of|[Rr]eminiscent of|[Ii]n the (?:vein|tradition|mou?ld) of|(?:[Ii]nfluenced|[Ii]nspired) by"
+                   r"|[Ii]n the words of|during (?:his|her|their) (?:\w+ )?careers?|sought.after sideman|\d+ (?:albums|records)"
+                   r"|(?:has|have) (?:since )?(?:played|performed|toured|recorded) with|to name a few|shared the stage with"
+                   r"|appear(?:s|ed)? as guests? on|[Ii] was (?:at|over at) the"
+                   r"|[Ii]n (?:19|20)\d\d,? (?:he|she|they) (?:joined|formed|moved|toured|recorded))\b"
+                   r"|[\u201d\"]\s*[\u2014\u2013]\s*[A-Z]")    # a blurb's signature: \u201c...\u201d \u2014 Sam Bush
+# Larry Keel's biography (LKE2019-06-30): "... Bill Monroe, Peter Rowan, and Danny Barnes to name a few"; a taper
+# elsewhere: "(I was at the Peter Rowan show with Mike Marshall & Brynn Bright)" (ymsb2004-10-07); the blurbs
+# on Keel's tape ("...Larry does.\u201d \u2014 Sam Bush"); Tyler Grant's: "In 2004 he joined Casey and Chris Henry".
+# Lower case, as prose writes it: a setlist's "The Likes Of Me" is a song (Billy Strings, 2021-12-11, where
+# John Mailander is on the fiddle). And a sentence's length: a description with no stops in it reads as one.
+PROSE_LONGEST = 600
+
+
+def about_a_player(line, name):
+    """The sentence of line naming name, when that sentence is about a player rather than this music; or None."""
+    flat = lambda t: t.replace("\u2019", "'").replace("\u2018", "'").lower()
+    for s in re.split(r"(?<=[.!?\u201d\"])\s+(?=[A-Z\u201c\"])", line):
+        if len(s) <= PROSE_LONGEST and flat(name) in flat(s) and ABOUT.search(s):
+            return s
+    return None
+
+
 def classify(lines, i, name="", creator=""):
     """The shape of lines[i], which contains name. Returns (shape, scope, detail) or None."""
     l = lines[i]
@@ -162,6 +191,11 @@ def classify(lines, i, name="", creator=""):
         return ("the song's writer (on the stage too?)", "song?", l)
     if re.search(r"(?i)\b(check out|online at|buy one of|support (?:the|this) (?:band|artist)|free .* concerts|available for download)\b", l):
         return ("promotion", "none", l)
+    if len(re.findall(r"(?i)\d{1,2}(?::\d\d)?\s*[ap]\.?m\.?\s*[-\u2013]\s*\d{1,2}(?::\d\d)?\s*[ap]\.?m", l)) >= 2:
+        return ("festival schedule (acts and their hours)", "festival", l)
+    about = name and about_a_player(l, name)
+    if about:
+        return ("about a player, not this music (likened, quoted, a career)", "none", about)
     if re.search(r"(?i)\b(filler|bonus)\b.*\bfrom\b|\(on bt\.etree\.org\)|^barn\d+", l):
         return ("other recording", "none", l)
     if re.search(r"(?i)\.(flac|shn|mp3|wav|ffp|md5)\b|:[0-9a-f]{32}\b", l):
