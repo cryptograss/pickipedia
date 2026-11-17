@@ -3,13 +3,32 @@
  * graph over the page, lit on that connection, rather than leaving the page. Esc or × closes it. Without this
  * script, the same links open the big graph as a page of its own.
  *
- * The big graph is its own page in a frame (assets/connectome/), so the keys go to it while it's open: it
- * tells this page when Esc was pressed in there. Its files are asked for as soon as the pointer comes near a
- * card, so the first click doesn't wait on them.
+ * The big graph is its own page in a frame (/bacon), so the keys go to it while it's open: it tells this page
+ * when Esc was pressed in there. Its files (in assets/connectome/) are asked for as soon as the pointer comes
+ * near a card, so the first click doesn't wait on them.
+ *
+ * A card's link names the page at /bacon or at its old address, /assets/connectome/: a page parsed before the
+ * move still says the old one. Either opens /bacon, with the link's query.
  */
 ( function () {
-	var VIEWER = '/assets/connectome/',
+	var PAGE = '/bacon',
+		FILES = '/assets/connectome/',
 		box, frame, from;
+
+	// Where in the frame a card's link goes, or null for a link that isn't to the big graph.
+	function graphOf( href ) {
+		var u;
+		try {
+			u = new URL( href, location.href );
+		} catch ( err ) {
+			return null;
+		}
+		if ( u.origin !== location.origin ||
+			( u.pathname !== PAGE && u.pathname !== PAGE + '/' && u.pathname.indexOf( FILES ) !== 0 ) ) {
+			return null;
+		}
+		return PAGE + u.search;
+	}
 
 	function shut() {
 		if ( box && box.style.display !== 'none' ) {
@@ -68,7 +87,7 @@
 			[ 'graph.json', 'connectome.js', 'connectome-core.js', 'connectome.css' ].forEach( function ( file ) {
 				var link = document.createElement( 'link' );
 				link.rel = 'prefetch';
-				link.href = VIEWER + file;
+				link.href = FILES + file;
 				document.head.appendChild( link );
 			} );
 		}
@@ -81,7 +100,8 @@
 			return;
 		}
 		href = a.getAttribute( 'href' ) || a.getAttributeNS( 'http://www.w3.org/1999/xlink', 'href' );
-		if ( !href || href.indexOf( VIEWER ) !== 0 ) {
+		href = href && graphOf( href );
+		if ( !href ) {
 			return;
 		}
 		e.preventDefault();

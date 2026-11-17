@@ -1,7 +1,9 @@
 <!doctype html>
 <!--
   The connectome's big graph: what opens when a reader clicks a line, a dot or the rabbit on a musician
-  page's connectome card ({{#connectome:}}), over the page; and a page of its own at /assets/connectome/.
+  page's connectome card ({{#connectome:}}), over the page; and a page of its own at /bacon. Its files stay
+  in /assets/connectome/, and the page names them by that whole path: at /bacon, a bare name would be
+  looked for at the site's root (.htaccess serves this page there, and sends the old address on).
 
     ?a=Kyle+Tuttle&b=Bronwyn    two pickers: what they've played together, and who both have played with
     ?p=Kyle+Tuttle              one picker and their company
@@ -36,7 +38,7 @@
 	}
 }() );
 </script>
-<link rel="stylesheet" href="connectome.css">
+<link rel="stylesheet" href="/assets/connectome/connectome.css">
 </head>
 <body>
 <header class="bar">
@@ -88,6 +90,6 @@
 	<aside id="panel" aria-label="What the sources say"></aside>
 </main>
 <datalist id="names"></datalist>
-<script type="module" src="connectome.js"></script>
+<script type="module" src="/assets/connectome/connectome.js"></script>
 </body>
 </html>

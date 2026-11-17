@@ -31,3 +31,18 @@ RewriteRule ^wiki/(.*)$ index.php?title=$1 [QSA,L]
 
 # Redirect bare /wiki to Main_Page
 RewriteRule ^wiki$ index.php?title=Main_Page [QSA,L]
+
+# The bacon graph's page is /bacon (Justin, #connectome, 16 Nov 2026). Its files stay in assets/connectome/,
+# where the build writes them, and the page asks for them there. [END]: no rule here sees the rewrite again.
+RewriteRule ^bacon/?$ assets/connectome/index.html [END]
+
+# Its old address still works, and says where the page lives now, with the query (?p=, ?walk=, ?host=).
+# THE_REQUEST is the request line as the reader sent it, so only a reader's own request is sent on. Caddy ends
+# TLS in front of this Apache, and a redirect Apache makes alone says http:// (as /assets/connectome without
+# its slash does): a frame on an https page that is sent to http:// is blocked, and Rabbithole frames this
+# page. So the redirect says the scheme Caddy passes on in X-Forwarded-Proto.
+RewriteCond %{THE_REQUEST} ^\S+\s/assets/connectome(/|/index\.html)?(\?\S*)?\s
+RewriteCond %{HTTP:X-Forwarded-Proto} =https
+RewriteRule ^assets/connectome(/|/index\.html)?$ https://%{HTTP_HOST}/bacon [R=301,L]
+RewriteCond %{THE_REQUEST} ^\S+\s/assets/connectome(/|/index\.html)?(\?\S*)?\s
+RewriteRule ^assets/connectome(/|/index\.html)?$ /bacon [R=301,L]
