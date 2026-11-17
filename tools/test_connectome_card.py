@@ -282,6 +282,65 @@ def test_build_makes_cards_only_for_musician_pages_the_store_knows(tmp_path):
     assert {p['a'] for p in __import__('json').load(open(tmp_path / 'pairs.json'))} <= {'Kyle Tuttle', 'Justin Myles Holmes'}
 
 
+class PageWiki(FakeWiki):
+    """A wiki where some pages carry {{Bacon graph of this page}}, and what each links."""
+    def __init__(self, asking=(), links=None, **kw):
+        super().__init__(**kw)
+        self.asking, self._links = list(asking), links or {}
+
+    def bacon_pages(self):
+        return self.asking
+
+    def links(self, titles):
+        return {t: self._links.get(t, []) for t in titles}
+
+
+def test_a_page_that_asks_gets_a_graph_of_the_pickers_it_links_for_that_page_only(tmp_path):
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:4masks', [('u', '', 'silver-44')]),
+             pair('Kyle Tuttle', 'Bronwyn Keith-Hynes', 'show', 'lma:show1'),
+             pair('Molly Tuttle', 'Somebody Else', 'record', 'discogs:1'),
+             pair('Molly Tuttle', 'Kyle Tuttle', 'record', 'discogs:1')]
+    grammys = '69th Annual Grammy Awards'
+    wiki = PageWiki(asking=[grammys, 'Kyle Tuttle', 'A Page Of Nobody'],
+                    links={grammys: ['Bronwyn Keith-Hynes', 'Molly Tuttle', 'Recording Academy', 'Kyle Tuttle'],
+                           'A Page Of Nobody': ['Recording Academy'], 'Kyle Tuttle': ['Bronwyn Keith-Hynes']},
+                    redirects={'Justin Holmes': 'Justin Myles Holmes', 'Bronwyn Keith-Hynes': 'Bronwyn'},
+                    pages={'Justin Myles Holmes', 'Kyle Tuttle', 'Bronwyn'}, musicians=['Kyle Tuttle'])
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 17))
+    assert sorted(result['page_cards']) == [grammys]          # a picker's own page keeps its card; no pickers, no graph
+    html = result['page_cards'][grammys]
+    # round the page, the pickers it links, by the wiki's own names (a redirect followed; a red link counts too)
+    assert '>Bronwyn<' in html and '>Kyle Tuttle<' in html and '>Molly Tuttle<' in html
+    assert 'Recording Academy' not in html and '>Bronwyn Keith-Hynes<' not in html
+    # a line where two played together, with its note; Molly only shares a record with Kyle: dotted, and said so
+    assert 'Kyle Tuttle &amp; Bronwyn' in html or 'Bronwyn &amp; Kyle Tuttle' in html
+    assert '>on a record: Some Record' in html and 'Molly Tuttle &amp; Bronwyn' not in html
+    assert html.count('played with') == 2                     # Kyle's and Bronwyn's notes; not Molly's
+    # each one's way to cryptograss, in jumps of playing together; a shared record is no jump
+    assert '>2 jumps from Justin Myles Holmes<' in html and '>by way of Kyle Tuttle<' in html
+    assert '>1 jump from Justin Myles Holmes<' in html
+    assert '…' not in html                                     # no note's line cut short
+    assert html.count('jump') == 2
+    # on the page together is a connection here and nowhere else: the store gained no tie
+    assert sorted((p['a'], p['b']) for p in result['pairs']) == [
+        ('Kyle Tuttle', 'Bronwyn'), ('Kyle Tuttle', 'Justin Myles Holmes'), ('Molly Tuttle', 'Kyle Tuttle'),
+        ('Molly Tuttle', 'Somebody Else')]
+    cc.write(result, str(tmp_path), {'db': 'x'})
+    assert (tmp_path / 'cards' / cc.card_file(grammys)).read_text() == html
+    assert __import__('json').load(open(tmp_path / 'cards.json'))['page_cards'] == {grammys: cc.card_file(grammys)}
+
+
+def test_a_page_graph_escapes_every_name_and_draws_sixteen_at_most():
+    pairs = [pair(f'P{i:02} <i>', 'Hub & Co', 'show', 'lma:show1') for i in range(20)]
+    store = cc.Store(pairs, TARGETS, GROUPS, {})
+    html = cc.page_card('A <b>page</b> & more', [f'P{i:02} <i>' for i in range(20)], store, lambda n: False, {})
+    assert '<b>' not in html and '<i>' not in html and 'A &lt;b&gt;page&lt;/b&gt; &amp; more' in html
+    assert html.count('r="15" fill="transparent"') == cc.PAGE_MOST
+    assert '16 of the pickers this page links (4 more not drawn)' in html
+    assert 'jump' not in html                                  # nobody here has a way to cryptograss
+    assert cc.page_card('A page', ['Nobody'], store, lambda n: False, {}) is None
+
+
 def test_a_song_plays_in_rabbithole_where_its_page_says_which_track(tmp_path):
     pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:4masks', [('u', '', 'silver-44'), ('u', '', 'august')])]
     whole = {'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []}}
