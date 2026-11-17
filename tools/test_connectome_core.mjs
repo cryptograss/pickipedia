@@ -544,6 +544,18 @@ test( 'a tag on a line keeps off a name it is told of', () => {
 	assert.equal( K.tagAt( a, { x: 400, y: 380 }, 24, 15, 150, 23, [ name ], 120 ).room, 0 );   // nowhere clear: no room
 } );
 
+test( 'a zoomed-in page draws the graph smaller, as far as the zoom and no further (Justin, 17 Nov 2026)', () => {
+	assert.equal( K.shrink( 1160, 728, 1 ), 1 );                       // 100%: as it was
+	assert.equal( K.shrink( 600, 400, 1 ), 1 );                        // a small window at 100%: nothing drawn smaller than at 100%
+	assert.equal( K.shrink( 1023, 625, 1.1 ), 1 );                     // room enough already
+	const s = K.shrink( 656, 391, 1.5 );                               // 150% on a laptop: laid out as big as shows everything
+	assert.equal( s, 1.44 );
+	assert.ok( Math.round( 656 * s ) >= K.ROOMY.W && Math.round( 391 * s ) >= K.ROOMY.H );
+	assert.equal( K.shrink( 600, 300, 1.25 ), 1.25 );                  // never more than the page is zoomed in
+	assert.equal( K.shrink( 488, 252, 1.8 ), 1.6 );                    // nor more than 1.6: at 180% it's still bigger than at 100%
+	assert.equal( K.shrink( 488, 252, 1.8, 2 ), 1.8 );
+} );
+
 test( 'another turn of the company: the next ones round, those the reader came by staying', () => {
 	const ring = [ 'k', 'a', 'b', 'c', 'd', 'e' ].map( ( id ) => ( { id } ) );
 	const ids = ( r ) => r.map( ( c ) => c.id ).join( '' );

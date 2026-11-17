@@ -1471,6 +1471,26 @@ export function beside( at, r, w, h, pts, boxes, frame, out = { x: 0, y: -1 }, e
 }
 
 /**
+ * The frame in which a picker's view shows all it can: eight named (connectome.js egoScene: H > 560 and W > 700)
+ * and the step further out (ego: W >= 736 and H >= 488). A change to either changes this.
+ */
+export const ROOMY = { W: 737, H: 561 };
+
+/**
+ * How many times smaller to draw a bacon graph than its frame's own pixels (Justin, #connectome, 17 Nov 2026: "At
+ * 150-160% zoom, I want to see more like what we currently see at 100-120. At 180, I'd still like to see more like
+ * what we currently have around 130-160."). Zooming in shrinks the frame, and a smaller frame shows less. So a
+ * frame smaller than ROOMY is laid out as if it were ROOMY, then drawn that much smaller, but never by more than
+ * the page is zoomed in, so nothing comes out smaller than it is at 100%; and never by more than `most`, so at
+ * 180% there's still less than at 100%, but bigger. W and H are the frame's pixels; zoom is the page's (1 at 100%).
+ */
+export function shrink( W, H, zoom, most = 1.6 ) {
+	const need = Math.ceil( Math.max( ROOMY.W / W, ROOMY.H / H ) * 100 ) / 100;   // up: the frame laid out is ROOMY at least
+	const s = Math.min( need, zoom > 1 ? Math.floor( zoom * 100 ) / 100 : 1, most );
+	return s > 1 ? s : 1;
+}
+
+/**
  * One picker and their company: the picker in the middle, the closest around them on an oval that starts a
  * quarter step past noon (nobody sits at twelve or at six, as on the cards), and the rest in two wider ovals.
  * Returns { C, rx, ry, web, far, named: [{x, y, below, angle, seat, of, lean}], dots: [{x, y}] }: seat, which
