@@ -3,7 +3,8 @@
 #
 # Usage:
 #   docker-compose up -d
-#   # Access at http://hunter.cryptograss.live:8080 (or configured port)
+#   # Reached on hunter's localhost only (WIKI_BIND, below). From outside, through Caddy:
+#   # WIKI_PORT=<4005 + your SSH port - 2222>, then https://pickipedia.<you>.hunter.cryptograss.live
 #
 # To test a different MediaWiki version:
 #   MEDIAWIKI_VERSION=1.44.0 docker-compose up -d --build
