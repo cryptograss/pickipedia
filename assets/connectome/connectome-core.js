@@ -571,6 +571,125 @@ export function hops( G, a, b ) {
 }
 
 /* ------------------------------------------------------------------------------------------------------------
+ * The challenge (Justin, #connectome, 17 Nov 2026, 17:40Z): /bacon/challenge/Vickie_Vaughn puts the reader at a
+ * random picker some hops from Vickie, and they find their way to her, picker by picker, the jumps counted.
+ * --------------------------------------------------------------------------------------------------------- */
+
+/** Whom an address asks the reader to find: /bacon/challenge/<name>, an underscore for a space, or
+ *  ?challenge=<name>. null when it asks for no one. */
+export function challengeOf( pathname, search ) {
+	const m = /\/bacon\/challenge\/([^/?#]+)\/?$/.exec( pathname || '' );
+	let raw = m ? m[ 1 ] : new URLSearchParams( search || '' ).get( 'challenge' );
+	if ( !raw ) {
+		return null;
+	}
+	if ( m ) {
+		try {
+			raw = decodeURIComponent( raw );
+		} catch ( e ) {}                                             // a stray % in the address: read as written
+	}
+	return raw.replace( /_/g, ' ' ).replace( /\s+/g, ' ' ).trim() || null;
+}
+
+/**
+ * Where a challenge starts: a picker `band` jumps (playedDistances) from the goal (3 or 4: far enough to need finding, near enough to
+ * find), else as far as anyone is, at least one hop. Of those, the ones with a page, when there are three or more,
+ * so a reader lands somewhere with a face and not always the same one; chosen with rand (Math.random's shape). { from, par } (par: the fewest jumps there), or
+ * null when nobody the sources know leads to the goal.
+ */
+export function challengeStart( G, to, rand = Math.random, band = [ 3, 4 ] ) {
+	const d = playedDistances( G, to );
+	const at = ( lo, hi ) => {
+		const all = G.people.filter( ( p ) => d[ p.id ] >= lo && d[ p.id ] <= hi );
+		const paged = all.filter( ( p ) => p.page );
+		return ( paged.length >= 3 ? paged : all ).map( ( p ) => p.id );      // a choice among faces, or among everyone
+	};
+	let pool = at( band[ 0 ], band[ 1 ] );
+	if ( !pool.length ) {
+		let most = 0;
+		for ( const x of d ) {
+			most = Math.max( most, x );
+		}
+		pool = most >= 1 ? at( most, most ) : [];
+	}
+	if ( !pool.length ) {
+		return null;
+	}
+	const from = pool[ Math.min( pool.length - 1, Math.floor( rand() * pool.length ) ) ];
+	return { from, par: d[ from ] };
+}
+
+/** Hops along lines of playing together only (tie.played): a challenge's jumps are the ones the list and the ring
+ *  offer, and two who only share a record are no step there. */
+export function playedDistances( G, src ) {
+	const dist = new Int32Array( G.people.length ).fill( -1 );
+	let frontier = [ src ];
+	dist[ src ] = 0;
+	while ( frontier.length ) {
+		const next = [];
+		for ( const u of frontier ) {
+			for ( const [ v, tie ] of G.adj[ u ] ) {
+				if ( tie.played && dist[ v ] < 0 ) {
+					dist[ v ] = dist[ u ] + 1;
+					next.push( v );
+				}
+			}
+		}
+		frontier = next;
+	}
+	return dist;
+}
+
+/**
+ * The way a reader went, as a chain: each picker they stood at, in order, with a loop cut out wherever they came
+ * back to someone (all between comes off). steps: each step's two pickers and the tie between them, null where
+ * they never shared anything (a step taken by typing a name, not along a line).
+ */
+export function wayOf( G, path ) {
+	const way = [];
+	for ( const id of path ) {
+		const at = way.indexOf( id );
+		if ( at >= 0 ) {
+			way.length = at + 1;
+		} else {
+			way.push( id );
+		}
+	}
+	return { way, steps: way.slice( 1 ).map( ( v, i ) => ( { u: way[ i ], v, tie: G.adj[ way[ i ] ].get( v ) || null } ) ) };
+}
+
+/** Who stands between two pickers a step apart, having played with both: one of `prefer` if any is, else the
+ *  first; undefined when nobody does. A click on someone a step further out is two jumps, by way of this one. */
+export function bridgeOf( G, u, v, prefer = [] ) {
+	const both = [];
+	for ( const [ m, t ] of G.adj[ u ] ) {
+		const back = G.adj[ m ].get( v );
+		if ( t.played && back && back.played && m !== v ) {
+			both.push( m );
+		}
+	}
+	return both.find( ( m ) => prefer.includes( m ) ) ?? both[ 0 ];
+}
+
+/** The songs along a way that play in Rabbithole, in the order walked, each once: [{ m, song, to }], to being
+ *  playOf's address. */
+export function wayPlays( G, steps ) {
+	const out = [], seen = new Set();
+	for ( const st of steps ) {
+		for ( const e of st.tie ? st.tie.ev : [] ) {
+			for ( const song of e.songs ) {
+				const to = playOf( G, G.music[ e.m ], song );
+				if ( to && !seen.has( song ) ) {
+					seen.add( song );
+					out.push( { m: e.m, song, to } );
+				}
+			}
+		}
+	}
+	return out;
+}
+
+/* ------------------------------------------------------------------------------------------------------------
  * Saying it
  * --------------------------------------------------------------------------------------------------------- */
 

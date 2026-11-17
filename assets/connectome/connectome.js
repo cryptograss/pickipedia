@@ -75,6 +75,7 @@ const alone = window.parent === window;   // a page of its own, not the graph ov
 const HOST = new URLSearchParams( location.search ).get( 'host' ) === 'rabbithole' && !alone ? 'rabbithole' : '';
 let MINI = new URLSearchParams( location.search ).get( 'walk' ) === 'mini';
 const trail = [];
+let GAME = null;                 // the challenge in play: { to, from, par, jumps, path, done } (challenge(), below)
 
 /* ------------------------------------------------------------------------------------------------------------
  * Small tools
@@ -184,6 +185,9 @@ function address( v ) {
 }
 
 function rawAddress( v ) {
+	if ( v.way ) {
+		return '?' + new URLSearchParams( { p: first( GAME.to ) } );           // the way found ends where it ended
+	}
 	if ( v.walk ) {
 		return '?' + new URLSearchParams( Object.assign( { walk: MINI ? 'mini' : '' }, HOST ? { host: HOST } : null ) );
 	}
@@ -2004,7 +2008,14 @@ function fillPanel() {
 		panel.replaceChildren();                                     // the walk is its own list: nothing beside it
 		return;
 	}
-	if ( view.cut !== undefined && G.songcast[ view.cut ] ) {
+	if ( view.way ) {
+		const { way, steps } = K.wayOf( G, GAME.path );
+		out.push( h( 'h2', null, 'Your way to ' + first( GAME.to ) ),
+			h( 'p', { class: 'sub' }, `${ K.plural( GAME.jumps, 'jump' ) }; the fewest it can be done in is ${ K.plural( GAME.par, 'hop' ) }` ),
+			h( 'ul', null, way.map( ( id, i ) => personRow( id, i === 0 ? 'where you started' :
+				( steps[ i - 1 ].tie ? K.times( steps[ i - 1 ].tie ) + ' with ' + first( steps[ i - 1 ].u ) : 'typed in' ), () => go( { a: id } ) ) ) ),
+			tellBox( first( GAME.to ), gameFrom() ) );
+	} else if ( view.cut !== undefined && G.songcast[ view.cut ] ) {
 		const scd = G.songcast[ view.cut ];
 		const cut = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean )[ 0 ];
 		out.push( h( 'h2', null, scd.song ), h( 'p', { class: 'sub' }, cut ? 'on ' + cut.title
@@ -2022,8 +2033,8 @@ function fillPanel() {
 			h( 'div', { class: 'acts' }, pageButton( a ) ) );
 		if ( scene.company.length ) {
 			out.push( h( 'h3', null, `Has played with · ${ scene.company.length }` ),
-				h( 'ul', null, scene.company.slice( 0, 80 ).map( ( c ) => personRow( c.id, K.times( c.tie ), () => go( { a, b: c.id } ) ) ) ) );
-			if ( scene.company.length > 80 ) {
+				h( 'ul', null, scene.company.slice( 0, GAME && !GAME.done ? Infinity : 80 ).map( ( c ) => personRow( c.id, K.times( c.tie ), () => go( { a, b: c.id } ) ) ) ) );
+			if ( scene.company.length > 80 && !( GAME && !GAME.done ) ) {     // in a challenge, all of them: the search box is put away
 				out.push( h( 'p', { class: 'sub' }, `and ${ scene.company.length - 80 } more: find one in the box up top` ) );
 			}
 		}
@@ -2064,6 +2075,9 @@ function fillPanel() {
 			}
 		}
 	}
+	if ( !view.way && view.a !== undefined && view.b === undefined && view.m === undefined && view.cut === undefined ) {
+		out.push( tellBox( first( view.a ), GAME ? gameFrom() : 'the bacon graph of ' + first( view.a ) ) );
+	}
 	out.push( h( 'p', { class: 'foot' }, `${ G.people.length } pickers, ${ G.music.length } records and shows that join them. Built ${ K.when( G.built ) }. `,
 		h( 'a', { href: 'connectome.sqlite', download: '' }, 'The whole store (SQLite)' ) ) );
 	panel.replaceChildren( ...out.flat().filter( Boolean ) );
@@ -2074,10 +2088,199 @@ function fillPanel() {
 }
 
 /* ------------------------------------------------------------------------------------------------------------
+ * The challenge (Justin, #connectome, 17 Nov 2026, 17:40Z): /bacon/challenge/<name> drops the reader at a random
+ * picker three or four hops out, and they find their way to <name>, picker by picker. Each step to another picker
+ * is a jump. There: a little confetti, then the way they took, drawn as a chain (the flowchart's shape, pickers
+ * for steps), with its songs to play in Rabbithole and a box for a connection the graph doesn't know.
+ * --------------------------------------------------------------------------------------------------------- */
+
+/** A challenge to find `to`, starting at `from` when it is given and leads there, else where challengeStart says. */
+function challenge( to, from ) {
+	const d = from !== undefined && from !== to ? K.playedDistances( G, from )[ to ] : -1;
+	const start = d > 0 ? { from, par: d } : K.challengeStart( G, to );
+	document.body.classList.add( 'challenge' );
+	if ( !start ) {
+		GAME = null;
+		lost = `Nobody the sources here know leads to ${ first( to ) } yet, so there's no way to find them. Here they are.`;
+		go( { a: to } );
+		gameSay();
+		return;
+	}
+	GAME = { to, from: start.from, par: start.par, jumps: 0, path: [ start.from ], done: false };
+	trail.length = 0;
+	go( { a: start.from } );
+	gameSay();
+}
+
+/** After each step: a new picker in the middle is a jump, and the goal is the end of it. */
+function gameStep() {
+	if ( GAME.done || view.a === undefined || view.b !== undefined || view.m !== undefined || view.way || view.walk ) {
+		return;
+	}
+	const last = GAME.path[ GAME.path.length - 1 ];
+	if ( view.a !== last ) {
+		const tie = G.adj[ last ].get( view.a );
+		if ( !( tie && tie.played ) ) {                              // a step further out: two jumps, by way of the one between
+			const mid = K.bridgeOf( G, last, view.a, view.keep || [] );
+			if ( mid !== undefined ) {
+				GAME.path.push( mid );
+				GAME.jumps++;
+			}
+		}
+		GAME.path.push( view.a );
+		GAME.jumps++;
+	}
+	if ( view.a === GAME.to ) {
+		GAME.done = true;
+		confetti();
+		setTimeout( () => {                                         // a moment to see who they found, then the way there
+			if ( GAME && GAME.done && view.a === GAME.to ) {
+				go( { way: true } );
+			}
+		}, still ? 300 : 1400 );
+	}
+	gameSay();
+}
+
+/** Where a note from the box says the visitor was: the challenge and where it started. */
+function gameFrom() {
+	return GAME ? `the challenge to find ${ first( GAME.to ) }, from ${ first( GAME.from ) }` : '';
+}
+
+/** The game's bar: whom to find, the jumps, and, at the end, the ways on. */
+function gameSay() {
+	const bar = $( 'game' );
+	bar.hidden = !document.body.classList.contains( 'challenge' );
+	if ( bar.hidden ) {
+		return;
+	}
+	if ( document.activeElement !== $( 'goal' ) && GAME ) {
+		$( 'goal' ).value = first( GAME.to );
+	}
+	if ( !GAME ) {
+		$( 'jumps' ).replaceChildren();
+		$( 'after' ).replaceChildren();
+		return;
+	}
+	$( 'jumps' ).replaceChildren( ...( GAME.done ?
+		[ h( 'b', null, `Found in ${ K.plural( GAME.jumps, 'jump' ) }` ), GAME.jumps <= GAME.par ? ' · the fewest there are! 🎯' : ` · it can be done in ${ GAME.par }` ] :
+		[ h( 'b', null, K.plural( GAME.jumps, 'jump' ) ), ` · from ${ first( GAME.from ) }, it can be done in ${ GAME.par }` ] ) );
+	const after = [];
+	if ( GAME.done ) {
+		after.push( h( 'button', { type: 'button', onclick: () => go( { way: true } ) }, 'Your way' ),
+			h( 'button', { type: 'button', onclick: () => go( { a: GAME.from, b: GAME.to } ) }, 'The shortest' ) );
+		const plays = K.wayPlays( G, K.wayOf( G, GAME.path ).steps );
+		if ( plays.length ) {
+			after.push( h( 'a', { class: 'play-way', href: HOME + plays[ 0 ].to, target: '_top', title: 'Play ' + plays[ 0 ].song + ' in Rabbithole' },
+				playMark(), ' Play it in Rabbithole' ) );
+		}
+	}
+	$( 'after' ).replaceChildren( ...after );
+}
+
+/** A little confetti, once, over the graph; none for a reader who has asked for less motion. */
+function confetti() {
+	if ( still ) {
+		return;
+	}
+	const box = $( 'confetti' );
+	const hues = [ '#1976d2', '#c2185b', '#e65100', '#7b1fa2', '#00838f' ];   // not gold: gold means a Permanent Release
+	box.replaceChildren( ...Array.from( { length: 34 }, ( _, i ) => h( 'i', { style: `left:${ ( 4 + Math.random() * 92 ).toFixed( 1 ) }%;` +
+		`background:${ hues[ i % hues.length ] };animation-delay:${ ( Math.random() * 0.35 ).toFixed( 2 ) }s;` +
+		`--dx:${ Math.round( ( Math.random() * 2 - 1 ) * 70 ) }px;--r:${ Math.round( Math.random() * 720 - 360 ) }deg` } ) ) );
+	box.hidden = false;
+	setTimeout( () => {
+		box.hidden = true;
+		box.replaceChildren();
+	}, 2300 );
+}
+
+/** The way taken, as a chain from where they started to whom they found: each step's line says what joins the two. */
+function wayScene() {
+	const { W, H } = frame();
+	const sc = newScene();
+	const { way, steps } = K.wayOf( G, GAME.path );
+	const a = way[ 0 ], b = way[ way.length - 1 ];
+	const L = Math.max( 1, steps.length );
+	const en = endNames( a, b, W );
+	const lay = K.ladder( { W, H, hops: L, chains: 1, la: en.la, lb: en.lb } );
+	if ( lay.upright ) {
+		addNode( sc, a, lay.A, 'subject', { rabbit: true, side: 'right', label: cut( first( a ), FONT.subject, W - lay.A.x - 42 ) } );
+		addNode( sc, b, lay.B, 'subject', { side: 'right', label: cut( first( b ), FONT.subject, W - lay.B.x - 42 ) } );
+	} else {
+		addEnds( sc, a, b, lay, en, W );
+	}
+	const room = ( lay.B.x - lay.A.x ) / L - 10;
+	way.slice( 1, -1 ).forEach( ( id, i ) => {
+		const level = i + 1;
+		const at = lay.at( 0, level );
+		addNode( sc, id, lay.upright ? at : Object.assign( at, { below: level % 2 === 0 } ), 'named', lay.upright ?
+			{ lit: true, side: 'right', label: cut( first( id ), FONT.named, W - at.x - 30 ), delay: 120 + level * 90 } :
+			Object.assign( { lit: true, delay: 120 + level * 90 }, fitName( first( id ), at.x, Math.max( 4, at.x - room / 2 ), Math.min( W - 4, at.x + room / 2 ), FONT.named ) ) );
+	} );
+	steps.forEach( ( st, i ) => {
+		if ( !st.tie ) {
+			return;                                                  // typed in: no line to draw
+		}
+		const pu = sc.nodes.get( 'p' + st.u ), pv = sc.nodes.get( 'p' + st.v );
+		addLine( sc, st.u, st.v, st.tie, { emph: true, role: 'hop', c: i === 0 ? st.v : st.u, delay: 160 + i * 90 } );
+		const span = lay.upright ? Math.min( 230, W - 2 * Math.abs( W / 2 - pu.x ) - 16 ) : Math.abs( pv.x - pu.x ) - 44;
+		placePills( sc, st.u, st.v, st.tie, ( pu.x + pv.x ) / 2 - span / 2, ( pu.x + pv.x ) / 2 + span / 2, ( pu.y + pv.y ) / 2, 1, 1, 200 + i * 90 );
+	} );
+	sc.chain = way;
+	sc.head = [ 'Your way to ', nameLink( GAME.to ) ];
+	sc.sub = [ h( 'b', null, K.plural( GAME.jumps, 'jump' ) ), ` from ${ first( GAME.from ) }; the fewest it can be done in is ${ K.plural( GAME.par, 'hop' ) }` ];
+	return sc;
+}
+
+/**
+ * "Know a connection? Tell us." (Justin, 17:40Z; re's spec, Cryptograss:Bacon graphs/Discovery, "The box"): plain
+ * text, up to 2,000 characters, to Cryptograss talk:Connection inbox, written there by a system account so a
+ * signed-out visitor's address is never published. The wiki keeps it as text: nothing in it is run or followed.
+ */
+function tellBox( about, from ) {
+	const what = h( 'input', { type: 'text', maxlength: 200, value: about, 'aria-label': 'Who or what the connection is about' } );
+	const note = h( 'textarea', { maxlength: 2000, rows: 4, placeholder: 'Who played with whom, and where: a record, a show, a night you were there. A way to reach you, if you want an answer.' } );
+	const said = h( 'p', { class: 'sub', role: 'status' } );
+	const send = h( 'button', { type: 'button', onclick: async () => {
+		const text = note.value.trim();
+		if ( !text ) {
+			said.textContent = 'Write the connection first.';
+			return;
+		}
+		send.disabled = true;
+		said.textContent = 'Sending…';
+		try {
+			const t = await wiki( { action: 'query', meta: 'tokens' } );
+			const r = await wiki( { action: 'connectionnote', about: what.value.trim().slice( 0, 200 ), from: from.slice( 0, 300 ),
+				note: text.slice( 0, 2000 ), token: t.query.tokens.csrftoken }, true );
+			if ( r.connectionnote && r.connectionnote.result === 'Success' ) {
+				note.value = '';
+				said.replaceChildren( 'Thank you: it’s in the ', h( 'a', { href: HOME + '/wiki/Cryptograss_talk:Connection_inbox', target: '_top' }, 'inbox' ),
+					'. If it turns into a walk, the link goes there too.' );
+				return;
+			}
+			throw new Error( r.error ? r.error.info || r.error.code : 'no answer' );
+		} catch ( err ) {
+			said.replaceChildren( 'It didn’t go through (' + err.message + '). You can write it on the ',
+				h( 'a', { href: HOME + '/wiki/Cryptograss_talk:Connection_inbox', target: '_top' }, 'inbox page' ), ' itself.' );
+		} finally {
+			send.disabled = false;
+		}
+	} }, 'Send' );
+	return h( 'details', { class: 'tell' }, h( 'summary', null, 'Know a connection we don’t? Tell us' ),
+		h( 'p', { class: 'sub' }, 'Plain text, read by a person. It’s public on the wiki, so leave contact info only if you want it seen.' ),
+		what, note, h( 'div', { class: 'acts' }, send ), said );
+}
+
+/* ------------------------------------------------------------------------------------------------------------
  * Going places
  * --------------------------------------------------------------------------------------------------------- */
 
 function label( v ) {
+	if ( v.way ) {
+		return 'Your way to ' + first( GAME.to );
+	}
 	if ( v.walk ) {
 		return 'Your rabbithole';
 	}
@@ -2155,7 +2358,7 @@ function show( quick, again ) {
 	stage.classList.toggle( 'walking', !!view.walk );
 	document.querySelector( 'main' ).classList.toggle( 'walking', !!view.walk );
 	steady();
-	scene = view.walk ? walkScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
+	scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
 	stage.classList.toggle( 'webbed', !!scene.web );
 	stage.classList.toggle( 'deep', !!scene.deep );
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
@@ -2164,13 +2367,13 @@ function show( quick, again ) {
 	keptSay();
 	qrSay();
 	fillPanel();
-	$( 'pa' ).value = view.walk || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
-	$( 'pb' ).value = view.walk || view.m !== undefined || view.b === undefined ? '' : first( view.b );
+	$( 'pa' ).value = view.way || view.walk || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
+	$( 'pb' ).value = view.way || view.walk || view.m !== undefined || view.b === undefined ? '' : first( view.b );
 	$( 'back' ).hidden = trail.length < 2;
 	$( 'crumbs' ).replaceChildren( ...trail.slice( -4, -1 ).flatMap( ( v, i, arr ) => [
 		h( 'button', { type: 'button', onclick: () => {
 			trail.splice( trail.length - ( arr.length - i ) - 1 );     // back to there: it, and all since, come off
-			go( v.walk ? { walk: true } : v.m !== undefined ? { m: v.m } : ( v.b === undefined ? { a: v.a } : { a: v.a, b: v.b } ) );
+			go( v.way ? { way: true } : v.walk ? { walk: true } : v.m !== undefined ? { m: v.m } : ( v.b === undefined ? { a: v.a } : { a: v.a, b: v.b } ) );
 		} }, label( v ) ), ' › ' ] ) );
 	document.title = label( view ) + ' · the connectome';
 	closeSheet();
@@ -2183,7 +2386,7 @@ function show( quick, again ) {
  * of the line it was on, and the other pieces named in sight; from one piece to the next, the one left behind.
  */
 function carry( v ) {
-	if ( !view || !scene || v.walk || v.b !== undefined || v.cut !== undefined || v.s !== undefined ) {
+	if ( !view || !scene || v.walk || v.way || v.b !== undefined || v.cut !== undefined || v.s !== undefined ) {
 		return v;                                                    // two pickers, or a cut: a view of its own, with nothing brought along
 	}
 	// Out of a cut's graph (Justin, #connectome, 15 Nov 2026, 04:53Z): the way back is the cut itself — the
@@ -2223,7 +2426,7 @@ function go( v ) {
 	if ( left ) {
 		v = leaveKept( v );                  // a click that goes further goes into today's graph
 	}
-	if ( !v.walk && v.m === undefined && v.s === undefined && v.b === v.a ) {
+	if ( !v.walk && !v.way && v.m === undefined && v.s === undefined && v.b === v.a ) {
 		v = { a: v.a };
 	}
 	view = carry( v );
@@ -2235,6 +2438,9 @@ function go( v ) {
 	show();
 	stamp( trail.length > 1 || left );
 	// The page stays where the reader has it (Justin, #connectome, 15 Nov 2026: not to the top on every click).
+	if ( GAME ) {
+		gameStep();
+	}
 }
 
 function choose( picked ) {
@@ -2425,7 +2631,7 @@ async function openKept( id ) {
 let qrFor = '';
 function qrSay() {
 	const box = $( 'qr' );
-	box.hidden = MINI || !view || !!view.walk;
+	box.hidden = MINI || !view || !!view.walk || !!view.way;            // the way found is a moment, not a place to pick up
 	if ( box.hidden ) {
 		return;
 	}
@@ -3011,6 +3217,20 @@ drawer.addEventListener( 'click', () => {
 	} catch ( e ) {}
 } );
 
+$( 'goal' ).addEventListener( 'change', () => {
+	const to = G ? K.find( G, $( 'goal' ).value ) : null;
+	if ( to === null || ( GAME && to === GAME.to ) ) {
+		return;
+	}
+	history.replaceState( null, '', '/bacon/challenge/' + encodeURIComponent( first( to ) ).replace( /%20/g, '_' ) );
+	challenge( to );
+} );
+$( 'restart' ).addEventListener( 'click', () => {
+	if ( G && GAME ) {
+		challenge( GAME.to );
+	}
+} );
+
 let sized = 0;
 new ResizeObserver( () => {
 	cancelAnimationFrame( sized );
@@ -3064,6 +3284,16 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	if ( keptAt() ) {
 		openKept( keptAt() );
 		return;
+	}
+	const goal = K.challengeOf( location.pathname, location.search );
+	if ( goal !== null ) {
+		const to = K.find( G, goal );
+		if ( to !== null ) {
+			const here = K.find( G, new URLSearchParams( location.search ).get( 'p' ) );     // a reload mid-game starts from there
+			challenge( to, here !== null ? here : undefined );
+			return;
+		}
+		lost = `The connectome doesn't know “${ goal }” yet, so there's no one to find. Here is someone it knows.`;
 	}
 	const q = new URLSearchParams( location.search );
 	const asked = q.get( 'm' ) || q.get( 'a' ) || q.get( 'from' ) || q.get( 'p' );

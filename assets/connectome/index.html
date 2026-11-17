@@ -10,6 +10,7 @@
     ?m=arthel:4masks&s=Victory  one piece of music (a record or a show by its key; s, a track of a record),
                                 with the graph inside out: the music as the circles, the pickers as the lines
   /bacon/c4f9qk2mzx7          a bacon graph kept as it was shared (🔗): the page Bacon:c4f9qk2mzx7 holds it
+  /bacon/challenge/Vickie_Vaughn   the challenge: start somewhere random, find your way to Vickie Vaughn
     (?from= and ?to= are read as a and b)
 
   A click never leaves the graph: a picker's click goes to that picker, a piece of music's turns the graph
@@ -50,6 +51,13 @@
 	<nav id="crumbs" aria-label="Where you have been"></nav>
 	<button type="button" id="share" title="Keep this graph as it is now, and copy a link to it" aria-label="Keep this graph, and copy its link" hidden>🔗</button>
 </header>
+<div id="game" class="bar game" role="region" aria-label="The challenge" hidden>
+	<label for="goal">Find your way to:</label>
+	<input id="goal" list="names" autocomplete="off" spellcheck="false">
+	<span id="jumps" role="status"></span>
+	<span id="after"></span>
+	<button type="button" id="restart" title="Start again from somewhere else">New start</button>
+</div>
 <div id="shared" role="status" hidden></div>
 <main>
 	<section id="stage" aria-label="The graph">
@@ -59,6 +67,7 @@
 		<svg id="g" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="The connectome"></svg>
 		<div id="tip" role="status" hidden></div>
 		<div id="sheet" role="dialog" aria-label="What you touched" hidden></div>
+		<div id="confetti" aria-hidden="true" hidden></div>
 		<div id="wait">Loading the connectome…</div>
 		<footer id="legend">
 			<span class="lg pv"><svg width="30" height="12" aria-hidden="true"><line class="glow" x1="2" y1="6" x2="28" y2="6"/><line class="core t2" x1="2" y1="6" x2="28" y2="6"/></svg>
