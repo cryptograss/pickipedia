@@ -556,6 +556,15 @@ test( 'a zoomed-in page draws the graph smaller, as far as the zoom and no furth
 	assert.equal( K.shrink( 488, 252, 1.8, 2 ), 1.8 );
 } );
 
+test( "a page's own graph: the big graph knows its pickers, and no tie between them (Justin, 17 Nov 2026)", () => {
+	const g = { people: [ [ 'A', 1 ], [ 'B', 1 ], [ 'C', 0 ] ], music: [ [ 'lma:x', 'show', '', '2026-01-01', 'X', 1, 'lma' ] ],
+		ties: [ [ 0, 1, [ [ 0, 2, 1 ] ] ] ], pages: { 'Some Awards': [ 2, 0, 1 ] } };
+	const G = K.build( g );
+	assert.deepEqual( G.pages[ 'Some Awards' ], [ 2, 0, 1 ] );
+	assert.equal( G.adj[ 2 ].size, 0 );                                // on the page with A and B, and tied to nobody
+	assert.deepEqual( K.build( { people: [], music: [], ties: [] } ).pages, {} );
+} );
+
 test( 'another turn of the company: the next ones round, those the reader came by staying', () => {
 	const ring = [ 'k', 'a', 'b', 'c', 'd', 'e' ].map( ( id ) => ( { id } ) );
 	const ids = ( r ) => r.map( ( c ) => c.id ).join( '' );

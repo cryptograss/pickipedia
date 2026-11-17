@@ -909,6 +909,20 @@ def played_way(store, s, t):
     return way[::-1]
 
 
+def page_order(title, members, store):
+    """The pickers a page links, as its graph takes them: once each, the store's own, those with the most ties among
+    the page's own first, then those with the most company. Returns (ranked, ties: name -> those of the page's own
+    they played with, on a stage or a track; a shared record isn't playing together)."""
+    members = [n for n in dict.fromkeys(members) if n != title and n in store.by]
+
+    def played(x, y):
+        ev = store.evidence(x, y)
+        return bool(ev) and any(e['kind'] != 'record' for e in ev['list'])
+
+    ties = {n: [o for o in members if o != n and played(n, o)] for n in members}
+    return sorted(members, key=lambda n: (-len(ties[n]), -len(store.by[n]), n)), ties
+
+
 def page_card(title, members, store, has_page, inst, home=HOME):
     """A page's own bacon graph (Justin, #connectome, 17 Nov 2026, 19:39Z: "a tag which makes a graph for the
     page itself, understand every linked page as a connection through that page ... a reasonable way to connect,
@@ -918,15 +932,9 @@ def page_card(title, members, store, has_page, inst, home=HOME):
     some other reason to"): the lines out from the middle are faint, and the store, the big graph and every jump
     stay as they were. members: the pickers the page links, as the store names them. Those with the most ties
     among the page's own come first, PAGE_MOST at most, each set beside one they played with where it can be."""
-    members = [n for n in dict.fromkeys(members) if n != title and n in store.by]
-    if not members:
+    ranked, ties = page_order(title, members, store)
+    if not ranked:
         return None
-    def played(x, y):                               # on a stage or a track together; a shared record isn't
-        ev = store.evidence(x, y)
-        return bool(ev) and any(e['kind'] != 'record' for e in ev['list'])
-
-    ties = {n: [o for o in members if o != n and played(n, o)] for n in members}
-    ranked = sorted(members, key=lambda n: (-len(ties[n]), -len(store.by[n]), n))
     chosen, more = ranked[:PAGE_MOST], max(0, len(ranked) - PAGE_MOST)
     ring, left = [], list(chosen)
     while left:                                     # round the ring: next, one the last played with, if any is left
@@ -989,7 +997,9 @@ def page_card(title, members, store, has_page, inst, home=HOME):
     o(f'<svg xmlns="http://www.w3.org/2000/svg" class="cc" viewBox="{x0:.0f} {y0:.0f} {x1 - x0:.0f} {y1 - y0:.0f}" '
       f'width="100%" font-family="Georgia, serif" font-size="{FS:g}" role="img" '
       f'aria-label="{attr("The pickers " + title + " names, and who of them played together")}">')
-    o(f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/>')
+    here = attr(viewer(page=title))                 # the paper and the middle: this page's graph on the big one
+    o(f'<a class="cc-bg" href="{here}" aria-label="{attr("Explore " + title + " on the big graph")}">'
+      f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/></a>')
     for n in ring:                                  # on the page together: here and only here; a hairline, not a tie
         s, t = trim_svg(C, pos[n], 22, 12)
         o(line_svg(s, t, stroke=SHUT, stroke_width=1, opacity=0.35))
@@ -1010,7 +1020,7 @@ def page_card(title, members, store, has_page, inst, home=HOME):
           f'text-anchor="middle" fill="{INK}" font-weight="bold">{escape(n)}</text>'
           + (f'<text class="cc-lab" x="{x_lab:.1f}" y="{ry:.1f}" text-anchor="middle" fill="{INK2}" '
              f'font-size="0.62em">{escape(roles[n])}</text>' if roles[n] else '') + '</a>')
-    o(f'<g transform="translate({C[0]:.0f} {C[1]:.0f})"><title>{escape(title)}</title>{PAGE}</g>')
+    o(f'<a href="{here}"><g transform="translate({C[0]:.0f} {C[1]:.0f})"><title>{escape(title)}</title>{PAGE}</g></a>')
     for x, y, _, e, n_ev in edges:                  # a line says where the two played together
         mx, my = (pos[x][0] + pos[y][0]) / 2, (pos[x][1] + pos[y][1]) / 2
         tail = f' (+{n_ev - 1} more)' if n_ev > 1 else ''
@@ -1043,7 +1053,7 @@ def page_card(title, members, store, has_page, inst, home=HOME):
               '</div>')
     count = f'{len(ring)} of the pickers this page links' + (f' ({more} more not drawn)' if more else '')
     return (f'<div class="connectome-card" data-page="{attr(title)}">'
-            '<div class="cc-head">Connectome</div>'
+            f'<div class="cc-head">Connectome <a class="cc-explore" href="{here}">⤢ explore</a></div>'
             + ''.join(out) + legend +
             f'<div class="cc-foot">{escape(count)}. A name opens their bacon graph.</div></div>')
 
@@ -1202,6 +1212,10 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
             html = page_card(t, [seen.get(x, (x, False))[0] for x in linked.get(t, [])], store, has_page, inst)
             if html:
                 page_cards[t] = html
+                if graph is not None:
+                    idx = {row[0]: i for i, row in enumerate(graph.get('people') or [])}
+                    ranked, _ = page_order(t, [seen.get(x, (x, False))[0] for x in linked.get(t, [])], store)
+                    graph.setdefault('pages', {})[t] = [idx[n] for n in ranked if n in idx]
     return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,
             'song_cards': song_cards, 'cut_cards': cut_cards, 'page_cards': page_cards,
             'pairs': store.pairs, 'names': {k: sorted(v) for k, v in sorted(store.raw.items())}}

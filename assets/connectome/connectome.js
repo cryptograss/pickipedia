@@ -191,6 +191,9 @@ function rawAddress( v ) {
 	if ( v.walk ) {
 		return '?' + new URLSearchParams( Object.assign( { walk: MINI ? 'mini' : '' }, HOST ? { host: HOST } : null ) );
 	}
+	if ( v.pg !== undefined ) {
+		return '?' + new URLSearchParams( { page: v.pg } );
+	}
 	if ( v.cut !== undefined ) {
 		return '?' + new URLSearchParams( v.s !== undefined ? { s: v.s, cut: v.cut } : { cut: v.cut } );
 	}
@@ -228,6 +231,10 @@ function rawAddress( v ) {
 function parse( q ) {
 	if ( q.has( 'walk' ) ) {
 		return { walk: true };                                       // your rabbithole: the songs heard in Rabbithole, and who was followed
+	}
+	const pg = q.get( 'page' );                                  // a page's own graph: the pickers it links ({{Bacon graph of this page}})
+	if ( pg && G.pages && G.pages[ pg ] ) {
+		return { pg };
 	}
 	const m = q.get( 'm' ) ? K.findPiece( G, q.get( 'm' ), q.get( 's' ) ) : null;
 	if ( m !== null ) {
@@ -1325,6 +1332,92 @@ function pieceScene( v ) {
  * everywhere else (Justin, #rabbithole, 15 Nov 2026, 00:23Z: the song-centred card; K.songcast has the cast).
  * --------------------------------------------------------------------------------------------------------- */
 
+/**
+ * A page's own bacon graph (Justin, #connectome, 17 Nov 2026, 19:39Z, and at 20:50Z, of the page's card: "It feels
+ * like I'm supposed to be able to click"): the page in the middle, the pickers it links round it (graph.json's
+ * pages, from the page's own links), the web of who of them played together, and a step out from each to who else
+ * they've played with. Being on the page together joins them here and only here (19:42Z): the spokes say nothing,
+ * and from any of them the reader goes on by real connections, bringing nothing of the page along (carry).
+ */
+function pageScene( v ) {
+	const { W, H } = frame();
+	const sc = newScene();
+	const ids = ( G.pages[ v.pg ] || [] ).filter( ( id ) => id >= 0 && id < G.people.length );
+	const onPage = new Set( ids );
+	const chosen = new Map();
+	for ( const id of ids ) {
+		for ( const [ o, tie ] of ( G.adj[ id ] || [] ) ) {
+			if ( !tie.played || onPage.has( o ) ) {
+				continue;
+			}
+			const was = chosen.get( o );
+			if ( !was || tie.ev.length > was.tie.ev.length || ( tie.ev.length === was.tie.ev.length && tie.w > was.tie.w ) ) {
+				chosen.set( o, { id: o, tie, by: id } );
+			}
+		}
+	}
+	const outer = [ ...chosen.values() ].sort( ( x, y ) => ( y.tie.ev.length - x.tie.ev.length ) || ( y.tie.w - x.tie.w ) )
+		.slice( 0, W > 700 && H > 560 ? 20 : ( W > 460 || H > 500 ? 12 : 8 ) );
+	const lay = K.ego( { W, H, named: Math.min( ids.length, 12 ), dots: outer.length } );
+	const n = lay.named.length, mine = ids.slice( 0, n );
+	const pan = slide( 'page', lay.C );
+	const seats = K.seat( lay.named, mine.map( ( id ) => wanted( 'p' + id, pan ) ) );
+	const seatOf = new Map( mine.map( ( id, i ) => [ id, lay.named[ seats[ i ] ] ] ) );
+	for ( const id of mine ) {						// a spoke to each: on the page together, which says nothing more
+		sc.lines.set( 'sp' + id, { a: 'page', b: 'p' + id, u: -1, v: id, tie: { played: false, tier: 0, w: 0.2 },
+			stands: 'tie', w: lineWidth( { w: 0.2 } ), o: 0.5, role: 'spoke', c: id, quiet: true, fine: true, delay: 120 } );
+	}
+	const web = K.among( G, mine, false ).map( ( t ) => Object.assign( t, { bow: K.arc( lay, seatOf.get( t.u ), seatOf.get( t.v ) ) } ) );
+	for ( const t of web ) {
+		sc.lines.set( lineKey( t.u, t.v ), { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, stands: 'tie', role: 'web', quiet: true,
+			w: lineWidth( t.tie ), o: lay.web ? webShade( t.bow, false ) : 0, bow: t.bow, delay: 300 } );
+	}
+	sc.nodes.set( 'page', { stands: 'page', is: 'page', x: lay.C.x, y: lay.C.y, kind: 'page', o: 1, title: v.pg, count: ids.length } );
+	mine.forEach( ( id ) => {
+		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { delay: 180 }, nameAt( first( id ), seatOf.get( id ), W, FONT.named ) ) );
+	} );
+	if ( outer.length ) {
+		const seated = outer.slice( 0, lay.dots.length );
+		const taken = mine.map( ( id ) => {
+			const pos = seatOf.get( id ), nm = nameAt( first( id ), pos, W, FONT.named );
+			return { x: pos.x + nm.dx, y: pos.y + ( pos.below ? 24 : -32 ), w: wide( nm.label, FONT.named ) / 2 + 3 };
+		} );
+		const clash = ( b, d ) => Math.abs( b.x - d.x ) < b.w + d.w && Math.abs( b.y - d.y ) < 22;
+		// each one a step out sits, as near as there's room, by the one on the page whose company they are, so
+		// the line out to them is short and crosses nothing (the strongest first, as the list is ordered)
+		const turn = ( pt ) => Math.atan2( pt.y - lay.C.y, pt.x - lay.C.x );
+		const open = lay.dots.map( ( d, k ) => k );
+		const oseats = seated.map( ( c ) => {
+			const want = turn( seatOf.get( c.by ) );
+			let best = 0, gap = Infinity;
+			open.forEach( ( k, at ) => {
+				const d = Math.abs( Math.atan2( Math.sin( turn( lay.dots[ k ] ) - want ), Math.cos( turn( lay.dots[ k ] ) - want ) ) );
+				if ( d < gap ) {
+					gap = d;
+					best = at;
+				}
+			} );
+			return open.splice( best, 1 )[ 0 ];
+		} );
+		seated.forEach( ( c, i ) => {
+			const at = lay.dots[ oseats[ i ] ], nm = nameAt( first( c.id ), at, W, FONT.far );
+			const box = { x: at.x + nm.dx, y: at.y + ( at.below ? 24 : -14 ), w: wide( nm.label, FONT.far ) / 2 + 2 };
+			const hit = taken.some( ( b ) => clash( b, box ) );
+			if ( !hit ) {
+				taken.push( box );
+			}
+			addNode( sc, c.id, at, hit ? 'dot' : 'far', Object.assign( { r: 4, by: c.by, tie: c.tie, delay: 360 }, hit ? {} : nm ) );
+			addLine( sc, c.by, c.id, c.tie, { o: 0.4, quiet: true, fine: true, role: 'far', c: c.id, delay: 360 } );
+		} );
+		sc.far = seated.map( ( c, i ) => ( { id: c.id, at: lay.dots[ oseats[ i ] ], tie: c.tie, by: c.by } ) );
+	}
+	sc.web = lay.web;
+	sc.head = [ h( 'b', null, v.pg ), ' ', h( 'a', { class: 'page', href: pageUrl( v.pg ), target: '_top' }, 'page ↗' ) ];
+	sc.sub = [ h( 'b', null, K.plural( ids.length, 'picker' ) ), ' this page links; a line between two: they played together. ',
+		'Being on the page together counts here, and nowhere else.' ];
+	return sc;
+}
+
 function songScene( v ) {
 	const scd = G.songcast[ v.cut ], { W, H } = frame();
 	const sc = newScene();
@@ -1532,6 +1625,20 @@ const draw = {
 			gl.setAttribute( 'transform', 'scale(1.25)' );
 			g.appendChild( gl );
 			stepLabel( g, d, 15, '/rabbithole/?track=' + encodeURIComponent( d.cid ), d.label );
+			return;
+		}
+		if ( d.stands === 'page' ) {                                 // a page's own graph: the page in the middle, its name a way to it
+			g.textContent = '';
+			g.setAttribute( 'class', 'pk page' );
+			g.setAttribute( 'aria-label', d.title + ', a page' );
+			layers.nodes.appendChild( g );
+			g.appendChild( s( 'circle', { class: 'halo', r: 32 } ) );
+			g.appendChild( s( 'circle', { class: 'ring', r: 24 } ) );
+			g.appendChild( s( 'g', { class: 'sheet', transform: 'scale(1.2)' },
+				s( 'path', { class: 'leaf', d: 'M-7 -11 h9 l5 5 v17 h-14 z' } ),
+				s( 'path', { class: 'writ', d: 'M2 -11 v5 h5 M-4 -1 h8 M-4 3 h8 M-4 7 h5' } ) ) );
+			g.appendChild( s( 'a', { href: pageUrl( d.title ), target: '_top', 'aria-label': 'The page: ' + d.title },
+				s( 'text', { y: 46, 'text-anchor': 'middle' }, K.clip( d.title, 30 ) ) ) );
 			return;
 		}
 		if ( d.stands === 'song' ) {
@@ -2042,6 +2149,11 @@ function fillPanel() {
 			h( 'ul', null, way.map( ( id, i ) => personRow( id, i === 0 ? 'where you started' :
 				( steps[ i - 1 ].tie ? K.times( steps[ i - 1 ].tie ) + ' with ' + first( steps[ i - 1 ].u ) : 'typed in' ), () => go( { a: id } ) ) ) ),
 			tellBox( first( GAME.to ), gameFrom() ) );
+	} else if ( view.pg !== undefined ) {
+		const ids = G.pages[ view.pg ] || [];
+		out.push( h( 'h2', null, view.pg ), h( 'p', { class: 'sub' }, h( 'a', { href: pageUrl( view.pg ), target: '_top' }, 'the page ↗' ) ),
+			h( 'h3', null, `The pickers it links · ${ ids.length }` ),
+			h( 'ul', null, ids.map( ( id ) => personRow( id, P( id ).inst || null, () => go( { a: id } ) ) ) ) );
 	} else if ( view.cut !== undefined && G.songcast[ view.cut ] ) {
 		const scd = G.songcast[ view.cut ];
 		const cut = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean )[ 0 ];
@@ -2102,7 +2214,7 @@ function fillPanel() {
 			}
 		}
 	}
-	if ( !view.way && view.a !== undefined && view.b === undefined && view.m === undefined && view.cut === undefined ) {
+	if ( !view.way && view.pg === undefined && view.a !== undefined && view.b === undefined && view.m === undefined && view.cut === undefined ) {
 		out.push( tellBox( first( view.a ), GAME ? gameFrom() : 'the bacon graph of ' + first( view.a ) ) );
 	}
 	out.push( h( 'p', { class: 'foot' }, `${ G.people.length } pickers, ${ G.music.length } records and shows that join them. Built ${ K.when( G.built ) }. `,
@@ -2317,6 +2429,9 @@ function label( v ) {
 	if ( v.walk ) {
 		return 'Your rabbithole';
 	}
+	if ( v.pg !== undefined ) {
+		return v.pg;
+	}
 	if ( v.cut !== undefined && G.songcast[ v.cut ] ) {
 		const c = G.songcast[ v.cut ];
 		return c.song + ( c.on && c.on.length ? ' · ' + G.music[ c.on[ 0 ] ].title : '' );
@@ -2331,7 +2446,7 @@ function label( v ) {
 	return v.b === undefined ? first( v.a ) : first( v.a ) + ' ⟷ ' + first( v.b );
 }
 
-const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m && v.s === w.s && v.cut === w.cut;
+const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m && v.s === w.s && v.cut === w.cut && v.pg === w.pg;
 
 /** Where each thing in sight is now, by what it stands for: a picker ('p' and their number) or a piece ('m' and its). */
 function whereabouts() {
@@ -2391,7 +2506,7 @@ function show( quick, again ) {
 	stage.classList.toggle( 'walking', !!view.walk );
 	document.querySelector( 'main' ).classList.toggle( 'walking', !!view.walk );
 	steady();
-	scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
+	scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.pg !== undefined ? pageScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
 	stage.classList.toggle( 'webbed', !!scene.web );
 	stage.classList.toggle( 'deep', !!scene.deep );
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
@@ -2400,13 +2515,13 @@ function show( quick, again ) {
 	keptSay();
 	qrSay();
 	fillPanel();
-	$( 'pa' ).value = view.way || view.walk || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
-	$( 'pb' ).value = view.way || view.walk || view.m !== undefined || view.b === undefined ? '' : first( view.b );
+	$( 'pa' ).value = view.way || view.walk || view.pg !== undefined || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
+	$( 'pb' ).value = view.way || view.walk || view.pg !== undefined || view.m !== undefined || view.b === undefined ? '' : first( view.b );
 	$( 'back' ).hidden = trail.length < 2;
 	$( 'crumbs' ).replaceChildren( ...trail.slice( -4, -1 ).flatMap( ( v, i, arr ) => [
 		h( 'button', { type: 'button', onclick: () => {
 			trail.splice( trail.length - ( arr.length - i ) - 1 );     // back to there: it, and all since, come off
-			go( v.way ? { way: true } : v.walk ? { walk: true } : v.m !== undefined ? { m: v.m } : ( v.b === undefined ? { a: v.a } : { a: v.a, b: v.b } ) );
+			go( v.way ? { way: true } : v.walk ? { walk: true } : v.pg !== undefined ? { pg: v.pg } : v.m !== undefined ? { m: v.m } : ( v.b === undefined ? { a: v.a } : { a: v.a, b: v.b } ) );
 		} }, label( v ) ), ' › ' ] ) );
 	document.title = label( view ) + ' · the connectome';
 	closeSheet();
@@ -2419,8 +2534,11 @@ function show( quick, again ) {
  * of the line it was on, and the other pieces named in sight; from one piece to the next, the one left behind.
  */
 function carry( v ) {
-	if ( !view || !scene || v.walk || v.way || v.b !== undefined || v.cut !== undefined || v.s !== undefined ) {
-		return v;                                                    // two pickers, or a cut: a view of its own, with nothing brought along
+	if ( !view || !scene || v.walk || v.way || v.pg !== undefined || v.b !== undefined || v.cut !== undefined || v.s !== undefined ) {
+		return v;                                                    // two pickers, a cut or a page: a view of its own, with nothing brought along
+	}
+	if ( view.pg !== undefined ) {
+		return v;                                                    // out of a page's graph: being on it together is no connection
 	}
 	// Out of a cut's graph (Justin, #connectome, 15 Nov 2026, 04:53Z): the way back is the cut itself — the
 	// record's artist first, then the song's writer where they're on it, then the rest of the cut's ensemble
@@ -2459,7 +2577,7 @@ function go( v ) {
 	if ( left ) {
 		v = leaveKept( v );                  // a click that goes further goes into today's graph
 	}
-	if ( !v.walk && !v.way && v.m === undefined && v.s === undefined && v.b === v.a ) {
+	if ( !v.walk && !v.way && v.pg === undefined && v.m === undefined && v.s === undefined && v.b === v.a ) {
 		v = { a: v.a };
 	}
 	view = carry( v );
@@ -2845,6 +2963,28 @@ function aSong( d ) {
 	return w;
 }
 
+/** A picker on a page's own graph: who of the page's own they played with; one a step out, whose company they're in. */
+function aPickerOfPage( d ) {
+	const id = d.id, name = first( id );
+	const w = { kind: 'a picker' + instOf( id ), title: name, tipTitle: name + instOf( id ), lines: [], hint: 'click: go to ' + name,
+		acts: [ act( 'Go to ' + name, () => go( { a: id } ) ), pageAct( id ) ] };
+	if ( d.by !== undefined && d.tie ) {
+		w.kind += ' · a step out';
+		w.lines.push( K.together( d.tie ) + ' with ' + first( d.by ) );
+	} else {
+		const here = ( G.pages[ view.pg ] || [] ).filter( ( o ) => o !== id && G.adj[ id ].has( o ) && G.adj[ id ].get( o ).played );
+		w.lines.push( here.length ? 'played with ' + listNames( here ) + ', of those on the page' : 'played with none of the others on the page' );
+	}
+	return w;
+}
+
+/** The page in the middle of its own graph: what's round it, and the way to it. */
+function aPage( d ) {
+	return { kind: 'a page', title: d.title, tipTitle: d.title + ', a page',
+		lines: [ K.plural( d.count, 'picker' ) + ' it links, round it', 'being on it together counts here, and nowhere else' ],
+		hint: 'click a picker round it: go to them', acts: [ link( 'Open the page ↗', pageUrl( d.title ), 'page' ) ] };
+}
+
 /** A picker on a song's ring: what this cut's credits gave them, and where else they lead. */
 function aPickerOfSong( d ) {
 	const id = d.id, name = first( id ), role = d.cutOf ? d.cutOf.role : '';
@@ -2864,6 +3004,9 @@ function aPickerOfSong( d ) {
 }
 
 function aPicker( d ) {
+	if ( view.pg !== undefined ) {
+		return aPickerOfPage( d );
+	}
 	if ( d.song !== undefined ) {
 		return aPickerOfSong( d );
 	}
@@ -3001,6 +3144,8 @@ function what( g ) {
 			return d.road !== undefined ? aRoad( d ) : d.step !== undefined ? aStep( d ) : ( d.more ? theRest( d ) : ( out ? aPieceAmong( d ) : aPiece( d ) ) );
 		case 'song':
 			return aSong( d );
+		case 'page':
+			return aPage( d );
 		case 'thread':
 			return d.quiet ? null : ( d.step !== undefined ? aVia( d ) : aPickerBetween( d ) );
 		case 'day':
