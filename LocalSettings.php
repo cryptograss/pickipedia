@@ -531,6 +531,16 @@ if ( getenv('DELIVERY_KID_API_KEY') ) {
 	$wgDeliveryKidApiKey = getenv('DELIVERY_KID_API_KEY');
 }
 
+# PickiPediaConnectionNotes - the connection box: a visitor's note about an
+# unrecorded connection, saved as plain text to Cryptograss talk:Connection
+# inbox by a system user (created on update.php), so a signed-out visitor
+# publishes no IP. Docs: Cryptograss:Bacon graphs/Discovery.
+wfLoadExtension( 'PickiPediaConnectionNotes' );
+# Rate limit for the connection box: 5 notes an hour per visitor, so a
+# script cannot fill the inbox. Keyed by IP for signed-out visitors; the
+# note itself is saved by the system user, so no IP is published.
+$wgRateLimits['connectionnote'] = [ 'ip' => [ 5, 3600 ], 'newbie' => [ 5, 3600 ] ];
+
 # PickiPediaRecordingMetadata - per-recording timeline + ensemble editor.
 # Routes Release:*\/Metadata pages to the recording-metadata-yaml content
 # model; loaded after PickiPediaReleases so NS_RELEASE is available.
