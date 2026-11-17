@@ -2243,16 +2243,22 @@ function tellBox( about, from ) {
 	const note = h( 'textarea', { maxlength: 2000, rows: 4, placeholder: 'Who played with whom, and where: a record, a show, a night you were there. A way to reach you, if you want an answer.' } );
 	const said = h( 'p', { class: 'sub', role: 'status' } );
 	const send = h( 'button', { type: 'button', onclick: async () => {
-		const text = note.value.trim();
+		const text = note.value.trim(), who = what.value.trim();
 		if ( !text ) {
 			said.textContent = 'Write the connection first.';
+			return;
+		}
+		if ( !who ) {
+			// re's module (pickipedia:re/connection-note) takes no note without it.
+			said.textContent = 'Say who or what it’s about.';
 			return;
 		}
 		send.disabled = true;
 		said.textContent = 'Sending…';
 		try {
 			const t = await wiki( { action: 'query', meta: 'tokens' } );
-			const r = await wiki( { action: 'connectionnote', about: what.value.trim().slice( 0, 200 ), from: from.slice( 0, 300 ),
+			// The caps are the module's own: about and from 200, the note 2,000.
+			const r = await wiki( { action: 'connectionnote', about: who.slice( 0, 200 ), from: from.slice( 0, 200 ),
 				note: text.slice( 0, 2000 ), token: t.query.tokens.csrftoken }, true );
 			if ( r.connectionnote && r.connectionnote.result === 'Success' ) {
 				note.value = '';
