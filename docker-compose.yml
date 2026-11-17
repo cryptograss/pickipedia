@@ -2,16 +2,15 @@
 # Run on hunter to test MediaWiki upgrades before deploying to the PickiPedia VPS
 #
 # Usage:
-#   docker-compose up -d
-#   # Reached on hunter's localhost only (WIKI_BIND, below). From outside, through Caddy:
-#   # WIKI_PORT=<4005 + your SSH port - 2222>, then https://pickipedia.<you>.hunter.cryptograss.live
+#   WIKI_PORT=4023 docker compose up -d
+#   # Reached on hunter's localhost only (WIKI_BIND, below). From outside, hunter's Caddy
+#   # proxies https://pickipedia.workbench.hunter.cryptograss.live -> localhost:4023.
 #
 # To test a different MediaWiki version:
-#   MEDIAWIKI_VERSION=1.44.0 docker-compose up -d --build
+#   MEDIAWIKI_VERSION=1.44.0 docker compose up -d --build
 #
-# When running from inside a container (e.g. magent containers on hunter),
-# set PICKIPEDIA_DIR to the host path of this directory:
-#   PICKIPEDIA_DIR=/opt/magenta/justin/home/workspace/pickipedia docker compose up -d
+# When running from inside workbench on hunter, set PICKIPEDIA_DIR to the host path:
+#   WIKI_PORT=4023 PICKIPEDIA_DIR=/opt/magenta/workbench/home/workspace/pickipedia docker compose up -d
 
 services:
   wiki:
@@ -30,7 +29,7 @@ services:
       - MEDIAWIKI_DB_NAME=${DB_NAME:-pickipedia}
       - MEDIAWIKI_DB_USER=${DB_USER:-pickipedia}
       - MEDIAWIKI_DB_PASSWORD=${DB_PASSWORD:-changeme}
-      - WIKI_URL=${WIKI_URL:-https://pickipedia.justin.hunter.cryptograss.live}
+      - WIKI_URL=${WIKI_URL:-https://pickipedia.workbench.hunter.cryptograss.live}
       - WIKI_DEV_MODE=true
       - DELIVERY_KID_API_KEY=${DELIVERY_KID_API_KEY:-}
     volumes:
