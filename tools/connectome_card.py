@@ -150,6 +150,33 @@ class Wiki:
                 return out
             cont = {'eicontinue': q['continue']['eicontinue']}
 
+    def bacon_pages(self):
+        """The pages that ask for a bacon graph of their own: those that carry {{Bacon graph of this page}},
+        in any namespace."""
+        out, cont = [], {}
+        while True:
+            q = self.api(action='query', list='embeddedin', eititle=PAGE_TEMPLATE, eilimit=500, **cont)
+            out += [p['title'] for p in q['query']['embeddedin']]
+            if 'continue' not in q:
+                return out
+            cont = {'eicontinue': q['continue']['eicontinue']}
+
+    def links(self, titles):
+        """title -> the main-namespace pages it links to, as the page writes them (redirects not yet followed)."""
+        out = {}
+        for t in sorted(set(titles)):
+            cont, got = {}, []
+            while True:
+                q = self.api(action='query', titles=t, prop='links', plnamespace=0, pllimit='max',
+                             formatversion=2, **cont)
+                for page in q['query'].get('pages', []):
+                    got += [x['title'] for x in page.get('links', [])]
+                if 'continue' not in q:
+                    break
+                cont = {'plcontinue': q['continue']['plcontinue']}
+            out[t] = got
+        return out
+
     def portraits(self, titles):
         """title -> the file its {{MusicianInfo}} gives as image=, for the pages that give one. The page says which
         picture is the picker's; nothing here chooses one."""
@@ -714,6 +741,10 @@ def card_file(title):
 
 
 SONG_RING = 120.0                      # the ring a song's cast sits on; wider when the cast is a big one
+PAGE_TEMPLATE = 'Template:Bacon graph of this page'   # a page that carries it asks for a graph of its own
+PAGE_MOST = 16                          # the most a page's graph names round it; the rest are counted under it
+PAGE_WIDE = 440                         # a page's graph is never narrower, so a note's line isn't cut short
+HOME = 'Justin Myles Holmes'            # whose way each picker on a page's graph is given: how far from cryptograss
 
 
 def song_cut(whole, tiers, pages, target):
@@ -849,6 +880,172 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
             + ''.join(out) + legend +
             f'<div class="cc-foot">On {record}{which}{took}.{playnote}</div></div>')
 
+
+PAGE = ('<circle r="21" fill="%s" stroke="%s" stroke-width="1.5"/>' % (PAPER, INK) +
+        '<path d="M-7 -11 h9 l5 5 v17 h-14 z" fill="%s" stroke="%s" stroke-width="1.6" stroke-linejoin="round"/>'
+        % (PAPER, INK) +
+        '<path d="M2 -11 v5 h5 M-4 -1 h8 M-4 3 h8 M-4 7 h5" fill="none" stroke="%s" stroke-width="1.3"/>' % INK)
+
+
+def played_way(store, s, t):
+    """The fewest jumps from s to t, a jump being two who played together on a stage or a track (as the
+    challenge and the big graph count them; a shared record is no jump): [s, ..., t], or None."""
+    if s == t:
+        return [s]
+    prev, front = {s: None}, [s]
+    while front and t not in prev:
+        nxt = []
+        for u in front:
+            for o, p in sorted(store.by[u], key=lambda op: op[0]):
+                if p['kind'] in ('track', 'show') and o not in prev:
+                    prev[o] = u
+                    nxt.append(o)
+        front = nxt
+    if t not in prev:
+        return None
+    way = [t]
+    while prev[way[-1]] is not None:
+        way.append(prev[way[-1]])
+    return way[::-1]
+
+
+def page_card(title, members, store, has_page, inst, home=HOME):
+    """A page's own bacon graph (Justin, #connectome, 17 Nov 2026, 19:39Z: "a tag which makes a graph for the
+    page itself, understand every linked page as a connection through that page ... a reasonable way to connect,
+    for example, awards pages"): the page in the middle, the pickers it links round it, and a line between two of
+    them where the store knows they played together. Being on the page together joins them here and nowhere else
+    (19:42Z: "only for the purposes of that page. It doesn't otherwise count as a connectome link unless it has
+    some other reason to"): the lines out from the middle are faint, and the store, the big graph and every jump
+    stay as they were. members: the pickers the page links, as the store names them. Those with the most ties
+    among the page's own come first, PAGE_MOST at most, each set beside one they played with where it can be."""
+    members = [n for n in dict.fromkeys(members) if n != title and n in store.by]
+    if not members:
+        return None
+    def played(x, y):                               # on a stage or a track together; a shared record isn't
+        ev = store.evidence(x, y)
+        return bool(ev) and any(e['kind'] != 'record' for e in ev['list'])
+
+    ties = {n: [o for o in members if o != n and played(n, o)] for n in members}
+    ranked = sorted(members, key=lambda n: (-len(ties[n]), -len(store.by[n]), n))
+    chosen, more = ranked[:PAGE_MOST], max(0, len(ranked) - PAGE_MOST)
+    ring, left = [], list(chosen)
+    while left:                                     # round the ring: next, one the last played with, if any is left
+        last = ring[-1] if ring else None
+        n = next((o for o in left if last is not None and o in ties[last]), left[0])
+        ring.append(n)
+        left.remove(n)
+    roles = {n: inst.get(n, '') for n in ring}
+    r = SONG_RING + max(0, len(ring) - 8) * 9
+    step = 360 / len(ring)
+    pos = {n: pol(r, -90 + step / 4 + step * i) for i, n in enumerate(ring)}
+
+    def label(n, below=None):
+        x, y = pos[n]
+        if below is None:
+            below = y > C[1] + 1
+        w = max(tw(n, bold=True), tw(roles[n]) * 0.62 if roles[n] else 0)
+        ny = y + 17 + FS * 0.8 if below else y - 17
+        top = ny - FS * 0.8 if below else ny - FS * 1.5
+        h = FS * (1.55 if roles[n] else 1.0)
+        return [x, ny, below, (x - w / 2, top, x + w / 2, top + h)]
+
+    labels = {}
+    for n in ring:                                  # a label that runs into one placed flips sides
+        lb = label(n)
+        if any(hits(lb[3], L[3]) for L in labels.values()):
+            lb = label(n, below=not lb[2])
+        labels[n] = lb
+    boxes = [L[3] for L in labels.values()]        # the page's own name isn't drawn: the card is on that page
+
+    edges = []
+    for i, x in enumerate(ring):
+        for y in ring[i + 1:]:
+            ev = store.evidence(x, y)
+            if not ev:
+                continue
+            with_ = [e for e in ev['list'] if e['kind'] != 'record']
+            e = (with_ or ev['list'])[0]
+            s, t = trim_svg(pos[x], pos[y], 12, 12)
+            if not with_ or e['tier'] == 0:         # only a record shared, or nothing to vouch for it: dotted
+                html = line_svg(s, t, stroke=SHUT, stroke_width=1.2, stroke_dasharray='1 5', stroke_linecap='round')
+            else:
+                col = GOLD if e['tier'] == 2 else INK2
+                html = line_svg(s, t, stroke=col, stroke_width=2.2 if e['kind'] == 'track' else 1.4,
+                                stroke_linecap='round')
+            said = e['text'] if with_ else 'on a record: ' + e['text']
+            edges.append((x, y, html, dict(e, text=said), len(ev['list'])))
+
+    xs = [C[0]] + [p[0] for p in pos.values()] + [b[0] for b in boxes] + [b[2] for b in boxes]
+    ys = [C[1]] + [p[1] for p in pos.values()] + [b[1] for b in boxes] + [b[3] for b in boxes]
+    x0, y0, x1, y1 = min(xs) - 14, min(ys) - 14, max(xs) + 14, max(ys) + 14
+    if x1 - x0 < PAGE_WIDE:                         # room for a note's line, however few are round the page
+        x0, x1 = x0 - (PAGE_WIDE - (x1 - x0)) / 2, x1 + (PAGE_WIDE - (x1 - x0)) / 2
+
+    def tip(lines, x, y):
+        return tip_box(lines, x, y, (x0, y0, x1, y1))
+
+    out = []
+    o = out.append
+    o(f'<svg xmlns="http://www.w3.org/2000/svg" class="cc" viewBox="{x0:.0f} {y0:.0f} {x1 - x0:.0f} {y1 - y0:.0f}" '
+      f'width="100%" font-family="Georgia, serif" font-size="{FS:g}" role="img" '
+      f'aria-label="{attr("The pickers " + title + " names, and who of them played together")}">')
+    o(f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/>')
+    for n in ring:                                  # on the page together: here and only here; a hairline, not a tie
+        s, t = trim_svg(C, pos[n], 22, 12)
+        o(line_svg(s, t, stroke=SHUT, stroke_width=1, opacity=0.35))
+    for _, _, html, _, _ in edges:
+        o(html)
+    for n in ring:
+        x, y = pos[n]
+        if roles[n]:
+            href = attr(ICON.format(urllib.parse.quote(roles[n])))
+            ic = (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="14" fill="{PAPER}" stroke="{INK}" stroke-width="2"/>'
+                  f'<image href="{href}" x="{x - 10:.1f}" y="{y - 10:.1f}" width="20" height="20"></image>')
+        else:
+            ic = (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="10" fill="{INK if has_page(n) else PAPER}" '
+                  f'stroke="{INK}" stroke-width="1.5"/>')
+        x_lab, ny, below, _ = labels[n]
+        ry = ny + FS * 1.05 if below else ny - FS * 1.05
+        o(f'<a href="{attr(viewer(p=n))}">{ic}<text class="cc-lab" x="{x_lab:.1f}" y="{ny:.1f}" '
+          f'text-anchor="middle" fill="{INK}" font-weight="bold">{escape(n)}</text>'
+          + (f'<text class="cc-lab" x="{x_lab:.1f}" y="{ry:.1f}" text-anchor="middle" fill="{INK2}" '
+             f'font-size="0.62em">{escape(roles[n])}</text>' if roles[n] else '') + '</a>')
+    o(f'<g transform="translate({C[0]:.0f} {C[1]:.0f})"><title>{escape(title)}</title>{PAGE}</g>')
+    for x, y, _, e, n_ev in edges:                  # a line says where the two played together
+        mx, my = (pos[x][0] + pos[y][0]) / 2, (pos[x][1] + pos[y][1]) / 2
+        tail = f' (+{n_ev - 1} more)' if n_ev > 1 else ''
+        o(f'<g class="cc-h">{tip([f"{x} & {y}", e["text"] + tail], mx, my)}</g>')
+    for n in ring:
+        x, y = pos[n]
+        lines = [n + (f' · {roles[n]}' if roles[n] else '')]
+        if ties[n]:
+            lines.append('played with ' + ties[n][0] + (f' and {len(ties[n]) - 1} more' if len(ties[n]) > 1 else ''))
+        if n != home:
+            way = played_way(store, n, home) if home in store.by else None
+            if way:
+                jumps = len(way) - 1
+                lines.append(f'{jumps} jump{"s" if jumps != 1 else ""} from {home}')
+                if jumps > 1:
+                    lines.append(f'by way of {way[1]}')
+        box = labels[n][3]
+        o(f'<g class="cc-h"><a href="{attr(viewer(p=n))}"><circle cx="{x:.1f}" cy="{y:.1f}" r="15" fill="transparent"/>'
+          f'<rect x="{box[0]:.1f}" y="{box[1]:.1f}" width="{box[2] - box[0]:.1f}" height="{box[3] - box[1]:.1f}" '
+          f'fill="transparent"/></a>{tip(lines, x, y)}</g>')
+    o('</svg>')
+
+    legend = ('<div class="cc-legend">'
+              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
+              "an etree tape or Creative Commons<br>"
+              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
+              '<span class="cc-key cc-rest"></span> the rest<br>'
+              'a line between two: they played together; dotted: only a record, or the rest · '
+              'a hairline from the middle: on this page, and only here'
+              '</div>')
+    count = f'{len(ring)} of the pickers this page links' + (f' ({more} more not drawn)' if more else '')
+    return (f'<div class="connectome-card" data-page="{attr(title)}">'
+            '<div class="cc-head">Connectome</div>'
+            + ''.join(out) + legend +
+            f'<div class="cc-foot">{escape(count)}. A name opens their bacon graph.</div></div>')
 
 # ---------------------------------------------------------------------------
 
@@ -993,8 +1190,20 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
             skipped.append(title)
         else:
             cards[title] = html
+    # The pages that ask for a graph of their own ({{Bacon graph of this page}}): the pickers they link, through
+    # the wiki's redirects, round them. A picker's own page, or a song's, keeps the card it has.
+    page_cards = {}
+    if not (only and only.startswith('Song:')):
+        asking = [only] if only else (wiki.bacon_pages() if hasattr(wiki, 'bacon_pages') else [])
+        asking = [t for t in asking if t not in cards and t not in song_cards]
+        linked = wiki.links(asking) if asking and hasattr(wiki, 'links') else {}
+        seen = wiki.resolve(sorted({x for xs in linked.values() for x in xs})) if linked else {}
+        for t in asking:
+            html = page_card(t, [seen.get(x, (x, False))[0] for x in linked.get(t, [])], store, has_page, inst)
+            if html:
+                page_cards[t] = html
     return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,
-            'song_cards': song_cards, 'cut_cards': cut_cards,
+            'song_cards': song_cards, 'cut_cards': cut_cards, 'page_cards': page_cards,
             'pairs': store.pairs, 'names': {k: sorted(v) for k, v in sorted(store.raw.items())}}
 
 
@@ -1004,6 +1213,9 @@ def write(result, out_dir, built_from):
         with open(os.path.join(out_dir, 'cards', card_file(title)), 'w') as f:
             f.write(html)
     for title, html in result.get('song_cards', {}).items():
+        with open(os.path.join(out_dir, 'cards', card_file(title)), 'w') as f:
+            f.write(html)
+    for title, html in result.get('page_cards', {}).items():
         with open(os.path.join(out_dir, 'cards', card_file(title)), 'w') as f:
             f.write(html)
     # Each cut its own file, named as Connectome::cutFileFor names it: the page's title and the cut's own
@@ -1025,6 +1237,7 @@ def write(result, out_dir, built_from):
         json.dump({'month': result['month'], 'featured': result['featured'],
                    'cards': {t: card_file(t) for t in sorted(result['cards'])},
                    'song_cards': {t: card_file(t) for t in sorted(result.get('song_cards', {}))},
+                   'page_cards': {t: card_file(t) for t in sorted(result.get('page_cards', {}))},
                    'cut_cards': {t: {k: card_file(t + '|' + k) for k in sorted(ks)}
                                  for t, ks in sorted(result.get('cut_cards', {}).items())},
                    'no_card': result['skipped'], 'built_from': built_from}, f, indent=1)
@@ -1046,6 +1259,7 @@ def main(argv):
     write(result, a.out, {'db': os.path.basename(a.db), 'wiki': a.wiki, 'today': today.isoformat()})
     print(f"{len(result['cards'])} cards; "
           f"{len(result.get('song_cards', {}))} song cards; "
+          f"{len(result.get('page_cards', {}))} page cards; "
           f"no card for {len(result['skipped'])} pages", file=sys.stderr)
 
 
