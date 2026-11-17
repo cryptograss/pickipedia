@@ -32,13 +32,23 @@ class SectionBuilder {
 		return preg_replace( '#</nowiki>#i', '<nowiki/>', $text );
 	}
 
-	/** A section heading may not carry =, {, }, |, [, ], < or >, or newlines. */
+	/** Heading fields lose =, {, }, |, [, ], <, >, ~ and newlines: a heading
+	 * carries no wikitext markup, no comment opener, and no signature. */
+	private static function clean( string $s ): string {
+		$s = str_replace( [ "\n", "\r" ], ' ', $s );
+		return trim( preg_replace( '/[={}|\\[\\]<>~]/u', '', $s ) );
+	}
+
+	/** The page heading: each part in its own <nowiki>, so __NOEDITSECTION__,
+	 * ~~~~, a bare URL or anything else the parser would act on is inert. */
 	public static function heading( string $about, string $from ): string {
-		$clean = static function ( string $s ): string {
-			$s = str_replace( [ "\n", "\r" ], ' ', $s );
-			return trim( preg_replace( '/[={}|\\[\\]<>]/u', '', $s ) );
-		};
-		return $clean( $about ) . ' — from ' . $clean( $from );
+		return '<nowiki>' . self::clean( $about ) . '</nowiki>'
+			. ' — from <nowiki>' . self::clean( $from ) . '</nowiki>';
+	}
+
+	/** The same heading as plain text, for the edit summary. */
+	public static function headingPlain( string $about, string $from = '' ): string {
+		return self::clean( $about ) . ( $from !== '' ? ' — from ' . self::clean( $from ) : '' );
 	}
 
 	/** One body line as inert text. */

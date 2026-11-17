@@ -26,22 +26,29 @@ function check( bool $ok, string $what ) {
 $s = SectionBuilder::build( 'Kyle Tuttle', '/bacon/challenge/Vickie_Vaughn', 'Kyle played banjo with Sam at Dee\'s, March 2026.' );
 check( $s !== null, 'plain note builds' );
 check( str_contains( $s, "<nowiki>Kyle played banjo with Sam at Dee's, March 2026.</nowiki>" ), 'note sits in nowiki, as written' );
-check( str_starts_with( $s, '== Kyle Tuttle — from /bacon/challenge/Vickie_Vaughn ==' ), 'heading is about — from' );
+check( str_starts_with( $s, '== <nowiki>Kyle Tuttle</nowiki> — from <nowiki>/bacon/challenge/Vickie_Vaughn</nowiki> ==' ), 'heading is about — from, each part inert' );
 check( str_contains( $s, '<nowiki>About: Kyle Tuttle</nowiki>' ), 'About line is inert text' );
 check( str_contains( $s, '<nowiki>From: /bacon/challenge/Vickie_Vaughn</nowiki>' ), 'From line is inert text' );
+// The heading's own parser traps, verified on a real 1.43.6 by blu:
+$s = SectionBuilder::build( '__NOEDITSECTION__', '~~~~', 'note' );
+check( str_contains( $s, '== <nowiki>__NOEDITSECTION__</nowiki> — from <nowiki></nowiki> ==' ), 'magic words and tildes are inert in the heading' );
+$heading = substr( $s, 0, (int)strpos( $s, "\n" ) );
+check( !str_contains( $heading, '~~~~' ), 'no signature survives the heading' );
+$s = SectionBuilder::build( 'Read https://example.com/x', 'Y', 'note' );
+check( str_contains( $s, '<nowiki>Read https://example.com/x</nowiki>' ), 'a bare URL in the heading does not become a link' );
 
 // The one string that could end the nowiki early is neutralized, and only it.
 $s = SectionBuilder::build( 'X', 'Y', "fine</nowiki>[[Bad template]]{{evil}}" );
 check( str_contains( $s, '<nowiki>fine<nowiki/>[[Bad template]]{{evil}}</nowiki>' ), 'a hostile </nowiki> is neutralized' );
 check( substr_count( $s, '<nowiki/>' ) === 1, 'only the escape sequence changed' );
 
-// Heading junk: =, {, }, |, [, ], <, >, newlines come out of the heading —
+// Heading junk: =, {, }, |, [, ], <, >, ~, newlines come out of the heading —
 // including a comment opener, which could otherwise hide every later note.
 $s = SectionBuilder::build( "A=b]\n{c}", 'from[[x]]', 'note' );
-check( str_contains( $s, '== Ab c — from fromx ==' ), 'heading carries no wikitext markup' );
+check( str_contains( $s, '== <nowiki>Ab c</nowiki> — from <nowiki>fromx</nowiki> ==' ), 'heading carries no wikitext markup' );
 $s = SectionBuilder::build( 'Hi <!--', 'Y', 'note' );
 $heading = substr( $s, 0, (int)strpos( $s, "\n" ) );
-check( str_contains( $heading, '== Hi !-- — from Y ==' ) && !str_contains( $heading, '<!--' ), 'heading cannot open a comment' );
+check( str_contains( $heading, '== <nowiki>Hi !--</nowiki> — from <nowiki>Y</nowiki> ==' ) && !str_contains( $heading, '<!--' ), 'heading cannot open a comment' );
 // The comment opener in the body is inert: it sits inside nowiki.
 check( str_contains( $s, '<nowiki>About: Hi <!--</nowiki>' ), 'comment opener in a field is inert text' );
 

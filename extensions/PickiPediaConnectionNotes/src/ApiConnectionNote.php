@@ -61,7 +61,8 @@ class ApiConnectionNote extends ApiBase {
 	/** @inheritDoc */
 	public function execute(): void {
 		// Per-visitor rate limit; see $wgRateLimits['connectionnote'].
-		if ( $this->pingLimiter( 'connectionnote' ) ) {
+		// pingLimiter lives on User, not on ApiBase.
+		if ( $this->getUser()->pingLimiter( 'connectionnote' ) ) {
 			$this->dieWithError( 'apierror-ratelimited', 'ratelimited' );
 		}
 
@@ -114,7 +115,7 @@ class ApiConnectionNote extends ApiBase {
 			);
 		}
 
-		$about = SectionBuilder::heading( (string)$params['about'], '' );
+		$about = SectionBuilder::headingPlain( (string)$params['about'] );
 		$comment = CommentStoreComment::newUnsavedComment( 'Connection note: ' . $about );
 		$updater->saveRevision( $comment );
 
