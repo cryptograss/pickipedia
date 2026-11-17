@@ -52,6 +52,46 @@ test( 'a tie adds up what two pickers share, shows and records apart', () => {
 	assert.equal( K.times( t ), '1 show, 1 record' );
 } );
 
+test( 'a challenge names its goal by the address, an underscore for a space', () => {
+	assert.equal( K.challengeOf( '/bacon/challenge/Vickie_Vaughn', '' ), 'Vickie Vaughn' );
+	assert.equal( K.challengeOf( '/bacon/challenge/Bronwyn%20Keith-Hynes/', '' ), 'Bronwyn Keith-Hynes' );
+	assert.equal( K.challengeOf( '/bacon', '?challenge=Kyle+Tuttle' ), 'Kyle Tuttle' );
+	assert.equal( K.challengeOf( '/bacon/challenge/100%_Bad', '' ), '100% Bad' );
+	assert.equal( K.challengeOf( '/bacon', '?p=Kyle' ), null );
+	assert.equal( K.challengeOf( '/bacon/challenge/', '' ), null );
+} );
+
+test( 'a challenge starts three or four jumps out, at a picker with a page where there is one', () => {
+	// Vickie, by playing together: Molly 1, Kyle and Justin 2 (pages), Sam 3 (no page); Far and Choir only share records
+	assert.deepEqual( K.challengeStart( G, VICKIE, () => 0 ), { from: SAM, par: 3 } );
+	// three with pages in reach (Molly, Kyle, Justin): one of them, never Sam
+	assert.deepEqual( K.challengeStart( G, VICKIE, () => 0.99, [ 1, 3 ] ), { from: MOLLY, par: 1 } );
+	// two with pages are too few to choose among: everyone in reach, Sam too
+	assert.deepEqual( K.challengeStart( G, VICKIE, () => 0, [ 2, 3 ] ), { from: KYLE, par: 2 } );
+	assert.deepEqual( K.challengeStart( G, VICKIE, () => 0.99, [ 2, 3 ] ), { from: SAM, par: 3 } );
+	// Molly: nobody three out, so the farthest there is: Sam, at 2
+	assert.deepEqual( K.challengeStart( G, MOLLY, () => 0 ), { from: SAM, par: 2 } );
+	assert.equal( K.challengeStart( G, LONE, () => 0 ), null );     // nobody leads to someone alone
+	assert.equal( K.challengeStart( G, FAR, () => 0 ), null );      // nor to one who only shares a record
+	// Choir only shares a record with Kyle and Justin: the record is a hop, but no jump
+	assert.equal( K.hops( G, KYLE, CHOIR ), 1 );
+	assert.equal( K.playedDistances( G, KYLE )[ CHOIR ], -1 );
+} );
+
+test( 'the way taken loses its loops, and says its songs that play', () => {
+	const { way, steps } = K.wayOf( G, [ SAM, KYLE, MOLLY, KYLE, JUSTIN, MOLLY, VICKIE ] );
+	assert.deepEqual( way, [ SAM, KYLE, JUSTIN, MOLLY, VICKIE ] );
+	assert.deepEqual( steps.map( ( st ) => [ st.u, st.v, !!st.tie ] ), [ [ SAM, KYLE, true ], [ KYLE, JUSTIN, true ], [ JUSTIN, MOLLY, true ], [ MOLLY, VICKIE, true ] ] );
+	assert.equal( K.wayOf( G, [ KYLE, LONE ] ).steps[ 0 ].tie, null );      // a name typed in: no line to it
+	// a step further out is two jumps, by way of someone who played with both
+	assert.equal( K.bridgeOf( G, SAM, MOLLY ), KYLE );
+	assert.equal( K.bridgeOf( G, SAM, MOLLY, [ JUSTIN ] ), JUSTIN );
+	assert.equal( K.bridgeOf( G, SAM, VICKIE ), undefined );
+	// Silver 44 plays (an arthel record); A Duet has a cid but sits on a Discogs record, so it doesn't
+	assert.deepEqual( K.wayPlays( G, steps ).map( ( x ) => x.song ), [ 'Silver 44' ] );
+	assert.equal( K.wayPlays( G, steps )[ 0 ].to, '/rabbithole/?track=' + encodeURIComponent( 'QmSilver44/x y' ) );
+} );
+
 test( 'the same record without the same track is a tie, but not playing together', () => {
 	const t = tie( KYLE, CHOIR );
 	assert.equal( t.played, false );
