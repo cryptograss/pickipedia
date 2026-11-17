@@ -287,10 +287,37 @@ function glyphBox( kind ) {
  * A view, as a scene: which pickers, lines and pills, and where
  * --------------------------------------------------------------------------------------------------------- */
 
-function frame() {
-	const W = Math.max( MINI ? 200 : 300, svg.clientWidth ), H = Math.max( MINI ? 120 : 240, svg.clientHeight );   // the dock's few steps: its own size
+/**
+ * The frame a view is laid out in, and drawn into. A page zoomed in lays it out as if it were bigger and draws it
+ * that much smaller (K.shrink), so a zoomed page still shows much of what it shows at 100%. The dock, the walk
+ * (own: its height is the walk's own), and a finger's screen keep their own pixels.
+ */
+let S = 1;                                                          // how many times smaller the drawing is than the frame's pixels
+function frame( own ) {
+	const cw = svg.clientWidth, ch = svg.clientHeight;
+	S = MINI || own || coarse ? 1 : K.shrink( cw, ch, zoomed() );
+	const W = Math.max( MINI ? 200 : 300, Math.round( cw * S ) ), H = Math.max( MINI ? 120 : 240, Math.round( ch * S ) );   // the dock's few steps: its own size
 	svg.setAttribute( 'viewBox', `0 0 ${ W } ${ H }` );
 	return { W, H };
+}
+
+/**
+ * How far the page is zoomed in, as near as a page can tell: the window's size against the page's, the narrower
+ * of the two ways (a sidebar or a docked inspector makes the other look zoomed). Over a wiki page, the wiki
+ * page's window; a frame on another site can't see that, and says 1, as does a browser that doesn't tell.
+ */
+function zoomed() {
+	let w = window;
+	if ( !alone ) {
+		try {
+			w = window.top;
+			void w.innerWidth;
+		} catch ( e ) {
+			return 1;
+		}
+	}
+	const z = Math.min( w.outerWidth / w.innerWidth, w.outerHeight / w.innerHeight );
+	return Number.isFinite( z ) && z > 1 ? z : 1;
 }
 
 function lineWidth( tie ) {
@@ -881,11 +908,11 @@ function walkScene() {
 		svg.style.height = MINI ? '' : Math.max( need, stage.clientHeight - ( $( 'say' ).offsetHeight || 0 ) - ( $( 'legend' ).offsetHeight || 0 ) ) + 'px';
 		return { shown, lay, W };
 	};
-	let { W, H } = frame(), fit = place( W, H );
-	( { W, H } = frame() );                                          // the height as set; and the width, should a scroll bar have come or gone
+	let { W, H } = frame( true ), fit = place( W, H );
+	( { W, H } = frame( true ) );                                    // the height as set; and the width, should a scroll bar have come or gone
 	if ( W !== fit.W ) {
 		fit = place( W, H );
-		( { W, H } = frame() );
+		( { W, H } = frame( true ) );
 	}
 	const { shown, lay } = fit, snaking = lay.cols > 1;
 	const want = MINI || !snaking ? 0 : ( W >= 700 ? 3 : 2 );       // the roads not taken, round each song
@@ -2135,7 +2162,7 @@ let lost = '';                   // an address that named nothing the graph know
  */
 function steady() {
 	const legend = $( 'legend' );
-	const most = K.ego( { W: svg.clientWidth, H: 4000, named: 8, dots: 0, far: true } );
+	const most = K.ego( { W: svg.clientWidth * ( coarse || MINI ? 1 : K.shrink( 1, 1, zoomed() ) ), H: 4000, named: 8, dots: 0, far: true } );   // as wide as it may ever be laid out
 	legend.style.minHeight = '';
 	stage.classList.remove( 'webbed', 'deep' );
 	stage.classList.add( ...[ most.web && 'webbed', most.far && 'deep' ].filter( Boolean ) );
@@ -2854,7 +2881,7 @@ function pick( e ) {
 		return g;
 	}
 	const box = svg.getBoundingClientRect();
-	const x = e.clientX - box.left, y = e.clientY - box.top;
+	const x = ( e.clientX - box.left ) * S, y = ( e.clientY - box.top ) * S;   // in the drawing's own units
 	let best = null, reach = 30;
 	for ( const [ , it ] of live.node ) {
 		const dist = it.dead || it.o < 0.05 ? Infinity : Math.hypot( it.x - x, it.y - y );
