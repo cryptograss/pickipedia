@@ -1158,3 +1158,51 @@ test( 'opened later, a kept graph says which of its ties have lost a source, los
 	assert.deepEqual( [ s.changed, s.gone, s.grown ], [ 1, 1, 1 ] );
 	assert.equal( K.since( kept, K.build( SHARED ), sight.map( ( i ) => nameOf( SHARED, i ) ) ).gone, 0 );
 } );
+
+/* A QR code of where the reader is (Justin, #connectome, 16 Nov 2026). */
+
+import { createHash } from 'node:crypto';
+const qrPrint = ( q ) => createHash( 'sha256' ).update( q.rows.map( ( r ) => r.join( '' ) ).join( '\n' ) ).digest( 'hex' ).slice( 0, 16 );
+
+test( 'a QR code is the smallest version that holds the text', () => {
+	assert.equal( K.qrCode( 'x'.repeat( 17 ), 'L' ).version, 1 );           // version 1 at L holds 17 bytes
+	assert.equal( K.qrCode( 'x'.repeat( 18 ), 'L' ).version, 2 );
+	assert.equal( K.qrCode( 'x'.repeat( 14 ), 'M' ).version, 1 );
+	assert.equal( K.qrCode( 'x'.repeat( 15 ), 'M' ).version, 2 );
+	const q = K.qrCode( 'https://pickipedia.xyz' );
+	assert.deepEqual( [ q.version, q.size, q.rows.length, q.rows[ 0 ].length ], [ 2, 25, 25, 25 ] );
+	assert.throws( () => K.qrCode( 'x'.repeat( 3000 ) ), RangeError );
+} );
+
+test( 'a QR code says its level and mask where a reader looks for them', () => {
+	for ( const ecl of [ 'L', 'M' ] ) {
+		for ( let mask = 0; mask < 8; mask++ ) {
+			const { rows } = K.qrCode( 'https://pickipedia.xyz/bacon/cepkp1cxqmc', ecl, mask );
+			const at = [ [ 8, 0 ], [ 8, 1 ], [ 8, 2 ], [ 8, 3 ], [ 8, 4 ], [ 8, 5 ], [ 8, 7 ], [ 8, 8 ], [ 7, 8 ], [ 5, 8 ], [ 4, 8 ], [ 3, 8 ], [ 2, 8 ], [ 1, 8 ], [ 0, 8 ] ];
+			const bits = at.reduce( ( b, [ x, y ], i ) => b | ( rows[ y ][ x ] << i ), 0 ) ^ 0x5412;
+			let rem = bits;
+			for ( let i = 14; i >= 10; i-- ) {
+				if ( ( rem >>> i ) & 1 ) {
+					rem ^= 0x537 << ( i - 10 );
+				}
+			}
+			assert.equal( rem, 0, 'the format bits are a BCH code word' );
+			assert.deepEqual( [ bits >>> 13, ( bits >>> 10 ) & 7 ], [ ecl === 'L' ? 1 : 0, mask ] );
+		}
+	}
+} );
+
+test( 'QR codes a reader read back whole stay as they were', () => {
+	// Each was drawn, then read by zxing-cpp to the same text (16 Nov 2026): versions 2, 3, 6 and 18.
+	assert.equal( qrPrint( K.qrCode( 'https://pickipedia.xyz', 'L' ) ), '459755bfb71f347f' );
+	assert.equal( qrPrint( K.qrCode( 'https://pickipedia.xyz/bacon/cepkp1cxqmc', 'L' ) ), 'd5c686acf8af945b' );
+	assert.equal( qrPrint( K.qrCode( 'https://pickipedia.xyz/bacon?p=Justin+Myles+Holmes&keep=Kyle+Tuttle%2CBronwyn&by=lma%3AEastNashGrass2024-06-30&on=Big+Sandy', 'L' ) ), '8db2a4bc92538d11' );
+	assert.equal( qrPrint( K.qrCode( 'https://pickipedia.xyz/bacon?' + 'p=Vickie+Vaughn&'.repeat( 30 ), 'M' ) ), '2c1cfb3f5af21c41' );
+} );
+
+test( 'a QR code is drawn as one path, a unit a module, inside a quiet zone of four', () => {
+	const q = K.qrCode( 'https://pickipedia.xyz' ), p = K.qrPath( q );
+	assert.equal( p.side, 33 );
+	assert.equal( ( p.d.match( /M/g ) || [] ).length, q.rows.flat().filter( Boolean ).length );
+	assert.ok( p.d.startsWith( 'M4 4h1v1h-1z' ) );                         // the finder's corner
+} );
