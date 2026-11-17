@@ -1,12 +1,16 @@
 <?php
 /**
- * Builds the wikitext of one connection note, without touching MediaWiki.
+ * Shapes a connection note into one Talk page section.
  *
- * The promise in the doc ([[Cryptograss:Bacon graphs/Discovery]]) is that a
- * note arrives as text: no formatting, no links, nothing that runs. The
- * section body therefore sits inside <nowiki>, and the one string that could
- * end the nowiki early — "</nowiki>" — is neutralized on the way in. That is
- * the only byte the tool changes; everything else is copied as written.
+ * The note arrives as text and stays text: the body sits inside <nowiki>,
+ * and the one string that could end the nowiki early — "</nowiki>" — is
+ * neutralized on the way in. That is the only byte the tool changes; every
+ * other character is copied as written.
+ *
+ * The heading and the About/From lines carry no live wikitext either: the
+ * heading loses the markup characters (={}|[]<>), and every line of the body
+ * is inside its own <nowiki>, so a template or link in a field is text a
+ * person reads, never something the page runs.
  *
  * @file
  */
@@ -28,13 +32,18 @@ class SectionBuilder {
 		return preg_replace( '#</nowiki>#i', '<nowiki/>', $text );
 	}
 
-	/** A section heading may not carry =, {, } or newlines. */
+	/** A section heading may not carry =, {, }, |, [, ], < or >, or newlines. */
 	public static function heading( string $about, string $from ): string {
 		$clean = static function ( string $s ): string {
 			$s = str_replace( [ "\n", "\r" ], ' ', $s );
-			return trim( preg_replace( '/[={}|\[\]]/u', '', $s ) );
+			return trim( preg_replace( '/[={}|\\[\\]<>]/u', '', $s ) );
 		};
 		return $clean( $about ) . ' — from ' . $clean( $from );
+	}
+
+	/** One body line as inert text. */
+	private static function line( string $label, string $value ): string {
+		return '<nowiki>' . $label . ': ' . self::neutralize( trim( $value ) ) . '</nowiki>';
 	}
 
 	/**
@@ -55,8 +64,8 @@ class SectionBuilder {
 		}
 
 		$heading = self::heading( $about, $from );
-		$body = 'About: ' . self::neutralize( trim( $about ) ) . "\n"
-			. 'From: ' . self::neutralize( trim( $from ) ) . "\n\n"
+		$body = self::line( 'About', $about ) . "\n"
+			. self::line( 'From', $from ) . "\n\n"
 			. '<nowiki>' . self::neutralize( $note ) . '</nowiki>';
 
 		return "== $heading ==\n\n" . $body . "\n";

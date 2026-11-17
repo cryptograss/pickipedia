@@ -1,13 +1,12 @@
 <?php
 /**
- * API module: save a "know a connection?" note as text, and nothing else.
+ * API module for the connection box: a visitor's plain-text note about a
+ * connection, appended to Cryptograss talk:Connection inbox.
  *
- *    api.php?action=connectionnote&about=…&from=…&note=…&format=json
- *    { "connectionnote": { "result": "Success" } }
- *
- * The note lands on [[Cryptograss talk:Connection inbox]], one section per
- * note, written by the system user so a signed-out visitor publishes no IP.
- * SectionBuilder does the shaping; this class does the saving.
+ * Writes as the ConnectionInbox-bot system user, so a signed-out visitor
+ * publishes no IP. SectionBuilder does the shaping; this class does the
+ * saving. Rate-limited through pingLimiter; the limits live in
+ * LocalSettings.php ($wgRateLimits['connectionnote']).
  *
  * @file
  */
@@ -19,6 +18,7 @@ use CommentStoreComment;
 use ContentHandler;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Title\Title;
+use MediaWiki\User\User;
 use Wikimedia\ParamValidator\ParamValidator;
 
 class ApiConnectionNote extends ApiBase {
@@ -60,6 +60,11 @@ class ApiConnectionNote extends ApiBase {
 
 	/** @inheritDoc */
 	public function execute(): void {
+		// Per-visitor rate limit; see $wgRateLimits['connectionnote'].
+		if ( $this->pingLimiter( 'connectionnote' ) ) {
+			$this->dieWithError( 'apierror-ratelimited', 'ratelimited' );
+		}
+
 		$params = $this->extractRequestParams();
 
 		$section = SectionBuilder::build(
@@ -75,7 +80,9 @@ class ApiConnectionNote extends ApiBase {
 		}
 
 		$services = MediaWikiServices::getInstance();
-		$systemUser = $services->getUserFactory()->newSystemUser(
+		// UserFactory has no newSystemUser in 1.43; the static is on User,
+		// the way Hooks creates the account on update.php.
+		$systemUser = User::newSystemUser(
 			Hooks::SYSTEM_USER_NAME, [ 'validate' => 'valid', 'steal' => false ]
 		);
 		if ( !$systemUser ) {
@@ -90,13 +97,15 @@ class ApiConnectionNote extends ApiBase {
 		$wikiPage = $services->getWikiPageFactory()->newFromTitle( $title );
 		$updater = $wikiPage->newPageUpdater( $systemUser );
 
-		if ( $title->exists() ) {
-			// Append the section, leave the rest of the page untouched.
-			$content = $updater->getContent( 'main' );
-			$existing = $content ? $content->getWikitextForTransclusion() : '';
+		// The section is appended to whatever is there; PageUpdater decides
+		// create or update from the parent revision, so no EDIT_NEW here.
+		$parent = $updater->grabParentRevision();
+		if ( $parent ) {
+			$existing = $parent->getContent( 'main' );
+			$existingText = $existing ? $existing->getWikitextForTransclusion() : '';
 			$updater->setContent(
 				'main',
-				ContentHandler::makeContent( rtrim( $existing ) . "\n\n" . $section, $title )
+				ContentHandler::makeContent( rtrim( $existingText ) . "\n\n" . $section, $title )
 			);
 		} else {
 			$updater->setContent(
@@ -107,7 +116,7 @@ class ApiConnectionNote extends ApiBase {
 
 		$about = SectionBuilder::heading( (string)$params['about'], '' );
 		$comment = CommentStoreComment::newUnsavedComment( 'Connection note: ' . $about );
-		$updater->saveRevision( $comment, EDIT_NEW | EDIT_SUPPRESS_RC );
+		$updater->saveRevision( $comment );
 
 		if ( !$updater->wasSuccessful() ) {
 			$this->dieWithError(
