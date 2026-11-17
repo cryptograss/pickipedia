@@ -1055,3 +1055,106 @@ test( 'the way home from a cut ends at its artist, then its writer on the track,
 	assert.deepEqual( K.homeward( { artist: null, writers: [], pickers: [ [ SAM, 'bass' ] ] }, KYLE ), [ SAM ] );
 	assert.deepEqual( K.homeward( { artist: VICKIE, pickers: [] }, KYLE ), [ VICKIE ] );         // an older graph.json: no writers
 } );
+
+/* A bacon graph kept as shared (Justin, #connectome, 16 Nov 2026). */
+
+const SHARED = Object.assign( {}, GRAPH, {
+	made: MUSIC.map( ( _, i ) => ( i === 0 ? [ JUSTIN ] : [] ) ),
+	cast: MUSIC.map( ( _, i ) => ( i === 0 ? [ [ KYLE, 'banjo' ], [ JUSTIN, 'guitar' ], [ LONE, 'bass' ] ] : [] ) ),
+	songcast: { QmSilver44: { song: 'Silver 44', on: [ 0 ], artist: JUSTIN, writers: [ VICKIE ], pickers: [ [ KYLE, 'banjo' ], [ LONE, 'bass' ] ] } },
+	songs: { 'Silver 44': '/wiki/Song:Silver_44', 'Elsewhere': '/wiki/Song:Elsewhere' },
+	plays: { 'Silver 44': 'QmSilver44', 'A Duet': 'QmSomeoneElses' }
+} );
+const nameOf = ( g, i ) => g.people[ i ][ 0 ];
+
+test( 'a view is kept by its kind: a constellation, a relationship, a lineup; not the walk, yet', () => {
+	assert.equal( K.kindOf( { a: KYLE } ), 'c' );
+	assert.equal( K.kindOf( { a: KYLE, keep: [ JUSTIN ], by: 2 } ), 'c' );
+	assert.equal( K.kindOf( { a: KYLE, b: JUSTIN } ), 'r' );
+	assert.equal( K.kindOf( { m: 3 } ), 'm' );
+	assert.equal( K.kindOf( { s: 'Silver 44', cut: 'QmSilver44' } ), 'm' );
+	assert.equal( K.kindOf( { walk: true } ), null );
+	assert.equal( K.kindOf( null ), null );
+} );
+
+test( 'a kept graph holds the ties among those in sight, all they say, and no tie to anyone else', () => {
+	const k = K.keep( SHARED, [ MOLLY, KYLE, JUSTIN ] );
+	const names = k.people.map( ( p ) => p[ 0 ] );
+	// In sight, and named for the record they share: its maker and its cut's writer. Not its bassist, out of sight.
+	assert.deepEqual( names, [ 'Kyle', 'Justin', 'Molly', 'Vickie' ] );
+	assert.deepEqual( k.ties.map( ( [ a, b, evs ] ) => [ names[ a ], names[ b ], evs.map( ( e ) => k.music[ e[ 0 ] ][ 0 ] ) ] ), [
+		[ 'Kyle', 'Justin', [ 'arthel:4masks', 'arthel:show:0-1' ] ],
+		[ 'Kyle', 'Molly', [ 'lma:sgp', 'lma:old' ] ],
+		[ 'Justin', 'Molly', [ 'discogs:7' ] ]
+	] );
+	assert.ok( !k.music.some( ( m ) => m[ 0 ] === 'discogs:8' ) );                // only Justin and Sam's: Sam is out of sight
+	assert.deepEqual( k.made[ 0 ].map( ( p ) => names[ p ] ), [ 'Justin' ] );
+	assert.deepEqual( k.cast[ 0 ].map( ( c ) => [ names[ c[ 0 ] ], c[ 1 ] ] ), [ [ 'Kyle', 'banjo' ], [ 'Justin', 'guitar' ] ] );
+	assert.deepEqual( k.songcast.QmSilver44.pickers.map( ( p ) => names[ p[ 0 ] ] ), [ 'Kyle' ] );
+	assert.deepEqual( Object.keys( k.songcast ), [ 'QmSilver44' ] );
+	const cut = k.songcast.QmSilver44;
+	assert.deepEqual( [ names[ cut.artist ], cut.writers.map( ( w ) => names[ w ] ), cut.on ], [ 'Justin', [ 'Vickie' ], [ 0 ] ] );
+	assert.deepEqual( k.songs, { 'Silver 44': '/wiki/Song:Silver_44' } );
+	assert.deepEqual( k.plays, { 'Silver 44': 'QmSilver44' } );
+	assert.equal( k.built, GRAPH.built );
+} );
+
+test( 'a hub keeps every tie it has: who of a middle\'s company is drawn is chosen from all of it', () => {
+	const k = K.keep( SHARED, [ KYLE, JUSTIN ], [], [ KYLE ] );
+	const names = k.people.map( ( p ) => p[ 0 ] );
+	const pairs = k.ties.map( ( [ a, b ] ) => names[ a ] + '-' + names[ b ] );
+	assert.deepEqual( pairs, [ 'Kyle-Justin', 'Kyle-Molly', 'Kyle-Sam', 'Kyle-Choir' ] );   // not Justin-Sam: Sam came by Kyle
+	const kept = K.build( k ), kyle = kept.byName.get( 'kyle' );
+	assert.deepEqual( K.company( kept, kyle ).map( ( c ) => c.id ).sort(), K.company( G, KYLE ).map( ( c ) => kept.byName.get( NAMES[ c.id ].toLowerCase() ) ).sort() );
+} );
+
+test( 'a kept graph draws as the whole does, from only what was in sight', () => {
+	const kept = K.build( K.keep( SHARED, [ KYLE, JUSTIN, MOLLY ] ) );
+	const kyle = kept.byName.get( 'kyle' ), justin = kept.byName.get( 'justin' );
+	assert.deepEqual( K.company( kept, kyle ).map( ( c ) => kept.people[ c.id ].name ).sort(), [ 'Justin', 'Molly' ] );
+	const was = tie( KYLE, JUSTIN ), is = kept.adj[ kyle ].get( justin );
+	assert.deepEqual( [ is.times, is.shows, is.records, is.tracks, is.tier, is.w ], [ was.times, was.shows, was.records, was.tracks, was.tier, was.w ] );
+	assert.equal( kept.people[ kept.byName.get( 'vickie' ) ].name, 'Vickie' );
+	assert.equal( kept.adj[ kept.byName.get( 'vickie' ) ].size, 0 );           // a writer by name, with none of her ties
+} );
+
+test( 'the same view kept twice is the same graph, whatever order its pickers came in', () => {
+	const one = K.keptText( K.keep( SHARED, [ KYLE, JUSTIN, MOLLY ] ) ), two = K.keptText( K.keep( SHARED, [ MOLLY, JUSTIN, KYLE, KYLE ] ) );
+	assert.equal( one, two );
+	assert.notEqual( one, K.keptText( K.keep( SHARED, [ KYLE, JUSTIN ] ) ) );
+} );
+
+test( 'a kept graph\'s text is plain ASCII with no "<", and reads back as it was', () => {
+	const doc = { on: [ 'Béla Fleck', 'Ólafur', '<b>Bold</b>', 'Emoji 🎻' ] };
+	const text = K.keptText( doc );
+	assert.match( text, /^[\x20-\x7e]*$/ );
+	assert.ok( !text.includes( '<' ) );
+	assert.deepEqual( JSON.parse( text ), doc );
+} );
+
+test( 'a kept graph\'s ID is its kind and fifty bits of its SHA-256, in letters that read aloud', async () => {
+	assert.equal( await K.keptId( 'c', 'abc' ), 'cq9w1dfwf07' );               // worked out in Python, apart from this code
+	assert.equal( await K.keptId( 'c', '{"bacon":1}' ), 'cdwv0g0t5w5' );
+	const id = await K.keptId( 'r', K.keptText( K.keep( SHARED, [ KYLE, JUSTIN ] ) ) );
+	assert.match( id, K.KEPT_ID );
+	assert.equal( id[ 0 ], 'r' );
+	assert.ok( !K.KEPT_ID.test( 'cq9w1dfwf0i' ) && !K.KEPT_ID.test( 'xq9w1dfwf07' ) && !K.KEPT_ID.test( 'cq9w1dfwf0' ) );
+} );
+
+test( 'opened later, a kept graph says which of its ties have lost a source, lost them all, or are new', () => {
+	const sight = [ KYLE, JUSTIN, MOLLY, VICKIE ];
+	const kept = K.build( K.keep( SHARED, sight ) );
+	// Since then: Kyle and Molly's 2019 tape was found to be someone else; Justin and Molly's record too;
+	// and Justin and Vickie turned up together on a record.
+	const later = Object.assign( {}, SHARED, { ties: SHARED.ties
+		.map( ( [ a, b, evs ] ) => [ a, b, a === KYLE && b === MOLLY ? evs.filter( ( e ) => e[ 0 ] !== 4 ) : evs ] )
+		.filter( ( [ a, b ] ) => !( a === JUSTIN && b === MOLLY ) )
+		.concat( [ [ JUSTIN, VICKIE, [ [ 3, 3, 1, [ 'New' ] ] ] ] ] ) } );
+	const s = K.since( kept, K.build( later ), sight.map( ( i ) => nameOf( SHARED, i ) ) );
+	assert.equal( s.state.get( K.pairName( 'Kyle', 'Justin' ) ), 'same' );
+	assert.equal( s.state.get( K.pairName( 'Molly', 'Kyle' ) ), 'changed' );
+	assert.equal( s.state.get( K.pairName( 'Justin', 'Molly' ) ), 'gone' );
+	assert.equal( s.state.get( K.pairName( 'Molly', 'Vickie' ) ), 'same' );
+	assert.deepEqual( [ s.changed, s.gone, s.grown ], [ 1, 1, 1 ] );
+	assert.equal( K.since( kept, K.build( SHARED ), sight.map( ( i ) => nameOf( SHARED, i ) ) ).gone, 0 );
+} );

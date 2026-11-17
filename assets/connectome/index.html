@@ -9,6 +9,7 @@
     ?p=Kyle+Tuttle              one picker and their company
     ?m=arthel:4masks&s=Victory  one piece of music (a record or a show by its key; s, a track of a record),
                                 with the graph inside out: the music as the circles, the pickers as the lines
+  /bacon/c4f9qk2mzx7          a bacon graph kept as it was shared (🔗): the page Bacon:c4f9qk2mzx7 holds it
     (?from= and ?to= are read as a and b)
 
   A click never leaves the graph: a picker's click goes to that picker, a piece of music's turns the graph
@@ -47,10 +48,13 @@
 	<span class="join" aria-hidden="true">⟷</span>
 	<label><span class="vh">Another picker</span><input id="pb" list="names" autocomplete="off" spellcheck="false" placeholder="connect to…"></label>
 	<nav id="crumbs" aria-label="Where you have been"></nav>
+	<button type="button" id="share" title="Keep this graph as it is now, and copy a link to it" aria-label="Keep this graph, and copy its link" hidden>🔗</button>
 </header>
+<div id="shared" role="status" hidden></div>
 <main>
 	<section id="stage" aria-label="The graph">
 		<div id="say"><h1></h1><p></p></div>
+		<p id="kept" hidden></p>
 		<svg id="g" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="The connectome"></svg>
 		<div id="tip" role="status" hidden></div>
 		<div id="sheet" role="dialog" aria-label="What you touched" hidden></div>

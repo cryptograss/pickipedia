@@ -911,3 +911,70 @@ body.mini #g { cursor: pointer; }
 /* The walk moving (Justin, item 7): a bead of light on the line it took, and the ring where it arrived. */
 .spark { fill: var( --ink ); stroke: none; pointer-events: none; }
 .spark-ring { fill: none; stroke: var( --ink ); stroke-width: 1.4; pointer-events: none; }
+
+/* A bacon graph kept as shared (connectome.js, keptSay and onShare): the 🔗 that keeps it, the note that says
+   the link, and over a kept one, what it is and what has changed since; a line that has lost a source since is
+   dashed, one that has lost them all dotted and faint. */
+#share {
+	margin-left: auto;
+	padding: 2px 9px;
+	border: 1px solid var( --axis );
+	border-radius: 6px;
+	background: var( --surface );
+	color: var( --ink );
+	font: 15px var( --ui );
+	cursor: pointer;
+}
+#share:hover { background: var( --hover ); }
+#share:disabled { opacity: .5; cursor: progress; }
+#share[hidden] { display: none; }
+#shared {
+	position: fixed;
+	top: 46px;
+	right: 10px;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: min( 440px, calc( 100vw - 20px ) );
+	padding: 10px 12px;
+	border: 1px solid var( --axis );
+	border-radius: 8px;
+	background: var( --surface );
+	color: var( --ink );
+	font: 13px/1.4 var( --ui );
+	box-shadow: 0 4px 18px rgba( 0, 0, 0, .18 );
+}
+#shared[hidden] { display: none; }
+#shared input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 4px 6px;
+	border: 1px solid var( --hair );
+	border-radius: 4px;
+	background: var( --plane );
+	color: var( --ink );
+	font: 13px ui-monospace, monospace;
+}
+#kept {                                /* over the graph's empty top corner: in the flow, it took the drawing's room */
+	position: absolute;
+	top: 10px;
+	right: 14px;
+	z-index: 5;
+	max-width: min( 44%, 400px );
+	margin: 0;
+	padding: 6px 10px;
+	border: 1px solid var( --hair );
+	border-left: 3px solid var( --axis );
+	border-radius: 4px;
+	background: color-mix( in srgb, var( --surface ) 92%, transparent );
+	color: var( --ink );
+	font: 12.5px/1.45 var( --ui );
+}
+@media ( max-width: 760px ) {
+	#kept { top: auto; bottom: 8px; left: 8px; right: 8px; max-width: none; }
+}
+#kept[hidden] { display: none; }
+#kept a { color: inherit; font-weight: 600; white-space: nowrap; }
+g.kept-changed path.core, g.kept-changed path.thread { stroke-dasharray: 7 4; }
+g.kept-gone path.core, g.kept-gone path.thread { stroke-dasharray: 1.5 4; opacity: .55; }

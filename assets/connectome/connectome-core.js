@@ -1449,3 +1449,153 @@ export function arc( lay, pa, pb, { clear = 46, lift = 0.38 } = {} ) {
 	const peak = neighbours ? 1 : Math.min( 1, Math.max( chord + lift * ( 1 - chord ), clear / Math.hypot( ux, uy ) ) );
 	return { x: 2 * ( peak - chord ) * ux, y: 2 * ( peak - chord ) * uy, apart: Math.min( q.seat - p.seat, p.of - ( q.seat - p.seat ) ) };
 }
+
+/* ------------------------------------------------------------------------------------------------------------
+ * A bacon graph kept as it was shared (Justin, #connectome, 16 Nov 2026: a permalink to "that exact bacon
+ * graph", which a source growing or being corrected later doesn't change; an old one that's no longer so says
+ * so). It is kept on the wiki as a page, Bacon:<id>, and opened at /bacon/<id>.
+ * --------------------------------------------------------------------------------------------------------- */
+
+/** The kinds, by the first letter of a kept graph's ID: a constellation, a relationship, a lineup, a flowchart. */
+export const KINDS = { c: 'constellation', r: 'relationship', m: 'lineup', f: 'flowchart' };
+
+/** A kept graph's ID: its kind's letter, then ten of Crockford's base-32 (no i, l, o or u: it reads aloud). */
+export const KEPT_ID = /^[cfmr][0-9a-hjkmnp-tv-z]{10}$/;
+const B32 = '0123456789abcdefghjkmnpqrstvwxyz';
+
+/** The kind of view this is, as a kept graph's letter; null for a view that can't be kept yet (the walk). */
+export function kindOf( v ) {
+	if ( !v || v.walk ) {
+		return null;
+	}
+	if ( v.m !== undefined || v.s !== undefined || v.cut !== undefined ) {
+		return 'm';
+	}
+	if ( v.a === undefined ) {
+		return null;
+	}
+	return v.b === undefined ? 'c' : 'r';
+}
+
+/**
+ * The part of graph.json a view stands on, as a graph.json of its own: the pickers in sight and every tie among
+ * them, with all each tie says; every tie of a hub (the one in a constellation's middle: who of their company is
+ * drawn, and who is further out, is chosen from all of it); the music those ties name, and the music in sight;
+ * and what that music says of its people where they're kept (its makers and its cuts' writers, by name). Numbered
+ * afresh, in graph.json's own order, so the same view always comes out the same, and build() reads it as it
+ * reads the whole: a view drawn from it is drawn by the same scenes, from what it stood on.
+ *
+ * @param {Object} g graph.json, as read.
+ * @param {number[]} pickers Who's in sight, by their numbers in g.
+ * @param {number[]} musics The music in sight (a lineup's record or show, a cut's record), by their numbers in g.
+ * @param {number[]} hubs Those whose every tie is kept.
+ * @return {Object} A graph.json.
+ */
+export function keep( g, pickers, musics = [], hubs = [] ) {
+	const sight = new Set( pickers ), hub = new Set( hubs );
+	const ties = g.ties.filter( ( [ a, b ] ) => ( sight.has( a ) && sight.has( b ) ) || hub.has( a ) || hub.has( b ) );
+	const mus = new Set( musics.filter( ( m ) => g.music[ m ] ) );
+	for ( const [ , , evs ] of ties ) {
+		evs.forEach( ( e ) => mus.add( e[ 0 ] ) );
+	}
+	const cuts = Object.entries( g.songcast || {} ).filter( ( [ , c ] ) => ( c.on || [] ).some( ( m ) => mus.has( m ) ) );
+	const who = new Set( sight );
+	ties.forEach( ( [ a, b ] ) => who.add( a ).add( b ) );
+	for ( const m of mus ) {
+		( ( g.made && g.made[ m ] ) || [] ).forEach( ( p ) => who.add( p ) );
+	}
+	for ( const [ , c ] of cuts ) {
+		[ c.artist, ...( c.writers || [] ) ].filter( ( p ) => typeof p === 'number' && p >= 0 ).forEach( ( p ) => who.add( p ) );
+	}
+	const pids = [ ...who ].filter( ( p ) => g.people[ p ] ).sort( ( x, y ) => x - y ), mids = [ ...mus ].sort( ( x, y ) => x - y );
+	const pn = new Map( pids.map( ( p, i ) => [ p, i ] ) ), mn = new Map( mids.map( ( m, i ) => [ m, i ] ) );
+	const P = ( p ) => ( typeof p === 'number' && pn.has( p ) ? pn.get( p ) : -1 );
+	const songsIn = new Set( cuts.map( ( [ , c ] ) => c.song ) );
+	ties.forEach( ( [ , , evs ] ) => evs.forEach( ( e ) => ( e[ 3 ] || [] ).forEach( ( s ) => songsIn.add( s ) ) ) );
+	const cids = new Set( cuts.map( ( [ cid ] ) => cid ) );
+	const pick = ( o, ok ) => Object.fromEntries( Object.entries( o || {} ).filter( ok ) );
+	return {
+		v: g.v, built: g.built || '', month: g.month || null, featured: [],
+		people: pids.map( ( p ) => g.people[ p ] ),
+		music: mids.map( ( m ) => g.music[ m ] ),
+		made: mids.map( ( m ) => ( ( g.made && g.made[ m ] ) || [] ).map( P ).filter( ( p ) => p >= 0 ) ),
+		cast: mids.map( ( m ) => ( ( g.cast && g.cast[ m ] ) || [] ).filter( ( c ) => pn.has( c[ 0 ] ) ).map( ( c ) => [ P( c[ 0 ] ), ...c.slice( 1 ) ] ) ),
+		ties: ties.map( ( [ a, b, evs ] ) => [ P( a ), P( b ), evs.map( ( e ) => [ mn.get( e[ 0 ] ), ...e.slice( 1 ) ] ) ] ),
+		songs: pick( g.songs, ( [ s ] ) => songsIn.has( s ) ),
+		songcast: Object.fromEntries( cuts.map( ( [ cid, c ] ) => [ cid, Object.assign( {}, c, {
+			on: ( c.on || [] ).filter( ( m ) => mn.has( m ) ).map( ( m ) => mn.get( m ) ),
+			artist: P( c.artist ),
+			writers: ( c.writers || [] ).map( P ),
+			pickers: ( c.pickers || [] ).filter( ( p ) => pn.has( p[ 0 ] ) ).map( ( p ) => [ P( p[ 0 ] ), ...p.slice( 1 ) ] )
+		} ) ] ) ),
+		plays: pick( g.plays, ( [ , cid ] ) => cids.has( cid ) )
+	};
+}
+
+/**
+ * A kept graph as the text its ID is made from and its page holds: JSON in plain ASCII (the wiki would
+ * otherwise normalize a name's accents, and the ID would no longer match), with no "<" to end its <pre>.
+ */
+export function keptText( doc ) {
+	return JSON.stringify( doc ).replace( /[<\u007f-\uffff]/g, ( c ) => '\\u' + c.charCodeAt( 0 ).toString( 16 ).padStart( 4, '0' ) );
+}
+
+/** A kept graph's ID: its kind's letter and the first fifty bits of its text's SHA-256, so the same graph kept twice is one page. */
+export async function keptId( kind, text ) {
+	const d = new Uint8Array( await crypto.subtle.digest( 'SHA-256', new TextEncoder().encode( text ) ) );
+	let id = kind, n = 0, bits = 0;
+	for ( const byte of d ) {
+		n = ( ( n << 8 ) | byte ) & 0xffff;
+		bits += 8;
+		while ( bits >= 5 && id.length < 11 ) {
+			bits -= 5;
+			id += B32[ ( n >> bits ) & 31 ];
+		}
+		if ( id.length === 11 ) {
+			break;
+		}
+	}
+	return id;
+}
+
+/** Two pickers' names, as one key: the same whichever is first. */
+export function pairName( x, y ) {
+	return x < y ? x + '\n' + y : y + '\n' + x;
+}
+
+/**
+ * What has become of a kept graph's ties since (Justin, 16 Nov 2026: "if you pull up an old one that's no longer
+ * valid, that needs to be indicated"). For each tie among those in sight, by the two pickers' names: 'same' while
+ * every record and show it named (by its key) still ties those two today, more or not; 'changed' when some no
+ * longer does; 'gone' when none does, or the two aren't tied at all now. And how many ties among them are new.
+ *
+ * @param {Object} kept The kept graph, built.
+ * @param {Object} now Today's graph, built.
+ * @param {string[]} sight The names that were in sight.
+ * @return {{ state: Map<string, string>, changed: number, gone: number, grown: number }}
+ */
+export function since( kept, now, sight ) {
+	const state = new Map();
+	let changed = 0, gone = 0, grown = 0;
+	const id = ( G, name ) => G.byName.get( String( name ).toLowerCase() );
+	const names = [ ...new Set( sight ) ];
+	for ( let i = 0; i < names.length; i++ ) {
+		for ( let j = i + 1; j < names.length; j++ ) {
+			const ka = id( kept, names[ i ] ), kb = id( kept, names[ j ] ), na = id( now, names[ i ] ), nb = id( now, names[ j ] );
+			const was = ka !== undefined && kb !== undefined ? kept.adj[ ka ].get( kb ) : null;
+			const is = na !== undefined && nb !== undefined ? now.adj[ na ].get( nb ) : null;
+			if ( !was ) {
+				grown += is ? 1 : 0;
+				continue;
+			}
+			const have = new Set( is ? is.ev.map( ( e ) => now.music[ e.m ].key ) : [] );
+			const keys = [ ...new Set( was.ev.map( ( e ) => kept.music[ e.m ].key ) ) ];
+			const still = keys.filter( ( k ) => have.has( k ) ).length;
+			const s = still === keys.length ? 'same' : ( still ? 'changed' : 'gone' );
+			changed += s === 'changed' ? 1 : 0;
+			gone += s === 'gone' ? 1 : 0;
+			state.set( pairName( names[ i ], names[ j ] ), s );
+		}
+	}
+	return { state, changed, gone, grown };
+}
