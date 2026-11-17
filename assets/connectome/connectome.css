@@ -976,6 +976,25 @@ body.mini #g { cursor: pointer; }
 }
 /* The QR code of where the reader is: over the graph's bottom right corner, just above the legend; a click makes
    it big enough to scan across a table, and another puts it back. */
+/* Closer in on the graph (the wheel): the paper moves about by a drag, and a button goes back to the whole. */
+#stage.closer #g { cursor: grab; }
+#stage.closer.moving #g { cursor: grabbing; }
+#whole {
+	position: absolute;
+	top: 8px;
+	right: 10px;
+	z-index: 6;
+	padding: 3px 10px;
+	border: 1px solid var( --hair );
+	border-radius: 999px;
+	background: var( --surface );
+	color: var( --ink );
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+#whole[hidden] { display: none; }
+
 #qr {
 	position: absolute;
 	right: 10px;
