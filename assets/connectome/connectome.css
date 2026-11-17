@@ -289,6 +289,10 @@ main {
 /* What kind of thing a headline names, when it isn't a picker. */
 #say .kind svg { vertical-align: -2px; margin-right: 6px; }
 
+/* A bead's own name: small, light, on paper of its own so a line under it doesn't cross the letters. */
+.pk.dot .bead-name { font: 400 11px Georgia, "Times New Roman", serif; fill: var( --ink2 ); stroke: var( --surface );
+	stroke-width: 3px; paint-order: stroke; stroke-linejoin: round; }
+
 /* A picker a step further out: a small dot, and a name in lighter type than the company's. */
 .pk.far text { font-weight: 400; font-size: 13px; }
 
