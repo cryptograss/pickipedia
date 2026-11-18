@@ -304,12 +304,45 @@ function glyphBox( kind ) {
  * (own: its height is the walk's own), and a finger's screen keep their own pixels.
  */
 let S = 1;                                                          // how many times smaller the drawing is than the frame's pixels
+let FW = 0, FH = 0;                                                 // the whole frame, in the drawing's units
 function frame( own ) {
 	const cw = svg.clientWidth, ch = svg.clientHeight;
 	S = MINI || own || coarse ? 1 : K.shrink( cw, ch, zoomed() );
 	const W = Math.max( MINI ? 200 : 300, Math.round( cw * S ) ), H = Math.max( MINI ? 120 : 240, Math.round( ch * S ) );   // the dock's few steps: its own size
-	svg.setAttribute( 'viewBox', `0 0 ${ W } ${ H }` );
+	FW = W;
+	FH = H;
+	if ( own || MINI ) {
+		ZOOM.k = 1;                                                  // the walk and the dock are seen whole
+	}
+	aim();
 	return { W, H };
+}
+
+/**
+ * Closer in on the graph itself, the page staying as it is (Justin, #connectome, 17 Nov 2026: "a way to scroll-zoom
+ * around the graph without also zooming the entire page"): the wheel over the graph goes in and out where the
+ * pointer is, a drag on the paper moves about, and a double-click on the paper or "Whole picture" goes back. A new
+ * view starts whole. k: how many times closer; x, y: the top left corner in sight, in the drawing's units.
+ */
+const ZOOM = { k: 1, x: 0, y: 0, most: 6 };
+function aim() {
+	const k = ZOOM.k, w = FW / k, h = FH / k;
+	ZOOM.x = Math.max( 0, Math.min( FW - w, ZOOM.x ) );
+	ZOOM.y = Math.max( 0, Math.min( FH - h, ZOOM.y ) );
+	svg.setAttribute( 'viewBox', k > 1 ? `${ ZOOM.x.toFixed( 1 ) } ${ ZOOM.y.toFixed( 1 ) } ${ w.toFixed( 1 ) } ${ h.toFixed( 1 ) }` : `0 0 ${ FW } ${ FH }` );
+	stage.classList.toggle( 'closer', k > 1 );
+	const whole = $( 'whole' );
+	if ( whole ) {
+		whole.hidden = k <= 1;
+	}
+}
+
+function closer( k, fx, fy ) {                                       // fx, fy: the point that stays put, as a share of the frame
+	const was = ZOOM.k;
+	ZOOM.k = Math.max( 1, Math.min( ZOOM.most, k ) );
+	ZOOM.x += fx * ( FW / was - FW / ZOOM.k );
+	ZOOM.y += fy * ( FH / was - FH / ZOOM.k );
+	aim();
 }
 
 /**
@@ -327,7 +360,14 @@ function zoomed() {
 			return 1;
 		}
 	}
-	const z = Math.min( w.outerWidth / w.innerWidth, w.outerHeight / w.innerHeight );
+	let z = Math.min( w.outerWidth / w.innerWidth, w.outerHeight / w.innerHeight );
+	// Firefox gives the window's size in the page's own pixels, zoomed with it, so that says 1 at any zoom (Justin
+	// didn't see the change, 17 Nov 2026: Firefox on Ubuntu). There the pixel ratio is the zoom times the screen's
+	// own, taken as 2 where it's 2 or more and 1 below that: right on most screens; a fine screen at 200% reads as 100%.
+	if ( 'mozInnerScreenX' in w ) {
+		const r = w.devicePixelRatio || 1;
+		z = Math.max( Number.isFinite( z ) ? z : 1, r >= 2 ? r / 2 : r );
+	}
 	return Number.isFinite( z ) && z > 1 ? z : 1;
 }
 
@@ -2554,6 +2594,7 @@ function show( quick, again ) {
 	was = again && scene ? settled( scene ) : whereabouts();
 	if ( !again ) {
 		turned = performance.now();
+		ZOOM.k = 1;                                                  // a new view starts whole
 	}
 	stage.classList.toggle( 'dual', view.m !== undefined || !!view.walk );
 	stage.classList.toggle( 'walking', !!view.walk );
@@ -3290,8 +3331,8 @@ function pick( e ) {
 	if ( !fingers || ( g && g.dataset.kind === 'pill' ) ) {
 		return g;
 	}
-	const box = svg.getBoundingClientRect();
-	const x = ( e.clientX - box.left ) * S, y = ( e.clientY - box.top ) * S;   // in the drawing's own units
+	const at = new DOMPoint( e.clientX, e.clientY ).matrixTransform( svg.getScreenCTM().inverse() );
+	const x = at.x, y = at.y;                                       // in the drawing's own units
 	let best = null, reach = 30;
 	for ( const [ , it ] of live.node ) {
 		const dist = it.dead || it.o < 0.05 ? Infinity : Math.hypot( it.x - x, it.y - y );
@@ -3306,6 +3347,50 @@ function pick( e ) {
 document.addEventListener( 'pointerdown', ( e ) => {
 	fingers = e.pointerType === 'touch' || e.pointerType === 'pen';
 }, true );
+
+svg.addEventListener( 'wheel', ( e ) => {
+	if ( MINI || !view || view.walk ) {
+		return;                                                      // the walk scrolls, and the dock is too small to go closer
+	}
+	e.preventDefault();
+	const box = svg.getBoundingClientRect();
+	const step = e.deltaMode === 1 ? e.deltaY * 16 : ( e.deltaMode === 2 ? e.deltaY * box.height : e.deltaY );
+	closer( ZOOM.k * Math.exp( -step * 0.0022 ), ( e.clientX - box.left ) / box.width, ( e.clientY - box.top ) / box.height );
+}, { passive: false } );
+let drag = null, dragged = false;
+svg.addEventListener( 'pointerdown', ( e ) => {
+	dragged = false;
+	if ( ZOOM.k > 1 && e.pointerType === 'mouse' && e.button === 0 && !e.target.closest( '[data-k], a' ) ) {
+		drag = { x: e.clientX, y: e.clientY, zx: ZOOM.x, zy: ZOOM.y };
+		svg.setPointerCapture( e.pointerId );
+	}
+} );
+svg.addEventListener( 'pointermove', ( e ) => {
+	if ( !drag ) {
+		return;
+	}
+	const box = svg.getBoundingClientRect(), dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+	if ( !dragged && Math.hypot( dx, dy ) < 4 ) {
+		return;
+	}
+	dragged = true;
+	stage.classList.add( 'moving' );
+	ZOOM.x = drag.zx - dx * ( FW / ZOOM.k ) / box.width;
+	ZOOM.y = drag.zy - dy * ( FH / ZOOM.k ) / box.height;
+	aim();
+} );
+const letGo = () => {
+	drag = null;
+	stage.classList.remove( 'moving' );
+};
+svg.addEventListener( 'pointerup', letGo );
+svg.addEventListener( 'pointercancel', letGo );
+svg.addEventListener( 'dblclick', ( e ) => {
+	if ( ZOOM.k > 1 && !e.target.closest( '[data-k], a' ) ) {
+		ZOOM.k = 1;
+		aim();
+	}
+} );
 svg.addEventListener( 'pointerover', ( e ) => {
 	if ( e.pointerType && e.pointerType !== 'mouse' ) {
 		return;                                                      // a finger doesn't hover: its touch opens the sheet
@@ -3337,6 +3422,10 @@ svg.addEventListener( 'focusout', () => {
 	}
 } );
 svg.addEventListener( 'click', ( e ) => {
+	if ( dragged ) {
+		dragged = false;                                             // the end of a drag about the graph, not a choice
+		return;
+	}
 	const a = e.target.closest( 'a' );
 	if ( a && ( a.classList.contains( 'play' ) || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey ) ) {
 		return;                                                      // the way into Rabbithole, or a new tab asked for: the browser goes
@@ -3455,6 +3544,10 @@ $( 'goal' ).addEventListener( 'change', () => {
 	}
 	history.replaceState( null, '', '/bacon/challenge/' + encodeURIComponent( first( to ) ).replace( /%20/g, '_' ) );
 	challenge( to );
+} );
+$( 'whole' ).addEventListener( 'click', () => {
+	ZOOM.k = 1;
+	aim();
 } );
 $( 'restart' ).addEventListener( 'click', () => {
 	if ( G && GAME ) {
