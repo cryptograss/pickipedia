@@ -605,8 +605,39 @@ test( 'a rabbithole walk, as the graph knows it: each cut, who was followed to i
 	assert.equal( K.walkSteps( g2, [ { cid: 'QmGm' } ] )[ 0 ].piece, K.trackOn( g2, 0, 'Gm' ) );
 } );
 
-test( 'with no address, the graph opens on whoever with a page has played with the most, featured or not', () => {
+test( 'with no address, the graph opens at random on one who has played with six or more and is on a Permanent studio track', () => {
+	// Justin, #connectome, 18 Nov 2026: "Six or more direct connections; At least one permanent release studio appearance"
+	const people = [], ties = [];
+	const add = ( name ) => people.push( [ name, 1, '' ] ) - 1;
+	const subject = ( name, m, how, many ) => {
+		const id = add( name );
+		for ( let k = 0; k < many; k++ ) {
+			ties.push( [ id, add( name + k ), [ [ m, how, 1, how === K.TRACK ? [ 'T' ] : [] ] ] ] );
+		}
+		return id;
+	};
+	const LEAD = subject( 'Lead', 0, K.TRACK, 6 );        // six, on a Permanent record's track
+	const MORE = subject( 'More', 0, K.TRACK, 7 );
+	subject( 'Stage', 1, K.STAGE, 9 );                     // a Permanent show only: no studio appearance
+	subject( 'Fuller', 2, K.TRACK, 9 );                    // a studio track, but a Full Release
+	subject( 'Five', 0, K.TRACK, 5 );                      // five aren't six
+	const SLEEVE = subject( 'Sleeve', 1, K.STAGE, 6 );     // on the Permanent record, no source saying which track
+	ties.push( [ SLEEVE, add( 'Credit' ), [ [ 0, K.RECORD, 0.01, [] ] ] ] );
+	const g = K.build( { people, cast: [ [], [], [] ], ties,
+		music: [ [ 'arthel:p', 'record', 'Lead', '2024', 'P', K.PERMANENT, '', '' ], [ 'lma:s', 'show', 'Band', '2025-01-01', 'S', K.PERMANENT, '', '' ],
+			[ 'discogs:f', 'record', 'Band', '2023', 'F', K.FULL, '', '' ] ] } );
+	assert.deepEqual( K.landable( g ), [ LEAD, MORE, SLEEVE ] );
+	assert.equal( K.landing( g, () => 0 ), LEAD );
+	assert.equal( K.landing( g, () => 0.5 ), MORE );
+	assert.equal( K.landing( g, () => 0.999 ), SLEEVE );
+	assert.equal( K.landing( g, () => 1 ), SLEEVE );       // never past the end
+	const seen = new Set( Array.from( { length: 300 }, () => K.landing( g ) ) );
+	assert.deepEqual( [ ...seen ].sort( ( x, y ) => x - y ), [ LEAD, MORE, SLEEVE ] );
+} );
+
+test( 'with nobody such, the graph opens on whoever with a page has played with the most, featured or not', () => {
 	// the featured pickers are set aside (Justin, #connectome, 15 Nov 2026)
+	assert.deepEqual( K.landable( G ), [] );
 	const most = G.people.map( ( p, i ) => ( p.page ? K.company( G, i ).length : -1 ) );
 	assert.equal( K.landing( G ), most.indexOf( Math.max( ...most ) ) );
 	assert.equal( G.people[ K.landing( G ) ].page, true );

@@ -271,12 +271,36 @@ export function company( G, id, loose = false ) {
 		G.people[ x.id ].name.localeCompare( G.people[ y.id ].name ) );
 }
 
+/** How many a picker has played with, at least, for the graph to open on them (see landable). */
+export const LANDING_COMPANY = 6;
+
 /**
- * Where the graph opens when the address names nothing: whoever with a page has played with the most. It opened on
- * the month's first featured picker; the featured pickers are set aside for now (Justin, #connectome, 15 Nov 2026:
- * "something that needs to be revisited later").
+ * Who the graph may open on when the address names nothing (Justin, #connectome, 18 Nov 2026: "as much as I love
+ * Jason, let's not always start with him. Just pick a random person with: Six or more direct connections; At least
+ * one permanent release studio appearance"): whoever has played with six or more and is on a track, or on a record
+ * where no source says which track, that's a Permanent Release. A show doesn't count, however free.
  */
-export function landing( G ) {
+export function landable( G ) {
+	const out = [];
+	G.people.forEach( ( p, i ) => {
+		const studio = G.on[ i ].some( ( pc ) => G.pieces[ pc ].kind !== 'show' && G.music[ G.pieces[ pc ].m ].tier === PERMANENT );
+		if ( studio && company( G, i ).length >= LANDING_COMPANY ) {
+			out.push( i );
+		}
+	} );
+	return out;
+}
+
+/**
+ * Where the graph opens when the address names nothing: one of landable()'s, picked at random each time. Where there
+ * is nobody such (a small kept graph), whoever with a page has played with the most, as it was until 18 Nov 2026.
+ * The featured pickers are set aside (Justin, #connectome, 15 Nov 2026). rand: Math.random, but for the tests.
+ */
+export function landing( G, rand = Math.random ) {
+	const pool = landable( G );
+	if ( pool.length ) {
+		return pool[ Math.min( pool.length - 1, Math.floor( rand() * pool.length ) ) ];
+	}
 	let best = 0, most = -1;
 	G.people.forEach( ( p, i ) => {
 		const n = p.page ? company( G, i ).length : -1;
