@@ -349,7 +349,7 @@ def test_the_big_graph_learns_a_pages_pickers_for_that_pages_view_and_no_tie():
     assert g['ties'] == plain['ties'] and g['people'] == plain['people']
     # the card's paper, its middle and its explore all open this page's graph on the big one
     html = result['page_cards']['Awards']
-    assert html.count('href="/assets/connectome/?page=Awards"') == 3
+    assert html.count(f'href="{cc.VIEWER}?page=Awards"') == 3
 
 
 def test_a_page_graph_escapes_every_name_and_draws_sixteen_at_most():
