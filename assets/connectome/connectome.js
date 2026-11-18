@@ -1282,8 +1282,8 @@ if ( HOST ) {
 	// Ways out, inside the player: a song plays there, and a page opens in its pane, not over the player.
 	document.addEventListener( 'click', ( ev ) => {
 		const a = ev.target.closest && ev.target.closest( 'a[href]' );
-		if ( !a || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey ) {
-			return;
+		if ( !a || a.id === 'faqlink' || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey ) {
+			return;                                                  // the FAQ opens over the graph here too (openFaq)
 		}
 		const u = new URL( a.getAttribute( 'href' ), location.href );
 		// the wiki's own links, whether this page is served from the wiki (all one origin) or from a preview of it
@@ -3425,7 +3425,9 @@ document.addEventListener( 'keydown', ( e ) => {
 	if ( e.key !== 'Escape' ) {
 		return;
 	}
-	if ( held !== null ) {
+	if ( !$( 'faq' ).hidden ) {
+		closeFaq();
+	} else if ( held !== null ) {
 		closeSheet();
 	} else if ( sel.picker !== null ) {
 		choose( { picker: null } );
@@ -3433,6 +3435,90 @@ document.addEventListener( 'keydown', ( e ) => {
 		window.parent.postMessage( { connectome: 'close' }, location.origin );
 	}
 } );
+
+/*
+ * The FAQ (Justin, #connectome, 18 Nov 2026, 17:39Z: "a FAQ for TOoBB, on a wiki page, that will be available in the
+ * styling of the graph, and linked from it"). The words are the wiki page's, Cryptograss:Bacon graphs/FAQ, asked for
+ * each time it opens, so an edit there shows here at once; only the look is this page's. The bar's FAQ is a real link
+ * to that page (a new tab, or no script, gets the page itself); a plain click opens it over the graph instead, and
+ * ?faq in the address opens it from the start. What the wiki marks as not yet checked by a person stays marked.
+ */
+const FAQ_PAGE = 'Cryptograss:Bacon_graphs/FAQ';
+let faqFrom = null;
+
+/** The wiki's HTML for the page, made inert here: no script, style, frame or form, no on* or javascript:, and each
+ *  link told where to open (the graph's own in this frame, the wiki's over it, anywhere else in a new tab). */
+function faqBody( html ) {
+	const doc = new DOMParser().parseFromString( html, 'text/html' );
+	doc.querySelectorAll( 'script, style, link, meta, iframe, object, embed, form, input, button, textarea, select, .toc, #toc, .mw-editsection' )
+		.forEach( ( e ) => e.remove() );
+	doc.querySelectorAll( '*' ).forEach( ( e ) => {
+		[ ...e.attributes ].forEach( ( at ) => {
+			if ( /^on/i.test( at.name ) || ( /href|src|action/i.test( at.name ) && /^\s*(javascript|data|vbscript):/i.test( at.value ) ) ) {
+				e.removeAttribute( at.name );
+			}
+		} );
+	} );
+	doc.querySelectorAll( 'a[href]' ).forEach( ( a ) => {
+		const href = a.getAttribute( 'href' );
+		if ( href.charAt( 0 ) === '#' ) {
+			return;
+		}
+		const u = new URL( href, location.href );
+		if ( u.origin !== location.origin ) {
+			a.target = '_blank';
+			a.rel = 'noopener';
+		} else {
+			a.target = /^\/bacon(\/|$)/.test( u.pathname ) ? '_self' : '_top';
+		}
+	} );
+	return [ ...doc.body.childNodes ];
+}
+
+function openFaq( from ) {
+	const box = $( 'faq' ), body = box.querySelector( '.faq-body' );
+	faqFrom = from || document.activeElement;
+	box.hidden = false;
+	box.scrollTop = 0;
+	$( 'faqlink' ).setAttribute( 'aria-expanded', 'true' );
+	body.replaceChildren( h( 'p', { class: 'faq-note' }, 'Asking the wiki…' ) );
+	box.querySelector( '.x' ).focus();
+	wiki( { action: 'parse', page: FAQ_PAGE, prop: 'text', disableeditsection: 1, disablelimitreport: 1, disabletoc: 1 } ).then( ( r ) => {
+		if ( !r.parse || !r.parse.text ) {
+			throw new Error( r.error ? r.error.info : 'no page' );
+		}
+		body.replaceChildren( ...faqBody( r.parse.text ) );
+		if ( body.querySelector( '.bot-proposal' ) ) {
+			body.prepend( h( 'p', { class: 'faq-note' }, 'What\'s marked unverified was written by an emergent and hasn\'t been checked by a person yet.' ) );
+		}
+	} ).catch( () => {
+		body.replaceChildren( h( 'p', {}, "The answers didn't come. ", h( 'a', { href: '/wiki/' + FAQ_PAGE, target: '_top' }, 'Read them on PickiPedia ↗' ) ) );
+	} );
+}
+
+function closeFaq() {
+	$( 'faq' ).hidden = true;
+	$( 'faqlink' ).setAttribute( 'aria-expanded', 'false' );
+	if ( faqFrom && faqFrom.focus && document.contains( faqFrom ) ) {
+		faqFrom.focus();
+	}
+}
+
+$( 'faqlink' ).addEventListener( 'click', ( e ) => {
+	if ( e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey ) {
+		return;
+	}
+	e.preventDefault();
+	if ( $( 'faq' ).hidden ) {
+		openFaq( e.currentTarget );
+	} else {
+		closeFaq();
+	}
+} );
+$( 'faq' ).querySelector( '.x' ).addEventListener( 'click', closeFaq );
+if ( new URLSearchParams( location.search ).has( 'faq' ) ) {
+	openFaq();
+}
 
 $( 'back' ).addEventListener( 'click', back );
 $( 'share' ).addEventListener( 'click', onShare );
