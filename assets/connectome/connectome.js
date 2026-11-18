@@ -194,6 +194,9 @@ function rawAddress( v ) {
 	if ( v.pg !== undefined ) {
 		return '?' + new URLSearchParams( { page: v.pg } );
 	}
+	if ( v.playing !== undefined ) {
+		return '?' + new URLSearchParams( { p: first( v.a ), playing: v.playing } );
+	}
 	if ( v.cut !== undefined ) {
 		return '?' + new URLSearchParams( v.s !== undefined ? { s: v.s, cut: v.cut } : { cut: v.cut } );
 	}
@@ -239,6 +242,13 @@ function parse( q ) {
 	const m = q.get( 'm' ) ? K.findPiece( G, q.get( 'm' ), q.get( 's' ) ) : null;
 	if ( m !== null ) {
 		return { m };
+	}
+	// Rabbithole's traverse (Justin, #connectome, 18 Nov 2026): a picker taking a solo, the song on now beside them.
+	// A soloist the graph doesn't know (a name it has under another, a guest): the song stays, in its own view.
+	const playing = q.get( 'playing' );
+	if ( playing && G.songcast && G.songcast[ playing ] ) {
+		const p = K.find( G, q.get( 'p' ) || q.get( 'a' ) );
+		return p !== null ? { a: p, playing } : { s: G.songcast[ playing ].song, cut: playing };
 	}
 	const s = q.get( 's' );                                      // a song, by name: its cut's cast (the song card's explore)
 	const cut = q.get( 'cut' );                                  // a cut, by its cid: its own graph (Justin, #connectome, 01:58Z)
@@ -719,6 +729,20 @@ function egoScene( v ) {
 	const stay = kept.filter( ( c ) => came.has( c.id ) ).length;
 	const ring = K.turned( kept, stay, Math.max( 1, want - stay ), v.turn || 0 );
 	const lay = K.ego( { W, H, named: want, dots: ring.length - want, far: true } );
+	// Rabbithole's traverse (Justin, #connectome, 18 Nov 2026: "I want the solos to traverse to the picker, but
+	// ensuring that the song still remains very visible; as big as the picker"): the one taking the solo in the
+	// middle, and the song in the ring's top seat, drawn as the song's own view draws it in its middle. Going from
+	// the song's view to here, the soloist moves into the middle and the song up to the top.
+	const playing = v.playing !== undefined && G.songcast ? G.songcast[ v.playing ] : null;
+	let songAt = null;
+	if ( playing && lay.named.length > 1 ) {
+		const top = lay.named.reduce( ( best, p, i ) => ( p.y < lay.named[ best ].y ? i : best ), 0 );
+		songAt = lay.named[ top ];
+		lay.named = lay.named.filter( ( _, i ) => i !== top );
+		if ( lay.far ) {
+			lay.far = lay.far.filter( ( _, i ) => i !== top );
+		}
+	}
 	const n = lay.named.length, mine = ring.slice( 0, n );
 	const pan = slide( 'p' + a, lay.C );
 	const seats = K.seat( lay.named, mine.map( ( c ) => wanted( 'p' + c.id, pan ) ) );
@@ -754,6 +778,14 @@ function egoScene( v ) {
 	};
 	// The one in the middle is named there too, as on the cards, though the headline says who it is (Justin, #connectome, 15 Nov 2026).
 	addNode( sc, a, lay.C, 'subject', { rabbit: true, label: cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ) } );
+	if ( songAt ) {                                                  // the song on now, and the line from it to who's taking it
+		const cuts = ( playing.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean );
+		const tier = cuts.length ? Math.max( ...cuts.map( ( c ) => c.tier ) ) : 0;
+		sc.nodes.set( 'song', { stands: 'song', is: 'song', x: songAt.x, y: songAt.y, kind: 'song', o: 1, title: playing.song, tier,
+			cuts: [ cuts[ 0 ] ].filter( Boolean ), cut: v.playing, above: true } );
+		sc.lines.set( 'sp' + a, { a: 'song', b: 'p' + a, u: -1, v: a, tie: { played: true, tier, w: 1 }, stands: 'tie',
+			w: lineWidth( { w: 1 } ), o: 1, role: 'spoke', c: a, quiet: true, delay: 120 } );
+	}
 	ring.slice( 0, shown ).forEach( ( c, i ) => {
 		const named = i < n;
 		const pos = named ? lay.named[ seats[ i ] ] : spots[ beads[ i - n ] ];
@@ -794,6 +826,10 @@ function egoScene( v ) {
 			mine.map( ( c ) => seatOf.get( c.id ) ).map( ( p ) => ( { x1: p.x - 17, y1: p.y - 17, x2: p.x + 17, y2: p.y + 17 } ) ) );
 	const midName = wide( cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
 	taken.push( { x1: lay.C.x - midName, y1: lay.C.y + 22, x2: lay.C.x + midName, y2: lay.C.y + 41 } );
+	if ( songAt ) {                                                  // the song's mark and its name over it
+		const half = Math.max( 34, wide( K.clip( playing.song, 30 ), FONT.named ) / 2 );
+		taken.push( { x1: songAt.x - half, y1: songAt.y - 54, x2: songAt.x + half, y2: songAt.y + 34 } );
+	}
 	const onLine = ( from, to, f, room ) => ( { x1: from.x + ( to.x - from.x ) * f - room / 2, x2: from.x + ( to.x - from.x ) * f + room / 2, y: from.y + ( to.y - from.y ) * f } );
 	// Who is named in sight: a line that says a song ends at its artist or its writer, or at another of its ensemble
 	// only with them in sight (K.mayEnd; Justin, #connectome, 15 Nov 2026, 07:29Z).
@@ -1222,9 +1258,45 @@ function aRoad( d ) {
 	return w;
 }
 
-// What Rabbithole says: the walk, the song on now, whether it plays, and whether the drawer is open.
+/**
+ * Where Rabbithole's traverse asks the graph to go (Justin, #connectome, 18 Nov 2026: "I'd like for the walk to happen
+ * within the bacon graph of the song by default"): an address, ?cut= for the song on now, ?p=…&playing= for whoever is
+ * taking it on that song. There, as a move rather than a step in the browser's history, so the player's back button
+ * stays the player's; or, naming nothing the graph holds, word back, and the player shows the song's page instead.
+ * Before the graph is read, the last ask waits for it.
+ */
+let hostTo = null;
+let booted = false;                      // the graph's first view is shown: a go() after it is someone moving it
+function goFromHost( to ) {
+	if ( typeof to !== 'string' ) {
+		return;
+	}
+	if ( !G ) {
+		hostTo = to;
+		return;
+	}
+	hostTo = null;
+	const v = parse( new URLSearchParams( to.replace( /^\?/, '' ) ) );
+	if ( !v ) {
+		tell( { missing: to } );
+		return;
+	}
+	if ( !same( v, view ) ) {
+		go( v, true );
+	}
+}
+
+// What Rabbithole says: the walk, the song on now, whether it plays, and whether the drawer is open; or, from its
+// traverse, where the graph in its pane should go.
 window.addEventListener( 'message', ( ev ) => {
-	if ( !HOST || ev.origin !== location.origin || ev.source !== window.parent || !ev.data || ev.data.rabbithole !== 'walk' ) {
+	if ( !HOST || ev.origin !== location.origin || ev.source !== window.parent || !ev.data ) {
+		return;
+	}
+	if ( ev.data.rabbithole === 'go' ) {
+		goFromHost( ev.data.to );
+		return;
+	}
+	if ( ev.data.rabbithole !== 'walk' ) {
 		return;
 	}
 	const d = ev.data;
@@ -1733,7 +1805,7 @@ const draw = {
 			const to = d.cut ? '/rabbithole/?track=' + encodeURIComponent( d.cut ) : '';
 			// Named, as every middle is (Justin, #connectome, 15 Nov 2026), over whatever of the web runs under the name.
 			g.appendChild( s( 'a', { href: G.songs[ d.title ] ? pageUrl( 'Song:' + d.title ) : address( { s: d.title, cut: d.cut } ),
-				'aria-label': 'About ' + d.title }, s( 'text', { y: 46, 'text-anchor': 'middle' }, K.clip( d.title, 30 ) ) ) );
+				'aria-label': 'About ' + d.title }, s( 'text', { y: d.above ? -40 : 46, 'text-anchor': 'middle' }, K.clip( d.title, 30 ) ) ) );
 			if ( to ) {
 				g.appendChild( playChip( 28, 0, to, d.title ) );
 			}
@@ -1891,7 +1963,7 @@ function playButton( m, song ) {
 
 const sig = {
 	node: ( d ) => [ d.stands, d.kind, d.lit, d.below, d.rabbit, d.side, d.anchor, d.up, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) : '', d.label, d.dx, d.sub, d.sdx, d.play, d.note,
-		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '' ].join( '|' ),
+		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '', d.title, d.cut, d.above ].join( '|' ),   // a song's: which, and its name over or under it
 	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role ] :
 		[ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
 	pill: ( d ) => [ d.stands, d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy, d.anchor, !!d.lit ].join( '|' )
@@ -2526,7 +2598,8 @@ function label( v ) {
 	return v.b === undefined ? first( v.a ) : first( v.a ) + ' ⟷ ' + first( v.b );
 }
 
-const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m && v.s === w.s && v.cut === w.cut && v.pg === w.pg;
+const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m && v.s === w.s && v.cut === w.cut && v.pg === w.pg &&
+	v.playing === w.playing;
 
 /** Where each thing in sight is now, by what it stands for: a picker ('p' and their number) or a piece ('m' and its). */
 function whereabouts() {
@@ -2614,8 +2687,9 @@ function show( quick, again ) {
  * of the line it was on, and the other pieces named in sight; from one piece to the next, the one left behind.
  */
 function carry( v ) {
-	if ( !view || !scene || v.walk || v.way || v.pg !== undefined || v.b !== undefined || v.cut !== undefined || v.s !== undefined ) {
-		return v;                                                    // two pickers, a cut or a page: a view of its own, with nothing brought along
+	if ( !view || !scene || v.walk || v.way || v.pg !== undefined || v.b !== undefined || v.cut !== undefined || v.s !== undefined ||
+		v.playing !== undefined ) {
+		return v;                                                    // two pickers, a cut, a page or a solo: a view of its own, nothing brought along
 	}
 	if ( view.pg !== undefined ) {
 		return v;                                                    // out of a page's graph: being on it together is no connection
@@ -2652,7 +2726,7 @@ function stamp( step ) {
 	history[ step ? 'pushState' : 'replaceState' ]( null, '', at );
 }
 
-function go( v ) {
+function go( v, quiet ) {
 	const left = !!KEPT && !!view;
 	if ( left ) {
 		v = leaveKept( v );                  // a click that goes further goes into today's graph
@@ -2667,7 +2741,12 @@ function go( v ) {
 		trail.shift();
 	}
 	show();
-	stamp( trail.length > 1 || left );
+	stamp( !quiet && ( trail.length > 1 || left ) );
+	if ( booted && !quiet ) {
+		// The reader moved the graph, not Rabbithole's traverse: the player turns traverse off, and back on if
+		// this is the song on now (Justin, #connectome, 18 Nov 2026).
+		tell( { moved: true, cut: view.cut || null } );
+	}
 	// The page stays where the reader has it (Justin, #connectome, 15 Nov 2026: not to the top on every click).
 	if ( GAME ) {
 		gameStep();
@@ -3578,9 +3657,16 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	if ( v ) {
 		go( v );
 	} else {
+		if ( q.get( 'cut' ) || q.get( 'playing' ) ) {
+			tell( { missing: location.search } );                    // Rabbithole's traverse asked for a song the graph doesn't hold
+		}
 		const start = K.landing( G );
 		lost = asked ? `The connectome doesn't know “${ asked }” yet. Here is ${ first( start ) } instead.` : '';
 		go( { a: start } );
+	}
+	booted = true;
+	if ( hostTo !== null ) {
+		goFromHost( hostTo );
 	}
 } ).catch( ( err ) => {
 	// #wait is gone once the graph is read: an error after that still has to be said somewhere, and seen in the console.
