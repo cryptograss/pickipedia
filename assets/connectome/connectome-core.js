@@ -1502,17 +1502,39 @@ export function beside( at, r, w, h, pts, boxes, frame, out = { x: 0, y: -1 }, e
 export const ROOMY = { W: 737, H: 561 };
 
 /**
- * How many times smaller to draw a bacon graph than its frame's own pixels (Justin, #connectome, 17 Nov 2026: "At
+ * The zoom a bacon graph is drawn as, the page being zoomed to zoom (1 at 100%). Justin, #connectome, 17 Nov 2026: "At
  * 150-160% zoom, I want to see more like what we currently see at 100-120. At 180, I'd still like to see more like
- * what we currently have around 130-160."). Zooming in shrinks the frame, and a smaller frame shows less. So a
- * frame smaller than ROOMY is laid out as if it were ROOMY, then drawn that much smaller, but never by more than
- * the page is zoomed in, so nothing comes out smaller than it is at 100%; and never by more than `most`, so at
- * 180% there's still less than at 100%, but bigger. W and H are the frame's pixels; zoom is the page's (1 at 100%).
+ * what we currently have around 130-160." And 18 Nov, when a zoom was drawn as 100% all the way to 160%: "it doesn't
+ * reduce even if I zoom way in". So 1 + (zoom - 1)^2 / 2: 150% is drawn as 112.5%, 160% as 118%, 180% as 132%, 200%
+ * as 150%, 250% as 212.5%; and from 300% on, as the zoom itself. Never less than 100%, never more than the zoom.
  */
-export function shrink( W, H, zoom, most = 1.6 ) {
+export function drawnAs( zoom ) {
+	const z = Math.max( 1, zoom );
+	return Math.min( z, 1 + ( z - 1 ) * ( z - 1 ) / 2 );
+}
+
+/**
+ * How many times smaller to draw a bacon graph than its frame's own pixels: as many as make the page's zoom look like
+ * drawnAs() of it, and no more than lays the frame out as ROOMY, where everything is in sight already. W and H are the
+ * frame's pixels; zoom is the page's (1 at 100%).
+ */
+export function shrink( W, H, zoom ) {
 	const need = Math.ceil( Math.max( ROOMY.W / W, ROOMY.H / H ) * 100 ) / 100;   // up: the frame laid out is ROOMY at least
-	const s = Math.min( need, zoom > 1 ? Math.floor( zoom * 100 ) / 100 : 1, most );
+	const z = Math.max( 1, zoom );
+	const s = Math.min( need, Math.floor( z / drawnAs( z ) * 100 ) / 100 );
 	return s > 1 ? s : 1;
+}
+
+/**
+ * Firefox's zoom, from its pixel ratio r. Firefox gives the window's size zoomed with the page, so the pixel ratio is
+ * all a page has, and that's the zoom times the screen's own ratio: a page can't tell the two apart. The screen's is
+ * taken as 2 where r is 2 or more and 1 below it, but never as more than the least ratio this browser has shown the
+ * bacon graphs (least, kept between visits; never taken under 1): a plain screen at 200% read as 100% (Justin, 18 Nov
+ * 2026), and now reads 200% once it has been here at anything less. Returns the zoom, and the least ratio to keep.
+ */
+export function foxZoom( r, least ) {
+	const low = Math.max( 1, Math.min( r, least > 0 ? least : r ) );
+	return { zoom: r / Math.min( r >= 2 ? 2 : 1, low ), least: low };
 }
 
 /**
