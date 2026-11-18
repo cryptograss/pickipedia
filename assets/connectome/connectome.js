@@ -42,7 +42,7 @@ const HOME = /(^|\.)pickipedia\.xyz$/.test( location.hostname ) ? '' : 'https://
 const ICON = HOME + '/index.php?title=Special:Redirect/file/Instrument-icon-';
 const FACE = HOME + '/index.php?title=Special:Redirect/file/';       // a picker's own picture, by its file's name on the wiki
 const FONT = { named: '700 14px Georgia, "Times New Roman", serif', subject: '700 17px Georgia, "Times New Roman", serif',
-	far: '400 13px Georgia, "Times New Roman", serif',
+	far: '400 13px Georgia, "Times New Roman", serif', bead: '400 11px Georgia, "Times New Roman", serif',
 	pill: '600 12.5px system-ui, -apple-system, "Segoe UI", sans-serif', tag: '700 12.5px Georgia, "Times New Roman", serif',
 	piece: '600 13px system-ui, -apple-system, "Segoe UI", sans-serif', sub: '400 11.5px system-ui, -apple-system, "Segoe UI", sans-serif',
 	road: 'italic 400 12px Georgia, "Times New Roman", serif' };
@@ -347,6 +347,34 @@ function addNode( sc, id, at, kind, more ) {
 	sc.nodes.set( 'p' + id, Object.assign( { id, stands: 'picker', is: 'p' + id, x: at.x, y: at.y, kind, below: kind === 'subject' ? true : !!at.below, o: 1 }, more ) );
 }
 
+/**
+ * Names for a view's beads, small, beside each where there's room: clear of the lines (pts) and of every name and
+ * circle already set down (boxes), the strongest of the company first. all: name every bead, a crowded one straight
+ * out from the middle all the same (the challenge).
+ */
+function nameBeads( sc, C, pts, boxes, W, H, all ) {
+	const beads = [ ...sc.nodes.values() ].filter( ( d ) => d.stands === 'picker' && d.kind === 'dot' );
+	for ( const d of beads ) {                                       // their circles first: no name is set down on one
+		boxes.push( { x1: d.x - d.r - 2, y1: d.y - d.r - 2, x2: d.x + d.r + 2, y2: d.y + d.r + 2 } );
+	}
+	for ( const d of beads ) {
+		const label = cut( first( d.id ), FONT.bead, 130 ), w = wide( label, FONT.bead );
+		let b = K.beside( d, d.r + 2, w, 12, pts, boxes, { W, H }, { x: d.x - C.x, y: d.y - C.y } );
+		if ( !b && all ) {
+			const t = Math.atan2( d.y - C.y, d.x - C.x ), cx = Math.cos( t ), side = Math.abs( cx ) > 0.4;
+			const x = side ? Math.sign( cx ) * ( d.r + 4 ) : 0, y = side ? 4 : ( Math.sin( t ) > 0 ? d.r + 12 : -d.r - 5 );
+			const anchor = side ? ( cx > 0 ? 'start' : 'end' ) : 'middle';
+			const x1 = d.x + x - ( anchor === 'start' ? 0 : anchor === 'end' ? w : w / 2 );
+			b = { x, y, anchor, box: { x1, y1: d.y + y - 10, x2: x1 + w, y2: d.y + y + 3 } };
+		}
+		if ( b ) {
+			d.label = label;
+			d.at = { x: b.x, y: b.y, anchor: b.anchor };
+			boxes.push( b.box );
+		}
+	}
+}
+
 /** Room for the two ends' names: beside each picker when the frame is wide, under it when it isn't. */
 function endNames( a, b, W ) {
 	const wa = wide( K.clip( first( a ), 26 ), FONT.subject ), wb = wide( K.clip( first( b ), 26 ), FONT.subject );
@@ -642,7 +670,7 @@ function further( v, lay, mine, seats, seatOf, web, W, H ) {
 	}
 	// The rest of the company: where nothing else is, and where the thin line to it from the middle crosses no name.
 	const open = K.away( K.clearOf( lay.dots, discs.concat( labels ), 9 ), pts, 11 ).filter( ( p ) => clear( K.along( lay.C, p ), labels, 4 ) );
-	return { names, fars, open };
+	return { names, fars, open, pts, boxes: discs.concat( labels ) };
 }
 
 function egoScene( v ) {
@@ -804,6 +832,28 @@ function egoScene( v ) {
 		addNode( sc, f.id, f.at, f.named ? 'far' : 'dot', Object.assign( { r: 3.8, by: f.by, tie: f.tie, delay: 360 }, f.name ) );
 		// a line a step out answers a click with the two-hop view, middle and far end (Justin, #connectome, 15 Nov 2026)
 		addLine( sc, f.by, f.id, f.tie, { o: walked ? 0.95 : ( f.named ? 0.78 : 0.45 ), role: 'far', c: f.id, delay: 360 } );
+	}
+	// The beads named too, small (Justin, #connectome, 17 Nov 2026: "In the challenge mode, I think every dot needs
+	// to be labeled, even the tiny ones. Otherwise the game turns into a game of hover-over-the-dot-to-see ... in
+	// general, I think it makes sense to put small labels on many more dots, even outside challenge mode (maybe not
+	// on mobile)"): where a name has room beside its bead, clear of the lines and of every other name; in a
+	// challenge every bead, the crowded ones straight out; on a finger's screen only in a challenge.
+	if ( GAME || !( coarse || narrow() ) ) {
+		let pts, boxes;
+		if ( out ) {
+			( { pts, boxes } = out );
+		} else {
+			pts = [];
+			boxes = [ { x1: lay.C.x - 26, y1: lay.C.y - 26, x2: lay.C.x + 26, y2: lay.C.y + 26 }, midBox ];
+			mine.forEach( ( c, i ) => {
+				const pos = lay.named[ seats[ i ] ], nm = names[ i ];
+				pts.push( ...K.along( lay.C, pos ) );
+				boxes.push( { x1: pos.x - 15, y1: pos.y - 15, x2: pos.x + 15, y2: pos.y + 15 },
+					nameBox( pos, nm.dx || 0, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -36, pos.below ? 36 : -18 ) );
+			} );
+			web.forEach( ( t ) => pts.push( ...K.along( seatOf.get( t.u ), seatOf.get( t.v ), t.bow ) ) );
+		}
+		nameBeads( sc, lay.C, pts, boxes.slice(), W, H, !!GAME );
 	}
 	sc.web = lay.web;
 	sc.deep = !!out;
@@ -1674,6 +1724,9 @@ const draw = {
 		if ( d.kind === 'dot' ) {
 			g.appendChild( s( 'circle', { class: 'halo', r: coarse ? 15 : Math.max( 12, d.r + 7 ) } ) );
 			g.appendChild( s( 'circle', { class: 'dot' + ( p.page ? '' : ' hollow' ), r: d.r } ) );
+			if ( d.label && d.at ) {                                 // a bead's own name, small (nameBeads)
+				g.appendChild( s( 'text', { class: 'bead-name', x: d.at.x, y: d.at.y, 'text-anchor': d.at.anchor }, d.label ) );
+			}
 			return;
 		}
 		// Their own picture, where their page gives one, in place of the rabbit or the instrument (Justin,
