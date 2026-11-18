@@ -1502,27 +1502,29 @@ export function beside( at, r, w, h, pts, boxes, frame, out = { x: 0, y: -1 }, e
 export const ROOMY = { W: 737, H: 561 };
 
 /**
- * The zoom a bacon graph is drawn as, the page being zoomed to zoom (1 at 100%). Justin, #connectome, 17 Nov 2026: "At
- * 150-160% zoom, I want to see more like what we currently see at 100-120. At 180, I'd still like to see more like
- * what we currently have around 130-160." And 18 Nov, when a zoom was drawn as 100% all the way to 160%: "it doesn't
- * reduce even if I zoom way in". So 1 + (zoom - 1)^2 / 2: 150% is drawn as 112.5%, 160% as 118%, 180% as 132%, 200%
- * as 150%, 250% as 212.5%; and from 300% on, as the zoom itself. Never less than 100%, never more than the zoom.
+ * The zoom a bacon graph is drawn as, zoomed in to zoom (1 at 100%): four tenths of the way there. Justin, #connectome,
+ * 17 Nov 2026: "At 150-160% zoom, I want to see more like what we currently see at 100-120. At 180, I'd still like to
+ * see more like what we currently have around 130-160." And 18 Nov: "I just want to see slightly more detail at
+ * slightly higher zoom levels". So 150% is drawn as 120%, 180% as 132%, 200% as 140%, 300% as 180%: each step in
+ * draws it bigger and shows less, as the plain zoom did, but less so. Never less than 100%, never more than the zoom.
  */
+export const ZOOM_COUNTS = 0.4;
 export function drawnAs( zoom ) {
-	const z = Math.max( 1, zoom );
-	return Math.min( z, 1 + ( z - 1 ) * ( z - 1 ) / 2 );
+	return 1 + ZOOM_COUNTS * ( Math.max( 1, zoom ) - 1 );
 }
 
 /**
- * How many times smaller to draw a bacon graph than its frame's own pixels: as many as make the page's zoom look like
- * drawnAs() of it, and no more than lays the frame out as ROOMY, where everything is in sight already. W and H are the
- * frame's pixels; zoom is the page's (1 at 100%).
+ * How many times smaller to draw a bacon graph than its frame's own pixels. The page zoomed in: as many as make its
+ * zoom look like drawnAs() of it, and no more than lays the frame out as ROOMY, where everything is in sight already.
+ * closer: the graph's own zoom, the wheel's, on top of the page's: drawn that much bigger again, as drawnAs() counts
+ * it, and laid out in that much less, so it shows less; under 1 then. W and H are the frame's pixels; zoom is the
+ * page's (1 at 100%).
  */
-export function shrink( W, H, zoom ) {
+export function shrink( W, H, zoom, closer = 1 ) {
 	const need = Math.ceil( Math.max( ROOMY.W / W, ROOMY.H / H ) * 100 ) / 100;   // up: the frame laid out is ROOMY at least
 	const z = Math.max( 1, zoom );
-	const s = Math.min( need, Math.floor( z / drawnAs( z ) * 100 ) / 100 );
-	return s > 1 ? s : 1;
+	const s = Math.max( 1, Math.min( need, Math.floor( z / drawnAs( z ) * 100 ) / 100 ) );
+	return closer > 1 ? Math.round( s * drawnAs( z ) / drawnAs( z * closer ) * 100 ) / 100 : s;
 }
 
 /**

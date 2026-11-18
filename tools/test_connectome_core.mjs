@@ -544,9 +544,9 @@ test( 'a tag on a line keeps off a name it is told of', () => {
 	assert.equal( K.tagAt( a, { x: 400, y: 380 }, 24, 15, 150, 23, [ name ], 120 ).room, 0 );   // nowhere clear: no room
 } );
 
-test( 'a zoomed-in page is drawn as a page less zoomed in, less so the further in (Justin, 17 and 18 Nov 2026)', () => {
-	// 150-160% drawn as 100-120%, 180% as 130-160%; and zoomed way in, it shows less
-	assert.deepEqual( [ 1, 1.5, 1.6, 1.8, 2, 2.5, 3, 4 ].map( ( z ) => +K.drawnAs( z ).toFixed( 3 ) ), [ 1, 1.125, 1.18, 1.32, 1.5, 2.125, 3, 4 ] );
+test( 'a zoomed-in page is drawn as a page four tenths as zoomed in (Justin, 17 and 18 Nov 2026)', () => {
+	// 150-160% drawn as 100-120%, 180% as 130-160%; and each step in still draws bigger and shows less
+	assert.deepEqual( [ 1, 1.5, 1.6, 1.8, 2, 3 ].map( ( z ) => +K.drawnAs( z ).toFixed( 3 ) ), [ 1, 1.2, 1.24, 1.32, 1.4, 1.8 ] );
 	assert.equal( K.drawnAs( 0.8 ), 1 );                                // zoomed out: as at 100%
 	for ( let z = 1; z < 5; z += 0.01 ) {
 		assert.ok( K.drawnAs( z + 0.01 ) > K.drawnAs( z ) );          // further in always draws bigger
@@ -555,12 +555,24 @@ test( 'a zoomed-in page is drawn as a page less zoomed in, less so the further i
 	assert.equal( K.shrink( 1160, 728, 1 ), 1 );                       // 100%: as it was
 	assert.equal( K.shrink( 600, 400, 1 ), 1 );                        // a small window at 100%: nothing drawn smaller than at 100%
 	assert.equal( K.shrink( 1023, 625, 1.1 ), 1 );                     // room enough already
-	assert.equal( K.shrink( 656, 391, 1.5 ), 1.33 );                   // 150% on a laptop: drawn as 112.5%
+	assert.equal( K.shrink( 656, 391, 1.5 ), 1.25 );                   // 150% on a laptop: drawn as 120%
 	assert.equal( K.shrink( 1000, 700, 1.5 ), 1 );                     // a frame roomy already isn't drawn smaller for nothing
 	assert.equal( K.shrink( 800, 500, 1.5 ), 1.13 );                   // nor smaller than lays it out roomy
 	assert.equal( K.shrink( 488, 252, 1.8 ), 1.36 );                   // 180%: drawn as 132%
-	assert.equal( K.shrink( 400, 250, 2 ), 1.33 );                     // 200%: as 150%
-	assert.equal( K.shrink( 330, 200, 3 ), 1 );                        // 300% on: as itself
+	assert.equal( K.shrink( 400, 250, 2 ), 1.42 );                     // 200%: as 140%
+	assert.equal( K.shrink( 330, 200, 3 ), 1.66 );                     // 300%: as 180%
+} );
+
+test( 'the wheel draws the graph bigger a step at a time, on top of the page\'s zoom, and lays it out in less', () => {
+	assert.equal( K.shrink( 1160, 728, 1, 1 ), K.shrink( 1160, 728, 1 ) );   // not closer: as the page's zoom has it
+	assert.equal( K.shrink( 1160, 728, 1, 2 ), 0.71 );                 // twice as close: drawn 1.4 times bigger
+	assert.equal( K.shrink( 656, 391, 1.5, 2 ), 0.83 );                // at 150%, twice as close: 1.25, times 1.2 (150%) over 1.8 (300%)
+	let was = Infinity;
+	for ( const c of [ 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3 ] ) {
+		const s = K.shrink( 900, 520, 1.25, c );
+		assert.ok( s < was );                                         // each step closer draws it bigger
+		was = s;
+	}
 } );
 
 test( "Firefox's zoom: its pixel ratio over the screen's, the screen's never more than the least ratio seen here", () => {
