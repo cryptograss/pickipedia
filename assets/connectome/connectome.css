@@ -283,8 +283,14 @@ main {
 
 /* The one in the middle is named over whatever runs under the name: more paper round the letters. */
 .pk.subject text,
-.pk.song text { stroke-width: 6px; }
-.pk.song text { font-size: 17px; }
+.pk.song text,
+.pk.page text { stroke-width: 6px; }
+.pk.song text,
+.pk.page text { font-size: 17px; }
+
+/* A page in the middle of its own graph: a sheet with a turned corner and three lines of writing. */
+.pk.page .leaf { fill: var( --surface ); stroke: var( --ink ); stroke-width: 1.4; stroke-linejoin: round; }
+.pk.page .writ { fill: none; stroke: var( --ink ); stroke-width: 1.1; }
 
 /* What kind of thing a headline names, when it isn't a picker. */
 #say .kind svg { vertical-align: -2px; margin-right: 6px; }

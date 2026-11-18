@@ -59,7 +59,8 @@ export function build( g ) {
 	}
 	const byName = new Map( people.map( ( p ) => [ p.name.toLowerCase(), p.id ] ) );
 	return Object.assign( { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
-		songcast: g.songcast || {}, plays: g.plays || {}, built: g.built || '' }, makers( g, music, byName ), pieces( g, people, music ) );
+		songcast: g.songcast || {}, plays: g.plays || {}, built: g.built || '',
+		pages: g.pages || {} }, makers( g, music, byName ), pieces( g, people, music ) );   // pages: a page's own graph's pickers, and no tie
 }
 
 /**

@@ -330,6 +330,28 @@ def test_a_page_that_asks_gets_a_graph_of_the_pickers_it_links_for_that_page_onl
     assert __import__('json').load(open(tmp_path / 'cards.json'))['page_cards'] == {grammys: cc.card_file(grammys)}
 
 
+def test_the_big_graph_learns_a_pages_pickers_for_that_pages_view_and_no_tie():
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:4masks', [('u', '', 'silver-44')]),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:show1')]
+    whole = {'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []},
+             'lma:show1': {'kind': 'show', 'title': 'Kyle Live', 'date': '2025-07-05', 'artist': 'Sam Grisman Project',
+                           'grp': 'lma:show1', 'formats': []}}
+    wiki = PageWiki(asking=['Awards'], links={'Awards': ['Molly Tuttle', 'Justin Holmes', 'Kyle Tuttle', 'Nobody']},
+                    redirects={'Justin Holmes': 'Justin Myles Holmes'}, pages={'Justin Myles Holmes', 'Kyle Tuttle'})
+    plain = cc.build(pairs, TARGETS, GROUPS, FakeWiki(redirects={'Justin Holmes': 'Justin Myles Holmes'},
+                     pages={'Justin Myles Holmes', 'Kyle Tuttle'}), date(2026, 11, 17), None, whole, [])['graph']
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 17), None, whole, [])
+    g = result['graph']
+    names = [p[0] for p in g['people']]
+    # the page's pickers, by their places in people: Kyle first (he played with both), then the others
+    assert [names[i] for i in g['pages']['Awards']] == ['Kyle Tuttle', 'Justin Myles Holmes', 'Molly Tuttle']
+    # and nothing else changed: Molly and Justin, on one page and never on a stage, are no tie
+    assert g['ties'] == plain['ties'] and g['people'] == plain['people']
+    # the card's paper, its middle and its explore all open this page's graph on the big one
+    html = result['page_cards']['Awards']
+    assert html.count(f'href="{cc.VIEWER}?page=Awards"') == 3
+
+
 def test_a_page_graph_escapes_every_name_and_draws_sixteen_at_most():
     pairs = [pair(f'P{i:02} <i>', 'Hub & Co', 'show', 'lma:show1') for i in range(20)]
     store = cc.Store(pairs, TARGETS, GROUPS, {})
