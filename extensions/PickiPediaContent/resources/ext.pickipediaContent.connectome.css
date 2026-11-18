@@ -164,6 +164,43 @@ svg.cc a {
 	border: 0;
 }
 
+/* "Full screen": a button that says so in words, beside the ×. */
+#cc-big .cc-full {
+	float: right;
+	margin: 4px 6px 0 0;
+	padding: 0 8px;
+	border: 1px solid #a2a9b1;
+	border-radius: 4px;
+	background: #fff;
+	color: #202122;
+	font-size: 13px;
+	font-weight: normal;
+	line-height: 20px;
+	cursor: pointer;
+}
+
+#cc-big .cc-full:hover {
+	border-color: #72777d;
+	background: #eaecf0;
+}
+
+#cc-big .cc-full svg {
+	width: 12px;
+	height: 12px;
+	margin-right: 5px;
+	vertical-align: -1px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.8;
+}
+
+/* Full screen: the browser makes the box the screen's size; its frame and shadow go. */
+#cc-big:fullscreen {
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+}
+
 @media screen and ( max-width: 720px ) {
 	.connectome-card {
 		float: none;
@@ -192,6 +229,11 @@ svg.cc a {
 		margin-right: -10px;
 		font-size: 30px;
 		line-height: 44px;
+	}
+
+	#cc-big .cc-full {
+		margin-top: 6px;
+		line-height: 30px;
 	}
 
 	#cc-big iframe {
