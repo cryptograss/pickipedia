@@ -300,7 +300,7 @@ function glyphBox( kind ) {
 
 /**
  * The frame a view is laid out in, and drawn into. A page zoomed in lays it out as if it were bigger and draws it
- * that much smaller (K.shrink), so a zoomed page still shows much of what it shows at 100%. The dock, the walk
+ * that much smaller (K.shrink), so a zoomed page shows what a page less zoomed in did (K.drawnAs). The dock, the walk
  * (own: its height is the walk's own), and a finger's screen keep their own pixels.
  */
 let S = 1;                                                          // how many times smaller the drawing is than the frame's pixels
@@ -350,6 +350,7 @@ function closer( k, fx, fy ) {                                       // fx, fy: 
  * of the two ways (a sidebar or a docked inspector makes the other look zoomed). Over a wiki page, the wiki
  * page's window; a frame on another site can't see that, and says 1, as does a browser that doesn't tell.
  */
+const LEAST_RATIO = 'bacon-least-pixel-ratio';                    // Firefox's least pixel ratio here, for K.foxZoom
 function zoomed() {
 	let w = window;
 	if ( !alone ) {
@@ -362,11 +363,19 @@ function zoomed() {
 	}
 	let z = Math.min( w.outerWidth / w.innerWidth, w.outerHeight / w.innerHeight );
 	// Firefox gives the window's size in the page's own pixels, zoomed with it, so that says 1 at any zoom (Justin
-	// didn't see the change, 17 Nov 2026: Firefox on Ubuntu). There the pixel ratio is the zoom times the screen's
-	// own, taken as 2 where it's 2 or more and 1 below that: right on most screens; a fine screen at 200% reads as 100%.
+	// didn't see the change, 17 Nov 2026: Firefox on Ubuntu). There it's read from the pixel ratio (K.foxZoom).
 	if ( 'mozInnerScreenX' in w ) {
-		const r = w.devicePixelRatio || 1;
-		z = Math.max( Number.isFinite( z ) ? z : 1, r >= 2 ? r / 2 : r );
+		let least = 0;
+		try {
+			least = +localStorage.getItem( LEAST_RATIO ) || 0;
+		} catch ( e ) {}
+		const fox = K.foxZoom( w.devicePixelRatio || 1, least );
+		if ( fox.least !== least ) {
+			try {
+				localStorage.setItem( LEAST_RATIO, String( fox.least ) );
+			} catch ( e ) {}
+		}
+		z = Math.max( Number.isFinite( z ) ? z : 1, fox.zoom );
 	}
 	return Number.isFinite( z ) && z > 1 ? z : 1;
 }
