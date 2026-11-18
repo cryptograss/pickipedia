@@ -370,8 +370,24 @@ REQS
                         # One that fails is fetched next time. `timeout` is for a server that hangs: the fetch is
                         # stopped at 90 seconds and the build goes on. Any other failure fails the stage, as before.
                         cd "${WORKSPACE}/tools"
+
+                        # Walk requests (Justin, #connectome, 18 Nov 2026: Category:Walk Requested triggers Artificial
+                        # Dumb only, not a wake). A page put in the category since its last walk is looked up on
+                        # Discogs, MusicBrainz and archive.org (connectome_walk.py), for 30 seconds a build; the rest
+                        # wait for the next. What's found goes into the cache, not git: walked_sources.txt and
+                        # walked_names.txt, read below beside the repo's own, and walked.json, published with the
+                        # graph so anyone can see what a walk added. A walk that fails leaves the build to go on.
+                        WALKED=0
+                        timeout 90 "${PY}" connectome_walk.py --cache "${CACHE}" --budget 30 || WALKED=$?
+                        if [ "${WALKED}" -eq 124 ]; then
+                            echo "Connectome: the walk ran past 90 seconds and was stopped"
+                        elif [ "${WALKED}" -ne 0 ]; then
+                            echo "Connectome: the walk failed (${WALKED}); the build goes on without it"
+                        fi
+                        touch "${CACHE}/walked_sources.txt" "${CACHE}/walked_names.txt"
+
                         FETCHED=0
-                        timeout 90 "${PY}" connectome_store.py fetch --raw "${CACHE}/raw" --sources connectome_sources.txt --budget 20 || FETCHED=$?
+                        timeout 90 "${PY}" connectome_store.py fetch --raw "${CACHE}/raw" --sources connectome_sources.txt "${CACHE}/walked_sources.txt" --budget 20 || FETCHED=$?
                         if [ "${FETCHED}" -eq 124 ]; then
                             echo "Connectome: the fetch ran past 90 seconds and was stopped"
                         elif [ "${FETCHED}" -ne 0 ]; then
@@ -379,14 +395,14 @@ REQS
                         fi
 
                         # The store, built again only when something it's built from has changed.
-                        KEY=$( { cat connectome_store.py recording_credits.py homeplace.py rambler.py lma_lineup.py connectome_sources.txt connectome_names.txt
+                        KEY=$( { cat connectome_store.py recording_credits.py homeplace.py rambler.py lma_lineup.py connectome_sources.txt connectome_names.txt "${CACHE}/walked_sources.txt" "${CACHE}/walked_names.txt"
                                  git -C "${CACHE}/arthel" rev-parse HEAD
                                  find "${CACHE}/raw" -name '*.json' | sort; } | sha256sum | cut -c1-16 )
                         STORE="${CACHE}/store-${KEY}"
                         if [ ! -f "${STORE}/pairs.json" ]; then
                             rm -rf "${STORE}.part"
                             mkdir -p "${STORE}.part"
-                            "${PY}" connectome_store.py build --raw "${CACHE}/raw" --arthel "${CACHE}/arthel/src/data" --lma-names connectome_names.txt --out "${STORE}.part/credits.jsonl" --db "${STORE}.part/connectome.sqlite"
+                            "${PY}" connectome_store.py build --raw "${CACHE}/raw" --arthel "${CACHE}/arthel/src/data" --lma-names connectome_names.txt "${CACHE}/walked_names.txt" --out "${STORE}.part/credits.jsonl" --db "${STORE}.part/connectome.sqlite"
                             "${PY}" connectome_store.py pairs --credits "${STORE}.part/credits.jsonl" --out "${STORE}.part/pairs.json"
                             mv "${STORE}.part" "${STORE}"
                             ls -dt "${CACHE}"/store-* | tail -n +4 | xargs -r rm -rf
@@ -396,6 +412,7 @@ REQS
                         rm -rf "${CACHE}/cards.part"
                         "${PY}" connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part"
                         cp "${STORE}/connectome.sqlite" "${OUT}/connectome.sqlite"
+                        if [ -f "${CACHE}/walked.json" ]; then cp "${CACHE}/walked.json" "${OUT}/walked.json"; fi
                         cp "${CACHE}/cards.part/graph.json" "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"
                         rm -rf "${OUT}/cards"
                         mv "${CACHE}/cards.part/cards" "${OUT}/cards"

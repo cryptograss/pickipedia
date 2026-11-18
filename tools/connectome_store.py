@@ -343,13 +343,15 @@ def main(argv):
     f.add_argument("--raw", required=True)
     f.add_argument("--discogs", nargs="*", default=[])
     f.add_argument("--mb", nargs="*", default=[])
-    f.add_argument("--sources", help="a sources file (connectome_sources.txt), fetched as well")
+    f.add_argument("--sources", nargs="+", default=[],
+                   help="sources files (connectome_sources.txt; the walker's walked_sources.txt), fetched as well")
     f.add_argument("--budget", type=float, metavar="SECONDS",
                    help="stop starting fetches after this long; what's left waits for the next run")
     b = sub.add_parser("build")
     b.add_argument("--raw", required=True)
     b.add_argument("--arthel")
-    b.add_argument("--lma-names", help="a file, one name per line, for the LMA parser to look for")
+    b.add_argument("--lma-names", nargs="+", default=[],
+                   help="files, one name per line, for the LMA parser to look for (connectome_names.txt; walked_names.txt)")
     b.add_argument("--out", required=True)
     b.add_argument("--db")
     e = sub.add_parser("pairs", help="write every pair as JSON, for a viewer")
@@ -360,13 +362,18 @@ def main(argv):
     q.add_argument("--db", required=True)
     args = ap.parse_args(argv[1:])
     if args.cmd == "fetch":
-        src = read_sources(args.sources) if args.sources else {"discogs": [], "mb": [], "lma": []}
+        src = {"discogs": [], "mb": [], "lma": []}
+        for path in args.sources:
+            for kind, ids in read_sources(path).items():
+                src[kind] += [i for i in ids if i not in src[kind]]
         got, failed, waiting = fetch(args.raw, args.discogs + src["discogs"], args.mb + src["mb"], src["lma"],
                                      budget=args.budget)
         print(f"fetched {got}; {len(failed)} failed" + (f"; {waiting} waiting for the next run" if waiting else "")
               + "".join("\n  " + f for f in failed[:20]))
     elif args.cmd == "build":
-        names = read_names(args.lma_names) if args.lma_names else []
+        names = []
+        for path in args.lma_names:
+            names += [n for n in read_names(path) if n not in names]
         rows = build(args.raw, args.arthel, names)
         with open(args.out, "w") as out:
             for r in rows:
