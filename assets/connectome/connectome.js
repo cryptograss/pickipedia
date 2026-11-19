@@ -75,6 +75,15 @@ const alone = window.parent === window;   // a page of its own, not the graph ov
 const HOST = new URLSearchParams( location.search ).get( 'host' ) === 'rabbithole' && !alone ? 'rabbithole' : '';
 let MINI = new URLSearchParams( location.search ).get( 'walk' ) === 'mini';
 const trail = [];
+// Each step as it was drawn, so that going back brings it back as it was (Justin, #connectome, 19 Nov 2026: "back
+// to the previous state entirely, with the same related pickers in the same positions"). A view is laid out from
+// where things were in the view before it, so the same address reached another way draws differently; what was
+// drawn is kept, and Back, Forward and a step of the strip put it back.
+const drawn = new WeakMap();      // a view -> { scene, fit, box, S, sel }: as it was last drawn, and the frame it was drawn for
+const steps = new Map();          // one of the browser's entries, by its number -> { view, trail, g }
+const SESSION = Math.random().toString( 36 ).slice( 2 );   // this load of the page: its numbers mean nothing to another
+let stepAt = 0, stepSeq = 0;      // the number of the entry in sight, and the last number given out
+let asDrawn = null;               // for one show(): what to draw the view as, a view brought back
 let GAME = null;                 // the challenge in play: { to, from, par, jumps, path, done, won } (challenge(), below)
 const SIX = 6;                   // the jumps a challenge is won in, at most (Justin, #connectome, 19 Nov 2026)
 
@@ -2705,8 +2714,17 @@ function steady() {
 }
 
 /** Show the view. again: the same view, laid out afresh because the frame changed; everyone keeps the seat they had. */
+/** The frame a view is drawn for: its size, and what else sets the drawing's scale. A view is put back as drawn only into the same frame. */
+function fitNow() {
+	return [ svg.clientWidth, svg.clientHeight, zoomed(), closer, MINI, coarse ].join( ' ' );
+}
+
 function show( quick, again ) {
-	was = again && scene ? settled( scene ) : whereabouts();
+	const kept = asDrawn;
+	asDrawn = null;
+	// A view brought back, into another frame than it was drawn for (the window resized since, the player docked):
+	// laid out afresh, with everything wanting the place it had.
+	was = kept ? settled( kept.scene ) : again && scene ? settled( scene ) : whereabouts();
 	if ( !again ) {
 		turned = performance.now();
 	}
@@ -2714,7 +2732,23 @@ function show( quick, again ) {
 	stage.classList.toggle( 'walking', !!view.walk );
 	document.querySelector( 'main' ).classList.toggle( 'walking', !!view.walk );
 	steady();
-	scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.pg !== undefined ? pageScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
+	if ( kept ) {
+		// What stands round the graph first (its headline, the way come), since those set the frame it is measured by.
+		$( 'say' ).firstElementChild.replaceChildren( ...kept.scene.head.filter( Boolean ) );
+		$( 'say' ).lastElementChild.replaceChildren( ...kept.scene.sub );
+		$( 'back' ).hidden = trail.length < 2;
+		pathSay();
+	}
+	if ( kept && kept.fit === fitNow() && !view.walk && !view.way ) {
+		scene = kept.scene;                                          // as it was drawn: nothing laid out again
+		S = kept.S;
+		svg.setAttribute( 'viewBox', kept.box );
+	} else {
+		scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.pg !== undefined ? pageScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
+	}
+	if ( !view.walk && !view.way ) {
+		drawn.set( view, { scene, fit: fitNow(), box: svg.getAttribute( 'viewBox' ), S, sel: Object.assign( {}, sel ) } );
+	}
 	stage.classList.toggle( 'webbed', !!scene.web );
 	stage.classList.toggle( 'deep', !!scene.deep );
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
@@ -2726,7 +2760,9 @@ function show( quick, again ) {
 	$( 'pa' ).value = view.way || view.walk || view.pg !== undefined || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
 	$( 'pb' ).value = view.way || view.walk || view.pg !== undefined || view.m !== undefined || view.b === undefined ? '' : first( view.b );
 	$( 'back' ).hidden = trail.length < 2;
-	pathSay();
+	if ( !kept ) {
+		pathSay();
+	}
 	document.title = label( view ) + ' · the connectome';
 	closeSheet();
 	hush();
@@ -2774,20 +2810,39 @@ function carry( v ) {
 function stamp( step ) {
 	// Out of a kept graph, at /bacon/<id>, the address is the page's own again: a bare ?p= would stay under the id.
 	const at = KEPT ? '/bacon/' + KEPT.id : ( keptAt() ? '/bacon' : '' ) + address( view );
-	history[ step ? 'pushState' : 'replaceState' ]( null, '', at );
+	if ( step || !stepAt ) {
+		stepAt = ++stepSeq;
+	}
+	steps.set( stepAt, { view, trail: trail.slice(), g: G } );
+	if ( steps.size > 240 ) {
+		steps.delete( steps.keys().next().value );                   // the oldest: Back to it lays it out afresh
+	}
+	history[ step ? 'pushState' : 'replaceState' ]( { bacon: stepAt, session: SESSION }, '', at );
 }
 
-function go( v, quiet ) {
+/** A view brought back, to be shown as it was drawn; its selection with it. */
+function bringBack( v ) {
+	view = v;
+	asDrawn = drawn.get( v ) || null;
+	sel = Object.assign( { picker: null }, asDrawn ? asDrawn.sel : null );
+}
+
+function go( v, quiet, asWas ) {
 	oracleDone();
 	const left = !!KEPT && !!view;
 	if ( left ) {
 		v = leaveKept( v );                  // a click that goes further goes into today's graph
+		asWas = false;
 	}
 	if ( !v.walk && !v.way && v.pg === undefined && v.m === undefined && v.s === undefined && v.b === v.a ) {
 		v = { a: v.a };
 	}
-	view = carry( v );
-	sel = { picker: null };
+	if ( asWas ) {
+		bringBack( v );                      // a step of the way come back to, by the strip: as it was drawn
+	} else {
+		view = carry( v );
+		sel = { picker: null };
+	}
 	trail.push( view );
 	if ( trail.length > 60 ) {
 		trail.shift();
@@ -2831,7 +2886,7 @@ const ORACLE = { mode: 'explore', goal: null };
 let fromOracle = false;          // the first step out of the Oracle is one of the browser's too, so its Back comes back here
 
 /** Open the Oracle: mode 'explore' or 'challenge'; goal, whom to find (someone at random when not given). */
-function oracleSay( mode, goal, note ) {
+function oracleSay( mode, goal, note, again ) {
 	const box = $( 'oracle' );
 	ORACLE.mode = mode;
 	ORACLE.goal = mode !== 'challenge' ? null : ( goal !== undefined && goal !== null ? goal : K.oracleGoal( G ) );
@@ -2844,7 +2899,7 @@ function oracleSay( mode, goal, note ) {
 	box.querySelector( '.ask' ).hidden = mode !== 'challenge';
 	box.querySelector( '.note' ).textContent = note || '';
 	oracleGoalSay();
-	oracleMinis();
+	oracleMinis( again );
 	box.hidden = false;
 	gameSay();
 	pathSay();
@@ -2878,9 +2933,14 @@ function oracleGoalSay() {
 }
 
 /** The four to start from, drawn small. */
-function oracleMinis() {
+function oracleMinis( again ) {
 	const box = $( 'oracle' );
-	const picked = K.oraclePick( G, ORACLE.mode === 'challenge' ? ORACLE.goal : undefined );
+	// Come back to by the browser's Back, the Oracle offers the four it offered (the same mode and goal): "back to the
+	// previous state entirely" (Justin, #connectome, 19 Nov 2026).
+	const key = ORACLE.mode + ' ' + ORACLE.goal;
+	const picked = again && ORACLE.offered && ORACLE.offered.key === key && ORACLE.offered.g === G ? ORACLE.offered.picked :
+		K.oraclePick( G, ORACLE.mode === 'challenge' ? ORACLE.goal : undefined );
+	ORACLE.offered = { key, picked, g: G };
 	box.querySelector( '.pick' ).textContent = picked.length ? 'Pick where to start:' :
 		'Nowhere here leads to them yet. Try someone else.';
 	box.querySelector( '.minis' ).replaceChildren( ...picked.map( miniEl ) );
@@ -3046,8 +3106,9 @@ function pathBack( st ) {
 	if ( st.ti >= trail.length - 1 ) {
 		return;
 	}
+	const old = trail[ st.ti ];
 	trail.splice( st.ti );                                       // it, and all since, come off; go() puts it back on
-	go( st.to );
+	go( old, false, true );                                      // as it was when they were there
 }
 
 function stepEl( st, i ) {
@@ -3350,25 +3411,34 @@ window.addEventListener( 'popstate', () => {
 		KEPT = null;
 		forget();
 	}
-	const v = G && parse( new URLSearchParams( location.search ) );
+	// A step this page drew, back or forward: the view as it was drawn, and the way to it as it was then.
+	const state = history.state;
+	const step = G && state && state.session === SESSION ? steps.get( state.bacon ) : null;
+	const v = step && step.g === G ? step.view : G && parse( new URLSearchParams( location.search ) );
 	if ( !v ) {
 		const goal = G ? K.challengeOf( location.pathname, location.search ) : null;
 		if ( goal !== null ) {                                       // back to the Oracle, in a challenge
 			const to = goal ? K.find( G, goal ) : null;
-			oracleSay( 'challenge', to !== null ? to : undefined );
+			oracleSay( 'challenge', to !== null ? to : undefined, '', true );
 		} else if ( G && /^\/bacon\/?$/.test( location.pathname ) && !location.search ) {
-			oracleSay( 'explore' );                                  // back to the Oracle
+			oracleSay( 'explore', undefined, '', true );             // back to the Oracle
 		}
 		return;
 	}
-	if ( trail.length > 1 && same( v, trail[ trail.length - 2 ] ) ) {   // a step back: as it was shown before
+	oracleDone();
+	if ( step && step.g === G ) {
+		stepAt = state.bacon;
+		trail.length = 0;
+		trail.push( ...step.trail );
+		bringBack( v );
+	} else if ( trail.length > 1 && same( v, trail[ trail.length - 2 ] ) ) {   // a step back: as it was shown before
 		trail.pop();
-		view = trail[ trail.length - 1 ];
+		bringBack( trail[ trail.length - 1 ] );
 	} else {
 		view = carry( v );
 		trail.push( view );
+		sel = { picker: null };
 	}
-	sel = { picker: null };
 	show();
 	if ( GAME ) {
 		gameStep();                                                  // back in a challenge: the chain unwinds with it
