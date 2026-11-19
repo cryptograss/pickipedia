@@ -601,11 +601,12 @@ export function hops( G, a, b ) {
  * --------------------------------------------------------------------------------------------------------- */
 
 /** Whom an address asks the reader to find: /bacon/challenge/<name>, an underscore for a space, or
- *  ?challenge=<name>. null when it asks for no one. */
+ *  ?challenge=<name>. '' when it asks for a challenge and names no one (/bacon/challenge: challengeGoal finds
+ *  someone); null when it asks for no challenge. */
 export function challengeOf( pathname, search ) {
-	const m = /\/bacon\/challenge\/([^/?#]+)\/?$/.exec( pathname || '' );
-	let raw = m ? m[ 1 ] : new URLSearchParams( search || '' ).get( 'challenge' );
-	if ( !raw ) {
+	const m = /\/bacon\/challenge(?:\/([^/?#]*))?\/?$/.exec( pathname || '' );
+	let raw = m ? m[ 1 ] || '' : new URLSearchParams( search || '' ).get( 'challenge' );
+	if ( raw === null ) {
 		return null;
 	}
 	if ( m ) {
@@ -613,7 +614,30 @@ export function challengeOf( pathname, search ) {
 			raw = decodeURIComponent( raw );
 		} catch ( e ) {}                                             // a stray % in the address: read as written
 	}
-	return raw.replace( /_/g, ' ' ).replace( /\s+/g, ' ' ).trim() || null;
+	return raw.replace( /_/g, ' ' ).replace( /\s+/g, ' ' ).trim();
+}
+
+/**
+ * Whom to find when the challenge's address names no one (Justin, #connectome, 19 Nov 2026, 03:19Z: "target the
+ * URL first, or a random person if nobody in the URL"): someone at random from landable()'s, the pickers the graph
+ * may open on, for whom there's somewhere `band` jumps out to start (as challengeStart starts); failing them, anyone
+ * with a page; failing them, anyone at all; and failing a start that far out, anyone a start leads to at all. null
+ * when nobody can be found from anywhere. rand: Math.random, but for the tests.
+ */
+export function challengeGoal( G, rand = Math.random, band = [ 3, 4 ] ) {
+	const pools = [ landable( G ), G.people.filter( ( p ) => p.page ).map( ( p ) => p.id ), G.people.map( ( p ) => p.id ) ];
+	for ( const [ lo, hi ] of [ band, [ 1, Infinity ] ] ) {
+		for ( const pool of pools ) {
+			const left = pool.slice();
+			while ( left.length ) {
+				const to = left.splice( Math.min( left.length - 1, Math.floor( rand() * left.length ) ), 1 )[ 0 ];
+				if ( playedDistances( G, to ).some( ( x ) => x >= lo && x <= hi ) ) {
+					return to;
+				}
+			}
+		}
+	}
+	return null;
 }
 
 /**
