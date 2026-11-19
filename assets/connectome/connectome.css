@@ -1402,7 +1402,7 @@ body.in-rabbithole #path { display: none; }
 }
 #oracle .rocker label:has( input:checked ) { background: var( --ink ); }
 #oracle .rocker label:has( input:checked ) b,
-#oracle .rocker label:has( input:checked ) span { color: #fff; }
+#oracle .rocker label:has( input:checked ) span { color: var( --surface ); }   /* the page's own ground: dark ink by night, where --ink is light */
 #oracle .rocker label:has( input:focus-visible ) {
 	outline: 2px solid var( --link );
 	outline-offset: -3px;
