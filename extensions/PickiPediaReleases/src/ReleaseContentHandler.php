@@ -13,7 +13,9 @@ use MediaWiki\Content\ContentHandler;
 use MediaWiki\Content\Renderer\ContentParseParams;
 use MediaWiki\Content\ValidationParams;
 use MediaWiki\Html\Html;
+use MediaWiki\MediaWikiServices;
 use MediaWiki\Parser\ParserOutput;
+use MediaWiki\Title\Title;
 use StatusValue;
 
 class ReleaseContentHandler extends ContentHandler {
@@ -46,6 +48,22 @@ class ReleaseContentHandler extends ContentHandler {
 	 */
 	public function unserializeContent( $text, $format = null ): ReleaseContent {
 		return new ReleaseContent( $text );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function supportsRedirects(): bool {
+		return true;
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function makeRedirectContent( Title $destination, $text = '' ) {
+		return new ReleaseContent(
+			ReleaseContent::formatRedirectYaml( $destination->getPrefixedText() )
+		);
 	}
 
 	/**
@@ -86,6 +104,22 @@ YAML;
 	): void {
 		if ( !$content instanceof ReleaseContent ) {
 			$output->setRawText( '<p>Invalid content type</p>' );
+			return;
+		}
+
+		$redir = $content->getRedirectTarget();
+		if ( $redir ) {
+			$output->addLink( $redir );
+			if ( $cpoParams->getGenerateHtml() ) {
+				$services = MediaWikiServices::getInstance();
+				$output->setRedirectHeader(
+					$services->getLinkRenderer()->makeRedirectHeader(
+						$services->getContentLanguage(), $redir, false
+					)
+				);
+				$output->addModuleStyles( [ 'mediawiki.action.view.redirectPage' ] );
+			}
+			$output->setRawText( '' );
 			return;
 		}
 
