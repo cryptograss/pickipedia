@@ -727,6 +727,10 @@ function pairScene( a, b ) {
 	} else if ( needLoose && all.length ) {
 		sc.sub.push( ' · ', K.plural( all.length, 'picker' ), ' on a record with each' );
 	}
+	const byTwo = is.filter( ( x, i ) => x.chain && lay.strands[ i ] ).length;    // the outermost strands, said: what they are
+	if ( byTwo && !sc.chain && !through ) {
+		sc.sub.push( ' · ', K.plural( byTwo, 'way' ) + ' across by two pickers' );
+	}
 	return sc;
 }
 
