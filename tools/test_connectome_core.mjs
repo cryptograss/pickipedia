@@ -58,7 +58,31 @@ test( 'a challenge names its goal by the address, an underscore for a space', ()
 	assert.equal( K.challengeOf( '/bacon', '?challenge=Kyle+Tuttle' ), 'Kyle Tuttle' );
 	assert.equal( K.challengeOf( '/bacon/challenge/100%_Bad', '' ), '100% Bad' );
 	assert.equal( K.challengeOf( '/bacon', '?p=Kyle' ), null );
-	assert.equal( K.challengeOf( '/bacon/challenge/', '' ), null );
+	assert.equal( K.challengeOf( '/bacon/challengers', '' ), null );
+	assert.equal( K.challengeOf( '/bacon/challenge/a/b', '' ), null );
+} );
+
+test( 'a challenge that names no one asks for someone at random (Justin, 19 Nov 2026)', () => {
+	assert.equal( K.challengeOf( '/bacon/challenge', '' ), '' );
+	assert.equal( K.challengeOf( '/bacon/challenge/', '?p=Kyle' ), '' );
+	assert.equal( K.challengeOf( '/bacon/challenge/_', '' ), '' );
+	assert.equal( K.challengeOf( '/bacon', '?challenge' ), '' );
+	assert.equal( K.challengeOf( '/bacon', '?challenge=' ), '' );
+} );
+
+test( 'someone at random to find: one a start three or four jumps out leads to, else one anything leads to', () => {
+	// Nobody here is landable, and of the three with pages (Kyle, Justin, Molly) none has anyone three out: then
+	// anyone, and only Vickie and Sam are three apart, by playing together.
+	assert.equal( K.challengeGoal( G, () => 0 ), VICKIE );
+	assert.equal( K.challengeGoal( G, () => 0.99 ), SAM );
+	// No start that far out for anyone: then anyone a start leads to at all, a page first (Kyle, at 0).
+	assert.equal( K.challengeGoal( G, () => 0, [ 5, 6 ] ), KYLE );
+	// Whoever it picks, a challenge can start there.
+	for ( const r of [ 0, 0.3, 0.6, 0.99 ] ) {
+		assert.notEqual( K.challengeStart( G, K.challengeGoal( G, () => r ), () => r ), null );
+	}
+	// Nobody plays with anybody: nobody to find.
+	assert.equal( K.challengeGoal( K.build( Object.assign( {}, GRAPH, { ties: [] } ) ), () => 0 ), null );
 } );
 
 test( 'a challenge starts three or four jumps out, at a picker with a page where there is one', () => {

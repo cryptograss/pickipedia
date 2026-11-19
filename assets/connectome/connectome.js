@@ -721,12 +721,17 @@ function egoScene( v ) {
 	}
 	// Those the reader came by stay, whatever their rank, and the line to each says what it is; then the closest,
 	// two at most by any one record or show while there are others to name (Justin, #connectome, 15 Nov 2026).
+	// In a challenge, the goal one step away stays named among them too, never left for "others" (Justin,
+	// #connectome, 19 Nov 2026, 03:21Z: "if you get to the penultimate node (ie, a picker who is one away from the
+	// goal), then the goal _needs_ to be displayed, and in the big six that are nearest").
 	const came = new Set( ( v.keep || [] ).filter( ( k ) => G.adj[ a ].has( k ) ) );
-	const queue = K.keeping( G, a, comp, v.keep );
-	const kept = K.fewPer( G, queue, 2, queue.filter( ( c ) => came.has( c.id ) ).length );
+	const goal = GAME && !GAME.done && GAME.to !== a && G.adj[ a ].has( GAME.to ) && !came.has( GAME.to ) ? GAME.to : undefined;
+	const pinned = ( c ) => came.has( c.id ) || c.id === goal;
+	const queue = K.keeping( G, a, comp, goal === undefined ? v.keep : ( v.keep || [] ).concat( goal ) );
+	const kept = K.fewPer( G, queue, 2, queue.filter( pinned ).length );
 	const want = Math.min( kept.length, H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 ) );
-	// another turn of the company, where there are more than one view names; those the reader came by stay
-	const stay = kept.filter( ( c ) => came.has( c.id ) ).length;
+	// another turn of the company, where there are more than one view names; those the reader came by stay, and the goal
+	const stay = kept.filter( pinned ).length;
 	const ring = K.turned( kept, stay, Math.max( 1, want - stay ), v.turn || 0 );
 	const lay = K.ego( { W, H, named: want, dots: ring.length - want, far: true } );
 	// Rabbithole's traverse (Justin, #connectome, 18 Nov 2026: "I want the solos to traverse to the picker, but
@@ -3659,12 +3664,18 @@ drawer.addEventListener( 'click', () => {
 	} catch ( e ) {}
 } );
 
+/** A challenge's own address: /bacon/challenge/<name>, an underscore for a space. */
+function challengeAddress( to ) {
+	return '/bacon/challenge/' + encodeURIComponent( first( to ) ).replace( /%20/g, '_' );
+}
+
+// Another name in the box: that one's challenge, at its own address.
 $( 'goal' ).addEventListener( 'change', () => {
 	const to = G ? K.find( G, $( 'goal' ).value ) : null;
 	if ( to === null || ( GAME && to === GAME.to ) ) {
 		return;
 	}
-	history.replaceState( null, '', '/bacon/challenge/' + encodeURIComponent( first( to ) ).replace( /%20/g, '_' ) );
+	history.replaceState( null, '', challengeAddress( to ) );
 	challenge( to );
 } );
 $( 'restart' ).addEventListener( 'click', () => {
@@ -3729,13 +3740,18 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	}
 	const goal = K.challengeOf( location.pathname, location.search );
 	if ( goal !== null ) {
-		const to = K.find( G, goal );
+		// No one named (/bacon/challenge): someone at random, and the address names them, so a reload or a link keeps them.
+		const to = goal === '' ? K.challengeGoal( G ) : K.find( G, goal );
 		if ( to !== null ) {
+			if ( goal === '' ) {
+				history.replaceState( null, '', challengeAddress( to ) );
+			}
 			const here = K.find( G, new URLSearchParams( location.search ).get( 'p' ) );     // a reload mid-game starts from there
 			challenge( to, here !== null ? here : undefined );
 			return;
 		}
-		lost = `The connectome doesn't know “${ goal }” yet, so there's no one to find. Here is someone it knows.`;
+		lost = goal ? `The connectome doesn't know “${ goal }” yet, so there's no one to find. Here is someone it knows.` :
+			'Nobody here can be found from anywhere yet. Here is someone the connectome knows.';
 	}
 	const q = new URLSearchParams( location.search );
 	const asked = q.get( 'm' ) || q.get( 'a' ) || q.get( 'from' ) || q.get( 'p' );
