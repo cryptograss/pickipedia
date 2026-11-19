@@ -1221,14 +1221,32 @@ export function called( G, piece ) {
 	const n = naming( G, { m: piece.m, how: piece.kind === 'show' ? STAGE : RECORD, songs: [] } );
 	if ( piece.kind === 'track' ) {
 		// A cut says whose it is, under its name; the record it's on is in its long name and the headline
-		// (Justin, #connectome, 15 Nov 2026). No artist said: the record.
-		return { glyph: 'track', name: piece.song, sub: m.artist || m.title || m.key, on: m.title || m.key, long: n.long };
+		// (Justin, #connectome, 15 Nov 2026). No artist said: the record. `on`, the record it's on, says whose
+		// that is too (recordBy).
+		return { glyph: 'track', name: piece.song, sub: m.artist || m.title || m.key, on: recordBy( m ), long: n.long };
 	}
 	if ( piece.kind === 'show' ) {
 		// A band and a night of theirs often have one name. A show always says it is one (Justin, #connectome, 15 Nov 2026).
 		return { glyph: 'show', name: n.who, sub: [ 'live', when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 	}
 	return { glyph: 'record', name: n.brief, sub: [ m.artist, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
+}
+
+/**
+ * Whose a record is, as a line says it after the record's title: " by " and its artist credit, as its source
+ * gives it. Nothing where no artist is credited, or for "Various", Discogs' word for a compilation: no one's.
+ */
+export function byArtist( m ) {
+	const a = String( m.artist || '' ).trim();
+	return a && !/^various( artists)?$/i.test( a ) ? ' by ' + a : '';
+}
+
+/**
+ * A record as a line names it: its title and whose it is. "It says 'a track on Vowel Sounds' - it needs to say
+ * the artist's name as well" (Justin, #connectome, 19 Nov 2026): a track on Vowel Sounds by Justin Myles Holmes.
+ */
+export function recordBy( m ) {
+	return ( m.title || m.key ) + byArtist( m );
 }
 
 /**
@@ -1249,7 +1267,7 @@ export function catalogue( G ) {
 	G.people.forEach( ( p ) => put( p.name, { a: p.id } ) );
 	const cut = new Set();
 	for ( const [ key, c ] of Object.entries( G.songcast || {} ) ) {
-		const on = c.on && c.on.length ? G.music[ c.on[ 0 ] ].title : '';
+		const on = c.on && c.on.length ? recordBy( G.music[ c.on[ 0 ] ] ) : '';
 		cut.add( c.song );
 		put( c.song + ' · song' + ( on ? ' on ' + on : '' ), { s: c.song, cut: key } );
 	}

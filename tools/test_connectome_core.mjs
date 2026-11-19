@@ -581,10 +581,20 @@ test( 'a show whose source names the band goes by the band; a cut says whose it 
 	assert.deepEqual( [ show.short, show.brief, show.long ], [ 'Justin Holmes and the Immutable String Band · block 15,735,471',
 		'Justin Holmes and the Immutable String Band · block 15,735,471', 'devcon VI night 1' ] );
 	const cut = K.called( g, g.pieces[ K.trackOn( g, 1, 'Victory' ) ] );
-	assert.deepEqual( [ cut.name, cut.sub, cut.on ], [ 'Victory', 'Justin Myles Holmes', '4masks' ] );
+	assert.deepEqual( [ cut.name, cut.sub, cut.on ], [ 'Victory', 'Justin Myles Holmes', '4masks by Justin Myles Holmes' ] );   // the record, and whose
 	assert.equal( g.music[ 1 ].art, 'Four-masks.png' );
 	assert.equal( g.music[ 0 ].art, '' );
-	assert.ok( K.catalogue( g ).some( ( x ) => x.label === 'Victory · track on 4masks' ) );
+	assert.ok( K.catalogue( g ).some( ( x ) => x.label === 'Victory · track on 4masks by Justin Myles Holmes' ) );
+} );
+
+test( 'a record a line names says whose it is: not "Various", nor anyone where no artist is credited', () => {
+	// Justin, #connectome, 19 Nov 2026: "it says 'a track on Vowel Sounds' - it needs to say the artist's name as well"
+	assert.equal( K.recordBy( { key: 'arthel:vowel sounds', artist: 'Justin Myles Holmes', title: 'Vowel Sounds' } ), 'Vowel Sounds by Justin Myles Holmes' );
+	assert.equal( K.recordBy( { key: 'discogs:1', artist: 'Various', title: 'Bluegrass Classics' } ), 'Bluegrass Classics' );
+	assert.equal( K.recordBy( { key: 'discogs:2', artist: ' various artists ', title: 'Pickin\' Time' } ), 'Pickin\' Time' );
+	assert.equal( K.recordBy( { key: 'discogs:3', artist: '', title: 'Untitled' } ), 'Untitled' );
+	assert.equal( K.recordBy( { key: 'discogs:4', artist: 'Tony Rice', title: '' } ), 'discogs:4 by Tony Rice' );
+	assert.equal( K.byArtist( { artist: 'Old & In The Way', title: 'Old & In The Way' } ), ' by Old & In The Way' );   // self-titled: still whose
 } );
 
 test( 'a tag on a line keeps off a name it is told of', () => {

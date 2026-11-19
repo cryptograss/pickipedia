@@ -1647,7 +1647,7 @@ function songScene( v ) {
 	sc.web = lay.web;
 	sc.head = [ h( 'b', null, scd.song ), h( 'a', { class: 'play', href: HOME + '/rabbithole/?track=' + encodeURIComponent( v.cut ),
 		target: '_top', title: 'Play ' + scd.song + ' in Rabbithole', 'aria-label': 'Play ' + scd.song + ' in Rabbithole' }, playMark() ) ];
-	sc.sub = [ 'On ', h( 'b', null, cuts[ 0 ] ? cuts[ 0 ].title : 'no cut the sources name' ),
+	sc.sub = [ 'On ', h( 'b', null, cuts[ 0 ] ? cuts[ 0 ].title : 'no cut the sources name' ), cuts[ 0 ] ? K.byArtist( cuts[ 0 ] ) : '',
 		scd.number ? ', track ' + scd.number : '', scd.recorded ? ', recorded ' + scd.recorded : '', ' · ',
 		h( 'b', null, K.plural( ids.length, 'picker' ) ), ' the page puts on this cut' ];
 	return sc;
@@ -2315,7 +2315,7 @@ function fillPanel() {
 	} else if ( view.cut !== undefined && G.songcast[ view.cut ] ) {
 		const scd = G.songcast[ view.cut ];
 		const cut = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean )[ 0 ];
-		out.push( h( 'h2', null, scd.song ), h( 'p', { class: 'sub' }, cut ? 'on ' + cut.title
+		out.push( h( 'h2', null, scd.song ), h( 'p', { class: 'sub' }, cut ? 'on ' + K.recordBy( cut )
 			+ ( scd.number ? ', track ' + scd.number : '' ) + ( scd.recorded ? ', recorded ' + scd.recorded : '' )
 			: 'no cut the sources name' ) );
 		if ( scd.pickers.length ) {
@@ -3467,7 +3467,7 @@ function aFar( d ) {
 function aSong( d ) {
 	const w = { kind: 'a song', title: d.title, tipTitle: d.title + ', a song', lines: [], hint: 'click a picker round it: go to them', acts: [] };
 	if ( d.cuts && d.cuts.length ) {
-		w.lines.push( 'on ' + d.cuts.map( ( c ) => c.title ).join( ', ' ) + ( d.cuts[ 0 ].date ? ', ' + d.cuts[ 0 ].date : '' ) );
+		w.lines.push( 'on ' + d.cuts.map( ( c ) => K.recordBy( c ) ).join( ', ' ) + ( d.cuts[ 0 ].date ? ', ' + d.cuts[ 0 ].date : '' ) );
 	} else {
 		w.lines.push( 'no cut the sources name' );
 	}
