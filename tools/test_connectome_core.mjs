@@ -279,39 +279,14 @@ test( 'music is named by what a reader would call it', () => {
 
 const inside = ( p, W, H, pad = 8 ) => p.x >= pad && p.x <= W - pad && p.y >= pad && p.y <= H - pad;
 
-test( 'between two pickers: the ends at the sides, the names in the middle column, nearest the middle first', () => {
-	for ( const [ W, H ] of [ [ 1020, 660 ], [ 760, 520 ], [ 390, 330 ] ] ) {
-		const lay = K.bridge( { W, H, direct: true, named: 6, dots: 40 } );
-		assert.ok( lay.A.x < lay.B.x && lay.A.y === lay.B.y );
-		assert.ok( lay.named.length >= 2 && lay.named.length <= 6 );
-		assert.ok( lay.named.every( ( p ) => p.x === Math.round( W / 2 ) && inside( p, W, H, 30 ) ), `${ W }x${ H }` );
-		assert.ok( lay.named.every( ( p ) => p.y !== lay.A.y ), 'the middle line is the direct tie\'s' );
-		const off = lay.named.map( ( p ) => Math.abs( p.y - lay.A.y ) );
-		assert.deepEqual( off, off.slice().sort( ( x, y ) => x - y ) );
-		assert.ok( lay.named.every( ( p ) => p.below === ( p.y > lay.A.y ) ) );
-		assert.ok( lay.dots.every( ( p ) => inside( p, W, H ) ) );
-		const up = lay.dots.filter( ( p ) => p.y < lay.A.y ).length;
-		assert.ok( Math.abs( up - ( lay.dots.length - up ) ) <= 1, 'as many above the line as below' );
-		const taken = new Set( lay.dots.map( ( p ) => p.x + ',' + p.y ) );
-		assert.equal( taken.size, lay.dots.length, 'no two beads in one place' );
-	}
-} );
-
-test( 'between two pickers with no tie of their own, the closest route takes the middle line', () => {
-	const lay = K.bridge( { W: 1020, H: 660, direct: false, named: 5, dots: 3 } );
-	assert.equal( lay.named[ 0 ].y, lay.A.y );
-	assert.equal( lay.named.length, 5 );
-	assert.equal( lay.dots.length, 3 );
-	assert.equal( K.bridge( { W: 1020, H: 660, direct: true, named: 0, dots: 0 } ).named.length, 0 );
-} );
-
 test( "the ends move in to leave room for their names", () => {
-	const plain = K.bridge( { W: 1020, H: 660, direct: true, named: 2, dots: 0 } );
-	const roomy = K.bridge( { W: 1020, H: 660, direct: true, named: 2, dots: 0, la: 200, lb: 60 } );
-	assert.ok( roomy.A.x >= 212 && roomy.A.x > plain.A.x );
+	const plain = K.rainbow( { W: 1020, H: 660, strands: [] } );
+	const roomy = K.rainbow( { W: 1020, H: 660, strands: [], la: 200, lb: 60 } );
+	assert.ok( roomy.A.x > plain.A.x && roomy.A.x >= 200 );
 	assert.equal( roomy.B.x, plain.B.x );
+	assert.equal( plain.A.y, 330 );
+	assert.equal( plain.B.y, 330 );
 } );
-
 test( 'one picker and their company: nobody at noon or at six, everyone in the frame', () => {
 	for ( const [ W, H, n ] of [ [ 1020, 660, 8 ], [ 700, 520, 6 ], [ 390, 330, 4 ] ] ) {
 		const lay = K.ego( { W, H, named: n, dots: 60 } );
@@ -335,6 +310,86 @@ test( 'chains of three hops: each chain a row, the first along the middle', () =
 	assert.deepEqual( lay.at( 0, 3 ), lay.B );
 } );
 
+test( 'ways across by two pickers: every hop played, no picker on two ways, none of those asked to be left out', () => {
+	const G = K.build( GRAPH );
+	const got = K.ways( G, SAM, VICKIE );                         // Sam, Kyle or Justin, Molly, Vickie: Molly is on both, so one way
+	assert.equal( got.length, 1 );
+	assert.equal( got[ 0 ][ 0 ], SAM );
+	assert.ok( [ KYLE, JUSTIN ].includes( got[ 0 ][ 1 ] ) );
+	assert.deepEqual( got[ 0 ].slice( 2 ), [ MOLLY, VICKIE ] );
+	assert.deepEqual( K.ways( G, SAM, VICKIE, 4, [ MOLLY ] ), [] );
+	assert.deepEqual( K.ways( G, SAM, FAR ), [] );                // Vickie and Far only share a record: not a hop of a way
+	assert.deepEqual( K.ways( G, SAM, VICKIE, 0 ), [] );
+} );
+
+test( 'an arc between two pickers: it starts at one, ends at the other, and stands as high as asked at its middle', () => {
+	const A = { x: 100, y: 300 }, B = { x: 900, y: 300 };
+	assert.deepEqual( K.onArc( A, B, 120, 0 ), A );
+	assert.deepEqual( K.onArc( A, B, 120, 1 ), B );
+	assert.deepEqual( K.onArc( A, B, 120, 0.5 ), { x: 500, y: 180 } );
+	assert.deepEqual( K.onArc( A, B, -80, 0.5 ), { x: 500, y: 380 } );
+	// A stretch of it, drawn as a line bowed from the middle of its ends, lies on the arc.
+	for ( const [ t1, t2 ] of [ [ 0, 1 ], [ 0.2, 0.7 ], [ 0.5, 1 ] ] ) {
+		const p = K.onArc( A, B, 120, t1 ), q = K.onArc( A, B, 120, t2 ), bow = K.arcBow( A, B, 120, t1, t2 );
+		const c = { x: ( p.x + q.x ) / 2 + bow.x, y: ( p.y + q.y ) / 2 + bow.y }, on = K.onArc( A, B, 120, ( t1 + t2 ) / 2 );
+		assert.ok( Math.abs( ( p.x + 2 * c.x + q.x ) / 4 - on.x ) < 1e-9 && Math.abs( ( p.y + 2 * c.y + q.y ) / 4 - on.y ) < 1e-9 );
+	}
+	// Standing up (a phone's ladder), it bows to the side.
+	assert.deepEqual( K.onArc( { x: 200, y: 50 }, { x: 200, y: 450 }, 60, 0.5 ), { x: 260, y: 250 } );
+} );
+
+test( 'the rainbow between two pickers: the first strand straight, the rest over and under by turns, nothing on anything', () => {
+	const name = { r: 14, w: 110 }, bead = { r: 5, w: 70, small: true };
+	const strands = [ { half: 15, marks: [ { pill: true, w: 150 } ] }, { half: 3, marks: [] }, { half: 3, marks: [] } ]
+		.concat( Array.from( { length: 10 }, () => ( { half: 15, marks: [ name ] } ) ), Array.from( { length: 8 }, () => ( { half: 6.5, marks: [ bead ] } ) ),
+			[ { half: 15, marks: [ name, name ] } ] );
+	const lay = K.rainbow( { W: 1100, H: 700, la: 80, lb: 80, strands, names: { a: { w: 120, side: 'left' }, b: { w: 120, side: 'right' } } } );
+	assert.equal( lay.strands.length, strands.length );
+	assert.ok( lay.strands.every( Boolean ) );
+	assert.equal( lay.strands[ 0 ].h, 0 );
+	assert.deepEqual( lay.strands[ 0 ].marks.map( ( m ) => m.t ), [ 0.5 ] );
+	const hs = lay.strands.map( ( st ) => st.h );
+	assert.equal( new Set( hs ).size, hs.length );                 // no two at one height: no two cross
+	assert.ok( hs.some( ( h ) => h > 0 ) && hs.some( ( h ) => h < 0 ) );
+	assert.ok( Math.abs( hs.filter( ( h ) => h > 0 ).length - hs.filter( ( h ) => h < 0 ).length ) <= 2 );
+	assert.ok( hs.every( ( h ) => Math.abs( h ) <= 350 - 18 ) );
+	for ( const st of lay.strands ) {
+		for ( const m of st.marks ) {
+			assert.ok( m.x > 0 && m.x < 1100 && m.y > 0 && m.y < 700 );
+			assert.deepEqual( { x: m.x, y: m.y }, K.onArc( lay.A, lay.B, st.h, m.t ) );
+		}
+	}
+	const named = lay.strands.flatMap( ( st ) => st.marks ).filter( ( m ) => m.named ).length;
+	assert.ok( named >= 16, 'most have their names: ' + named );
+	const two = lay.strands[ lay.strands.length - 1 ].marks;      // two on one strand: in order, each name on the side away from the other
+	assert.ok( two[ 0 ].t < two[ 1 ].t );
+	assert.deepEqual( two.map( ( m ) => m.at ), [ 'left', 'right' ] );
+	for ( let i = 0; i < lay.taken.length; i++ ) {                // every box set down is clear of every other
+		for ( let j = i + 1; j < lay.taken.length; j++ ) {
+			const p = lay.taken[ i ], q = lay.taken[ j ];
+			assert.ok( !( p.x1 < q.x2 && p.x2 > q.x1 && p.y1 < q.y2 && p.y2 > q.y1 ), `boxes ${ i } and ${ j }` );
+		}
+	}
+} );
+
+test( 'a rainbow with more strands than the frame holds leaves the outermost out; with few, they spread to fill it', () => {
+	const many = Array.from( { length: 40 }, () => ( { half: 15, marks: [ { r: 9, w: 90 } ] } ) );
+	const full = K.rainbow( { W: 900, H: 500, strands: many } );
+	const drawn = full.strands.filter( Boolean );
+	assert.ok( drawn.length < 40 && drawn.length >= 14 );
+	assert.ok( full.strands.slice( drawn.length ).every( ( st ) => st === null ) );
+	assert.ok( drawn.every( ( st ) => Math.abs( st.h ) + 15 <= 250 - 18 + 0.5 ) );
+	const few = Array.from( { length: 5 }, () => ( { half: 15, marks: [ { r: 9, w: 90 } ] } ) );
+	const tight = K.rainbow( { W: 900, H: 500, strands: few } ), spread = K.rainbow( { W: 900, H: 500, strands: few, fill: 3 } );
+	assert.deepEqual( tight.strands.map( ( st ) => st.h ), [ 0, 30, -30, 60, -60 ] );
+	assert.ok( spread.strands.every( Boolean ) );
+	assert.equal( spread.strands[ 1 ].h, 90 );                    // three times as far apart, and no further
+	assert.ok( Math.max( ...K.rainbow( { W: 900, H: 300, strands: few, fill: 3 } ).strands.map( ( st ) => Math.abs( st.h ) ) ) <= 150 - 18 );
+	// A picker in a chain keeps to their own hop, where the frame says where that is.
+	const at = K.rainbow( { W: 900, H: 500, strands: [ { half: 15, marks: [ { r: 9, w: 0 }, { r: 9, w: 0 } ], at: [ 1 / 3, 2 / 3 ] } ] } ).strands[ 0 ].marks;
+	assert.deepEqual( at.map( ( m ) => m.t ), [ 1 / 3, 2 / 3 ] );
+} );
+
 test( "a track plays in Rabbithole only from a record cryptograss cut itself", () => {
 	const G = K.build( GRAPH );
 	assert.equal( K.playOf( G, G.music[ 0 ], 'Silver 44' ), '/rabbithole/?track=QmSilver44%2Fx%20y' );   // the CID, safe in an address
@@ -352,21 +407,6 @@ test( 'a name is moved only as far as keeps it in its room', () => {
 	assert.equal( K.nudge( 370, 40, 6, 384 ), -26 );                           // off the right
 	assert.equal( K.nudge( 76, 85, 6, 175 ), 14.5 );                           // an end's long name, kept to its own half
 	assert.equal( K.nudge( 76, 120, 6, 175 ), 14.5 );                          // wider than its room: the middle of the room
-} );
-
-test( 'beads sit further apart, and fewer to a row, where a finger has to tell them apart', () => {
-	const rows = ( lay ) => {
-		const by = new Map();
-		lay.dots.forEach( ( d ) => by.set( d.y, ( by.get( d.y ) || [] ).concat( d.x ).sort( ( a, b ) => a - b ) ) );
-		return [ ...by.values() ];
-	};
-	const gaps = ( xs ) => xs.slice( 1 ).map( ( x, i ) => x - xs[ i ] );
-	const mouse = K.bridge( { W: 390, H: 540, direct: true, named: 6, dots: 30, la: 40, lb: 40 } );
-	const finger = K.bridge( { W: 390, H: 540, direct: true, named: 6, dots: 30, la: 40, lb: 40, gap: 27, perRow: 5 } );
-	assert.ok( rows( mouse ).some( ( r ) => r.length === 7 ) && rows( mouse ).every( ( r ) => gaps( r ).every( ( g ) => g === 18 ) ) );
-	assert.ok( rows( finger ).every( ( r ) => r.length <= 5 && gaps( r ).every( ( g ) => g === 27 ) ) );
-	assert.ok( finger.dots.length < mouse.dots.length );                        // fewer fit: the rest are in the list
-	assert.deepEqual( finger.named, mouse.named );                              // the names don't move
 } );
 
 test( 'in a narrow upright frame the ladder stands up: a at the top, b at the bottom, the other chains beside', () => {

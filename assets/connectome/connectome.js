@@ -526,9 +526,77 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
 	}
 }
 
-function curveMid( pa, pb, viaY ) {
-	const cx = ( pa.x + pb.x ) / 2;
-	return { x: 0.25 * pa.x + 0.5 * cx + 0.25 * pb.x, y: 0.25 * pa.y + 0.5 * viaY + 0.25 * pb.y };
+/* ------------------------------------------------------------------------------------------------------------
+ * Two pickers: the rainbow between them (Justin, #connectome, 19 Nov 2026: "Showing a single path is boring. Give
+ * me a full rainbow for their directs, and also a multi-hop rainbow for their two hops; fill the screen with the
+ * richness of the ecosystem connecting them"). K.rainbow says where each strand goes; these say what's on them.
+ * From the straight line outward: what the two share, a strand each; whoever has played with both, a strand each;
+ * those only on a record with each, as beads; and the ways across by two pickers, outermost.
+ * --------------------------------------------------------------------------------------------------------- */
+
+const ROW = 15;                  // half the room a strand with names on it takes
+const R_OF = ( id ) => ( P( id ).img ? 16 : ( P( id ).inst ? 14 : 9 ) );      // a named picker's circle, as draw.node draws it
+const nameMark = ( id ) => ( { r: R_OF( id ), w: wide( K.clip( first( id ), 26 ), FONT.named ) + 4 } );
+/** How far apart the two ends stand, as K.rainbow will set them: what a hop of a way across has for its name and what it says. */
+function spanOf( W, en ) {
+	const inset = Math.max( 76, Math.min( W * 0.13, 170 ) );
+	return W - Math.max( inset, en.la + 12 ) - Math.max( inset, en.lb + 12 );
+}
+const strandWidth = ( e ) => Math.max( 1.6, Math.min( 5, 1.6 + 2.1 * Math.sqrt( e.w || 0.1 ) ) );
+
+const beadMark = ( id, r ) => ( { r: Math.min( 6, r ), w: wide( cut( first( id ), FONT.bead, 130 ), FONT.bead ) + 3, small: true } );
+
+/**
+ * A picker set down where the rainbow put them: named beside their circle (or under it, on the straight line), a
+ * bead with its name small beside it, or a bead alone where no name would go.
+ */
+function addOnStrand( sc, id, mk, more, bead ) {
+	const side = ( R, y ) => ( { x: mk.at === 'right' ? R + 5 : -R - 5, y, anchor: mk.at === 'right' ? 'start' : 'end' } );
+	if ( bead || !mk.named ) {
+		const r = Math.min( 6, more.r || 5 );
+		addNode( sc, id, mk, 'dot', Object.assign( { tight: true }, bead && mk.named ? { label: cut( first( id ), FONT.bead, 130 ), at: side( r, 3.5 ) } : null, more, { r } ) );
+	} else if ( mk.at === 'under' ) {
+		addNode( sc, id, Object.assign( {}, mk, { below: true } ), 'named', Object.assign( { label: cut( first( id ), FONT.named, more.room || 200 ) }, more ) );
+	} else {
+		addNode( sc, id, mk, 'named', Object.assign( { at: side( R_OF( id ), 5 ) }, more ) );
+	}
+}
+
+/** How the two ends are named, for K.rainbow: nothing is set down on them. */
+function endsNamed( a, b, en ) {
+	const R = ( id, rabbit ) => ( P( id ).img ? 26 : ( rabbit || P( id ).inst ? 22 : 13 ) );
+	return { a: { w: wide( K.clip( first( a ), 26 ), FONT.subject ), side: en.sa, r: R( a, true ) },
+		b: { w: wide( K.clip( first( b ), 26 ), FONT.subject ), side: en.sb, r: R( b, false ) } };
+}
+
+/**
+ * What a hop of a lit way is, said on it: where a pill is clear of the pickers, names and pills already set down, a
+ * briefer one where the full one finds nowhere, and at the last one that laps a little onto the hop's own two
+ * pickers. A hop with no room even for that says nothing here: the line is still the tie, a pointer at it says what
+ * it is, and the list has it whole.
+ */
+function sayHop( sc, lay, h, t1, t2, u, v, tie, room ) {
+	const free = ( box ) => !lay.taken.some( ( q ) => box.x1 < q.x2 && box.x2 > q.x1 && box.y1 < q.y2 && box.y2 > q.y1 );
+	const boxAt = ( p, w ) => ( { x1: p.x - w / 2 - 3, y1: p.y - 12, x2: p.x + w / 2 + 3, y2: p.y + 12 } );
+	const put = ( p, part, box ) => {
+		lay.taken.push( box );
+		placePills( sc, u, v, tie, p.x - room * part / 2, p.x + room * part / 2, p.y, 1, 1, 60 );
+	};
+	for ( const part of [ 1, 0.72, 0.5 ] ) {
+		const w = pillsFor( tie, room * part, 1 ).used;
+		for ( const f of [ 0.5, 0.38, 0.62, 0.26, 0.74 ] ) {
+			const p = K.onArc( lay.A, lay.B, h, t1 + ( t2 - t1 ) * f );
+			if ( free( boxAt( p, w ) ) ) {
+				put( p, part, boxAt( p, w ) );
+				return;
+			}
+		}
+	}
+	// A show keeps its night however short the hop: at the hop's middle, its ends over the edge of the hop's own two pickers.
+	const w = pillsFor( tie, room * 0.5, 1 ).used, mid = K.onArc( lay.A, lay.B, h, ( t1 + t2 ) / 2 );
+	if ( free( boxAt( mid, w - 34 ) ) ) {
+		put( mid, 0.5, boxAt( mid, w ) );
+	}
 }
 
 function pairScene( a, b ) {
@@ -542,41 +610,96 @@ function pairScene( a, b ) {
 	}
 	const needLoose = !played.length && !( tie && tie.played );      // only looser ties join them: show those
 	let pool = played.length ? played : ( needLoose ? all : [] );
-	const want = Math.min( pool.length, tie ? ( H > 500 ? 6 : 4 ) : ( H > 500 ? 5 : 3 ) );
+	const rest = needLoose ? [] : all.filter( ( m ) => !m.played );  // on a record with each, and never on a stage with both: beads
 	const en = endNames( a, b, W );
-	const lay = K.bridge( { W, H, direct: !!tie, named: want, dots: pool.length - want, la: en.la, lb: en.lb,
-		gap: coarse ? 27 : 18, perRow: coarse ? Math.max( 3, Math.min( 7, Math.floor( ( W - 250 ) / 27 ) ) ) : 7 } );
-	const placed = lay.named.length + lay.dots.length;
-	const at = pool.findIndex( ( m ) => m.id === sel.picker );
-	if ( at >= placed ) {                                             // picked from the list, beyond what's drawn
-		pool = pool.slice();
-		pool.splice( Math.max( 0, lay.named.length - 1 ), 0, pool.splice( at, 1 )[ 0 ] );
-	} else if ( sel.picker !== null && at < 0 ) {
+	const small = W < 560, TOP = 20, BOTTOM = 20;
+
+	// What the two share: the loudest few said on their strands, the rest thin strands round them.
+	const shared = [];
+	const said = tie ? Math.min( tie.ev.length, small ? 1 : ( H > 640 ? 4 : ( H > 460 ? 3 : 2 ) ) ) : 0;
+	const thin = tie ? Math.min( tie.ev.length - said, H > 460 ? 12 : 6 ) : 0;
+	// what's said on the straight line keeps clear of a name under either end
+	const pillRoom = Math.max( 96, Math.min( 300, W * 0.36, W - 2 * 76 - ( en.sa ? 0 : en.la + en.lb ) ) );
+	( tie ? tie.ev.slice( 0, said + thin ) : [] ).forEach( ( e, i ) => {
+		shared.push( { e, fit: i < said ? pillsFor( tie, pillRoom, 1, undefined, e ).shown[ 0 ] : null } );
+	} );
+
+	// The room left, in strands with names on them: most to those who have played with both, some to the ways by two.
+	const span = H - TOP - BOTTOM - shared.reduce( ( sum, x ) => sum + ( x.fit ? 2 * ROW : 6 ), 0 );
+	const rows = Math.max( 1, Math.floor( span / ( 2 * ROW ) ) );
+	const twos = K.ways( G, a, b, Math.min( 8, Math.max( rows - pool.length, Math.round( rows * 0.3 ) ) ), pool.map( ( m ) => m.id ) );
+	const onTwo = new Set( twos.flat() );
+	const named = Math.max( 0, Math.min( pool.length, rows - twos.length ) );
+	const beads = pool.slice( named ).concat( rest ).filter( ( m ) => !onTwo.has( m.id ) );
+	const beadRoom = Math.max( 0, Math.min( 60, Math.floor( ( span - 2 * ROW * ( named + twos.length ) ) / 13 ) ) );
+	const ways = pool.slice( 0, named ).map( ( m ) => ( { m } ) ).concat( beads.map( ( m, i ) => ( { m, bead: true, spare: i >= beadRoom } ) ), twos.map( ( chain ) => ( { chain } ) ) );
+
+	// The lit way takes the straight line, its pickers named under it and its hops said; with none lit, what the
+	// two share has it. One picked from the list who had no room is lit all the same.
+	const onWay = ( x ) => ( x.m ? x.m.id === sel.picker : x.chain.slice( 1, -1 ).includes( sel.picker ) );
+	let litWay = sel.picker !== null ? ways.find( onWay ) : null;
+	if ( !litWay ) {
 		sel.picker = null;
+		litWay = tie ? null : ways[ 0 ];
 	}
-	const lit = sel.picker !== null ? sel.picker : ( tie ? null : ( pool[ 0 ] ? pool[ 0 ].id : null ) );
+	const picked = sel.picker !== null;
+	const lit = litWay ? ( litWay.m ? litWay.m.id : sel.picker ) : null;
+	const hop = spanOf( W, en ) / 3;
+	const under = ( id, room ) => ( { r: R_OF( id ), w: Math.min( room, wide( first( id ), FONT.named ) ), under: true } );
+	const is = ( litWay ? [ litWay ] : [] ).concat( shared, ways.filter( ( x ) => x !== litWay && !x.spare ) );
+	const strands = is.map( ( x ) => ( x.e ? ( x.fit ? { half: ROW, marks: [ { pill: true, w: x.fit.w } ] } : { half: 3, marks: [] } ) :
+		x === litWay ? { half: 34, marks: x.m ? [ under( x.m.id, 200 ) ] : x.chain.slice( 1, -1 ).map( ( id ) => under( id, hop - 12 ) ) } :
+			x.m ? { half: x.bead ? 6.5 : ROW, marks: [ x.bead ? beadMark( x.m.id, dotRadius( x.m.w ) ) : nameMark( x.m.id ) ] } :
+				{ half: ROW, marks: x.chain.slice( 1, -1 ).map( nameMark ) } ) );
+
+	const lay = K.rainbow( { W, H, la: en.la, lb: en.lb, strands, top: TOP, bottom: BOTTOM, fill: 3, names: endsNamed( a, b, en ) } );
 
 	addEnds( sc, a, b, lay, en, W );
-	if ( tie ) {
-		addLine( sc, a, b, tie, { o: lit === null ? 1 : 0.5, role: 'direct', emph: true, w: Math.max( 4.5, lineWidth( tie ) ) } );
-		placePills( sc, a, b, tie, lay.A.x + 48, lay.B.x - 48, lay.band.y, W > 900 ? 3 : ( W > 620 ? 2 : 1 ), lit === null ? 1 : 0.45, 140 );
-	}
-	pool.slice( 0, placed ).forEach( ( m, i ) => {
-		const named = i < lay.named.length;
-		const pos = named ? lay.named[ i ] : lay.dots[ i - lay.named.length ];
-		const on = lit === m.id;
-		const picked = sel.picker !== null;
-		addNode( sc, m.id, pos, named ? 'named' : 'dot', Object.assign( { r: dotRadius( m.w ), lit: on, delay: named ? 120 + i * 45 : 330,
-			o: !picked || on || !named ? 1 : 0.55, m }, named ? fitName( first( m.id ), pos.x, 4, W - 4, FONT.named ) : null ) );
-		const o = on ? 1 : ( named ? ( picked ? 0.28 : 0.9 ) : ( picked ? FAINT / 2 : FAINT ) );
-		const leg = { via: 'p' + m.id, o, quiet: !named && !on, emph: on, delay: named ? 160 + i * 45 : 360, role: 'leg', c: m.id };
-		addLine( sc, a, m.id, m.ta, leg );
-		addLine( sc, m.id, b, m.tb, leg );
-		if ( on && W >= 560 ) {
-			const ma = curveMid( lay.A, pos, pos.y ), mb = curveMid( pos, lay.B, pos.y );
-			const half = ( pos.x - lay.A.x ) - 44;
-			placePills( sc, a, m.id, m.ta, ma.x - half / 2, ma.x + half / 2, ma.y, 1, 1, 60 );
-			placePills( sc, m.id, b, m.tb, mb.x - half / 2, mb.x + half / 2, mb.y, 1, 1, 60 );
+	const bow = ( st, t1, t2 ) => K.arcBow( lay.A, lay.B, st.h, t1, t2 );
+	is.forEach( ( x, i ) => {
+		const st = lay.strands[ i ];
+		if ( !st ) {
+			return;
+		}
+		if ( x.e ) {                                                 // something the two share: its own arc, end to end
+			const piece = K.pieceFor( G, x.e ), o = lit === null ? 1 : 0.4;
+			sc.lines.set( 's' + lineKey( a, b ) + '.' + x.e.m, { a: 'p' + a, b: 'p' + b, u: a, v: b, tie, e: x.e, piece, stands: 'piece', strand: true,
+				role: 'direct', fine: !x.fit, emph: x === shared[ 0 ] && lit === null, w: strandWidth( x.e ) + ( x.fit ? 1.5 : 0 ), o: x.fit ? o : o * 0.8,
+				bow: bow( st, 0, 1 ), delay: 100 + i * 25 } );
+			if ( x.fit ) {
+				const mk = st.marks[ 0 ], p = x.fit;
+				sc.pills.set( 'm' + lineKey( a, b ) + '.' + p.e.m, { stands: 'piece', piece, is: 'm' + piece, x: mk.x, y: mk.y, w: p.w, label: p.label,
+					glyph: p.glyph, tier: p.tier, e: p.e, u: a, v: b, o, delay: 140 + i * 25, play: p.play, song: p.song } );
+			}
+			return;
+		}
+		if ( x.m ) {                                                 // someone with a tie to both: a to them to b
+			const m = x.m, mk = st.marks[ 0 ], on = x === litWay, bead = x.bead && !on, plain = !bead && mk.named;
+			addOnStrand( sc, m.id, mk, { r: dotRadius( m.w ), lit: on, delay: plain ? 120 + i * 30 : 330, o: !picked || on || !plain ? 1 : 0.55, m, room: 200 }, bead );
+			const leg = { o: on ? 1 : ( plain ? ( picked ? 0.28 : 0.9 ) : ( picked ? FAINT / 2 : ( m.played ? 0.5 : FAINT ) ) ), quiet: !plain && !on, fine: !plain && !on,
+				emph: on, delay: plain ? 160 + i * 30 : 360, role: 'leg', c: m.id };
+			addLine( sc, a, m.id, m.ta, Object.assign( { bow: bow( st, 0, mk.t ) }, leg ) );
+			addLine( sc, m.id, b, m.tb, Object.assign( { bow: bow( st, mk.t, 1 ) }, leg ) );
+			if ( on && !small ) {
+				const room = Math.min( 230, ( lay.B.x - lay.A.x ) / 2 - 50 );
+				sayHop( sc, lay, st.h, 0, mk.t, a, m.id, m.ta, room );
+				sayHop( sc, lay, st.h, mk.t, 1, m.id, b, m.tb, room );
+			}
+			return;
+		}
+		const chain = x.chain, on = x === litWay, ts = [ 0, ...st.marks.map( ( mk ) => mk.t ), 1 ];
+		chain.slice( 1, -1 ).forEach( ( id, k ) => {                 // a way by two: a, one, the other, b
+			addOnStrand( sc, id, st.marks[ k ], { lit: on, delay: 200 + i * 30, o: !picked || on ? 1 : 0.55, chain: i, room: hop - 12 } );
+		} );
+		for ( let k = 0; k < chain.length - 1; k++ ) {
+			const u = chain[ k ], v = chain[ k + 1 ], t = G.adj[ u ].get( v );
+			addLine( sc, u, v, t, { bow: bow( st, ts[ k ], ts[ k + 1 ] ), o: on ? 1 : ( picked ? 0.28 : 0.8 ), emph: on, role: 'hop', c: k === 0 ? v : u, delay: 240 + i * 30 } );
+			if ( on && !small ) {
+				sayHop( sc, lay, st.h, ts[ k ], ts[ k + 1 ], u, v, t, Math.min( 210, hop - 44 ) );
+			}
+		}
+		if ( on ) {
+			sc.chain = chain;
 		}
 	} );
 
@@ -584,6 +707,7 @@ function pairScene( a, b ) {
 	sc.tie = tie;
 	sc.lit = lit;
 	sc.loose = needLoose;
+	sc.ways = twos;
 	sc.head = [ nameLink( a ), ' and ', nameLink( b ) ];
 	const both = played.length;
 	if ( tie && tie.played ) {
@@ -593,8 +717,10 @@ function pairScene( a, b ) {
 	} else {
 		sc.sub = [ 'Never on one stage or one track, so far as the sources here say' ];
 	}
-	const through = sel.picker !== null && pool.find( ( m ) => m.id === sel.picker );
-	if ( through ) {
+	const through = picked && pool.concat( rest ).find( ( m ) => m.id === sel.picker );
+	if ( sc.chain ) {
+		sc.sub = [ h( 'b', null, 'By way of ' + listNames( sc.chain.slice( 1, -1 ) ) ) ];
+	} else if ( through ) {
 		sc.sub = [ h( 'b', null, 'By way of ' + first( through.id ) ), `: ${ K.times( through.ta ) } with ${ first( a ) }, ${ K.times( through.tb ) } with ${ first( b ) }` ];
 	} else if ( both ) {
 		sc.sub.push( ' · ', h( 'b', null, K.plural( both, 'picker' ) ), both === 1 ? ' has played with both' : ' have played with both' );
@@ -604,10 +730,94 @@ function pairScene( a, b ) {
 	return sc;
 }
 
+/**
+ * Two pickers three hops apart or more: every shortest way across that shares no picker with another is a strand
+ * of the rainbow, the loudest along the straight line; and whoever else sits on a shortest way is a bead at their
+ * own hop, tied to the loudest of those before and after them in sight.
+ */
+function farScene( a, b, W, H, sc, r, en ) {
+	const TOP = 20, BOTTOM = 20, L = r.hops, hop = spanOf( W, en ) / L;
+	let on = r.chains.findIndex( ( c ) => c.includes( sel.picker ) );
+	if ( on < 0 ) {
+		on = 0;
+		sel.picker = null;
+	}
+	const picked = sel.picker !== null;
+	// The lit way takes the straight line, its pickers named under it and every hop said; the others, round it.
+	const chains = [ r.chains[ on ], ...r.chains.filter( ( c, i ) => i !== on ) ];
+	const strands = chains.map( ( chain, c ) => ( { half: c ? ROW + 1 : 34, at: chain.slice( 1, -1 ).map( ( id, k ) => ( k + 1 ) / L ),
+		marks: chain.slice( 1, -1 ).map( ( id ) => ( c ? nameMark( id ) : { r: R_OF( id ), w: Math.min( hop - 12, wide( first( id ), FONT.named ) ), under: true } ) ) } ) );
+	const others = [];
+	const most = Math.max( ...r.others.map( ( level ) => level.length ), 0 );
+	for ( let k = 0; k < most && others.length < 40; k++ ) {             // a few from each hop in turn
+		r.others.forEach( ( level, i ) => {
+			if ( level[ k ] !== undefined ) {
+				others.push( { id: level[ k ], level: i + 1 } );
+			}
+		} );
+	}
+	others.forEach( ( o ) => strands.push( { half: 6.5, marks: [ beadMark( o.id, 5 ) ], at: [ o.level / L ] } ) );
+	const lay = K.rainbow( { W, H, la: en.la, lb: en.lb, strands, top: TOP, bottom: BOTTOM, fill: 3, names: endsNamed( a, b, en ) } );
+	addEnds( sc, a, b, lay, en, W );
+	const level = Array.from( { length: L + 1 }, () => [] );          // who is in sight at each hop
+	level[ 0 ].push( a );
+	level[ L ].push( b );
+	const shown = [];
+	chains.forEach( ( chain, c ) => {
+		const st = lay.strands[ c ];
+		if ( !st ) {
+			return;
+		}
+		shown.push( chain );
+		const lit = c === 0, ts = [ 0, ...st.marks.map( ( mk ) => mk.t ), 1 ];
+		chain.slice( 1, -1 ).forEach( ( id, k ) => {
+			addOnStrand( sc, id, st.marks[ k ], { lit, o: lit || !picked ? 1 : 0.6, delay: 120 + c * 40, chain: c, room: hop - 12 } );
+			level[ k + 1 ].push( id );
+		} );
+		for ( let k = 0; k < L; k++ ) {
+			const u = chain[ k ], v = chain[ k + 1 ], tie = G.adj[ u ].get( v );
+			addLine( sc, u, v, tie, { bow: K.arcBow( lay.A, lay.B, st.h, ts[ k ], ts[ k + 1 ] ), o: lit ? 1 : ( picked ? 0.3 : 0.75 ), emph: lit, role: 'hop',
+				c: k === 0 ? v : u, delay: 160 + c * 40 } );
+			if ( lit && W >= 560 ) {
+				sayHop( sc, lay, st.h, ts[ k ], ts[ k + 1 ], u, v, tie, Math.min( 220, hop - 44 ) );
+			}
+		}
+	} );
+	// Whoever else is on a shortest way: a bead at their own hop. One a hop from an end hangs from it by its own
+	// strand; any other tie of theirs to someone in sight crosses the rainbow, and lies faint behind it.
+	others.forEach( ( o, i ) => {
+		const st = lay.strands[ chains.length + i ];
+		if ( !st ) {
+			return;
+		}
+		const mk = st.marks[ 0 ];
+		addOnStrand( sc, o.id, mk, { r: 5, delay: 360, o: 1 }, true );
+		for ( const [ near, t1, t2 ] of [ [ level[ o.level - 1 ], 0, mk.t ], [ level[ o.level + 1 ], mk.t, 1 ] ] ) {
+			const best = near.filter( ( u ) => G.adj[ u ].has( o.id ) ).sort( ( u, v ) => K.loudness( G.adj[ v ].get( o.id ) ) - K.loudness( G.adj[ u ].get( o.id ) ) )[ 0 ];
+			if ( best !== undefined ) {
+				const along = best === a || best === b;
+				addLine( sc, best, o.id, G.adj[ best ].get( o.id ), { o: along ? 0.5 : FAINT * 0.6, quiet: true, fine: true, role: 'leg', c: o.id, delay: 380,
+					bow: along ? K.arcBow( lay.A, lay.B, st.h, t1, t2 ) : undefined } );
+			}
+		}
+	} );
+	sc.chain = shown[ 0 ];
+	sc.routes = r;
+	sc.sub = [ h( 'b', null, K.plural( r.hops, 'hop' ) + ' apart' ), ': never on one stage or one track, so far as the sources here say' ];
+	if ( shown.length > 1 ) {
+		sc.sub.push( ' · ', h( 'b', null, K.plural( shown.length, 'way' ) + ' across' ), ' that share no picker' );
+	}
+	return sc;
+}
+
 function ladderScene( a, b, W, H, sc ) {
-	const r = K.routes( G, a, b, H > 520 ? 3 : 2 );
+	const standing = W < 560 && H > W;                              // a phone: the ladder stands up (K.ladder)
+	const r = K.routes( G, a, b, standing ? ( H > 520 ? 3 : 2 ) : Math.max( 2, Math.floor( ( H - 40 ) / ( 2 * ROW + 2 ) ) ) );
 	const en = endNames( a, b, W );
 	sc.head = [ nameLink( a ), ' and ', nameLink( b ) ];
+	if ( r && !standing ) {
+		return farScene( a, b, W, H, sc, r, en );
+	}
 	if ( !r ) {
 		const lay = K.ladder( { W, H, hops: 1, chains: 1, la: en.la, lb: en.lb } );
 		addEnds( sc, a, b, lay, en, W );
@@ -1897,7 +2107,8 @@ const draw = {
 		g.setAttribute( 'aria-label', p.name + ( onCut && d.cutOf.role ? ' · ' + d.cutOf.role : instOf( d.id ) ) );
 		( d.kind === 'dot' ? layers.dots : layers.nodes ).appendChild( g );
 		if ( d.kind === 'dot' ) {
-			g.appendChild( s( 'circle', { class: 'halo', r: coarse ? 15 : Math.max( 12, d.r + 7 ) } ) );
+			// a bead on a strand of the rainbow has others close over and under it: its ground is kept to itself
+			g.appendChild( s( 'circle', { class: 'halo', r: d.tight ? d.r + 3 : ( coarse ? 15 : Math.max( 12, d.r + 7 ) ) } ) );
 			g.appendChild( s( 'circle', { class: 'dot' + ( p.page ? '' : ' hollow' ), r: d.r } ) );
 			if ( d.label && d.at ) {                                 // a bead's own name, small (nameBeads)
 				g.appendChild( s( 'text', { class: 'bead-name', x: d.at.x, y: d.at.y, 'text-anchor': d.at.anchor }, d.label ) );
@@ -1961,12 +2172,13 @@ const draw = {
 			}
 			return;
 		}
-		const t = d.tie;
+		// A strand between two pickers is one thing they share, and is marked as that thing is; any other line, as all of it.
+		const t = d.strand ? { played: d.e.how >= K.STAGE, tier: G.music[ d.e.m ].tier } : d.tie;
 		const gold = t.played && t.tier === K.PERMANENT;
 		const cls = !t.played ? 't0' : 't' + t.tier;
 		g.textContent = '';
 		const far = d.role === 'far', fine = d.role === 'web' || far || d.fine;
-		g.setAttribute( 'class', 'ln ' + ( fine ? 'fine ' : '' ) + ( d.role === 'web' ? 'web ' : '' ) + ( far ? 'far ' : '' ) + ( d.quiet ? 'quiet' : '' ) );
+		g.setAttribute( 'class', 'ln ' + ( fine ? 'fine ' : '' ) + ( d.role === 'web' ? 'web ' : '' ) + ( far ? 'far ' : '' ) + ( d.strand ? 'strand ' : '' ) + ( d.quiet ? 'quiet' : '' ) );
 		( d.quiet ? layers.faint : layers.lines ).appendChild( g );
 		if ( fine ) {                                                // the web, the ways on, the rest of the company: the same marks, half as heavy
 			g.appendChild( s( 'path', { class: gold ? 'thread' : 'core ' + cls,
@@ -2038,10 +2250,10 @@ function playButton( m, song ) {
 }
 
 const sig = {
-	node: ( d ) => [ d.stands, d.kind, d.lit, d.below, d.rabbit, d.side, d.anchor, d.up, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) : '', d.label, d.dx, d.sub, d.sdx, d.play, d.note,
+	node: ( d ) => [ d.stands, d.kind, d.lit, d.below, d.rabbit, d.side, d.anchor, d.up, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) + ( d.tight ? 't' : '' ) : '', d.label, d.dx, d.sub, d.sdx, d.play, d.note,
 		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '', d.title, d.cut, d.above ].join( '|' ),   // a song's: which, and its name over or under it
 	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role ] :
-		[ d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
+		[ d.strand ? 's' + d.e.m : d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
 	pill: ( d ) => [ d.stands, d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy, d.anchor, !!d.lit ].join( '|' )
 };
 
@@ -2134,13 +2346,9 @@ function sync( kind, next, now ) {
 
 /**
  * Where a line's curve is drawn toward, from the middle of the straight line between its ends: nowhere for a
- * straight one; up or down to the picker a way round goes by; for the web, as far as K.arc said.
+ * straight one; for a stretch of a strand between two pickers, as far as K.arcBow said; for the web, as K.arc did.
  */
 function pull( d, a, b ) {
-	if ( d.via ) {
-		const v = live.node.get( d.via );
-		return v ? { x: 0, y: v.y - ( a.y + b.y ) / 2 } : STRAIGHT;
-	}
 	return d.bow || STRAIGHT;
 }
 

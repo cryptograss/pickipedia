@@ -244,6 +244,8 @@ main {
 	cursor: pointer;
 }
 
+/* A strand of the rainbow between two pickers, one thing they share: thin ones lie close, so each is caught only on itself. */
+.ln.strand.fine .hit { stroke-width: 6; }
 .ln { transition: opacity 0.12s; }
 .ln.quiet { pointer-events: none; }
 .ln.hot { opacity: 1; }
