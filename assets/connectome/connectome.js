@@ -1647,7 +1647,7 @@ function songScene( v ) {
 	sc.web = lay.web;
 	sc.head = [ h( 'b', null, scd.song ), h( 'a', { class: 'play', href: HOME + '/rabbithole/?track=' + encodeURIComponent( v.cut ),
 		target: '_top', title: 'Play ' + scd.song + ' in Rabbithole', 'aria-label': 'Play ' + scd.song + ' in Rabbithole' }, playMark() ) ];
-	sc.sub = [ 'On ', h( 'b', null, cuts[ 0 ] ? cuts[ 0 ].title : 'no cut the sources name' ),
+	sc.sub = [ 'On ', h( 'b', null, cuts[ 0 ] ? cuts[ 0 ].title : 'no cut the sources name' ), cuts[ 0 ] ? K.byArtist( cuts[ 0 ] ) : '',
 		scd.number ? ', track ' + scd.number : '', scd.recorded ? ', recorded ' + scd.recorded : '', ' · ',
 		h( 'b', null, K.plural( ids.length, 'picker' ) ), ' the page puts on this cut' ];
 	return sc;
@@ -2315,7 +2315,7 @@ function fillPanel() {
 	} else if ( view.cut !== undefined && G.songcast[ view.cut ] ) {
 		const scd = G.songcast[ view.cut ];
 		const cut = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean )[ 0 ];
-		out.push( h( 'h2', null, scd.song ), h( 'p', { class: 'sub' }, cut ? 'on ' + cut.title
+		out.push( h( 'h2', null, scd.song ), h( 'p', { class: 'sub' }, cut ? 'on ' + K.recordBy( cut )
 			+ ( scd.number ? ', track ' + scd.number : '' ) + ( scd.recorded ? ', recorded ' + scd.recorded : '' )
 			: 'no cut the sources name' ) );
 		if ( scd.pickers.length ) {
@@ -2391,9 +2391,8 @@ function fillPanel() {
  * for steps), with its songs to play in Rabbithole and a box for a connection the graph doesn't know.
  * --------------------------------------------------------------------------------------------------------- */
 
-/** A challenge to find `to`, starting at `from` when it is given and leads there, else where challengeStart says.
- *  intro: a new game, so it opens on its landing (introSay) rather than straight on the graph. */
-function challenge( to, from, intro ) {
+/** A challenge to find `to`, starting at `from` when it is given and leads there, else where challengeStart says. */
+function challenge( to, from ) {
 	const d = from !== undefined && from !== to ? K.playedDistances( G, from )[ to ] : -1;
 	const start = d > 0 ? { from, par: d } : K.challengeStart( G, to );
 	document.body.classList.add( 'challenge' );
@@ -2408,35 +2407,23 @@ function challenge( to, from, intro ) {
 	trail.length = 0;
 	go( { a: start.from } );
 	gameSay();
-	if ( intro ) {
-		introSay();
-	} else {
-		introDone();
-	}
 }
 
-/**
- * The challenge's landing (Justin, #connectome, 19 Nov 2026, 03:46Z: "Instead of just popping you directly into the
- * chart, let's have it say"), over the graph until the reader starts: whom to find, the rule, and where they start.
- */
-function introSay() {
-	const to = P( GAME.to );
-	const who = to.page ? h( 'a', { href: pageUrl( to.name ), target: '_top', title: to.name + "'s page on PickiPedia" }, to.name ) : h( 'b', null, to.name );
-	$( 'intro' ).firstElementChild.replaceChildren( ...[
-		to.img ? h( 'img', { class: 'face', src: FACE + encodeURIComponent( to.img.replace( / /g, '_' ) ) + '&width=240', alt: '' } ) : null,
-		h( 'h2', { id: 'intro-h' }, 'Play The Six Degrees of Bluegrass Bacon.' ),
-		h( 'p', { class: 'rules' }, 'Find ', who, " in six jumps or less and you win. Fail, and you'll have to play the banjo. In an otherwise decent and upstanding band. Forever." ),
-		h( 'p', { class: 'from' }, 'You start at ', h( 'b', null, first( GAME.from ) ), '. A jump is from one picker to another who played with them.' ),
-		h( 'button', { type: 'button', class: 'go', onclick: introDone }, 'Start jumping' ) ].filter( Boolean ) );
-	$( 'intro' ).querySelectorAll( 'img.face' ).forEach( ( img ) => img.addEventListener( 'error', () => img.remove() ) );
-	$( 'intro' ).hidden = false;
-	document.body.classList.add( 'intro' );
-	$( 'intro' ).querySelector( 'button.go' ).focus();
+/** A challenge to find `to` from a track (the Oracle's): through it, whoever on it the reader picks is where they start.
+ *  The track opens as its song's view where there is one, the pickers round it (K.trackView). */
+function challengeDoor( to, piece ) {
+	document.body.classList.add( 'challenge' );
+	GAME = { to, door: { piece, view: K.trackView( G, piece ), name: K.called( G, M( piece ) ).name }, from: undefined, par: undefined,
+		jumps: 0, path: [], done: false, won: false };
+	trail.length = 0;
+	go( GAME.door.view );
+	gameSay();
 }
 
-function introDone() {
-	$( 'intro' ).hidden = true;
-	document.body.classList.remove( 'intro' );
+/** Whether a view is the track a challenge came in by. */
+function atDoor( v ) {
+	const d = GAME && GAME.door;
+	return !!d && v.a === undefined && ( d.view.cut !== undefined ? v.cut === d.view.cut : v.m === d.piece );
 }
 
 /**
@@ -2445,12 +2432,26 @@ function introDone() {
  * foot of the graph does (Justin, #connectome, 19 Nov 2026, 03:46Z). Six or fewer to the goal wins.
  */
 function gameStep() {
-	if ( GAME.done || view.a === undefined || view.b !== undefined || view.m !== undefined || view.way || view.walk ) {
+	if ( GAME.done ) {
+		return;
+	}
+	if ( atDoor( view ) ) {
+		GAME.path.length = 0;                                        // back at the track they came in by: no one picked yet
+		GAME.jumps = 0;
+		gameSay();
+		return;
+	}
+	if ( view.a === undefined || view.b !== undefined || view.m !== undefined || view.way || view.walk ) {
 		return;
 	}
 	const at = GAME.path.lastIndexOf( view.a );
 	if ( at >= 0 ) {
 		GAME.path.length = at + 1;                                   // back to where they'd been: the chain unwinds to there
+	} else if ( !GAME.path.length ) {
+		GAME.path.push( view.a );                                    // through the track: whoever they picked on it is the start
+		GAME.from = view.a;
+		const d = K.playedDistances( G, view.a )[ GAME.to ];
+		GAME.par = d >= 0 ? d : undefined;
 	} else {
 		const last = GAME.path[ GAME.path.length - 1 ];
 		const tie = G.adj[ last ].get( view.a );
@@ -2462,7 +2463,7 @@ function gameStep() {
 		}
 		GAME.path.push( view.a );
 	}
-	GAME.jumps = GAME.path.length - 1;
+	GAME.jumps = Math.max( 0, GAME.path.length - 1 );
 	if ( view.a === GAME.to ) {
 		GAME.done = true;
 		GAME.won = GAME.jumps <= SIX;
@@ -2480,7 +2481,7 @@ function gameStep() {
 
 /** Where a note from the box says the visitor was: the challenge and where it started. */
 function gameFrom() {
-	return GAME ? `the challenge to find ${ first( GAME.to ) }, from ${ first( GAME.from ) }` : '';
+	return GAME ? `the challenge to find ${ first( GAME.to ) }, from ${ GAME.from !== undefined ? first( GAME.from ) : GAME.door.name }` : '';
 }
 
 /** The game's bar: whom to find, the jumps, and, at the end, the ways on. */
@@ -2498,11 +2499,13 @@ function gameSay() {
 		$( 'after' ).replaceChildren();
 		return;
 	}
-	$( 'jumps' ).replaceChildren( ...( GAME.done ? ( GAME.won ?
-		[ h( 'b', null, `Found in ${ K.plural( GAME.jumps, 'jump' ) }: you win!` ), GAME.jumps <= GAME.par ? ' The fewest there are! 🎯' : ` It can be done in ${ GAME.par }.` ] :
+	const par = GAME.par !== undefined ? ` It can be done in ${ GAME.par }.` : '';
+	$( 'jumps' ).replaceChildren( ...( !GAME.path.length ? [ h( 'b', null, `Pick anyone on ${ GAME.door.name } to start` ), ', then six jumps or less' ] :
+		GAME.done ? ( GAME.won ?
+		[ h( 'b', null, `Found in ${ K.plural( GAME.jumps, 'jump' ) }: you win!` ), GAME.par !== undefined && GAME.jumps <= GAME.par ? ' The fewest there are! 🎯' : par ] :
 		[ h( 'b', null, `Found, in ${ GAME.jumps } jumps: more than six.` ), ' Grab a banjo. 🪕' ] ) :
 		GAME.jumps > SIX ? [ h( 'b', null, `${ GAME.jumps } jumps: past six.` ), " Back up, or it's the banjo. 🪕" ] :
-		[ h( 'b', null, `${ GAME.jumps } of ${ SIX } jumps` ), ` · from ${ first( GAME.from ) }, it can be done in ${ GAME.par }` ] ) );
+		[ h( 'b', null, `${ GAME.jumps } of ${ SIX } jumps` ), ` · from ${ first( GAME.from ) }` + ( GAME.par !== undefined ? `, it can be done in ${ GAME.par }` : '' ) ] ) );
 	const after = [];
 	if ( GAME.done ) {
 		after.push( h( 'button', { type: 'button', onclick: () => go( { way: true } ) }, 'Your way' ),
@@ -2514,6 +2517,10 @@ function gameSay() {
 		}
 	}
 	$( 'after' ).replaceChildren( ...after );
+	const restart = $( 'restart' );
+	restart.textContent = GAME.done ? 'New game' : 'New start';
+	restart.title = GAME.done ? 'Someone new to find, from somewhere new' : 'Start again from somewhere else';
+	restart.classList.toggle( 'again', GAME.done );
 	pathSay();
 }
 
@@ -2567,8 +2574,8 @@ function wayScene() {
 		placePills( sc, st.u, st.v, st.tie, ( pu.x + pv.x ) / 2 - span / 2, ( pu.x + pv.x ) / 2 + span / 2, ( pu.y + pv.y ) / 2, 1, 1, 200 + i * 90 );
 	} );
 	sc.chain = way;
-	sc.head = [ 'Your way to ', nameLink( GAME.to ) ];
-	sc.sub = [ h( 'b', null, K.plural( GAME.jumps, 'jump' ) ), ` from ${ first( GAME.from ) }; the fewest it can be done in is ${ K.plural( GAME.par, 'hop' ) }` ];
+	sc.head = [ 'Your way to ', nameLink( GAME.to ), ' ', h( 'button', { type: 'button', class: 'turn again', title: 'Someone new to find, from somewhere new', onclick: newGame }, 'New game' ) ];
+	sc.sub = [ h( 'b', null, K.plural( GAME.jumps, 'jump' ) ), ` from ${ first( GAME.from ) }` + ( GAME.par !== undefined ? `; the fewest it can be done in is ${ K.plural( GAME.par, 'hop' ) }` : '' ) ];
 	return sc;
 }
 
@@ -2771,6 +2778,7 @@ function stamp( step ) {
 }
 
 function go( v, quiet ) {
+	oracleDone();
 	const left = !!KEPT && !!view;
 	if ( left ) {
 		v = leaveKept( v );                  // a click that goes further goes into today's graph
@@ -2785,7 +2793,8 @@ function go( v, quiet ) {
 		trail.shift();
 	}
 	show();
-	stamp( !quiet && ( trail.length > 1 || left ) );
+	stamp( !quiet && ( trail.length > 1 || left || fromOracle ) );
+	fromOracle = false;
 	if ( booted && !quiet ) {
 		// The reader moved the graph, not Rabbithole's traverse: the player turns traverse off, and back on if
 		// this is the song on now (Justin, #connectome, 18 Nov 2026).
@@ -2809,6 +2818,167 @@ function back() {
 	history.back();                          // the browser's step, wherever the graph lives: popstate, below, shows it.
 	                                         // One history, one way back — the ← here and the browser's Back agree.
 }
+
+/* ------------------------------------------------------------------------------------------------------------
+ * The Oracle of Bluegrass Bacon: what /bacon opens on (Justin, #connectome, 19 Nov 2026, 07:10Z). A rocker of two,
+ * challenge (the six degrees of bluegrass bacon) and explore (find music and connections and pickers). In a
+ * challenge, whom to find, filled in from the address when it names someone, and "random" for someone else. Under
+ * it, four mini constellations at random, each a track of a Permanent studio release or a picker on one
+ * (K.oraclePick); a click on one begins there.
+ * --------------------------------------------------------------------------------------------------------- */
+
+const ORACLE = { mode: 'explore', goal: null };
+let fromOracle = false;          // the first step out of the Oracle is one of the browser's too, so its Back comes back here
+
+/** Open the Oracle: mode 'explore' or 'challenge'; goal, whom to find (someone at random when not given). */
+function oracleSay( mode, goal, note ) {
+	const box = $( 'oracle' );
+	ORACLE.mode = mode;
+	ORACLE.goal = mode !== 'challenge' ? null : ( goal !== undefined && goal !== null ? goal : K.oracleGoal( G ) );
+	GAME = null;
+	document.body.classList.toggle( 'challenge', mode === 'challenge' );
+	document.body.classList.add( 'intro' );
+	box.querySelectorAll( 'input[name="oracle-mode"]' ).forEach( ( r ) => {
+		r.checked = r.value === mode;
+	} );
+	box.querySelector( '.ask' ).hidden = mode !== 'challenge';
+	box.querySelector( '.note' ).textContent = note || '';
+	oracleGoalSay();
+	oracleMinis();
+	box.hidden = false;
+	gameSay();
+	pathSay();
+	document.title = 'The Oracle of Bluegrass Bacon';
+	history.replaceState( null, '', mode === 'challenge' && ORACLE.goal !== null ? challengeAddress( ORACLE.goal ) : '/bacon' );
+}
+
+function oracleDone() {
+	if ( $( 'oracle' ).hidden ) {
+		return;
+	}
+	$( 'oracle' ).hidden = true;
+	document.body.classList.remove( 'intro' );
+}
+
+/** Whom to find, in the box, and the rule, with their name a link to their page. */
+function oracleGoalSay() {
+	const box = $( 'oracle' );
+	const rules = box.querySelector( '.rules' );
+	if ( ORACLE.goal === null ) {
+		box.querySelector( '#oracle-goal' ).value = '';
+		rules.textContent = ORACLE.mode === 'challenge' ? 'Nobody here can be found from anywhere yet.' : '';
+		return;
+	}
+	const to = P( ORACLE.goal );
+	if ( document.activeElement !== box.querySelector( '#oracle-goal' ) ) {
+		box.querySelector( '#oracle-goal' ).value = to.name;
+	}
+	const who = to.page ? h( 'a', { href: pageUrl( to.name ), target: '_top', title: to.name + "'s page on PickiPedia" }, to.name ) : h( 'b', null, to.name );
+	rules.replaceChildren( 'Find ', who, " in six jumps or less and you win. Fail, and you'll have to play the banjo. In an otherwise decent and upstanding band. Forever." );
+}
+
+/** The four to start from, drawn small. */
+function oracleMinis() {
+	const box = $( 'oracle' );
+	const picked = K.oraclePick( G, ORACLE.mode === 'challenge' ? ORACLE.goal : undefined );
+	box.querySelector( '.pick' ).textContent = picked.length ? 'Pick where to start:' :
+		'Nowhere here leads to them yet. Try someone else.';
+	box.querySelector( '.minis' ).replaceChildren( ...picked.map( miniEl ) );
+}
+
+/** One mini constellation: a track and who's on it, or a picker and who they've played with most, as the graph draws them. */
+function miniEl( it ) {
+	const W = 200, H = 150, C = { x: 100, y: 70 };
+	const svg = s( 'svg', { class: 'mini-g', viewBox: `0 0 ${ W } ${ H }`, 'aria-hidden': 'true' } );
+	const around = ( it.kind === 'track' ? M( it.piece ).cast.slice() : K.company( G, it.id ).map( ( c ) => c.id ) ).slice( 0, 6 );
+	const pts = around.map( ( id, i ) => {
+		const a = -Math.PI / 2 + ( i + 0.5 ) * 2 * Math.PI / around.length;
+		return { id, x: C.x + 62 * Math.cos( a ), y: C.y + 46 * Math.sin( a ), up: Math.sin( a ) < -0.3 };
+	} );
+	for ( const p of pts ) {
+		svg.appendChild( s( 'line', { class: 'glow', x1: C.x, y1: C.y, x2: p.x, y2: p.y, 'stroke-width': 5 } ) );
+		svg.appendChild( s( 'line', { class: 'core t2', x1: C.x, y1: C.y, x2: p.x, y2: p.y, 'stroke-width': 1.4 } ) );
+	}
+	const face = ( g, file, r ) => {
+		if ( !file ) {
+			return false;
+		}
+		const img = s( 'image', { class: 'face', href: FACE + encodeURIComponent( file.replace( / /g, '_' ) ) + '&width=90', x: -r, y: -r, width: 2 * r, height: 2 * r,
+			preserveAspectRatio: 'xMidYMid slice', 'clip-path': `circle(${ r }px at ${ r }px ${ r }px)` } );
+		img.addEventListener( 'error', () => img.remove() );
+		g.appendChild( img );
+		g.appendChild( s( 'circle', { class: 'ring rim', r } ) );
+		return true;
+	};
+	for ( const p of pts ) {
+		const g = s( 'g', { class: 'pk named', transform: `translate(${ p.x },${ p.y })` } );
+		g.appendChild( s( 'circle', { class: 'ring', r: 8.5, 'stroke-width': 1.5 } ) );
+		face( g, P( p.id ).img, 8.5 );
+		// Each name over or under its own picker, inside the card, so no name runs into the next card's.
+		g.appendChild( s( 'text', { class: 'mini-name', x: 0, y: p.up ? -12.5 : 19.5, 'text-anchor': 'middle' }, K.clip( first( p.id ), 13 ) ) );
+		svg.appendChild( g );
+	}
+	const mid = s( 'g', { class: it.kind === 'track' ? 'pk mu subject t2' : 'pk subject', transform: `translate(${ C.x },${ C.y })` } );
+	mid.appendChild( s( 'circle', { class: 'ring', r: 20 } ) );
+	if ( it.kind === 'track' ) {
+		if ( !cover( mid, G.music[ M( it.piece ).m ].art, 20, () => {} ) ) {
+			const gl = glyph( 'track' );
+			gl.setAttribute( 'transform', 'scale(1.5)' );
+			mid.appendChild( gl );
+		}
+	} else if ( !face( mid, P( it.id ).img, 20 ) ) {
+		mid.appendChild( rabbit( 0.8 ) );
+	}
+	svg.appendChild( mid );
+	const c = it.kind === 'track' ? K.called( G, M( it.piece ) ) : null;
+	const name = c ? c.name : first( it.id );
+	const sub = c ? 'a track on ' + c.on : ( P( it.id ).inst || 'a picker' ) + ( around.length ? ', with ' + K.plural( K.company( G, it.id ).length, 'picker' ) : '' );
+	return h( 'button', { type: 'button', class: 'mini ' + it.kind, title: ( ORACLE.mode === 'challenge' ? 'Start the challenge from ' : 'Start at ' ) + name,
+		onclick: () => oracleBegin( it ) }, svg, h( 'b', null, name ), h( 'span', null, sub ) );
+}
+
+/** Begin where the reader picked: in a challenge, the game from there; else the graph there. */
+function oracleBegin( it ) {
+	const goal = ORACLE.mode === 'challenge' ? ORACLE.goal : null;
+	fromOracle = true;
+	if ( goal !== null ) {
+		if ( it.kind === 'picker' ) {
+			challenge( goal, it.id );
+		} else {
+			challengeDoor( goal, it.piece );
+		}
+		return;
+	}
+	document.body.classList.remove( 'challenge' );
+	trail.length = 0;
+	go( it.kind === 'picker' ? { a: it.id } : K.trackView( G, it.piece ) );
+}
+
+$( 'oracle' ).querySelectorAll( 'input[name="oracle-mode"]' ).forEach( ( r ) => r.addEventListener( 'change', () => {
+	if ( G && r.checked ) {
+		oracleSay( r.value, r.value === 'challenge' ? ORACLE.goal || undefined : undefined );
+	}
+} ) );
+$( 'oracle' ).querySelector( '.random' ).addEventListener( 'click', () => {
+	if ( !G ) {
+		return;
+	}
+	let to = K.oracleGoal( G );
+	for ( let i = 0; i < 6 && to === ORACLE.goal; i++ ) {
+		to = K.oracleGoal( G );                                      // someone other than who it was
+	}
+	oracleSay( 'challenge', to );
+} );
+$( 'oracle-goal' ).addEventListener( 'change', () => {
+	const to = G ? K.find( G, $( 'oracle-goal' ).value ) : null;
+	if ( to === null ) {
+		$( 'oracle' ).querySelector( '.note' ).textContent = `The connectome doesn't know “${ $( 'oracle-goal' ).value.trim() }” yet.`;
+		return;
+	}
+	if ( to !== ORACLE.goal ) {
+		oracleSay( 'challenge', to );
+	}
+} );
 
 /* ------------------------------------------------------------------------------------------------------------
  * The way you came, at the foot of the graph (Justin, #connectome, 19 Nov 2026, 03:46Z: "at the bottom, let's keep
@@ -2841,7 +3011,8 @@ function stepOf( v ) {
 /** The steps to draw: the challenge's chain, or the places the reader has been, each with where it is in the trail. */
 function pathSteps() {
 	if ( GAME ) {
-		return GAME.path.map( ( id, i ) => ( { key: 'j' + i + '.' + id, kind: 'picker', id, label: first( id ), to: { a: id } } ) );
+		const door = GAME.door ? [ { key: 'door' + GAME.door.piece, kind: 'music', label: GAME.door.name, to: GAME.door.view, door: true } ] : [];
+		return door.concat( GAME.path.map( ( id, j ) => ( { key: 'j' + j + '.' + id, kind: 'picker', id, label: first( id ), to: { a: id }, jump: j } ) ) );
 	}
 	const out = [];
 	trail.forEach( ( v, ti ) => {
@@ -2860,6 +3031,12 @@ function pathSteps() {
 
 /** Back to a step: the chain unwinds to it, or the trail does, as the crumbs did. */
 function pathBack( st ) {
+	if ( GAME && st.door ) {
+		if ( !atDoor( view ) ) {
+			go( st.to );                                             // back to the track they came in by
+		}
+		return;
+	}
 	if ( GAME ) {
 		if ( st.id !== view.a || view.b !== undefined || view.m !== undefined ) {
 			go( { a: st.id } );
@@ -2879,7 +3056,8 @@ function stepEl( st, i ) {
 	if ( face ) {
 		face.addEventListener( 'error', () => face.replaceWith( h( 'span', { class: 'mark picker', 'aria-hidden': 'true' } ) ) );
 	}
-	const hop = i > 0 ? h( 'span', { class: 'hop' + ( GAME && i > SIX ? ' over' : '' ), 'aria-hidden': 'true' }, GAME ? h( 'i', null, String( i ) ) : null ) : null;
+	const n = GAME ? st.jump : undefined;                           // a jump's number; none into the track's first picker
+	const hop = i > 0 ? h( 'span', { class: 'hop' + ( n > SIX ? ' over' : '' ), 'aria-hidden': 'true' }, n > 0 ? h( 'i', null, String( n ) ) : null ) : null;
 	return h( 'li', { class: 'step ' + st.kind }, hop,
 		h( 'button', { type: 'button', title: 'Back to ' + st.label, onclick: () => pathBack( st ) },
 			face || h( 'span', { class: 'mark ' + st.kind, 'aria-hidden': 'true' } ), h( 'span', { class: 'nm' }, st.label ) ) );
@@ -3174,6 +3352,13 @@ window.addEventListener( 'popstate', () => {
 	}
 	const v = G && parse( new URLSearchParams( location.search ) );
 	if ( !v ) {
+		const goal = G ? K.challengeOf( location.pathname, location.search ) : null;
+		if ( goal !== null ) {                                       // back to the Oracle, in a challenge
+			const to = goal ? K.find( G, goal ) : null;
+			oracleSay( 'challenge', to !== null ? to : undefined );
+		} else if ( G && /^\/bacon\/?$/.test( location.pathname ) && !location.search ) {
+			oracleSay( 'explore' );                                  // back to the Oracle
+		}
 		return;
 	}
 	if ( trail.length > 1 && same( v, trail[ trail.length - 2 ] ) ) {   // a step back: as it was shown before
@@ -3282,7 +3467,7 @@ function aFar( d ) {
 function aSong( d ) {
 	const w = { kind: 'a song', title: d.title, tipTitle: d.title + ', a song', lines: [], hint: 'click a picker round it: go to them', acts: [] };
 	if ( d.cuts && d.cuts.length ) {
-		w.lines.push( 'on ' + d.cuts.map( ( c ) => c.title ).join( ', ' ) + ( d.cuts[ 0 ].date ? ', ' + d.cuts[ 0 ].date : '' ) );
+		w.lines.push( 'on ' + d.cuts.map( ( c ) => K.recordBy( c ) ).join( ', ' ) + ( d.cuts[ 0 ].date ? ', ' + d.cuts[ 0 ].date : '' ) );
 	} else {
 		w.lines.push( 'no cut the sources name' );
 	}
@@ -3349,6 +3534,9 @@ function aPicker( d ) {
 		if ( id === view.a ) {
 			w.lines.push( P( id ).page ? '' : 'no page yet' );
 			w.hint = 'click anyone around them: go to them';
+		} else if ( !d.tie ) {                                       // a step on the way a challenge was found by: no one in the middle to share with
+			w.lines.push( P( id ).page ? '' : 'no page yet' );
+			w.acts.push( goTo );
 		} else {
 			const top = K.naming( G, d.tie.ev[ 0 ] );
 			const web = webFrom( ( l ) => ( l.u === id ? l.v : ( l.v === id ? l.u : undefined ) ) );
@@ -3840,14 +4028,32 @@ $( 'goal' ).addEventListener( 'change', () => {
 	if ( to === null || ( GAME && to === GAME.to ) ) {
 		return;
 	}
-	history.replaceState( null, '', challengeAddress( to ) );
-	challenge( to, undefined, true );
+	oracleSay( 'challenge', to );
 } );
 $( 'restart' ).addEventListener( 'click', () => {
 	if ( G && GAME ) {
-		challenge( GAME.to );
+		if ( GAME.done ) {
+			newGame();
+		} else {
+			oracleSay( 'challenge', GAME.to );                       // the same one to find, from somewhere new: pick where
+		}
 	}
 } );
+
+/**
+ * A new game: someone new to find, from somewhere new, on its landing (Justin, #connectome, 19 Nov 2026, 05:44Z:
+ * "When you get to the end, it needs to be easy to start a new game with a new goal and new starting place").
+ */
+function newGame() {
+	let to = K.oracleGoal( G );
+	for ( let i = 0; i < 6 && GAME && to === GAME.to; i++ ) {
+		to = K.oracleGoal( G );                                      // someone other than the one just found, when there is
+	}
+	if ( to === null ) {
+		return;
+	}
+	oracleSay( 'challenge', to );
+}
 
 let sized = 0;
 new ResizeObserver( () => {
@@ -3906,13 +4112,15 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	const goal = K.challengeOf( location.pathname, location.search );
 	if ( goal !== null ) {
 		// No one named (/bacon/challenge): someone at random, and the address names them, so a reload or a link keeps them.
-		const to = goal === '' ? K.challengeGoal( G ) : K.find( G, goal );
+		const to = goal === '' ? K.oracleGoal( G ) : K.find( G, goal );
 		if ( to !== null ) {
-			if ( goal === '' ) {
-				history.replaceState( null, '', challengeAddress( to ) );
-			}
 			const here = K.find( G, new URLSearchParams( location.search ).get( 'p' ) );     // a reload mid-game starts from there
-			challenge( to, here !== null ? here : undefined, here === null );
+			if ( here !== null ) {
+				challenge( to, here );
+			} else {
+				oracleSay( 'challenge', to );
+			}
+			booted = true;
 			return;
 		}
 		lost = goal ? `The connectome doesn't know “${ goal }” yet, so there's no one to find. Here is someone it knows.` :
@@ -3923,6 +4131,8 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	const v = parse( q );
 	if ( v ) {
 		go( v );
+	} else if ( !asked && !HOST && !MINI && !q.get( 'cut' ) && !q.get( 'playing' ) && !lost ) {
+		oracleSay( 'explore' );                                      // nothing asked for: the Oracle
 	} else {
 		if ( q.get( 'cut' ) || q.get( 'playing' ) ) {
 			tell( { missing: location.search } );                    // Rabbithole's traverse asked for a song the graph doesn't hold

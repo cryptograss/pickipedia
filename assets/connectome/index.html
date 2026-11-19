@@ -53,7 +53,7 @@
 	<a id="faqlink" href="/wiki/Cryptograss:Bacon_graphs/FAQ" target="_top" aria-controls="faq" aria-expanded="false" title="Questions and answers about the bacon graph">FAQ</a>
 </header>
 <div id="game" class="bar game" role="region" aria-label="The challenge" hidden>
-	<label for="goal">Find your way to:</label>
+	<label for="goal">Find a path to:</label>
 	<input id="goal" list="names" autocomplete="off" spellcheck="false">
 	<span id="jumps" role="status"></span>
 	<span id="after"></span>
@@ -109,7 +109,20 @@
 	</section>
 	<button type="button" id="drawer" aria-controls="panel" aria-expanded="true" title="Hide the list"><span class="chev" aria-hidden="true">›</span><span class="word">Hide the list</span></button>
 	<aside id="panel" aria-label="What the sources say"></aside>
-	<section id="intro" role="dialog" aria-labelledby="intro-h" hidden><div class="card"></div></section>
+	<section id="oracle" aria-labelledby="oracle-h" hidden><div class="card">
+		<h1 id="oracle-h">The Oracle of Bluegrass Bacon</h1>
+		<div class="rocker" role="radiogroup" aria-label="What to do">
+			<label><input type="radio" name="oracle-mode" value="challenge"><b>challenge</b><span>the six degrees of bluegrass bacon</span></label>
+			<label><input type="radio" name="oracle-mode" value="explore"><b>explore</b><span>find music and connections and pickers</span></label>
+		</div>
+		<div class="ask" hidden>
+			<div class="goal-row"><label for="oracle-goal">Find a path to:</label><input id="oracle-goal" list="names" autocomplete="off" spellcheck="false"><button type="button" class="random" title="Someone else to find">random</button></div>
+			<p class="rules"></p>
+		</div>
+		<p class="note" role="status"></p>
+		<p class="pick"></p>
+		<div class="minis"></div>
+	</div></section>
 </main>
 <datalist id="names"></datalist>
 <script type="module" src="/assets/connectome/connectome.js"></script>
