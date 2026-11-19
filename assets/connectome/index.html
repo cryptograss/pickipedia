@@ -50,6 +50,7 @@
 	<label><span class="vh">Another picker</span><input id="pb" list="names" autocomplete="off" spellcheck="false" placeholder="connect to…"></label>
 	<nav id="crumbs" aria-label="Where you have been"></nav>
 	<button type="button" id="share" title="Keep this graph as it is now, and copy a link to it" aria-label="Keep this graph, and copy its link" hidden>🔗</button>
+	<a id="faqlink" href="/wiki/Cryptograss:Bacon_graphs/FAQ" target="_top" aria-controls="faq" aria-expanded="false" title="Questions and answers about the bacon graph">FAQ</a>
 </header>
 <div id="game" class="bar game" role="region" aria-label="The challenge" hidden>
 	<label for="goal">Find your way to:</label>
@@ -67,6 +68,11 @@
 		<svg id="g" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="The connectome"></svg>
 		<div id="tip" role="status" hidden></div>
 		<div id="sheet" role="dialog" aria-label="What you touched" hidden></div>
+		<section id="faq" role="dialog" aria-labelledby="faq-h" hidden>
+			<div class="faq-top"><h2 id="faq-h">Questions and answers</h2><button type="button" class="x" aria-label="Back to the graph" title="Back to the graph">×</button></div>
+			<div class="faq-body"></div>
+			<p class="faq-foot"><a href="/wiki/Cryptograss:Bacon_graphs/FAQ" target="_top">These answers live on PickiPedia ↗</a></p>
+		</section>
 		<div id="confetti" aria-hidden="true" hidden></div>
 		<div id="wait">Loading the connectome…</div>
 		<footer id="legend">
