@@ -49,7 +49,6 @@
 	<label><span class="vh">A picker, a song, a show or a record</span><input id="pa" list="names" autocomplete="off" spellcheck="false" placeholder="a picker, a song, a show…"></label>
 	<span class="join" aria-hidden="true">⟷</span>
 	<label><span class="vh">Another picker</span><input id="pb" list="names" autocomplete="off" spellcheck="false" placeholder="connect to…"></label>
-	<nav id="crumbs" aria-label="Where you have been"></nav>
 	<button type="button" id="share" title="Keep this graph as it is now, and copy a link to it" aria-label="Keep this graph, and copy its link" hidden>🔗</button>
 	<a id="faqlink" href="/wiki/Cryptograss:Bacon_graphs/FAQ" target="_top" aria-controls="faq" aria-expanded="false" title="Questions and answers about the bacon graph">FAQ</a>
 </header>
@@ -106,9 +105,11 @@
 				<svg width="14" height="12" aria-hidden="true"><circle class="dot hollow" cx="7" cy="6" r="4"/></svg> no page yet</span>
 			<span class="lg more">thicker, bigger = more together</span>
 		</footer>
+		<nav id="path" aria-label="The way you came" hidden><ol></ol></nav>
 	</section>
 	<button type="button" id="drawer" aria-controls="panel" aria-expanded="true" title="Hide the list"><span class="chev" aria-hidden="true">›</span><span class="word">Hide the list</span></button>
 	<aside id="panel" aria-label="What the sources say"></aside>
+	<section id="intro" role="dialog" aria-labelledby="intro-h" hidden><div class="card"></div></section>
 </main>
 <datalist id="names"></datalist>
 <script type="module" src="/assets/connectome/connectome.js"></script>

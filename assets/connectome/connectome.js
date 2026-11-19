@@ -75,7 +75,8 @@ const alone = window.parent === window;   // a page of its own, not the graph ov
 const HOST = new URLSearchParams( location.search ).get( 'host' ) === 'rabbithole' && !alone ? 'rabbithole' : '';
 let MINI = new URLSearchParams( location.search ).get( 'walk' ) === 'mini';
 const trail = [];
-let GAME = null;                 // the challenge in play: { to, from, par, jumps, path, done } (challenge(), below)
+let GAME = null;                 // the challenge in play: { to, from, par, jumps, path, done, won } (challenge(), below)
+const SIX = 6;                   // the jumps a challenge is won in, at most (Justin, #connectome, 19 Nov 2026)
 
 /* ------------------------------------------------------------------------------------------------------------
  * Small tools
@@ -2390,8 +2391,9 @@ function fillPanel() {
  * for steps), with its songs to play in Rabbithole and a box for a connection the graph doesn't know.
  * --------------------------------------------------------------------------------------------------------- */
 
-/** A challenge to find `to`, starting at `from` when it is given and leads there, else where challengeStart says. */
-function challenge( to, from ) {
+/** A challenge to find `to`, starting at `from` when it is given and leads there, else where challengeStart says.
+ *  intro: a new game, so it opens on its landing (introSay) rather than straight on the graph. */
+function challenge( to, from, intro ) {
 	const d = from !== undefined && from !== to ? K.playedDistances( G, from )[ to ] : -1;
 	const start = d > 0 ? { from, par: d } : K.challengeStart( G, to );
 	document.body.classList.add( 'challenge' );
@@ -2402,33 +2404,71 @@ function challenge( to, from ) {
 		gameSay();
 		return;
 	}
-	GAME = { to, from: start.from, par: start.par, jumps: 0, path: [ start.from ], done: false };
+	GAME = { to, from: start.from, par: start.par, jumps: 0, path: [ start.from ], done: false, won: false };
 	trail.length = 0;
 	go( { a: start.from } );
 	gameSay();
+	if ( intro ) {
+		introSay();
+	} else {
+		introDone();
+	}
 }
 
-/** After each step: a new picker in the middle is a jump, and the goal is the end of it. */
+/**
+ * The challenge's landing (Justin, #connectome, 19 Nov 2026, 03:46Z: "Instead of just popping you directly into the
+ * chart, let's have it say"), over the graph until the reader starts: whom to find, the rule, and where they start.
+ */
+function introSay() {
+	const to = P( GAME.to );
+	const who = to.page ? h( 'a', { href: pageUrl( to.name ), target: '_top', title: to.name + "'s page on PickiPedia" }, to.name ) : h( 'b', null, to.name );
+	$( 'intro' ).firstElementChild.replaceChildren( ...[
+		to.img ? h( 'img', { class: 'face', src: FACE + encodeURIComponent( to.img.replace( / /g, '_' ) ) + '&width=240', alt: '' } ) : null,
+		h( 'h2', { id: 'intro-h' }, 'Play The Six Degrees of Bluegrass Bacon.' ),
+		h( 'p', { class: 'rules' }, 'Find ', who, " in six jumps or less and you win. Fail, and you'll have to play the banjo. In an otherwise decent and upstanding band. Forever." ),
+		h( 'p', { class: 'from' }, 'You start at ', h( 'b', null, first( GAME.from ) ), '. A jump is from one picker to another who played with them.' ),
+		h( 'button', { type: 'button', class: 'go', onclick: introDone }, 'Start jumping' ) ].filter( Boolean ) );
+	$( 'intro' ).querySelectorAll( 'img.face' ).forEach( ( img ) => img.addEventListener( 'error', () => img.remove() ) );
+	$( 'intro' ).hidden = false;
+	document.body.classList.add( 'intro' );
+	$( 'intro' ).querySelector( 'button.go' ).focus();
+}
+
+function introDone() {
+	$( 'intro' ).hidden = true;
+	document.body.classList.remove( 'intro' );
+}
+
+/**
+ * After each step: a new picker in the middle is a jump, and the goal is the end of it. The jumps are the chain the
+ * reader is on, from the start to here: back to a picker on it, and the chain unwinds to there, as the way at the
+ * foot of the graph does (Justin, #connectome, 19 Nov 2026, 03:46Z). Six or fewer to the goal wins.
+ */
 function gameStep() {
 	if ( GAME.done || view.a === undefined || view.b !== undefined || view.m !== undefined || view.way || view.walk ) {
 		return;
 	}
-	const last = GAME.path[ GAME.path.length - 1 ];
-	if ( view.a !== last ) {
+	const at = GAME.path.lastIndexOf( view.a );
+	if ( at >= 0 ) {
+		GAME.path.length = at + 1;                                   // back to where they'd been: the chain unwinds to there
+	} else {
+		const last = GAME.path[ GAME.path.length - 1 ];
 		const tie = G.adj[ last ].get( view.a );
 		if ( !( tie && tie.played ) ) {                              // a step further out: two jumps, by way of the one between
 			const mid = K.bridgeOf( G, last, view.a, view.keep || [] );
 			if ( mid !== undefined ) {
 				GAME.path.push( mid );
-				GAME.jumps++;
 			}
 		}
 		GAME.path.push( view.a );
-		GAME.jumps++;
 	}
+	GAME.jumps = GAME.path.length - 1;
 	if ( view.a === GAME.to ) {
 		GAME.done = true;
-		confetti();
+		GAME.won = GAME.jumps <= SIX;
+		if ( GAME.won ) {
+			confetti();
+		}
 		setTimeout( () => {                                         // a moment to see who they found, then the way there
 			if ( GAME && GAME.done && view.a === GAME.to ) {
 				go( { way: true } );
@@ -2458,9 +2498,11 @@ function gameSay() {
 		$( 'after' ).replaceChildren();
 		return;
 	}
-	$( 'jumps' ).replaceChildren( ...( GAME.done ?
-		[ h( 'b', null, `Found in ${ K.plural( GAME.jumps, 'jump' ) }` ), GAME.jumps <= GAME.par ? ' · the fewest there are! 🎯' : ` · it can be done in ${ GAME.par }` ] :
-		[ h( 'b', null, K.plural( GAME.jumps, 'jump' ) ), ` · from ${ first( GAME.from ) }, it can be done in ${ GAME.par }` ] ) );
+	$( 'jumps' ).replaceChildren( ...( GAME.done ? ( GAME.won ?
+		[ h( 'b', null, `Found in ${ K.plural( GAME.jumps, 'jump' ) }: you win!` ), GAME.jumps <= GAME.par ? ' The fewest there are! 🎯' : ` It can be done in ${ GAME.par }.` ] :
+		[ h( 'b', null, `Found, in ${ GAME.jumps } jumps: more than six.` ), ' Grab a banjo. 🪕' ] ) :
+		GAME.jumps > SIX ? [ h( 'b', null, `${ GAME.jumps } jumps: past six.` ), " Back up, or it's the banjo. 🪕" ] :
+		[ h( 'b', null, `${ GAME.jumps } of ${ SIX } jumps` ), ` · from ${ first( GAME.from ) }, it can be done in ${ GAME.par }` ] ) );
 	const after = [];
 	if ( GAME.done ) {
 		after.push( h( 'button', { type: 'button', onclick: () => go( { way: true } ) }, 'Your way' ),
@@ -2472,6 +2514,7 @@ function gameSay() {
 		}
 	}
 	$( 'after' ).replaceChildren( ...after );
+	pathSay();
 }
 
 /** A little confetti, once, over the graph; none for a reader who has asked for less motion. */
@@ -2676,11 +2719,7 @@ function show( quick, again ) {
 	$( 'pa' ).value = view.way || view.walk || view.pg !== undefined || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
 	$( 'pb' ).value = view.way || view.walk || view.pg !== undefined || view.m !== undefined || view.b === undefined ? '' : first( view.b );
 	$( 'back' ).hidden = trail.length < 2;
-	$( 'crumbs' ).replaceChildren( ...trail.slice( -4, -1 ).flatMap( ( v, i, arr ) => [
-		h( 'button', { type: 'button', onclick: () => {
-			trail.splice( trail.length - ( arr.length - i ) - 1 );     // back to there: it, and all since, come off
-			go( v.way ? { way: true } : v.walk ? { walk: true } : v.pg !== undefined ? { pg: v.pg } : v.m !== undefined ? { m: v.m } : ( v.b === undefined ? { a: v.a } : { a: v.a, b: v.b } ) );
-		} }, label( v ) ), ' › ' ] ) );
+	pathSay();
 	document.title = label( view ) + ' · the connectome';
 	closeSheet();
 	hush();
@@ -2769,6 +2808,129 @@ function back() {
 	}
 	history.back();                          // the browser's step, wherever the graph lives: popstate, below, shows it.
 	                                         // One history, one way back — the ← here and the browser's Back agree.
+}
+
+/* ------------------------------------------------------------------------------------------------------------
+ * The way you came, at the foot of the graph (Justin, #connectome, 19 Nov 2026, 03:46Z: "at the bottom, let's keep
+ * a flow-chart style graph going of where you've jumped, so that when you go back it kinda unwinds ... In fact -
+ * let's do that everywhere, even outside challenge mode!"). Each place is a step, joined to the one before by an
+ * arrow, the newest at the right; a step back takes the last ones off, the last first; a click on one goes back
+ * there. In a challenge the steps are the chain of jumps the reader is on, each arrow numbered, and the goal waits
+ * at the end. Not in Rabbithole's frames, where the player moves the graph.
+ * --------------------------------------------------------------------------------------------------------- */
+
+const drawnPath = [];            // the steps drawn, in order: { key, li }
+
+/** A view as a step on the way: its key (one place twice in a row is one step), what it's called, the way back. */
+function stepOf( v ) {
+	if ( v.pg !== undefined ) {
+		return { key: 'g' + v.pg, kind: 'page', label: v.pg, to: { pg: v.pg } };
+	}
+	if ( v.cut !== undefined || v.s !== undefined ) {
+		return { key: 'c' + ( v.cut !== undefined ? v.cut : v.s ), kind: 'music', label: label( v ), to: v.cut !== undefined ? { cut: v.cut, s: v.s } : { s: v.s } };
+	}
+	if ( v.m !== undefined ) {
+		return { key: 'm' + v.m, kind: 'music', label: label( v ), to: { m: v.m } };
+	}
+	if ( v.b !== undefined ) {
+		return { key: 'p' + v.a + '-' + v.b, kind: 'pair', label: first( v.a ) + ' ⟷ ' + first( v.b ), to: { a: v.a, b: v.b } };
+	}
+	return { key: 'p' + v.a, kind: 'picker', id: v.a, label: first( v.a ), to: { a: v.a } };
+}
+
+/** The steps to draw: the challenge's chain, or the places the reader has been, each with where it is in the trail. */
+function pathSteps() {
+	if ( GAME ) {
+		return GAME.path.map( ( id, i ) => ( { key: 'j' + i + '.' + id, kind: 'picker', id, label: first( id ), to: { a: id } } ) );
+	}
+	const out = [];
+	trail.forEach( ( v, ti ) => {
+		if ( v.walk || v.way || v.playing !== undefined || ( v.a === undefined && v.m === undefined && v.cut === undefined && v.s === undefined && v.pg === undefined ) ) {
+			return;
+		}
+		const st = Object.assign( stepOf( v ), { ti } );
+		if ( out.length && out[ out.length - 1 ].key === st.key ) {
+			out[ out.length - 1 ] = st;                              // another turn of the same place: still one step
+		} else {
+			out.push( st );
+		}
+	} );
+	return out;
+}
+
+/** Back to a step: the chain unwinds to it, or the trail does, as the crumbs did. */
+function pathBack( st ) {
+	if ( GAME ) {
+		if ( st.id !== view.a || view.b !== undefined || view.m !== undefined ) {
+			go( { a: st.id } );
+		}
+		return;
+	}
+	if ( st.ti >= trail.length - 1 ) {
+		return;
+	}
+	trail.splice( st.ti );                                       // it, and all since, come off; go() puts it back on
+	go( st.to );
+}
+
+function stepEl( st, i ) {
+	const p = st.kind === 'picker' ? P( st.id ) : null;
+	const face = p && p.img ? h( 'img', { class: 'face', src: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=60', alt: '' } ) : null;
+	if ( face ) {
+		face.addEventListener( 'error', () => face.replaceWith( h( 'span', { class: 'mark picker', 'aria-hidden': 'true' } ) ) );
+	}
+	const hop = i > 0 ? h( 'span', { class: 'hop' + ( GAME && i > SIX ? ' over' : '' ), 'aria-hidden': 'true' }, GAME ? h( 'i', null, String( i ) ) : null ) : null;
+	return h( 'li', { class: 'step ' + st.kind }, hop,
+		h( 'button', { type: 'button', title: 'Back to ' + st.label, onclick: () => pathBack( st ) },
+			face || h( 'span', { class: 'mark ' + st.kind, 'aria-hidden': 'true' } ), h( 'span', { class: 'nm' }, st.label ) ) );
+}
+
+function pathSay() {
+	const nav = $( 'path' ), ol = nav.firstElementChild;
+	const steps = !view || !G || HOST || view.way || view.walk ? [] : pathSteps();
+	let keep = 0;
+	while ( keep < steps.length && keep < drawnPath.length && steps[ keep ].key === drawnPath[ keep ].key ) {
+		keep++;
+	}
+	// What's gone comes off the end, the last first: the way unwinds.
+	drawnPath.splice( keep ).reverse().forEach( ( x, i ) => {
+		x.li.classList.add( 'going' );
+		x.li.style.transitionDelay = ( still ? 0 : i * 60 ) + 'ms';
+		setTimeout( () => x.li.remove(), still ? 0 : 330 + i * 60 );
+	} );
+	const fresh = steps.slice( keep ).map( ( st, i ) => ( { key: st.key, li: stepEl( st, keep + i ) } ) );
+	let at = keep ? drawnPath[ keep - 1 ].li : null;
+	fresh.forEach( ( x, i ) => {
+		x.li.classList.add( 'coming' );
+		x.li.style.transitionDelay = ( still ? 0 : i * 60 ) + 'ms';
+		if ( at ) {
+			at.after( x.li );
+		} else {
+			ol.prepend( x.li );
+		}
+		at = x.li;
+	} );
+	drawnPath.push( ...fresh );
+	drawnPath.forEach( ( x, i ) => x.li.classList.toggle( 'here', i === drawnPath.length - 1 ) );
+	// In a challenge, whom they're finding, at the end of the way, as far off as they still are.
+	const ghost = ol.querySelector( ':scope > li.goal' );
+	if ( ghost ) {
+		ghost.remove();
+	}
+	if ( GAME && !GAME.done && drawnPath.length ) {
+		ol.append( h( 'li', { class: 'goal' }, h( 'span', { class: 'hop far', 'aria-hidden': 'true' } ),
+			h( 'span', { class: 'target' }, '🎯 ', first( GAME.to ) ) ) );
+	}
+	nav.hidden = steps.length < ( GAME ? 1 : 2 );                 // outside a challenge, one place is no way yet
+	stage.style.setProperty( '--path', nav.hidden ? '0px' : nav.offsetHeight + 'px' );   // the QR code sits above it too
+	if ( fresh.length ) {
+		void ol.offsetWidth;                                     // laid out closed, so they open
+		fresh.forEach( ( x ) => x.li.classList.remove( 'coming' ) );
+	}
+	if ( !nav.hidden ) {                                         // the newest in sight, once the new ones have opened
+		nav.scrollTo( { left: nav.scrollWidth, behavior: still ? 'auto' : 'smooth' } );
+		setTimeout( () => nav.scrollTo( { left: nav.scrollWidth, behavior: still ? 'auto' : 'smooth' } ), still ? 0 : 380 );
+	}
 }
 
 /* ------------------------------------------------------------------------------------------------------------
@@ -3023,6 +3185,9 @@ window.addEventListener( 'popstate', () => {
 	}
 	sel = { picker: null };
 	show();
+	if ( GAME ) {
+		gameStep();                                                  // back in a challenge: the chain unwinds with it
+	}
 } );
 
 /* ------------------------------------------------------------------------------------------------------------
@@ -3676,7 +3841,7 @@ $( 'goal' ).addEventListener( 'change', () => {
 		return;
 	}
 	history.replaceState( null, '', challengeAddress( to ) );
-	challenge( to );
+	challenge( to, undefined, true );
 } );
 $( 'restart' ).addEventListener( 'click', () => {
 	if ( G && GAME ) {
@@ -3747,7 +3912,7 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 				history.replaceState( null, '', challengeAddress( to ) );
 			}
 			const here = K.find( G, new URLSearchParams( location.search ).get( 'p' ) );     // a reload mid-game starts from there
-			challenge( to, here !== null ? here : undefined );
+			challenge( to, here !== null ? here : undefined, here === null );
 			return;
 		}
 		lost = goal ? `The connectome doesn't know “${ goal }” yet, so there's no one to find. Here is someone it knows.` :
