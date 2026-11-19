@@ -837,6 +837,7 @@ a.out:focus { text-decoration: underline; }
 	.bar label { flex: 1 1 0; min-width: 0; }
 	/* 16px: a phone zooms the whole page in when a smaller box is typed in. */
 	.bar input { width: 100%; max-width: none; padding: 7px 8px; font-size: 16px; }
+	.bar.game #goal { flex: 1 1 9em; width: auto; min-width: 0; }      /* beside "Find a path to:", not under it */
 	#back { padding: 6px 12px; }
 	#panel h3 { font-size: 12px; }
 	.badge { font-size: 12px; }
@@ -1131,13 +1132,23 @@ g.kept-gone path.core, g.kept-gone path.thread { stroke-dasharray: 1.5 4; opacit
 .bar.game .play-way:hover { background: var( --play-on ); }
 .bar.game .play-way svg { width: 14px; height: 14px; }
 .bar.game #restart { margin-left: auto; }
+/* At the end, the way on is a new game: green, as the way to play is. */
+.bar.game #restart.again,
+#say .again {
+	border-color: var( --play );
+	background: var( --play );
+	color: #fff;
+}
+.bar.game #restart.again:hover,
+#say .again:hover { background: var( --play-on ); }
 /* Outside a challenge its bar stays put away. .bar's display beat the hidden attribute, so "Find your way to:"
    sat over every view from the day the challenge came in, 17 Nov 2026 (seen in Rabbithole's pane: Justin,
    #connectome, 19 Nov 2026, 03:15Z). */
 .bar.game[hidden] { display: none; }
 
-body.challenge .bar label,
-body.challenge .bar .join { display: none; }
+/* The top bar's search, put away in a challenge; the game's own "Find a path to:" stays (it had gone with them). */
+body.challenge header.bar label,
+body.challenge header.bar .join { display: none; }
 
 #confetti {
 	position: absolute;

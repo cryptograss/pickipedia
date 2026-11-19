@@ -2514,6 +2514,10 @@ function gameSay() {
 		}
 	}
 	$( 'after' ).replaceChildren( ...after );
+	const restart = $( 'restart' );
+	restart.textContent = GAME.done ? 'New game' : 'New start';
+	restart.title = GAME.done ? 'Someone new to find, from somewhere new' : 'Start again from somewhere else';
+	restart.classList.toggle( 'again', GAME.done );
 	pathSay();
 }
 
@@ -2567,7 +2571,7 @@ function wayScene() {
 		placePills( sc, st.u, st.v, st.tie, ( pu.x + pv.x ) / 2 - span / 2, ( pu.x + pv.x ) / 2 + span / 2, ( pu.y + pv.y ) / 2, 1, 1, 200 + i * 90 );
 	} );
 	sc.chain = way;
-	sc.head = [ 'Your way to ', nameLink( GAME.to ) ];
+	sc.head = [ 'Your way to ', nameLink( GAME.to ), ' ', h( 'button', { type: 'button', class: 'turn again', title: 'Someone new to find, from somewhere new', onclick: newGame }, 'New game' ) ];
 	sc.sub = [ h( 'b', null, K.plural( GAME.jumps, 'jump' ) ), ` from ${ first( GAME.from ) }; the fewest it can be done in is ${ K.plural( GAME.par, 'hop' ) }` ];
 	return sc;
 }
@@ -3349,6 +3353,9 @@ function aPicker( d ) {
 		if ( id === view.a ) {
 			w.lines.push( P( id ).page ? '' : 'no page yet' );
 			w.hint = 'click anyone around them: go to them';
+		} else if ( !d.tie ) {                                       // a step on the way a challenge was found by: no one in the middle to share with
+			w.lines.push( P( id ).page ? '' : 'no page yet' );
+			w.acts.push( goTo );
 		} else {
 			const top = K.naming( G, d.tie.ev[ 0 ] );
 			const web = webFrom( ( l ) => ( l.u === id ? l.v : ( l.v === id ? l.u : undefined ) ) );
@@ -3845,9 +3852,29 @@ $( 'goal' ).addEventListener( 'change', () => {
 } );
 $( 'restart' ).addEventListener( 'click', () => {
 	if ( G && GAME ) {
-		challenge( GAME.to );
+		if ( GAME.done ) {
+			newGame();
+		} else {
+			challenge( GAME.to );
+		}
 	}
 } );
+
+/**
+ * A new game: someone new to find, from somewhere new, on its landing (Justin, #connectome, 19 Nov 2026, 05:44Z:
+ * "When you get to the end, it needs to be easy to start a new game with a new goal and new starting place").
+ */
+function newGame() {
+	let to = K.challengeGoal( G );
+	for ( let i = 0; i < 6 && GAME && to === GAME.to; i++ ) {
+		to = K.challengeGoal( G );                                   // someone other than the one just found, when there is
+	}
+	if ( to === null ) {
+		return;
+	}
+	history.replaceState( null, '', challengeAddress( to ) );
+	challenge( to, undefined, true );
+}
 
 let sized = 0;
 new ResizeObserver( () => {
