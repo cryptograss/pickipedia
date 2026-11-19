@@ -905,6 +905,10 @@ g.day text { font: 700 11px var( --ui ); fill: var( --muted ); letter-spacing: .
 .pill.rn { pointer-events: none; }
 .pill.rn text { font: italic 400 12px var( --name ); fill: var( --ink2 ); stroke: var( --surface ); stroke-width: 4px; paint-order: stroke; stroke-linejoin: round; }
 
+/* In the player, the graph sits right under the player's own bar, with no search or "connect to" over it
+   (Justin, #connectome, 19 Nov 2026, 03:15Z: "just get the bacon graph right under the green top bar"). */
+body.in-rabbithole .bar { display: none; }
+
 /* In the player's dock: the few steps there's room for, and nothing else. */
 body.mini .bar, body.mini #say, body.mini #legend, body.mini #panel, body.mini #drawer { display: none; }
 body.mini, body.mini main, body.mini #stage { background: transparent; }
@@ -1148,6 +1152,10 @@ g.kept-gone path.core, g.kept-gone path.thread { stroke-dasharray: 1.5 4; opacit
 .bar.game .play-way:hover { background: var( --play-on ); }
 .bar.game .play-way svg { width: 14px; height: 14px; }
 .bar.game #restart { margin-left: auto; }
+/* Outside a challenge its bar stays put away. .bar's display beat the hidden attribute, so "Find your way to:"
+   sat over every view from the day the challenge came in, 17 Nov 2026 (seen in Rabbithole's pane: Justin,
+   #connectome, 19 Nov 2026, 03:15Z). */
+.bar.game[hidden] { display: none; }
 
 body.challenge .bar label,
 body.challenge .bar .join { display: none; }
