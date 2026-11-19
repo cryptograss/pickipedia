@@ -148,6 +148,19 @@
 	table.wikitable > * > tr > th { background-color: var( --night-wash ); }
 	table.wikitable > * > tr > td { background-color: transparent; }
 
+	/* MediaWiki's table of a JSON page (a ReleaseDraft's diagnostics, any .json page): day's grey rows, white
+	   keys and empties and mint values, under night's pale words, read as nothing (Justin, 19 Nov 2026). */
+	.mw-json tr { background-color: var( --night-wash ); }
+	.mw-json th,
+	.mw-json td {
+		border-color: var( --night-line );
+		color: var( --night-ink );
+	}
+	.mw-json th,
+	.mw-json .mw-json-empty { background-color: var( --night-panel ); }
+	.mw-json .mw-json-empty { color: var( --night-muted ); }
+	.mw-json .mw-json-value { background-color: var( --night-add ); }
+
 	.mw-message-box, .cdx-message {
 		border-color: var( --night-line );
 		background-color: var( --night-wash );
