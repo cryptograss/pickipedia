@@ -668,6 +668,106 @@ export function challengeStart( G, to, rand = Math.random, band = [ 3, 4 ] ) {
 	return { from, par: d[ from ] };
 }
 
+/**
+ * Where the Oracle offers to start (Justin, #connectome, 19 Nov 2026, 07:10Z: "four mini constellations ... randomly
+ * chosen, but each either itself a permanent-release studio track or a picker with a 1-degree connection to one"):
+ * every track of a Permanent Release that isn't a show, then every picker on one of them.
+ * Returns [{ kind: 'track', piece } | { kind: 'picker', id }].
+ */
+export function oracleItems( G ) {
+	const tracks = G.pieces.filter( ( p ) => p.kind === 'track' && G.music[ p.m ].kind !== 'show' && G.music[ p.m ].tier === PERMANENT );
+	const pickers = [ ...new Set( tracks.flatMap( ( t ) => t.cast ) ) ].sort( ( x, y ) => x - y );
+	return tracks.map( ( t ) => ( { kind: 'track', piece: t.id } ) ).concat( pickers.map( ( id ) => ( { kind: 'picker', id } ) ) );
+}
+
+/**
+ * n of oracleItems() at random (rand: Math.random's shape), tracks and pickers both where both are to be had. With a
+ * goal (a challenge), none that is the goal or has them on it, nor any the goal can't be reached from; of the rest,
+ * those three to six jumps from the goal first (a track: from the nearest picker on it), then the nearer and the
+ * farther. So it can come back with fewer than n.
+ */
+export function oraclePick( G, goal, rand = Math.random, n = 4 ) {
+	const d = goal === undefined || goal === null ? null : playedDistances( G, goal );
+	const far = ( it ) => itemJumps( G, d, it );
+	const shuffled = ( list ) => shuffle( list, rand );
+	const items = oracleItems( G );
+	const order = d ? [ ( x ) => x >= 3 && x <= 6, ( x ) => x >= 1 && x < 3, ( x ) => x > 6 && x < Infinity ]
+		.flatMap( ( fits ) => shuffled( items.filter( ( it ) => fits( far( it ) ) ) ) ) : shuffled( items );
+	// One of each kind first, where there is one, as early in the order as it comes; then the order.
+	const out = [];
+	for ( const kind of [ 'track', 'picker' ] ) {
+		const it = order.find( ( x ) => x.kind === kind );
+		if ( it && out.length < n ) {
+			out.push( it );
+		}
+	}
+	for ( const it of order ) {
+		if ( out.length >= n ) {
+			break;
+		}
+		if ( !out.includes( it ) ) {
+			out.push( it );
+		}
+	}
+	return order.filter( ( it ) => out.includes( it ) );           // in the order's own order: the best first
+}
+
+/** How many jumps an Oracle item is from the goal, given playedDistances from it (d): a track, by its nearest picker;
+ *  0 where it is the goal or has them on it; -1 or Infinity where nothing leads there. */
+function itemJumps( G, d, it ) {
+	if ( it.kind === 'picker' ) {
+		return d[ it.id ];
+	}
+	const ds = G.pieces[ it.piece ].cast.map( ( id ) => d[ id ] );
+	return ds.some( ( x ) => x === 0 ) ? 0 : Math.min( ...ds.filter( ( x ) => x > 0 ).concat( [ Infinity ] ) );
+}
+
+function shuffle( list, rand ) {
+	const out = list.slice();
+	for ( let i = out.length - 1; i > 0; i-- ) {
+		const j = Math.min( i, Math.floor( rand() * ( i + 1 ) ) );
+		[ out[ i ], out[ j ] ] = [ out[ j ], out[ i ] ];
+	}
+	return out;
+}
+
+/**
+ * Whom the Oracle sets to find when nobody is named: someone four of its starting places are three to six jumps
+ * from, so the game from any of them is worth playing (its places are all near one another, and challengeGoal's
+ * pick is often a jump or two from them). Of landable()'s at random, then anyone with a page; `tries` of each at
+ * most; failing four, whoever had the most; failing all, challengeGoal's.
+ */
+export function oracleGoal( G, rand = Math.random, tries = 80 ) {
+	const items = oracleItems( G );
+	let best = null, most = 0;
+	for ( const pool of [ landable( G ), G.people.filter( ( p ) => p.page ).map( ( p ) => p.id ) ] ) {
+		for ( const to of shuffle( pool, rand ).slice( 0, tries ) ) {
+			const d = playedDistances( G, to );
+			const n = items.filter( ( it ) => {
+				const x = itemJumps( G, d, it );
+				return x >= 3 && x <= 6;
+			} ).length;
+			if ( n >= 4 ) {
+				return to;
+			}
+			if ( n > most ) {
+				best = to;
+				most = n;
+			}
+		}
+	}
+	return best !== null ? best : challengeGoal( G, rand );
+}
+
+/** Where a track is drawn: its song's own view where a page charts a cut of it (the pickers round the song), else
+ *  the track as a piece. */
+export function trackView( G, piece ) {
+	const pc = G.pieces[ piece ];
+	const cuts = Object.entries( G.songcast || {} ).filter( ( [ , c ] ) => c.song === pc.song );
+	const cut = cuts.find( ( [ , c ] ) => ( c.on || [] ).includes( pc.m ) ) || cuts[ 0 ];
+	return cut ? { s: cut[ 1 ].song, cut: cut[ 0 ] } : { m: piece };
+}
+
 /** Hops along lines of playing together only (tie.played): a challenge's jumps are the ones the list and the ring
  *  offer, and two who only share a record are no step there. */
 export function playedDistances( G, src ) {

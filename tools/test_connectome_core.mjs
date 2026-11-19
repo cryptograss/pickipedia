@@ -85,6 +85,36 @@ test( 'someone at random to find: one a start three or four jumps out leads to, 
 	assert.equal( K.challengeGoal( K.build( Object.assign( {}, GRAPH, { ties: [] } ) ), () => 0 ), null );
 } );
 
+test( 'the Oracle starts from a Permanent studio track, or a picker on one (Justin, 19 Nov 2026)', () => {
+	const items = K.oracleItems( G );
+	const tracks = items.filter( ( it ) => it.kind === 'track' ).map( ( it ) => G.pieces[ it.piece ] );
+	// 4masks is Permanent: its two tracks, Silver 44 and Victory, both Kyle and Justin's. A Duet is on a Full Release.
+	assert.deepEqual( tracks.map( ( t ) => t.song ).sort(), [ 'Silver 44', 'Victory' ] );
+	assert.deepEqual( items.filter( ( it ) => it.kind === 'picker' ).map( ( it ) => it.id ), [ KYLE, JUSTIN ] );
+	// No goal: all four, a track and a picker among them.
+	const four = K.oraclePick( G, undefined, () => 0.5 );
+	assert.equal( four.length, 4 );
+	assert.ok( four.some( ( it ) => it.kind === 'track' ) && four.some( ( it ) => it.kind === 'picker' ) );
+	// Finding Vickie: everyone here is two jumps from her, so all four.
+	assert.equal( K.oraclePick( G, VICKIE, () => 0 ).length, 4 );
+	// Finding Kyle: not Kyle, not a track with Kyle on it; Justin, one jump away, is all that's left.
+	assert.deepEqual( K.oraclePick( G, KYLE, () => 0 ), [ { kind: 'picker', id: JUSTIN } ] );
+	// Finding someone nobody here leads to: nowhere to start.
+	assert.deepEqual( K.oraclePick( G, LONE, () => 0 ), [] );
+} );
+
+test( 'the Oracle sets someone to find four of its places are three to six jumps from; failing that, challengeGoal\'s', () => {
+	// Here everyone is a jump or two from Kyle and Justin, so nobody is that far: challengeGoal's pick, Vickie.
+	assert.equal( K.oracleGoal( G, () => 0 ), VICKIE );
+} );
+
+test( 'a track opens as its song\'s view where a page charts a cut of it, else as itself', () => {
+	const silver = G.pieces.find( ( p ) => p.kind === 'track' && p.song === 'Silver 44' ).id;
+	assert.deepEqual( K.trackView( G, silver ), { m: silver } );
+	const G2 = K.build( Object.assign( {}, GRAPH, { songcast: { QmS44: { song: 'Silver 44', on: [ 0 ], pickers: [ [ KYLE, 'banjo', 'banjo' ] ] } } } ) );
+	assert.deepEqual( K.trackView( G2, silver ), { s: 'Silver 44', cut: 'QmS44' } );
+} );
+
 test( 'a challenge starts three or four jumps out, at a picker with a page where there is one', () => {
 	// Vickie, by playing together: Molly 1, Kyle and Justin 2 (pages), Sam 3 (no page); Far and Choir only share records
 	assert.deepEqual( K.challengeStart( G, VICKIE, () => 0 ), { from: SAM, par: 3 } );
