@@ -73,6 +73,15 @@ const alone = window.parent === window;   // a page of its own, not the graph ov
 // and the graph asks it to play, to open a page in its pane, to open the drawer. MINI: the few steps the dock has
 // room for, until the drawer opens.
 const HOST = new URLSearchParams( location.search ).get( 'host' ) === 'rabbithole' && !alone ? 'rabbithole' : '';
+// One shell (Justin, #connectome, 19 Nov 2026: "I want to be sure that we don't have parallel logical paths
+// happening ... precisely the same application state"; 20:45Z: "build one shell in place of the dock"). /bacon is
+// Rabbithole's own app, with this page as the graph in its pane (shell=1) whether the reader came by /bacon or by
+// the player. There the shell keeps the one history: a step here is said to it (`at`), it puts the step in the
+// browser's history and the address, and Back and Forward come here as its word (`step`). The search bar and the
+// way come show while the reader steers (the shell's traverse mode off), and stand aside while the music does.
+const SHELL = HOST && new URLSearchParams( location.search ).get( 'shell' ) === '1';
+let steering = SHELL && new URLSearchParams( location.search ).get( 'steer' ) === '1';
+let freshStep = false;            // the shell opened a graph as a step of its own: this view gets a number of its own
 let MINI = new URLSearchParams( location.search ).get( 'walk' ) === 'mini';
 const trail = [];
 // Each step as it was drawn, so that going back brings it back as it was (Justin, #connectome, 19 Nov 2026: "back
@@ -191,7 +200,25 @@ function address( v ) {
 	// hosted (a pushed step lives in the browser's history, and a reload can land on any of them).
 	const q = new URLSearchParams( raw.slice( 1 ) );
 	q.set( 'host', HOST );
+	if ( SHELL ) {
+		q.set( 'shell', '1' );
+	}
 	return '?' + q;
+}
+
+/** This page's address as the shell's own: without what says it is hosted. */
+function shellAddress() {
+	const q = new URLSearchParams( location.search );
+	[ 'host', 'shell', 'steer' ].forEach( ( k ) => q.delete( k ) );
+	const query = q.toString();
+	return location.pathname + ( query ? '?' + query : '' );
+}
+
+/** In the shell: where the graph is now, for its address and its history; `step`, one the reader took. */
+function tellAt( step ) {
+	if ( SHELL ) {
+		tell( { at: shellAddress(), step: !!step, n: stepAt, s: SESSION, title: document.title } );
+	}
 }
 
 function rawAddress( v ) {
@@ -1282,12 +1309,14 @@ function aRoad( d ) {
  */
 let hostTo = null;
 let booted = false;                      // the graph's first view is shown: a go() after it is someone moving it
-function goFromHost( to ) {
+let hostFresh = false;
+function goFromHost( to, fresh ) {
 	if ( typeof to !== 'string' ) {
 		return;
 	}
 	if ( !G ) {
 		hostTo = to;
+		hostFresh = !!fresh;
 		return;
 	}
 	hostTo = null;
@@ -1296,9 +1325,29 @@ function goFromHost( to ) {
 		tell( { missing: to } );
 		return;
 	}
-	if ( !same( v, view ) ) {
+	if ( !same( v, view ) || !$( 'oracle' ).hidden ) {
+		freshStep = !!fresh;             // opened as a step of the shell's own: the view before keeps its number, and its drawing
 		go( v, true );
 	}
+}
+
+/**
+ * The shell's word that the reader went Back or Forward to a step of the graph's: this page's address becomes that
+ * step's, and the step comes back as the browser's own popstate would bring it, as it was drawn where this page
+ * drew it.
+ */
+function stepFromShell( d ) {
+	if ( !SHELL || typeof d.to !== 'string' || !G ) {
+		return;
+	}
+	const u = new URL( d.to, location.origin );
+	if ( u.origin !== location.origin || !/^\/bacon(\/|$)/.test( u.pathname ) ) {
+		return;
+	}
+	u.searchParams.set( 'host', HOST );
+	u.searchParams.set( 'shell', '1' );
+	history.replaceState( typeof d.n === 'number' && d.n > 0 ? { bacon: d.n, session: d.s } : null, '', u.pathname + u.search );
+	comeTo( history.state );
 }
 
 // What Rabbithole says: the walk, the song on now, whether it plays, and whether the drawer is open; or, from its
@@ -1308,7 +1357,11 @@ window.addEventListener( 'message', ( ev ) => {
 		return;
 	}
 	if ( ev.data.rabbithole === 'go' ) {
-		goFromHost( ev.data.to );
+		goFromHost( ev.data.to, ev.data.fresh );
+		return;
+	}
+	if ( ev.data.rabbithole === 'step' ) {
+		stepFromShell( ev.data );
 		return;
 	}
 	if ( ev.data.rabbithole !== 'walk' ) {
@@ -1320,6 +1373,13 @@ window.addEventListener( 'message', ( ev ) => {
 	}
 	walkHops = Array.isArray( d.hops ) ? d.hops : walkHops;
 	walkChasing = d.chasing || null;
+	if ( SHELL && typeof d.steering === 'boolean' && d.steering !== steering ) {
+		steering = d.steering;                                       // the reader steers, or the music does: the bar and the way come, or neither
+		document.body.classList.toggle( 'steering', steering );
+		if ( G && view ) {
+			pathSay();
+		}
+	}
 	if ( typeof d.night === 'boolean' ) {                        // night as the player has it (Justin, #rabbithole, 15 Nov 2026,
 		                                                     // item 5: the drawer "in dark mode even if the page is light"):
 		                                                     // in the frame the player says, not this page's own reading
@@ -1366,6 +1426,7 @@ window.addEventListener( 'message', ( ev ) => {
 document.body.classList.toggle( 'mini', MINI );
 if ( HOST ) {
 	document.body.classList.add( 'in-rabbithole' );
+	document.body.classList.toggle( 'steering', steering );
 	// Ways out, inside the player: a song plays there, and a page opens in its pane, not over the player.
 	document.addEventListener( 'click', ( ev ) => {
 		const a = ev.target.closest && ev.target.closest( 'a[href]' );
@@ -2810,14 +2871,18 @@ function carry( v ) {
 function stamp( step ) {
 	// Out of a kept graph, at /bacon/<id>, the address is the page's own again: a bare ?p= would stay under the id.
 	const at = KEPT ? '/bacon/' + KEPT.id : ( keptAt() ? '/bacon' : '' ) + address( view );
-	if ( step || !stepAt ) {
+	if ( step || freshStep || !stepAt ) {
 		stepAt = ++stepSeq;
 	}
+	freshStep = false;
 	steps.set( stepAt, { view, trail: trail.slice(), g: G } );
 	if ( steps.size > 240 ) {
 		steps.delete( steps.keys().next().value );                   // the oldest: Back to it lays it out afresh
 	}
-	history[ step ? 'pushState' : 'replaceState' ]( { bacon: stepAt, session: SESSION }, '', at );
+	// In the shell the step is the shell's to put in the browser's history: one history, the pane's pages and the
+	// graph's steps in the order they were taken. This page's own address follows, for its links and its QR.
+	history[ step && !SHELL ? 'pushState' : 'replaceState' ]( { bacon: stepAt, session: SESSION }, '', at );
+	tellAt( step );
 }
 
 /** A view brought back, to be shown as it was drawn; its selection with it. */
@@ -2904,7 +2969,14 @@ function oracleSay( mode, goal, note, again ) {
 	gameSay();
 	pathSay();
 	document.title = 'The Oracle of Bluegrass Bacon';
-	history.replaceState( null, '', mode === 'challenge' && ORACLE.goal !== null ? challengeAddress( ORACLE.goal ) : '/bacon' );
+	history.replaceState( null, '', ( mode === 'challenge' && ORACLE.goal !== null ? challengeAddress( ORACLE.goal ) : '/bacon' ) + hosted() );
+	stepAt = 0;                                                  // the Oracle is no step of the graph's: the next view takes a number of its own
+	tellAt( false );
+}
+
+/** What an address this page writes for itself carries in Rabbithole, so a reload of the frame comes back hosted. */
+function hosted() {
+	return HOST ? '?host=' + HOST + ( SHELL ? '&shell=1' + ( steering ? '&steer=1' : '' ) : '' ) : '';
 }
 
 function oracleDone() {
@@ -3126,7 +3198,7 @@ function stepEl( st, i ) {
 
 function pathSay() {
 	const nav = $( 'path' ), ol = nav.firstElementChild;
-	const steps = !view || !G || HOST || view.way || view.walk ? [] : pathSteps();
+	const steps = !view || !G || ( HOST && !steering ) || view.way || view.walk ? [] : pathSteps();
 	let keep = 0;
 	while ( keep < steps.length && keep < drawnPath.length && steps[ keep ].key === drawnPath[ keep ].key ) {
 		keep++;
@@ -3323,7 +3395,7 @@ async function openKept( id ) {
 	if ( !doc || !doc.graph ) {
 		const start = K.landing( G );
 		lost = `No bacon graph is kept as “${ id }”. Here is ${ first( start ) } instead.`;
-		history.replaceState( null, '', '/bacon' );
+		history.replaceState( null, '', '/bacon' + hosted() );
 		go( { a: start } );
 		return;
 	}
@@ -3335,7 +3407,9 @@ async function openKept( id ) {
 	sel = { picker: null };
 	lost = '';
 	show();
-	history.replaceState( null, '', '/bacon/' + id + ( HOST ? '?host=' + HOST : '' ) );
+	history.replaceState( null, '', '/bacon/' + id + hosted() );
+	stepAt = 0;
+	tellAt( false );
 }
 
 /**
@@ -3399,7 +3473,10 @@ function keptSay() {
 		lines.join( ' ' ) + ' ', h( 'a', { href: '/bacon?' + today }, 'See it as it is today →' ) );
 }
 
-window.addEventListener( 'popstate', () => {
+window.addEventListener( 'popstate', () => comeTo( history.state ) );
+
+/** Back or Forward brought the reader here: the browser's own popstate, or in the shell its word (stepFromShell). */
+function comeTo( state ) {
 	if ( keptAt() ) {                           // back to a kept graph
 		if ( G && ( !KEPT || KEPT.id !== keptAt() ) ) {
 			openKept( keptAt() );
@@ -3412,7 +3489,6 @@ window.addEventListener( 'popstate', () => {
 		forget();
 	}
 	// A step this page drew, back or forward: the view as it was drawn, and the way to it as it was then.
-	const state = history.state;
 	const step = G && state && state.session === SESSION ? steps.get( state.bacon ) : null;
 	const v = step && step.g === G ? step.view : G && parse( new URLSearchParams( location.search ) );
 	if ( !v ) {
@@ -3420,7 +3496,7 @@ window.addEventListener( 'popstate', () => {
 		if ( goal !== null ) {                                       // back to the Oracle, in a challenge
 			const to = goal ? K.find( G, goal ) : null;
 			oracleSay( 'challenge', to !== null ? to : undefined, '', true );
-		} else if ( G && /^\/bacon\/?$/.test( location.pathname ) && !location.search ) {
+		} else if ( G && /^\/bacon\/?$/.test( location.pathname ) && !shellAddress().includes( '?' ) ) {
 			oracleSay( 'explore', undefined, '', true );             // back to the Oracle
 		}
 		return;
@@ -3443,7 +3519,7 @@ window.addEventListener( 'popstate', () => {
 	if ( GAME ) {
 		gameStep();                                                  // back in a challenge: the chain unwinds with it
 	}
-} );
+}
 
 /* ------------------------------------------------------------------------------------------------------------
  * The pointer, and the keys
@@ -4129,6 +4205,12 @@ let sized = 0;
 new ResizeObserver( () => {
 	cancelAnimationFrame( sized );
 	sized = requestAnimationFrame( () => {
+		// Out of sight (a frame put away behind a page has no size), or the same frame the view in sight was drawn
+		// for: nothing to lay out. Laid out for no room at all, the drawing was lost by the time it was seen again.
+		const d = view && drawn.get( view );
+		if ( !svg.clientWidth || !svg.clientHeight || ( d && d.scene === scene && d.fit === fitNow() ) ) {
+			return;
+		}
 		if ( G && view ) {
 			// A new view's own headline can wrap and so resize the frame a moment after it is shown: that mustn't
 			// cut its slide short. Any other resize is a window being dragged, and nothing swims after it.
@@ -4201,7 +4283,7 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	const v = parse( q );
 	if ( v ) {
 		go( v );
-	} else if ( !asked && !HOST && !MINI && !q.get( 'cut' ) && !q.get( 'playing' ) && !lost ) {
+	} else if ( !asked && ( !HOST || SHELL ) && !MINI && !q.get( 'cut' ) && !q.get( 'playing' ) && !lost ) {
 		oracleSay( 'explore' );                                      // nothing asked for: the Oracle
 	} else {
 		if ( q.get( 'cut' ) || q.get( 'playing' ) ) {
@@ -4213,7 +4295,7 @@ fetch( new URL( 'graph.json', import.meta.url ) ).then( ( r ) => {
 	}
 	booted = true;
 	if ( hostTo !== null ) {
-		goFromHost( hostTo );
+		goFromHost( hostTo, hostFresh );
 	}
 } ).catch( ( err ) => {
 	// #wait is gone once the graph is read: an error after that still has to be said somewhere, and seen in the console.

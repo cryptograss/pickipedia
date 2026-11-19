@@ -36,6 +36,10 @@
 			( u.pathname !== PAGE && u.pathname !== PAGE + '/' && u.pathname.indexOf( FILES ) !== 0 ) ) {
 			return null;
 		}
+		// host=page: this page frames the graph. At its own address, with no host named, /bacon is Rabbithole's
+		// shell, the graph in its pane (one shell: Justin, #connectome, 19 Nov 2026); a frame asks for the graph's
+		// page itself by naming its host, as Rabbithole does (host=rabbithole).
+		u.searchParams.set( 'host', 'page' );
 		return PAGE + u.search;
 	}
 

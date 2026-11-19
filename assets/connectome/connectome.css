@@ -888,6 +888,9 @@ g.day text { font: 700 11px var( --ui ); fill: var( --muted ); letter-spacing: .
 /* In the player, the graph sits right under the player's own bar, with no search or "connect to" over it
    (Justin, #connectome, 19 Nov 2026, 03:15Z: "just get the bacon graph right under the green top bar"). */
 body.in-rabbithole .bar { display: none; }
+/* In the one shell, while the reader steers (the player's traverse mode off): the search bar, the challenge's bar
+   and the way come, as on a page of its own. They stand aside again while the music moves the graph. */
+body.in-rabbithole.steering .bar:not([hidden]) { display: flex; }
 
 /* In the player's dock: the few steps there's room for, and nothing else. */
 body.mini .bar, body.mini #say, body.mini #legend, body.mini #panel, body.mini #drawer { display: none; }
@@ -1328,7 +1331,7 @@ body.challenge header.bar .join { display: none; }
 	font: 600 12px/1.2 var( --ui );
 	white-space: nowrap;
 }
-body.in-rabbithole #path { display: none; }
+body.in-rabbithole:not(.steering) #path { display: none; }
 @media ( prefers-reduced-motion: reduce ) {
 	#path li { transition: none; }
 }
