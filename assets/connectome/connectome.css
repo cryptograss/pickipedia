@@ -1114,7 +1114,7 @@ body:not( .mini ) #legend { min-height: 102px; padding-right: 120px; align-conte
 @media ( max-width: 760px ) {
 	/* Upright, where the list is under the graph and the page scrolls: the band's added height comes out of the
 	   page's length, not out of the graph. */
-	body:not( .mini ) #stage { height: calc( 78vh + 40px ); height: calc( 78svh + 40px ); min-height: 500px; }
+	body:not( .mini ) #stage { height: calc( 78vh + 44px ); height: calc( 78svh + 44px ); min-height: 504px; }
 }
 #kept[hidden] { display: none; }
 #kept a { color: inherit; font-weight: 600; white-space: nowrap; }
