@@ -3036,7 +3036,8 @@ function show( quick, again ) {
 	if ( !kept ) {
 		pathSay();
 	}
-	document.title = label( view ) + ' · the connectome';
+	document.title = K.pageTitle( { challenge: !!GAME, a: view.way || view.walk || view.a === undefined || view.a === null ? '' : first( view.a ),
+		b: view.way || view.walk || view.b === undefined ? '' : first( view.b ), of: label( view ) } );
 	closeSheet();
 	hush();
 }
@@ -3180,7 +3181,7 @@ function oracleSay( mode, goal, note, again ) {
 	box.hidden = false;
 	gameSay();
 	pathSay();
-	document.title = 'The Oracle of Bluegrass Bacon';
+	document.title = K.pageTitle( { oracle: true, challenge: mode === 'challenge' } );
 	history.replaceState( null, '', ( mode === 'challenge' && ORACLE.goal !== null ? challengeAddress( ORACLE.goal ) : '/bacon' ) + hosted() );
 	stepAt = 0;                                                  // the Oracle is no step of the graph's: the next view takes a number of its own
 	tellAt( false );
