@@ -377,6 +377,12 @@ REQS
                         # wait for the next. What's found goes into the cache, not git: walked_sources.txt and
                         # walked_names.txt, read below beside the repo's own, and walked.json, published with the
                         # graph so anyone can see what a walk added. A walk that fails leaves the build to go on.
+                        # Where a site has several artists of the picker's name and the page links none, the walk
+                        # asks which: the candidates go into walked.json, and a {{Which picker|status=proposed}} box
+                        # to the top of the page (Justin, #connectome, 20 Nov 2026). That is the only thing here that
+                        # edits the wiki, and it needs a bot password in Jenkins' environment
+                        # (CONNECTOME_WALK_BOT_USER, CONNECTOME_WALK_BOT_PASSWORD; maybelle-config). Without one the
+                        # question waits in walked.json. One such walk is 25 seconds of paced lookups (blu's machine).
                         WALKED=0
                         timeout 90 "${PY}" connectome_walk.py --cache "${CACHE}" --budget 30 || WALKED=$?
                         if [ "${WALKED}" -eq 124 ]; then

@@ -10,11 +10,12 @@ trigger Artificial Dumb only." So a walk is plain lookups, the same for whoever 
 
   who          the pages in Category:Walk_Requested, and when each was put there (categorymembers' timestamp). A page
                is walked when it was put there after its last walk, so taking the category off and putting it back
-               walks it again. Nothing here edits the wiki.
+               walks it again.
   names        the page's title, its {{MusicianInfo}} name=, and the titles of the redirects to it; only names of two
                words or more, since one word ("Bronwyn") is too loose to look anybody up by.
   links        Discogs releases and artists, MusicBrainz releases and artists, and archive.org items linked from the
                page or its talk page, taken as they are. That is how a person says which "Frank Evans" is meant.
+               A link that is only inside a {{Which picker}} box is the question, not the answer, and isn't taken.
   Discogs      for each name, the one artist Discogs has by that name (ignoring case and its "(2)"), unless the links
                name an artist: their releases as Main, Appearance or TrackAppearance, one per title, newest first.
   MusicBrainz  the same: the one artist of that name, unless linked; the releases they have a performance
@@ -27,20 +28,31 @@ Two or more artists of one name on a site, and none linked: nothing from that si
 of each kind, and nothing the store's sources already have. Who played on what is for the readers to say
 (connectome_store.py), as for any other source.
 
+Then the walk asks which one (Justin, #connectome, 20 Nov 2026, 03:29Z: "a template, 'Which <picker_name> is this?'
+that can appear on a page in a warning-ish style, and ask an editor to sort it out", and 03:31Z, that the Artificial
+Dumb do it during a walk; re's spec, 03:32Z). For each such site it lists the artists of that name with what the site
+says of each, how many releases and from when, and the first few titles: in walked.json ("asks"), and on the page, in
+a {{Which picker|status=proposed}} box put at the top. This is the one place a walk edits the wiki, and all it ever
+writes there. A page that has a box already, by hand or from a walk, gets no second one. With no login for the wiki
+in the build (CONNECTOME_WALK_BOT_USER and CONNECTOME_WALK_BOT_PASSWORD, a bot password; never printed), nothing is
+written to the page: the question waits in walked.json ("box": wanted), and a later run with a login writes it. A
+save the wiki refuses waits too, and is tried again after an hour.
+
 What a walk finds goes into the cache, never into git, each line saying which request added it:
-  walked.json          page -> {"requested", "by", "walked", "names", "sources", "notes"}
+  walked.json          page -> {"requested", "by", "walked", "names", "sources", "notes", "asks", "box"}
   walked_sources.txt   the sources, in connectome_sources.txt's shape, under a comment naming the page and the times
   walked_names.txt     the names, for the LMA reader
 """
 import argparse
 import datetime
+import http.cookiejar
 import json
 import os
 import re
 import sys
 import time
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
 import recording_credits as sideman
 import rambler
@@ -49,6 +61,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CATEGORY = "Category:Walk_Requested"
 CAP = {"discogs": 20, "mb": 10, "lma": 20}
 LINKS_CAP = 50                    # sources a page and its talk page can name, taken as they are
+CANDIDATES_CAP = 6                # artists of one name a walk asks a site about: each is a paced request more
+TITLES_SHOWN = 3
+SITES = {"Discogs": ("discogs", "https://www.discogs.com/artist/", re.compile(r"\d+$")),
+         "MusicBrainz": ("mb", "https://musicbrainz.org/artist/", re.compile(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"))}
+WHICH_BOX = re.compile(r"\{\{\s*Which[ _]picker\b", re.I)
+BOT_USER, BOT_PASSWORD = "CONNECTOME_WALK_BOT_USER", "CONNECTOME_WALK_BOT_PASSWORD"
+RETRY_AFTER = 3600                # seconds before a save the wiki refused is tried again: the build runs every five minutes
 DISCOGS_ROLES = {"Main", "Appearance", "TrackAppearance"}
 IA_QUERY = '"{name}" AND (mediatype:etree OR (mediatype:audio AND collection:taperssection))'
 IA_SEARCH = "https://archive.org/advancedsearch.php"
@@ -67,8 +86,49 @@ def _json(url, timeout=30):
 
 
 def wiki_getter(wiki):
+    """A function asking the wiki's API: by GET, or by POST for what is too long for an address."""
     api = wiki.rstrip("/") + "/api.php"
-    return lambda params: _json(api + "?" + urlencode(dict(params, format="json", formatversion="2")))
+
+    def get(params, post=False):
+        q = urlencode(dict(params, format="json", formatversion="2"))
+        if not post:
+            return _json(api + "?" + q)
+        with urlopen(Request(api, data=q.encode(), headers={"User-Agent": USER_AGENT, "Accept": "application/json"}), timeout=30) as r:
+            return json.load(r)
+    return get
+
+
+def wiki_editor(wiki, user, password, opener=None):
+    """A function putting text at the top of a page that exists, as a bot password's login: prepend(title, text,
+    summary) -> the new revision's id. Logs in at the first call. Raises with the wiki's own word for what went
+    wrong, never with the password. Standard library only, as the build's image is bare."""
+    api = wiki.rstrip("/") + "/api.php"
+    opener = opener or build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    state = {"in": False}
+
+    def call(params, post=False):
+        q = urlencode(dict(params, format="json", formatversion="2"))
+        req = Request(api, data=q.encode(), headers={"User-Agent": USER_AGENT}) if post else Request(api + "?" + q, headers={"User-Agent": USER_AGENT})
+        with opener.open(req, timeout=30) as r:
+            data = json.load(r)
+        if "error" in data:
+            raise RuntimeError("the wiki said " + str(data["error"].get("code", "error")))
+        return data
+
+    def prepend(title, text, summary):
+        if not state["in"]:
+            token = call({"action": "query", "meta": "tokens", "type": "login"})["query"]["tokens"]["logintoken"]
+            result = call({"action": "login", "lgname": user, "lgpassword": password, "lgtoken": token}, post=True)["login"]["result"]
+            if result != "Success":
+                raise RuntimeError("the wiki would not log the walk in (" + str(result) + ")")
+            state["in"] = True
+        token = call({"action": "query", "meta": "tokens", "type": "csrf"})["query"]["tokens"]["csrftoken"]
+        done = call({"action": "edit", "title": title, "prependtext": text, "summary": summary, "nocreate": "1", "bot": "1",
+                     "assert": "user", "token": token}, post=True).get("edit", {})
+        if done.get("result") != "Success":
+            raise RuntimeError("the wiki did not save it (" + str(done.get("result") or done.get("code") or "no result") + ")")
+        return done.get("newrevid")
+    return prepend
 
 
 def ia_search(query, rows):
@@ -130,17 +190,48 @@ def linked(urls):
     return out
 
 
+def without_boxes(text):
+    """A page's wikitext with every {{Which picker}} call taken out, braces matched; and whether there was one."""
+    out, at, found = [], 0, False
+    while True:
+        m = WHICH_BOX.search(text, at)
+        if not m:
+            return "".join(out) + text[at:], found
+        found = True
+        out.append(text[at:m.start()])
+        depth, i = 0, m.start()
+        while i < len(text):
+            if text.startswith("{{", i):
+                depth, i = depth + 1, i + 2
+            elif text.startswith("}}", i):
+                depth, i = depth - 1, i + 2
+                if depth == 0:
+                    break
+            else:
+                i += 1
+        at = i
+
+
 def page_facts(wiki_get, title):
-    """The names to look the page's picker up by, and what the page and its talk page link."""
+    """The names to look the page's picker up by, what the page and its talk page link, and whether the page asks
+    which picker it is already. The artists a {{Which picker}} box lists are links on the page too, and they are the
+    question: with a box on it, the page's links are those it has without the box (the wiki parses it so)."""
     data = wiki_get({"action": "query", "titles": f"{title}|Talk:{title}", "prop": "redirects|extlinks|revisions",
                      "rvprop": "content", "rvslots": "main", "rdlimit": "max", "ellimit": "max"})
-    names, urls = [title], []
+    names, urls, boxed = [title], [], False
     for p in data.get("query", {}).get("pages", []):
-        urls += [e.get("url", "") for e in p.get("extlinks", [])]
         if p.get("title") != title:
+            urls += [e.get("url", "") for e in p.get("extlinks", [])]
             continue
         names += [r["title"] for r in p.get("redirects", [])]
         text = ((p.get("revisions") or [{}])[0].get("slots", {}).get("main", {}).get("content", ""))
+        rest, boxed = without_boxes(text)
+        if boxed:
+            parsed = wiki_get({"action": "parse", "title": title, "text": rest, "prop": "externallinks",
+                               "contentmodel": "wikitext", "disablelimitreport": "1"}, post=True)
+            urls += parsed.get("parse", {}).get("externallinks", [])
+        else:
+            urls += [e.get("url", "") for e in p.get("extlinks", [])]
         m = MUSICIAN_NAME.search(text)
         if m:
             names.append(m.group(1).strip())
@@ -150,7 +241,7 @@ def page_facts(wiki_get, title):
         if len(n.split()) >= 2 and n.casefold() not in seen:
             seen.add(n.casefold())
             kept.append(n)
-    return kept, linked(urls)
+    return kept, linked(urls), boxed
 
 
 # ---------------------------------------------------------------------------
@@ -180,8 +271,50 @@ def mb_releases(mbid, records_of):
     return [f"mb {rid}" for date, rid, title in sorted(found, key=lambda x: x[0] if x[0] != "9999" else "", reverse=True)]
 
 
-def lookup_artists(site, names, linked_ids, named, notes):
-    """The artists to walk on one site: the linked ones, or else, for each name, the one artist of that name."""
+def discogs_about(artist_id, get):
+    """What Discogs lists for an artist: how many releases, from when to when, and the newest few titles."""
+    data = get(f"artists/{artist_id}/releases?per_page=100&sort=year&sort_order=desc")
+    rel = data.get("releases", [])
+    years = sorted(r["year"] for r in rel if r.get("year"))
+    return {"releases": data.get("pagination", {}).get("items", len(rel)), "years": [years[0], years[-1]] if years else [],
+            "titles": list(dict.fromkeys(r.get("title", "") for r in rel if r.get("title")))[:TITLES_SHOWN]}
+
+
+def mb_about(mbid, get):
+    """What MusicBrainz lists under an artist's own name: how many releases, from when to when, a few titles; and
+    what it says to tell them from others of the name (its disambiguation, where they are from)."""
+    artist = get(f"artist/{mbid}")
+    data = get("release", artist=mbid, limit=25)
+    rel = data.get("releases", [])
+    years = sorted(int(r["date"][:4]) for r in rel if re.match(r"\d{4}", r.get("date") or ""))
+    says = ", ".join(x for x in (artist.get("disambiguation"), artist.get("country")) if x)
+    return {"releases": data.get("release-count", len(rel)), "years": [years[0], years[-1]] if years else [], "says": says,
+            "titles": list(dict.fromkeys(r.get("title", "") for r in rel if r.get("title")))[:TITLES_SHOWN]}
+
+
+def candidates(site, name, found, about):
+    """The question a site's several artists of one name make: {"site", "name", "found", "candidates"}, each
+    candidate {"url", "name"} with what `about` says of them, where it answers; the first CANDIDATES_CAP of them."""
+    key, base, shape = SITES[site]
+    out = []
+    for artist_id, artist_name in found:
+        if not shape.match(str(artist_id)):
+            continue                                         # an id that isn't one makes no link
+        if len(out) >= CANDIDATES_CAP:
+            break
+        c = {"url": base + str(artist_id), "name": artist_name}
+        if about:
+            try:
+                c.update(about(str(artist_id)))
+            except Exception as e:                           # the list still asks; this one says less
+                c["note"] = str(e)[:80]
+        out.append(c)
+    return {"site": site, "name": name, "found": len(found), "candidates": out}
+
+
+def lookup_artists(site, names, linked_ids, named, notes, asks=None, about=None):
+    """The artists to walk on one site: the linked ones, or else, for each name, the one artist of that name. Where
+    a name has several and nothing is linked, the question goes into asks (candidates())."""
     if linked_ids:
         return list(linked_ids)
     out = []
@@ -195,15 +328,18 @@ def lookup_artists(site, names, linked_ids, named, notes):
             out.append(found[0][0])
         elif found:
             notes.append(f"{site}: {len(found)} artists named {name}; a link to one on the page or its talk page says which")
+            if asks is not None and site in SITES:
+                asks.append(candidates(site, name, found, about))
         else:
             notes.append(f"{site}: no artist named {name}")
     return list(dict.fromkeys(out))
 
 
-def walk_one(title, names, links, known, look):
+def walk_one(title, names, links, known, look, asks=None):
     """One walk: the sources to add, newest first, at most CAP of each kind past those known, and what was noted.
 
-    look: {"discogs_named", "discogs_releases", "mb_named", "mb_releases", "ia_search"}, the lookups (tests swap them).
+    look: {"discogs_named", "discogs_releases", "mb_named", "mb_releases", "ia_search"}, the lookups (tests swap them),
+    and, where given, "discogs_about" and "mb_about". asks: a list the walk's questions are added to (candidates()).
     """
     notes, adding = [], []
     have = set(known)
@@ -225,7 +361,7 @@ def walk_one(title, names, links, known, look):
     for site, key, named, releases in (("Discogs", "discogs", look["discogs_named"], look["discogs_releases"]),
                                        ("MusicBrainz", "mb", look["mb_named"], look["mb_releases"])):
         lines = []
-        for artist in lookup_artists(site, names, links.get(key + "-artist", []), named, notes):
+        for artist in lookup_artists(site, names, links.get(key + "-artist", []), named, notes, asks, look.get(key + "_about")):
             try:
                 lines += releases(artist)
             except Exception as e:                           # a site down today: the next request walks it
@@ -250,7 +386,85 @@ LOOKUPS = {
     "mb_named": rambler.mb_artists_named,
     "mb_releases": lambda a: mb_releases(a, rambler.mb_records_of),
     "ia_search": ia_search,
+    "discogs_about": lambda a: discogs_about(a, sideman.discogs_get),
+    "mb_about": lambda a: mb_about(a, sideman.mb_get),
 }
+
+
+# ---------------------------------------------------------------------------
+# The question, as a box on the page
+# ---------------------------------------------------------------------------
+
+_PLAIN = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"), ("[", "&#91;"), ("]", "&#93;"), ("{", "&#123;"), ("}", "&#125;"),
+          ("|", "&#124;"), ("'", "&#39;"), ("~", "&#126;"), ("=", "&#61;"), ("://", ":&#47;/"), ("__", "&#95;_"))
+
+
+def plain(text):
+    """A site's words as wikitext that says them and does nothing else: no link, template, tag, bold or signature."""
+    text = " ".join(str(text).split())
+    for a, b in _PLAIN:
+        text = text.replace(a, b)
+    return text
+
+
+def candidate_line(c):
+    """One artist of the name, as a line of the box: the link, what the site says to tell them apart, how many
+    releases and from when, and a few titles; only what the site gave."""
+    line = f"* [{c['url']} {plain(c['name'])}]" + (f" ({plain(c['says'])})" if c.get("says") else "")
+    parts = []
+    if c.get("releases") is not None:
+        years = c.get("years") or []
+        when = "" if not years else (f", {years[0]}" if years[0] == years[-1] else f", {years[0]} to {years[-1]}")
+        parts.append(f"{c['releases']} release" + ("" if c["releases"] == 1 else "s") + when)
+    if c.get("titles"):
+        parts.append(", ".join('"' + plain(t) + '"' for t in c["titles"]))
+    return line + (": " + ": ".join(parts) if parts else "")
+
+
+def which_boxes(asks):
+    """The {{Which picker}} boxes a walk's questions make, one a site, each marked as a bot's and not yet checked
+    (status=proposed, which the wiki's gate asks of a bot and Template:Which picker says on the box)."""
+    out = []
+    for site in SITES:
+        mine = [a for a in asks if a["site"] == site and a["candidates"]]
+        if not mine:
+            continue
+        lines, seen = [], set()
+        for a in mine:
+            for c in a["candidates"]:
+                if c["url"] in seen:
+                    continue
+                seen.add(c["url"])
+                lines.append(candidate_line(c))
+            if a["found"] > len(a["candidates"]):
+                lines.append(f"* and {a['found'] - len(a['candidates'])} more named {plain(a['name'])} that this walk did not look at")
+        out.append("{{Which picker\n|status=proposed\n|site=" + site + "\n|1=\n" + "\n".join(lines) + "\n}}\n")
+    return "".join(out)
+
+
+def settle_box(title, w, boxed, links, prepend, stamp):
+    """What becomes of a walk's question: w["box"] is set to what was done. Nothing is written where the page has a
+    box already, where the page or its talk page now links an artist on each site that was asked about, or where
+    there is no login; a failure to save is kept as wanted, for the next run."""
+    asks = [a for a in w.get("asks", []) if a["candidates"]]
+    if not asks:
+        return
+    if boxed:
+        w["box"] = {"state": "the page has one", "at": stamp()}
+        return
+    asks = [a for a in asks if not links.get(SITES[a["site"]][0] + "-artist")]
+    if not asks:
+        w["box"] = {"state": "answered: the page links one", "at": stamp()}
+        return
+    if prepend is None:
+        w["box"] = {"state": "wanted", "note": "no login for the wiki in this build; the candidates are in asks"}
+        return
+    sites = " and ".join(dict.fromkeys(a["site"] for a in asks))
+    try:
+        rev = prepend(title, which_boxes(asks), f"Connectome walk (Artificial Dumb): more than one artist of this name on {sites}; which is this?")
+        w["box"] = {"state": "written", "at": stamp(), "rev": rev}
+    except Exception as e:
+        w["box"] = {"state": "wanted", "note": str(e)[:120], "tried": stamp()}
 
 
 # ---------------------------------------------------------------------------
@@ -292,11 +506,16 @@ def write_files(cache, walked):
     _write(os.path.join(cache, "walked_names.txt"), "".join(n + "\n" for n in names))
 
 
-def run(cache, asked, facts, known_paths, budget=None, look=LOOKUPS, clock=time.monotonic, stamp=now_iso, by="category"):
+def run(cache, asked, facts, known_paths, budget=None, look=LOOKUPS, clock=time.monotonic, stamp=now_iso, by="category",
+        prepend=None):
     """Walk the requests due, the oldest first, starting no new walk once budget seconds have gone; a walk started
     is finished. asked: [(page, when it was asked for)], from the category (by="category") or by hand ("hand", asked
     now). A page the wiki doesn't answer for waits for the next run. Writes the cache's files. Returns (walks,
-    waiting, report lines)."""
+    waiting, report lines).
+
+    facts(title) -> (names, links) or (names, links, whether the page has a {{Which picker}} box). prepend: the
+    wiki's editor (wiki_editor), or None with no login: then a walk's question waits in walked.json, and a later
+    run that has a login writes it, while there is budget left."""
     path = os.path.join(cache, "walked.json")
     walked = json.load(open(path)) if os.path.exists(path) else {}
     todo = due(asked, walked)
@@ -305,20 +524,52 @@ def run(cache, asked, facts, known_paths, budget=None, look=LOOKUPS, clock=time.
         if budget is not None and clock() - start >= budget:
             break
         try:
-            names, links = facts(title)
+            names, links, boxed = (tuple(facts(title)) + (False,))[:3]
         except Exception as e:
             report.append(f"{title}: not walked, the wiki didn't answer ({e}); next run")
             continue
         known = known_sources(known_paths) | {s for t, w in walked.items() if t != title for s in w["sources"]}
-        sources, notes = walk_one(title, names, links, known, look)
+        asks = []
+        sources, notes = walk_one(title, names, links, known, look, asks)
         walked[title] = {"requested": requested, "by": by, "walked": stamp(), "names": names, "sources": sources,
                          "notes": notes}
+        if asks:
+            walked[title]["asks"] = asks
+            settle_box(title, walked[title], boxed, links, prepend, stamp)
         write_files(cache, walked)
         done += 1
-        report.append(f"{title}: {len(sources)} sources ({'; '.join(notes)})")
+        report.append(f"{title}: {len(sources)} sources ({'; '.join(notes)})" + box_says(walked[title]))
+    # Questions an earlier run could not put on their pages (no login then, or the wiki said no): now, one by one.
+    for title in sorted(t for t, w in walked.items() if (w.get("box") or {}).get("state") == "wanted"):
+        if prepend is None or (budget is not None and clock() - start >= budget):
+            break
+        tried = walked[title]["box"].get("tried")
+        if tried and since(tried, stamp()) < RETRY_AFTER:
+            continue                                         # the wiki said no not long ago (or in this very run)
+        try:
+            names, links, boxed = (tuple(facts(title)) + (False,))[:3]
+        except Exception as e:
+            report.append(f"{title}: its question waits, the wiki didn't answer ({e})")
+            continue
+        settle_box(title, walked[title], boxed, links, prepend, stamp)
+        write_files(cache, walked)
+        report.append(f"{title}: the question from its walk of {walked[title]['walked']}" + box_says(walked[title]))
     if not os.path.exists(os.path.join(cache, "walked_sources.txt")):
         write_files(cache, walked)
     return done, len(todo) - done, report
+
+
+def since(then, now):
+    """Seconds from one of the walk's own stamps to another."""
+    at = lambda t: datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ")
+    return (at(now) - at(then)).total_seconds()
+
+
+def box_says(w):
+    box = w.get("box")
+    if not box:
+        return ""
+    return f"; Which picker box: {box['state']}" + (f" (revision {box['rev']})" if box.get("rev") else "") + (f" ({box['note']})" if box.get("note") else "")
 
 
 def main(argv):
@@ -330,12 +581,16 @@ def main(argv):
                     help="sources files the store already reads: what's in them isn't added again")
     ap.add_argument("--request", action="append", default=[], metavar="PAGE",
                     help="walk this page now, in the category or not (repeatable)")
+    ap.add_argument("--no-edit", action="store_true",
+                    help="write no Which picker box to the wiki, login or not: the question stays in walked.json")
     args = ap.parse_args(argv[1:])
     os.makedirs(args.cache, exist_ok=True)
     wiki_get = wiki_getter(args.wiki)
+    user, password = os.environ.get(BOT_USER, ""), os.environ.get(BOT_PASSWORD, "")
+    prepend = wiki_editor(args.wiki, user, password) if user and password and not args.no_edit else None
     asked = [(t, now_iso()) for t in args.request] if args.request else requests(wiki_get)
     done, waiting, report = run(args.cache, asked, lambda t: page_facts(wiki_get, t), args.sources, args.budget,
-                                by="hand" if args.request else "category")
+                                by="hand" if args.request else "category", prepend=prepend)
     print(f"Connectome walk: {done} walked" + (f"; {waiting} waiting for the next run" if waiting else "")
           + "".join("\n  " + r for r in report))
     return 0

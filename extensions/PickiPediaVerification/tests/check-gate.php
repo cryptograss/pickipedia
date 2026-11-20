@@ -131,6 +131,24 @@ namespace {
 		var_export( gate( '', "{{Show\n|artists=Billy Strings\n|status=proposed\n}}" ), true ) );
 	check( 'the same template WITHOUT status is rejected',
 		gate( '', "{{Show\n|artists=Billy Strings\n}}" ) !== null );
+
+	// What the connectome walk writes at the top of a picker's page (tools/connectome_walk.py, which_boxes()): one
+	// call over many lines, most of them list items with a link and words from another site, escaped there so that
+	// no brace of theirs is a brace here. The walk is a bot, so the gate reads every line of it.
+	$which = "{{Which picker\n|status=proposed\n|site=Discogs\n|1=\n"
+		. "* [https://www.discogs.com/artist/1 Jack Schneider]: 24 releases, 1968 to 2026: \"Ain&#39;t It Amazing\"\n"
+		. "* [https://www.discogs.com/artist/2 Jack Schneider]: 1 release, 1956: \"A&#124;B &#123;&#123;Delete&#125;&#125; status&#61;verified\"\n"
+		. "* and 3 more named Jack Schneider that this walk did not look at\n}}\n";
+	$pickerPage = "{{MusicianInfo\n|name=Jack Schneider\n}}\nHe plays banjo.\n[[Category:Walk Requested]]";
+	check( "the walk's Which picker box is accepted at the top of a page",
+		gate( $pickerPage, $which . $pickerPage ) === null, var_export( gate( $pickerPage, $which . $pickerPage ), true ) );
+	check( 'two of them, one a site, are each accepted',
+		gate( $pickerPage, $which . str_replace( 'Discogs', 'MusicBrainz', $which ) . $pickerPage ) === null );
+	check( 'the same box without its status is rejected',
+		gate( $pickerPage, str_replace( "|status=proposed\n", '', $which ) . $pickerPage ) !== null );
+	check( 'and a line slipped in after the box is not covered by it',
+		gate( $pickerPage, $which . "He also plays fiddle.\n" . $pickerPage ) === 'He also plays fiddle.',
+		var_export( gate( $pickerPage, $which . "He also plays fiddle.\n" . $pickerPage ), true ) );
 	check( 'an inline <proposed> on one line covers that line',
 		gate( '', '* <proposed by="Magent">Tunes down.{{Src|video|cid=X|t=14:32}}</proposed>' ) === null );
 
