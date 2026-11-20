@@ -425,3 +425,50 @@ def test_the_editor_says_what_the_wiki_said_and_never_the_password():
             assert False, "it should have raised"
         except RuntimeError as e:
             assert word in str(e) and "s3cret" not in str(e)
+
+
+def test_an_artist_is_asked_about_once_a_walk_however_many_names_find_them():
+    looked = []
+    look = ask_look()
+    look["discogs_about"] = lambda a: looked.append(a) or {"releases": 2}
+    asks = []
+    walk.walk_one("Jack Schneider", ["Jack Schneider", "Jack W. Schneider", "J. Schneider"], {}, set(), look, asks)
+    assert len(asks) == 3 and sorted(looked) == sorted(i for i, _ in SIX)                           # three names, six lookups, not eighteen
+    assert all(c["releases"] == 2 for a in asks for c in a["candidates"])
+    assert walk.which_boxes(asks).count("* [https://www.discogs.com/artist/") == 6                  # and each once in the box
+
+
+def test_past_its_budget_a_walk_lists_the_rest_by_name_and_link_alone():
+    now = [0.0]
+    look = ask_look(mb=MB_TWO)
+
+    def slow(artist_id):                                         # a site answering in ten seconds
+        now[0] += 10
+        return {"releases": 1}
+    look["discogs_about"] = look["mb_about"] = slow
+    asks = []
+    walk.walk_one("Jack Schneider", ["Jack Schneider"], {}, set(), look, asks, clock=lambda: now[0])
+    told = [("releases" in c) for a in asks for c in a["candidates"]]
+    assert told == [True, True, True] + [False] * 5 and now[0] == 30   # 25 seconds gone after the third: no fourth is asked, on either site
+    box = walk.which_boxes(asks)
+    assert "* [https://www.discogs.com/artist/7190407 Jack Schneider]\n" in box and "* [https://musicbrainz.org/artist/" + MB_TWO[1][0] + " Jack Schneider]\n" in box
+
+
+def test_a_question_still_waiting_is_dropped_when_its_page_leaves_the_category(tmp_path):
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), None)
+    saved, read = [], []
+    facts = lambda t: read.append(t) or (["Jack Schneider"], {}, False)
+    done, waiting, report = run_ask(tmp_path, facts, lambda *a: saved.append(a) or 5, asked=())      # the category is empty now
+    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
+    assert saved == [] and read == [] and w["box"] == {"state": "dropped: the page left the category", "at": "2026-11-20T04:00:00Z"}
+    assert "dropped: the page left the category" in report[0] and w["asks"]
+    run_ask(tmp_path, facts, lambda *a: saved.append(a) or 5)                                        # back in the category with no new walk due: it stays dropped
+    assert saved == []
+
+
+def test_a_walk_by_hand_leaves_other_pages_questions_waiting(tmp_path):
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), None)
+    saved = []
+    walk.run(str(tmp_path), [("Sam Jones", "2026-11-20T05:00:00Z")], lambda t: ([t], {}, False), [], look=ask_look(discogs=SIX[:1]),
+             stamp=lambda: "2026-11-20T05:00:00Z", prepend=lambda *a: saved.append(a) or 5, by="hand")
+    assert saved == [] and json.load(open(tmp_path / "walked.json"))["Jack Schneider"]["box"]["state"] == "wanted"

@@ -36,7 +36,8 @@ a {{Which picker|status=proposed}} box put at the top. This is the one place a w
 writes there. A page that has a box already, by hand or from a walk, gets no second one. With no login for the wiki
 in the build (CONNECTOME_WALK_BOT_USER and CONNECTOME_WALK_BOT_PASSWORD, a bot password; never printed), nothing is
 written to the page: the question waits in walked.json ("box": wanted), and a later run with a login writes it. A
-save the wiki refuses waits too, and is tried again after an hour.
+save the wiki refuses waits too, and is tried again after an hour. A question still waiting when its page leaves the
+category is dropped.
 
 What a walk finds goes into the cache, never into git, each line saying which request added it:
   walked.json          page -> {"requested", "by", "walked", "names", "sources", "notes", "asks", "box"}
@@ -61,7 +62,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CATEGORY = "Category:Walk_Requested"
 CAP = {"discogs": 20, "mb": 10, "lma": 20}
 LINKS_CAP = 50                    # sources a page and its talk page can name, taken as they are
-CANDIDATES_CAP = 6                # artists of one name a walk asks a site about: each is a paced request more
+CANDIDATES_CAP = 6                # artists of one name a walk lists for a site
+ABOUT_BUDGET = 25                 # seconds a walk spends asking the sites about them: each is a paced request or two,
+                                  # and the build stops a walk at 90. Past it the rest are listed by name and link alone.
 TITLES_SHOWN = 3
 SITES = {"Discogs": ("discogs", "https://www.discogs.com/artist/", re.compile(r"\d+$")),
          "MusicBrainz": ("mb", "https://musicbrainz.org/artist/", re.compile(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"))}
@@ -294,7 +297,8 @@ def mb_about(mbid, get):
 
 def candidates(site, name, found, about):
     """The question a site's several artists of one name make: {"site", "name", "found", "candidates"}, each
-    candidate {"url", "name"} with what `about` says of them, where it answers; the first CANDIDATES_CAP of them."""
+    candidate {"url", "name"} with what `about` says of them (walk_one's: once an artist, within the walk's
+    budget, a failure kept as a note); the first CANDIDATES_CAP of them."""
     key, base, shape = SITES[site]
     out = []
     for artist_id, artist_name in found:
@@ -304,10 +308,7 @@ def candidates(site, name, found, about):
             break
         c = {"url": base + str(artist_id), "name": artist_name}
         if about:
-            try:
-                c.update(about(str(artist_id)))
-            except Exception as e:                           # the list still asks; this one says less
-                c["note"] = str(e)[:80]
+            c.update(about(str(artist_id)))
         out.append(c)
     return {"site": site, "name": name, "found": len(found), "candidates": out}
 
@@ -335,14 +336,37 @@ def lookup_artists(site, names, linked_ids, named, notes, asks=None, about=None)
     return list(dict.fromkeys(out))
 
 
-def walk_one(title, names, links, known, look, asks=None):
+def walk_one(title, names, links, known, look, asks=None, clock=time.monotonic):
     """One walk: the sources to add, newest first, at most CAP of each kind past those known, and what was noted.
 
     look: {"discogs_named", "discogs_releases", "mb_named", "mb_releases", "ia_search"}, the lookups (tests swap them),
     and, where given, "discogs_about" and "mb_about". asks: a list the walk's questions are added to (candidates()).
+    An artist is asked about once a walk, however many of the page's names find them (re's review, 20 Nov 2026: a
+    page with two redirects asked three times over), and none is asked about once ABOUT_BUDGET seconds have gone
+    on it: those are listed without their details.
     """
     notes, adding = [], []
     have = set(known)
+    told, spent = {}, [0.0]
+
+    def once(key):
+        about = look.get(key + "_about")
+        if not about:
+            return None
+
+        def ask(artist_id):
+            if (key, artist_id) not in told:
+                if spent[0] >= ABOUT_BUDGET:
+                    return {}                                # out of time: named and linked, nothing more
+                start = clock()
+                try:
+                    told[(key, artist_id)] = about(artist_id)
+                except Exception as e:                       # the list still asks; this one says less
+                    told[(key, artist_id)] = {"note": str(e)[:80]}
+                finally:
+                    spent[0] += clock() - start
+            return dict(told[(key, artist_id)])
+        return ask
 
     def add(lines, cap=None):
         n = 0
@@ -361,7 +385,7 @@ def walk_one(title, names, links, known, look, asks=None):
     for site, key, named, releases in (("Discogs", "discogs", look["discogs_named"], look["discogs_releases"]),
                                        ("MusicBrainz", "mb", look["mb_named"], look["mb_releases"])):
         lines = []
-        for artist in lookup_artists(site, names, links.get(key + "-artist", []), named, notes, asks, look.get(key + "_about")):
+        for artist in lookup_artists(site, names, links.get(key + "-artist", []), named, notes, asks, once(key)):
             try:
                 lines += releases(artist)
             except Exception as e:                           # a site down today: the next request walks it
@@ -530,7 +554,7 @@ def run(cache, asked, facts, known_paths, budget=None, look=LOOKUPS, clock=time.
             continue
         known = known_sources(known_paths) | {s for t, w in walked.items() if t != title for s in w["sources"]}
         asks = []
-        sources, notes = walk_one(title, names, links, known, look, asks)
+        sources, notes = walk_one(title, names, links, known, look, asks, clock)
         walked[title] = {"requested": requested, "by": by, "walked": stamp(), "names": names, "sources": sources,
                          "notes": notes}
         if asks:
@@ -540,7 +564,16 @@ def run(cache, asked, facts, known_paths, budget=None, look=LOOKUPS, clock=time.
         done += 1
         report.append(f"{title}: {len(sources)} sources ({'; '.join(notes)})" + box_says(walked[title]))
     # Questions an earlier run could not put on their pages (no login then, or the wiki said no): now, one by one.
+    # A page taken out of the category since is no longer asking for a walk, and is not asked which (re's review).
+    still = {t for t, _ in asked}
     for title in sorted(t for t, w in walked.items() if (w.get("box") or {}).get("state") == "wanted"):
+        if by != "category":
+            break                                            # a walk by hand settles only what it walked
+        if title not in still:
+            walked[title]["box"] = {"state": "dropped: the page left the category", "at": stamp()}
+            write_files(cache, walked)
+            report.append(f"{title}: the question from its walk of {walked[title]['walked']}" + box_says(walked[title]))
+            continue
         if prepend is None or (budget is not None and clock() - start >= budget):
             break
         tried = walked[title]["box"].get("tried")
