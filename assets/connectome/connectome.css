@@ -181,6 +181,8 @@ main {
 	width: 100%;
 	min-height: 0;
 	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;    /* a held name opens the sheet, not the phone's own card for a link */
 	touch-action: manipulation;
 	-webkit-tap-highlight-color: transparent;
 }
@@ -573,7 +575,7 @@ a.play:focus {
 	background: var( --play-on );
 }
 
-/* ---- the sheet: what a finger touched, and the ways on from it ---- */
+/* ---- the sheet: what a finger is held on, and the other ways on from it ---- */
 #sheet {
 	position: absolute;
 	right: 8px;
