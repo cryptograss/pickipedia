@@ -1029,7 +1029,10 @@ function further( v, lay, mine, seats, seatOf, web, W, H ) {
 		return b ? { label, at: { x: b.x, y: b.y, anchor: b.anchor } } : null;
 	};
 	const clear = ( l, of, pad ) => K.clearOf( l, of, pad ).length === l.length;
-	const on = K.beyond( G, v.a, mine.map( ( c ) => c.id ), 2, v.keep || [] ), fars = [];
+	// One of the band the middle has no tie with has a seat here all the same (egoScene's `apart`): not a step further too.
+	const seated = new Set( mine.map( ( c ) => c.id ) ), strangers = mine.filter( ( c ) => c.apart ).length;
+	const on = K.beyond( G, v.a, mine.map( ( c ) => c.id ), 2 + strangers, v.keep || [] )
+		.map( ( l ) => ( strangers ? l.filter( ( f ) => !seated.has( f.id ) ).slice( 0, 2 ) : l ) ), fars = [];
 	disc( lay.C, 26 );
 	const mid = wide( cut( first( v.a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ), FONT.subject ) / 2;
 	discs.push( { x1: lay.C.x - mid, y1: lay.C.y + 22, x2: lay.C.x + mid, y2: lay.C.y + 22 + tx( 19 ) } );   // the middle's own name, tucked under it
@@ -1105,7 +1108,7 @@ function egoScene( v ) {
 	// The places round the middle: as many as the frame names, and while a song plays as many as its band takes
 	// (K.bandSeats: with the song's own and the card's empty one), where the frame holds them.
 	const usual = H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 );
-	const want = playing ? K.bandSeats( others.length, kept.length - band.length, usual, carded, W, H ) : Math.min( kept.length, usual );
+	const want = playing ? K.bandSeats( others.length, usual, carded, W, H ) : Math.min( kept.length, usual );
 	// another turn of the company, where there are more than one view names; those the reader came by stay, and the goal
 	const stay = kept.filter( pinned ).length + apart.length;
 	const ring = K.turned( kept, stay - apart.length, Math.max( 1, want - stay ), v.turn || 0 );
@@ -1122,6 +1125,21 @@ function egoScene( v ) {
 		// number of small one pointing to the upper-right if rabbithole is playing"): no bead in the upper right,
 		// and the beads there would have been are spread round the rest.
 		lay.dots = K.spread( lay.dots.filter( ( p ) => !( p.x > lay.C.x + 20 && p.y < lay.C.y - 20 ) ), need + 2 );
+	}
+	if ( corner && lay.named.length ) {
+		// The ring sits clear below the card: where its top place would be under the card's corner, the whole of
+		// it is set down lower, as far as the frame has room under it.
+		// By the named places alone, which are the same for every one of a band: the ring is as low for each solo.
+		const top = Math.min( ...lay.named.map( ( p ) => p.y ) ), foot = Math.max( ...lay.named.map( ( p ) => p.y ) );
+		const lower = Math.round( Math.max( 0, Math.min( corner.y2 + ( playing ? 30 : 22 ) - top, H - 44 - tx( 18 ) - foot ) ) );
+		if ( lower > 0 ) {
+			const drop = ( p ) => {
+				p.y += lower;
+			};
+			[ lay.C, ...lay.named, ...lay.dots ].forEach( drop );
+			( lay.far || [] ).forEach( ( f ) => [ f.main, ...f.sides ].forEach( drop ) );
+			lay.dots = lay.dots.filter( ( p ) => p.y < H - 10 );
+		}
 	}
 	let songAt = null;
 	if ( playing && lay.named.length > 1 ) {

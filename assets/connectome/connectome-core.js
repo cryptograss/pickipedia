@@ -1475,18 +1475,18 @@ export function bandOf( G, cut, soloist ) {
 /**
  * How many places the ring has while a song plays (Justin, #connectome, 20 Nov 2026, 19:41Z: "keep the ensemble
  * visible the whole time"): a place for each of the band, one for the song, and with the card out one left empty
- * for it; never fewer than the frame names anyway (`usual`) while the soloist has other company to name
- * (`more` of them), and never more than the frame holds. A frame too small for the whole band names as many as
- * it holds; the rest are beads.
+ * for it; never fewer than the frame names anyway (`usual`), and never more than the frame holds. It is the same
+ * for every one of the band taking a solo, whoever else they have played with, so the ring is the same ring from
+ * one solo to the next and everyone keeps their seat. A frame too small for the whole band names as many as it
+ * holds; the rest are beads.
  *
  * band: how many others are on the cut. carded: the middle's card is out. W, H: the frame, in the drawing's
  * measure. Returns the places asked of ego(): the song's and the card's among them.
  */
-export function bandSeats( band, more, usual, carded, W, H ) {
+export function bandSeats( band, usual, carded, W, H ) {
 	const extra = 1 + ( carded ? 1 : 0 );
 	const holds = W >= 520 && H >= 600 ? 10 : ( ( W >= 520 && H >= 440 ) || ( W >= 440 && H >= 640 ) ? 8 : ( W >= 340 && H >= 400 ? 6 : 4 ) );
-	const asked = Math.max( band + extra, Math.min( usual, band + Math.max( 0, more ) + extra ) );
-	return Math.min( asked, holds );
+	return Math.min( Math.max( band + extra, usual ), Math.max( holds, usual ) );
 }
 
 /**
