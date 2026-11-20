@@ -791,6 +791,9 @@ a.play:focus {
 
 .pill.tag.nopage text { fill: var( --ink ); }
 
+/* A pill's "+n": a mark of its own, since its click goes somewhere the pill's doesn't. */
+.pill tspan.plus { fill: var( --link ); font-weight: 600; cursor: pointer; }
+.pill tspan.plus:hover { text-decoration: underline; }
 .pill.tag tspan.n {
 	font: 400 calc( 11.5px * var( --t, 1 ) ) var( --ui );
 	fill: var( --ink2 );

@@ -279,7 +279,8 @@ function rawAddress( v ) {
 		}
 		return '?' + new URLSearchParams( q );
 	}
-	return '?' + new URLSearchParams( { a: first( v.a ), b: first( v.b ) } );
+	// the two, and the record whose tracks the reader asked to see spread out between them (its "+n")
+	return '?' + new URLSearchParams( Object.assign( { a: first( v.a ), b: first( v.b ) }, v.rec !== undefined && G.music[ v.rec ] ? { rec: G.music[ v.rec ].key } : null ) );
 }
 
 /** The view an address asks for; null when it names nothing the graph knows. (?from= and ?to= are read as a and b.) */
@@ -326,7 +327,8 @@ function parse( q ) {
 		const via = q.get( 'via' ), turn = parseInt( q.get( 'turn' ) || '', 10 );
 		return { a, keep, by: by === null ? undefined : by, via: via || undefined, turn: turn > 0 ? turn : undefined };
 	}
-	return { a, b };
+	const rec = q.get( 'rec' ) ? K.findPiece( G, q.get( 'rec' ) ) : null;
+	return rec !== null && rec !== undefined ? { a, b, rec: M( rec ).m } : { a, b };
 }
 
 /** A plain click on a link to somewhere in the graph goes there without leaving; any other kind of click is the browser's. */
@@ -500,7 +502,7 @@ function pillsFor( tie, room, most, prefer, entry ) {
 	// `entry`: the one to say, as fresh() chose it, its song first
 	const came = entry || ( prefer === undefined ? null : ( tie.ev.find( ( e ) => K.pieceFor( G, e ) === prefer ) || tie.ev.find( ( e ) => e.m === M( prefer ).m ) ) );
 	if ( came ) {                                                 // the piece the reader came by is the one to say
-		pool = [ came ].concat( pool.filter( ( e ) => e.m !== came.m ) );
+		pool = [ came ].concat( pool.filter( ( e ) => ( came.one !== undefined ? e !== came : e.m !== came.m ) ) );
 	}
 	for ( const e of pool ) {
 		if ( shown.length >= most ) {
@@ -619,11 +621,23 @@ function sayHop( sc, lay, h, t1, t2, u, v, tie, room ) {
 	}
 }
 
-function pairScene( a, b ) {
+function pairScene( a, b, rec ) {
 	const { W, H } = frame();
 	const sc = newScene();
-	const tie = G.adj[ a ].get( b ) || null;
+	const whole = G.adj[ a ].get( b ) || null;
+	// A record the two share several tracks of says one of them on a line and "+n" for the rest. Asked for by its
+	// "+n" (Justin, #connectome, 20 Nov 2026, 14:16Z: "if we have '+<n>' in there, that needs to do something.
+	// Probably a rainbow graph showing all those songs in between the two, with other involved pickers as hops
+	// where relevant"), that record is spread out here: a strand to each of its tracks, named, before the rest of
+	// what the two share; and those who are on that record with both come first among the ways by one picker.
+	const spread = rec !== undefined && whole ? whole.ev.find( ( e ) => e.m === rec && e.how === K.TRACK && e.songs.length > 1 ) : null;
+	const tie = spread ? Object.assign( {}, whole, { ev: spread.songs.map( ( song ) => Object.assign( {}, spread, { songs: [ song ], one: song } ) )
+		.concat( whole.ev.filter( ( e ) => e !== spread ) ) } ) : whole;
+	const onRec = ( t ) => !!t && t.ev.some( ( e ) => e.m === rec );
 	const all = K.mutuals( G, a, b );
+	if ( spread ) {
+		all.sort( ( x, y ) => ( onRec( y.ta ) && onRec( y.tb ) ? 1 : 0 ) - ( onRec( x.ta ) && onRec( x.tb ) ? 1 : 0 ) );      // a stable sort: otherwise as they were
+	}
 	const played = all.filter( ( m ) => m.played );
 	if ( !tie && !all.length ) {
 		return ladderScene( a, b, W, H, sc );
@@ -636,7 +650,9 @@ function pairScene( a, b ) {
 
 	// What the two share: the loudest few said on their strands, the rest thin strands round them.
 	const shared = [];
-	const said = tie ? Math.min( tie.ev.length, small ? 1 : ( H > 640 ? 4 : ( H > 460 ? 3 : 2 ) ) ) : 0;
+	const usual = small ? 1 : ( H > 640 ? 4 : ( H > 460 ? 3 : 2 ) );
+	// the record spread out: every track of it named, as far as the frame's height goes with three rows left for the ways round
+	const said = tie ? Math.min( tie.ev.length, spread ? Math.max( usual, Math.min( spread.songs.length, Math.floor( ( H - TOP - BOTTOM ) / ( 2 * ROW ) ) - 3 ) ) : usual ) : 0;
 	const thin = tie ? Math.min( tie.ev.length - said, H > 460 ? 12 : 6 ) : 0;
 	// what's said on the straight line keeps clear of a name under either end
 	const pillRoom = Math.max( 96, Math.min( 300, W * 0.36, W - 2 * 76 - ( en.sa ? 0 : en.la + en.lb ) ) );
@@ -683,12 +699,13 @@ function pairScene( a, b ) {
 		}
 		if ( x.e ) {                                                 // something the two share: its own arc, end to end
 			const piece = K.pieceFor( G, x.e ), o = lit === null ? 1 : 0.4;
-			sc.lines.set( 's' + lineKey( a, b ) + '.' + x.e.m, { a: 'p' + a, b: 'p' + b, u: a, v: b, tie, e: x.e, piece, stands: 'piece', strand: true,
+			const key = lineKey( a, b ) + '.' + x.e.m + ( x.e.one !== undefined ? '·' + x.e.one : '' );            // a track of the record spread out: a strand of its own
+			sc.lines.set( 's' + key, { a: 'p' + a, b: 'p' + b, u: a, v: b, tie, e: x.e, piece, stands: 'piece', strand: true,
 				role: 'direct', fine: !x.fit, emph: x === shared[ 0 ] && lit === null, w: strandWidth( x.e ) + ( x.fit ? 1.5 : 0 ), o: x.fit ? o : o * 0.8,
 				bow: bow( st, 0, 1 ), delay: 100 + i * 25 } );
 			if ( x.fit ) {
 				const mk = st.marks[ 0 ], p = x.fit;
-				sc.pills.set( 'm' + lineKey( a, b ) + '.' + p.e.m, { stands: 'piece', piece, is: 'm' + piece, x: mk.x, y: mk.y, w: p.w, label: p.label,
+				sc.pills.set( 'm' + key, { stands: 'piece', piece, is: 'm' + piece, x: mk.x, y: mk.y, w: p.w, label: p.label,
 					glyph: p.glyph, tier: p.tier, e: p.e, u: a, v: b, o, delay: 140 + i * 25, play: p.play, song: p.song } );
 			}
 			return;
@@ -724,13 +741,15 @@ function pairScene( a, b ) {
 	} );
 
 	sc.pool = pool;
-	sc.tie = tie;
+	sc.tie = whole;
 	sc.lit = lit;
 	sc.loose = needLoose;
 	sc.ways = twos;
 	sc.head = [ nameLink( a ), ' and ', nameLink( b ) ];
 	const both = played.length;
-	if ( tie && tie.played ) {
+	if ( spread ) {
+		sc.sub = [ h( 'b', null, K.plural( spread.songs.length, 'track' ) + ' together on ' + K.clip( K.naming( G, spread ).long, 60 ) ), ' · ', K.together( whole ), ' in all' ];
+	} else if ( tie && tie.played ) {
 		sc.sub = [ h( 'b', null, K.together( tie ) ) ];
 	} else if ( tie ) {
 		sc.sub = [ K.together( tie ) ];
@@ -2269,12 +2288,27 @@ const draw = {
 		const gl = glyph( d.glyph );
 		gl.setAttribute( 'transform', `translate(${ -d.w / 2 + 14 } 0)` );
 		g.appendChild( gl );
-		g.appendChild( s( 'text', { x: -d.w / 2 + 25, y: tx( 4.3 ) }, d.label ) );
+		// "+n": the other tracks of the record these two share. A mark of its own: its click spreads them out between the two.
+		const plus = spreads( d ) ? /^(.*\S)\s(\+\d+)$/.exec( d.label ) : null;
+		const t = s( 'text', { x: -d.w / 2 + 25, y: tx( 4.3 ) }, plus ? plus[ 1 ] + ' ' : d.label );
+		if ( plus ) {
+			const n = s( 'tspan', { class: 'plus' }, plus[ 2 ] );
+			n.appendChild( s( 'title', null, `All ${ d.e.songs.length } tracks ${ first( d.u ) } and ${ first( d.v ) } share on it, spread out between them` ) );
+			t.appendChild( n );
+		}
+		g.appendChild( t );
 		if ( d.play ) {                                              // a track that plays: the rabbit takes you there
 			g.appendChild( playChip( d.w / 2 - 37, 0, d.play, d.song ) );
 		}
 	}
 };
+
+/** Does this pill's "+n" lead anywhere: several tracks of one record, between two pickers who are both known, not already spread out. */
+function spreads( d ) {
+	return !!d.e && d.e.how === K.TRACK && d.e.songs && d.e.songs.length > 1 && d.u >= 0 && d.v >= 0 && !!G.adj[ d.u ] && G.adj[ d.u ].has( d.v ) &&
+		!( view.b !== undefined && view.rec === d.e.m && lineKey( view.a, view.b ) === lineKey( d.u, d.v ) );
+}
+const spreadOut = ( d ) => go( { a: d.u, b: d.v, rec: d.e.m } );
 
 /** The way into Rabbithole, small: a rabbit and a play mark. */
 function playMark() {
@@ -2972,7 +3006,7 @@ function label( v ) {
 	return v.b === undefined ? first( v.a ) : first( v.a ) + ' ⟷ ' + first( v.b );
 }
 
-const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m && v.s === w.s && v.cut === w.cut && v.pg === w.pg &&
+const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.rec === w.rec && v.m === w.m && v.s === w.s && v.cut === w.cut && v.pg === w.pg &&
 	v.playing === w.playing;
 
 /** Where each thing in sight is now, by what it stands for: a picker ('p' and their number) or a piece ('m' and its). */
@@ -3035,7 +3069,7 @@ function show( quick, again ) {
 		words( kept.T );
 		svg.setAttribute( 'viewBox', kept.box );
 	} else {
-		scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.pg !== undefined ? pageScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
+		scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.pg !== undefined ? pageScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b, view.rec ) );
 	}
 	if ( !view.walk && !view.way ) {
 		drawn.set( view, { scene, fit: fitNow(), box: svg.getAttribute( 'viewBox' ), S, T, sel: Object.assign( {}, sel ) } );
@@ -3989,6 +4023,10 @@ function aPiece( d ) {
 		title: n.short, lines: [ n.long !== n.short ? n.long : '', d.e.songs.length > 1 ? d.e.songs.slice( 0, 6 ).join( ', ' ) + ( d.e.songs.length > 6 ? ', …' : '' ) : '',
 			K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) ], hint: "click: go to it · who's on it, and where they lead",
 		acts: [ act( 'Go to ' + K.clip( K.called( G, pc ).name, 30 ), () => go( { m: d.piece, hand: [ d.u, d.v ] } ) ) ] };
+	if ( spreads( d ) ) {
+		w.hint = `click: go to it · click +${ d.e.songs.length - 1 }: all ${ d.e.songs.length } tracks, between the two`;
+		w.acts.push( act( `All ${ d.e.songs.length } tracks ${ first( d.u ) } & ${ first( d.v ) } share on it`, () => spreadOut( d ) ) );
+	}
 	for ( const song of d.e.songs.slice( 0, 3 ) ) {
 		const to = K.playOf( G, m, song );
 		if ( to ) {
@@ -4296,6 +4334,13 @@ svg.addEventListener( 'click', ( e ) => {
 	}
 	if ( a ) {
 		e.preventDefault();                                          // a name goes where its mark goes: to them, here
+	}
+	const plus = e.target.closest( 'tspan.plus' ), pg = plus && plus.closest( 'g[data-kind]' ), pit = pg && live[ pg.dataset.kind ].get( pg.dataset.k );
+	if ( pit && !pit.dead && spreads( pit.d ) ) {                    // a pill's "+n": the rest of that record, spread out between the two
+		closeSheet();
+		hush();
+		spreadOut( pit.d );
+		return;
 	}
 	const g = pick( e );
 	if ( fingers ) {
