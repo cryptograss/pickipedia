@@ -61,7 +61,7 @@ FEATURED_PAGE = 'Cryptograss:Connectome/Featured'
 TEMPLATE = 'Template:MusicianInfo'
 # The picture a musician's page gives for them: {{MusicianInfo|image=Some file.jpg|...}}, with or without "File:".
 PORTRAIT = re.compile(r'\{\{\s*MusicianInfo\b[^{}]*?\|\s*image\s*=\s*(?:File:|Image:)?\s*([^|{}\[\]<>\n]+)', re.S | re.I)
-VIEWER = '/assets/connectome/'          # the big graph, served beside the wiki
+VIEWER = '/bacon'                      # the big graph's page (Justin, 16 Nov 2026); its files: assets/connectome/
 ICON = '/index.php?title=Special:Redirect/file/Instrument-icon-{}.png'
 UA = 'PickiPedia-connectome-card/1.0'
 # The track a song page plays in Rabbithole: the first parameter of its {{Listen in Rabbithole}}; or, since
