@@ -2539,9 +2539,10 @@ function sync( kind, next, now ) {
 		if ( it.sig !== sg ) {
 			draw[ kind ]( it.el, d );
 			it.sig = sg;
+			it.wd = null;                                                // drawn afresh: its paths have no shape yet (put's tick)
 		}
 		Object.assign( it, { d, fx: it.x, fy: it.y, fo: it.o, fq: it.q || null, tx: d.x, ty: d.y, to: d.o === undefined ? 1 : d.o, t0: now,
-			delay: fresh && !it.born ? ( d.delay || 0 ) : 0, dead: false } );
+			delay: fresh && !it.born ? ( d.delay || 0 ) * WAIT : 0, dead: false } );
 		if ( kind === 'line' && d.glint ) {
 			spark( it, d.glint );
 		} else if ( kind === 'node' && d.glintTo ) {
@@ -2584,8 +2585,15 @@ function pathOf( it, e ) {
 		`${ A }Q${ ( ( a.x + b.x ) / 2 + q.x ).toFixed( 1 ) } ${ ( ( a.y + b.y ) / 2 + q.y ).toFixed( 1 ) } ${ B }`;
 }
 
+/**
+ * How long a view takes to slide into place, and how much of each mark's own wait it keeps. It was 420 ms with the
+ * waits whole, which had the last bead arrive 720 ms after a click (Justin, #connectome, 20 Nov 2026: "clicking
+ * around the graph feels clunky"): now the last is in by 450 ms, and there are fewer frames to draw.
+ */
+const SLIDE = 300, WAIT = 0.5;
+
 function put( next, quick ) {
-	const D = quick || still ? 0 : 420;
+	const D = quick || still ? 0 : SLIDE;
 	const now = performance.now();
 	sync( 'node', next.nodes, now );
 	sync( 'pill', next.pills, now );
@@ -2608,23 +2616,38 @@ function put( next, quick ) {
 					live[ kind ].delete( key );
 					continue;
 				}
-				it.el.setAttribute( 'opacity', it.o.toFixed( 3 ) );
+				// Only what changed is written (wo, wt, wd: as last written). Most of a view is not moving while it
+				// changes: what leaves fades where it stands, what arrives fades in where it will be, and only what
+				// stays slides. Writing every mark's place and every line's shape on every frame had the browser lay
+				// out and paint the whole drawing each frame: a click took a second of a laptop's main thread, in
+				// frames of 70 ms (Justin, #connectome, 20 Nov 2026: "clicking around the graph feels clunky").
+				const o = it.o.toFixed( 3 );
+				if ( it.wo !== o ) {
+					it.el.setAttribute( 'opacity', it.wo = o );
+				}
 				if ( kind === 'line' ) {
 					const p = pathOf( it, e );
-					if ( p ) {
+					if ( p && it.wd !== p ) {
+						it.wd = p;
 						for ( const c of it.el.children ) {
 							c.setAttribute( 'd', p );
 						}
 					}
 				} else {
-					it.el.setAttribute( 'transform', `translate(${ it.x.toFixed( 1 ) } ${ it.y.toFixed( 1 ) })` );
+					const at = `translate(${ it.x.toFixed( 1 ) } ${ it.y.toFixed( 1 ) })`;
+					if ( it.wt !== at ) {
+						it.el.setAttribute( 'transform', it.wt = at );
+					}
 				}
 			}
 		}
 		if ( busy ) {
 			raf = requestAnimationFrame( tick );
+		} else {
+			svg.classList.remove( 'sliding' );
 		}
 	};
+	svg.classList.toggle( 'sliding', !!D );                          // no easing of a line's shade by the stylesheet while this sets it frame by frame
 	if ( D ) {
 		raf = requestAnimationFrame( tick );
 	} else {
@@ -3651,7 +3674,8 @@ function pathSay() {
 	}
 	if ( !nav.hidden ) {                                         // the newest in sight, once the new ones have opened
 		nav.scrollTo( { left: nav.scrollWidth, behavior: still ? 'auto' : 'smooth' } );
-		setTimeout( () => nav.scrollTo( { left: nav.scrollWidth, behavior: still ? 'auto' : 'smooth' } ), still ? 0 : 380 );
+		// at a frame, where the page is laid out anyway: from a timer it had the page laid out again in mid-slide
+		setTimeout( () => requestAnimationFrame( () => nav.scrollTo( { left: 1e6, behavior: still ? 'auto' : 'smooth' } ) ), still ? 0 : 380 );
 	}
 }
 
@@ -3904,15 +3928,25 @@ function qrRoom( quick ) {
 		}
 		box.classList.remove( 'tight' );
 		const r = box.getBoundingClientRect();
-		box.classList.toggle( 'tight', [ ...svg.querySelectorAll( 'text, circle, image, rect:not( .reach )' ) ].some( ( el ) => {
+		// Only the marks that have come to stand near its corner are asked where they are, by where the view put
+		// them: asking every word and circle of the drawing cost a laptop some 50 ms, a second after every click.
+		const m = svg.getScreenCTM(), near = [];
+		for ( const kind of m ? [ 'node', 'pill' ] : [] ) {
+			for ( const [ , it ] of live[ kind ] ) {
+				if ( !it.dead && it.to > 0.05 && m.a * it.tx + m.e > r.left - 280 && m.d * it.ty + m.f > r.top - 70 ) {
+					near.push( it.el );
+				}
+			}
+		}
+		box.classList.toggle( 'tight', near.some( ( g ) => [ ...g.querySelectorAll( 'text, circle, image, rect:not( .reach )' ) ].some( ( el ) => {
 			const b = el.getBoundingClientRect();
 			return b.width > 0 && b.right > r.left - 4 && b.left < r.right + 4 && b.bottom > r.top - 4 && b.top < r.bottom + 4;
-		} ) );
+		} ) ) );
 	};
 	if ( quick ) {
 		look();
 	}
-	qrLook = setTimeout( look, 900 );
+	qrLook = setTimeout( look, SLIDE + 380 );                        // once the view has slid into place
 }
 
 /** What a kept graph says of itself, above it, and its lines marked where a source has gone since. */
