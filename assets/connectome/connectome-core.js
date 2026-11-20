@@ -590,6 +590,43 @@ export function routes( G, a, b, want = 3 ) {
 	return { hops: L, chains, others };
 }
 
+/**
+ * Ways across by two pickers: a, x, y, b, where a has played with x, x with y and y with b, and neither x nor y is
+ * one of `skip` (those who have a tie to both ends are drawn as ways by one picker). Up to `want` of them, the
+ * loudest first (a way is as loud as its quietest hop: see loudness), and no picker on two of them: each is its
+ * own arc of the rainbow between the two (Justin, #connectome, 19 Nov 2026: "a multi-hop rainbow for their two hops").
+ * Returns [[a, x, y, b]].
+ */
+export function ways( G, a, b, want = 4, skip = [] ) {
+	const out = new Set( [ a, b, ...skip ] );
+	const found = [];
+	for ( const [ x, t1 ] of G.adj[ a ] ) {
+		if ( !t1.played || out.has( x ) ) {
+			continue;
+		}
+		const l1 = loudness( t1 );
+		for ( const [ y, t2 ] of G.adj[ x ] ) {
+			const t3 = t2.played && !out.has( y ) ? G.adj[ b ].get( y ) : null;
+			if ( t3 && t3.played ) {
+				found.push( { x, y, s: Math.min( l1, loudness( t2 ), loudness( t3 ) ), sum: l1 + loudness( t2 ) + loudness( t3 ) } );
+			}
+		}
+	}
+	found.sort( ( p, q ) => ( q.s - p.s ) || ( q.sum - p.sum ) || G.people[ p.x ].name.localeCompare( G.people[ q.x ].name ) ||
+		G.people[ p.y ].name.localeCompare( G.people[ q.y ].name ) );
+	const chains = [], used = new Set();
+	for ( const f of found ) {
+		if ( chains.length >= want ) {
+			break;
+		}
+		if ( !used.has( f.x ) && !used.has( f.y ) ) {
+			chains.push( [ a, f.x, f.y, b ] );
+			used.add( f.x ).add( f.y );
+		}
+	}
+	return chains;
+}
+
 /** The Bacon number: hops from one picker to another, or -1. */
 export function hops( G, a, b ) {
 	return distances( G, a )[ b ];
@@ -1467,67 +1504,15 @@ export function clip( s, n ) {
  * --------------------------------------------------------------------------------------------------------- */
 
 /**
- * Two pickers and what lies between them: a on the left, b on the right, the direct tie along the middle,
- * and whoever both have played with in a column between, the closest nearest the middle.
- *
- * opts: W, H, direct (is there a tie along the middle), named, dots (how many of each are wanted),
- * la, lb (half the width of each end's name, so neither runs off the frame); gap and perRow, how far apart
- * the beads sit and how many to a row (18 and 7; wider and fewer where a finger has to tell them apart).
- * Returns { A, B, named: [{x, y, below}], dots: [{x, y}], band: {x1, x2, y} }; fewer places than asked
- * when the frame is too small for them.
+ * Where two pickers stand with what lies between them: a on the left, b on the right, on the frame's middle line.
+ * la, lb: half the width of each end's name, or all of it where it's written beside its picker, so neither runs
+ * off the frame.
  */
 function ends( W, H, la, lb ) {
 	const cy = Math.round( H / 2 );
 	const inset = Math.max( 76, Math.min( W * 0.13, 170 ) );
 	return { A: { x: Math.round( Math.max( inset, ( la || 0 ) + 12 ) ), y: cy },
 		B: { x: Math.round( W - Math.max( inset, ( lb || 0 ) + 12 ) ), y: cy }, cy };
-}
-
-export function bridge( { W, H, direct, named, dots, la, lb, gap = 18, perRow = 7 } ) {
-	const { A, B, cy } = ends( W, H, la, lb );
-	const mid = Math.round( W / 2 );
-	const room = cy - 34;                                // above the middle line, and below it
-	const step = Math.max( 64, Math.min( 108, ( room - 28 ) / 3 ) );   // 28: a name under the lowest picker
-	const perSide = Math.max( 1, Math.floor( ( room - 28 ) / step + 0.001 ) );
-	const places = [];
-	if ( !direct ) {
-		places.push( { x: mid, y: cy, below: true } );
-	}
-	for ( let k = 1; k <= perSide; k++ ) {
-		places.push( { x: mid, y: Math.round( cy - k * step ), below: false } );
-		places.push( { x: mid, y: Math.round( cy + k * step ), below: true } );
-	}
-	const namedPlaces = places.slice( 0, Math.max( 0, named ) );
-
-	// The rest: small rows of beads in the same column, in the gaps between the names, nearest the middle first,
-	// as many above the middle line as below it.
-	const rows = [];
-	for ( let k = 0; k < perSide; k++ ) {
-		if ( k === 0 ) {
-			rows.push( cy - step / 2, cy + step / 2 + ( direct ? 0 : 9 ) );
-		} else if ( step - 52 >= 18 ) {
-			rows.push( cy - ( k + 0.5 ) * step - 10, cy + ( k + 0.5 ) * step + 10 );
-		}
-	}
-	const PER_ROW = Math.max( 1, perRow );
-	const count = rows.map( () => 0 );
-	let left = Math.max( 0, Math.min( dots, rows.length * PER_ROW ) );
-	for ( let pair = 0; pair < rows.length && left > 0; pair += 2 ) {
-		const here = Math.min( left, 2 * PER_ROW );
-		count[ pair ] = Math.ceil( here / 2 );
-		count[ pair + 1 ] = Math.floor( here / 2 );
-		left -= here;
-	}
-	const dotPlaces = [];
-	for ( let i = 0; i < PER_ROW; i++ ) {                 // across the rows, so the closest sit nearest the middle
-		rows.forEach( ( y, r ) => {
-			if ( i < count[ r ] ) {
-				dotPlaces.push( { x: Math.round( mid + ( i - ( count[ r ] - 1 ) / 2 ) * gap ), y: Math.round( y ), row: r } );
-			}
-		} );
-	}
-	dotPlaces.sort( ( p, q ) => ( ( p.row >> 1 ) - ( q.row >> 1 ) ) );
-	return { A, B, named: namedPlaces, dots: dotPlaces, band: { x1: A.x, x2: B.x, y: cy } };
 }
 
 /**
@@ -1549,6 +1534,145 @@ export function ladder( { W, H, hops: L, chains, la, lb } ) {
 	const step = Math.max( 70, Math.min( 120, ( H - 120 ) / Math.max( 1, chains ) ) );
 	const rowY = ( c ) => Math.round( cy + ( c === 0 ? 0 : ( c % 2 ? -1 : 1 ) * Math.ceil( c / 2 ) * step ) );
 	return { A, B, at: ( c, level ) => ( { x: Math.round( A.x + ( B.x - A.x ) * level / L ), y: rowY( c ) } ) };
+}
+
+/* ------------------------------------------------------------------------------------------------------------
+ * The rainbow between two pickers (Justin, #connectome, 19 Nov 2026: "Showing a single path is boring. Give me a
+ * full rainbow for their directs, and also a multi-hop rainbow for their two hops; fill the screen with the
+ * richness of the ecosystem connecting them").
+ *
+ * Every way from one to the other is a strand: an arc from a to b that stands some height over the straight line
+ * between them at its middle, or under it. Two such arcs meet only at their ends, so no strand crosses another,
+ * however many there are. What a strand goes by (a piece of music the two share, a picker who has played with
+ * both, two pickers in a chain) sits on it; the strands are stacked outward from the straight line, over and
+ * under by turns, until the frame is full.
+ * --------------------------------------------------------------------------------------------------------- */
+
+/** The point t of the way along the arc from A to B that stands h over the straight line at its middle (h < 0: under). */
+export function onArc( A, B, h, t ) {
+	const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot( dx, dy ) || 1, k = 4 * h * t * ( 1 - t );
+	return { x: A.x + dx * t + ( dy / len ) * k, y: A.y + dy * t - ( dx / len ) * k };
+}
+
+/** That arc's stretch from t1 to t2, as a line's bow: how far its curve is pulled from the middle of the straight line between its ends. */
+export function arcBow( A, B, h, t1, t2 ) {
+	const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot( dx, dy ) || 1, k = 2 * h * ( t2 - t1 ) * ( t2 - t1 );
+	return { x: ( dy / len ) * k, y: -( dx / len ) * k };
+}
+
+const hits = ( p, q ) => p.x1 < q.x2 && p.x2 > q.x1 && p.y1 < q.y2 && p.y2 > q.y1;
+const ALONG = [ 0.5, 0.36, 0.64, 0.25, 0.75, 0.43, 0.57, 0.3, 0.7, 0.2, 0.8 ];   // where along its strand a mark may sit, the middle first
+
+/**
+ * Where the strands go, and where on each its marks sit.
+ *
+ * opts: W, H; la, lb (as ends()); names, how the ends are named ({ a: { w, side, r }, b: { w, side, r } }: side 'left'
+ * or 'right' of the picker, or null for under it; r, the picker's circle), so nothing is set down on them; top, bottom, the room to leave at
+ * the frame's edges; strands, from the straight line outward, each
+ *   { half, marks: [{ r, w, pill, small, under }], at }
+ * half: the room the strand wants on either side of itself at its middle. A mark is a circle of radius r with a
+ * name w wide beside it (w 0: no name; small: a bead's small name; under: the name goes under the circle, not
+ * beside it), or a pill w wide (pill: true) centred on the strand. The first strand is the straight line itself.
+ * fill: with room to spare, how many times further apart the strands may stand to fill the frame.
+ *
+ * Returns { A, B, taken (every box set down), strands: [ null | { h, side, marks: [{ t, x, y, named, at: 'right' | 'left' | 'under' | null }] } ] }: null
+ * for a strand the frame had no room for. A name that would lie on another mark or run off the frame is tried
+ * further along the strand and on the mark's other side; with nowhere clear, the mark is set down without it
+ * (named: false). Of several marks on one strand, each one's name is tried first on the side away from the others,
+ * so the stretch of the strand between them is left in sight.
+ */
+export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, bottom = 18, fill = 1 } ) {
+	const { A, B, cy } = ends( W, H, la, lb );
+	const room = [ cy - top, H - bottom - cy ];              // over the straight line, and under it
+	// With fewer strands than the frame has room for, they stand further apart, up to `fill` times, and fill it:
+	// as far as the fuller side of the straight line allows.
+	const need = [ 0, 0 ];
+	asked.forEach( ( st, i ) => {
+		if ( i === 0 ) {
+			need[ 0 ] = need[ 1 ] = st.half;
+		} else {
+			need[ need[ 0 ] <= need[ 1 ] ? 0 : 1 ] += 2 * st.half;
+		}
+	} );
+	const wide = Math.max( 1, Math.min( fill, room[ 0 ] / Math.max( 1, need[ 0 ] ), room[ 1 ] / Math.max( 1, need[ 1 ] ) ) );
+	const strands = asked.map( ( st ) => Object.assign( {}, st, { half: st.half * wide } ) );
+	const edge = [ 0, 0 ];                                   // how far out each side is taken
+	const taken = [];
+	for ( const [ P, nm ] of [ [ A, names.a ], [ B, names.b ] ] ) {
+		taken.push( { x1: P.x - 32, y1: P.y - 32, x2: P.x + 32, y2: P.y + 32 } );
+		if ( nm && nm.side ) {
+			taken.push( nm.side === 'left' ? { x1: P.x - 40 - nm.w, y1: P.y - 12, x2: P.x - 32, y2: P.y + 12 } :
+				{ x1: P.x + 32, y1: P.y - 12, x2: P.x + 40 + nm.w, y2: P.y + 12 } );
+		} else if ( nm ) {
+			const r = nm.r || 22;                               // the name is tucked up to the circle's rim (draw.node)
+			taken.push( { x1: P.x - nm.w / 2 - 8, y1: Math.min( P.y + 32, P.y + r - 3 ), x2: P.x + nm.w / 2 + 8, y2: P.y + r + 18 } );
+		}
+	}
+	let first = true;
+	const out = strands.map( ( st, i ) => {
+		let side = edge[ 0 ] <= edge[ 1 ] ? 0 : 1, h;
+		if ( first ) {
+			h = 0;
+		} else {
+			if ( edge[ side ] + 2 * st.half > room[ side ] + 0.5 ) {
+				side = 1 - side;
+			}
+			if ( edge[ side ] + 2 * st.half > room[ side ] + 0.5 ) {
+				return null;
+			}
+			h = edge[ side ] + st.half;
+		}
+		const sign = side === 0 ? 1 : -1, n = st.marks.length;
+		const boxOf = ( m, p, at ) => {
+			if ( m.pill ) {
+				return [ { x1: p.x - m.w / 2 - 3, y1: p.y - 14, x2: p.x + m.w / 2 + 3, y2: p.y + 14 } ];
+			}
+			const pad = m.small ? 3.5 : 2, b = [ { x1: p.x - m.r - pad, y1: p.y - m.r - pad, x2: p.x + m.r + pad, y2: p.y + m.r + pad } ];
+			if ( at === 'under' ) {
+				b.push( { x1: p.x - m.w / 2, y1: p.y + m.r + 4, x2: p.x + m.w / 2, y2: p.y + m.r + 22 } );
+			} else if ( at ) {
+				const x1 = at === 'right' ? p.x + m.r + 5 : p.x - m.r - 5 - m.w, tall = m.small ? 8 : 9;
+				b.push( { x1, y1: p.y - tall, x2: x1 + m.w, y2: p.y + tall } );
+			}
+			return b;
+		};
+		const clear = ( bs ) => bs.every( ( b ) => b.x1 >= 3 && b.x2 <= W - 3 && !taken.some( ( q ) => hits( b, q ) ) );
+		// One mark: anywhere along, each strand starting somewhere else, so the marks fill the frame and don't
+		// stand in a column. More: spread evenly, and all slid together a little either way. `at`: where the
+		// strand's marks belong (a picker's place in a chain), and a little either way of that.
+		const lead = n === 1 && st.marks[ 0 ].pill ? ALONG : [ 0, 1, 2 ].map( ( k ) => ALONG[ ( i + k ) % 3 ] ).concat( ALONG.slice( 3 ) );
+		const tries = st.at ? [ 0, -0.04, 0.04, -0.08, 0.08 ].map( ( s ) => st.at.map( ( t ) => t + s ) ) :
+			n === 1 ? lead.map( ( t ) => [ t ] ) :
+				[ 0, -0.25, 0.25, -0.45, 0.45 ].map( ( s ) => st.marks.map( ( m, k ) => ( k + 1 + s ) / ( n + 1 ) ) );
+		let best = null;
+		for ( const ts of tries ) {
+			const got = st.marks.map( ( m, k ) => {
+				const p = onArc( A, B, sign * h, ts[ k ] );
+				for ( const at of ( m.pill || !m.w ? [ null ] : m.under ? [ 'under' ] : ( ( n > 1 ? ts[ k ] < 0.5 : ts[ k ] > 0.6 ) ? [ 'left', 'right' ] : [ 'right', 'left' ] ) ) ) {
+					if ( clear( boxOf( m, p, at ) ) ) {
+						return { t: ts[ k ], x: p.x, y: p.y, named: !!at || !!m.pill, at, ok: true };
+					}
+				}
+				return { t: ts[ k ], x: p.x, y: p.y, named: false, at: null, ok: !m.pill && clear( boxOf( m, p, null ) ) };
+			} );
+			const score = got.reduce( ( sum, g, k ) => sum + ( g.named || !st.marks[ k ].w ? 2 : 0 ) + ( g.ok ? 1 : 0 ), 0 );
+			if ( !best || score > best.score ) {
+				best = { got, score };
+			}
+			if ( score === 3 * n ) {
+				break;
+			}
+		}
+		best.got.forEach( ( g, k ) => taken.push( ...boxOf( st.marks[ k ], g, g.at ) ) );
+		if ( first ) {
+			edge[ 0 ] = edge[ 1 ] = st.half;
+			first = false;
+		} else {
+			edge[ side ] = h + st.half;
+		}
+		return { h: sign * h, side, marks: best.got };
+	} );
+	return { A, B, cy, taken, strands: out };
 }
 
 const LEAN = 56;                                    // about half a name's width: how far a name at the side leans out
