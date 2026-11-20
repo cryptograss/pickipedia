@@ -42,8 +42,8 @@ def test_a_page_says_its_names_and_what_it_and_its_talk_page_link():
                 {"url": "https://musicbrainz.org/release/0b4f1d3e-1111-2222-3333-444455556666"},
                 {"url": "https://archive.org/details/bkh2026-03-01.sbd"},
                 {"url": "https://www.discogs.com/release/38267088"}]}]}}
-    names, links, boxed = walk.page_facts(wiki_get, "Bronwyn")
-    assert boxed is False
+    names, links, boxed, cats = walk.page_facts(wiki_get, "Bronwyn")
+    assert boxed is False and cats == set()
     # one word is too loose to look anybody up by; the redirect and MusicianInfo's name are full names
     assert names == ["Bronwyn Keith-Hynes", "Bronwyn Keith Hynes"]
     assert links == {"discogs-artist": ["123"], "discogs": ["38267088"], "mb": ["0b4f1d3e-1111-2222-3333-444455556666"],
@@ -286,9 +286,11 @@ def test_a_box_on_the_page_is_taken_out_before_its_links_are_read():
             return {"parse": {"externallinks": ["https://www.discogs.com/artist/3847115"]}}
         return {"query": {"pages": [
             {"title": "Jack Schneider", "revisions": [{"slots": {"main": {"content": text}}}],
+             "categories": [{"title": "Category:Walk Requested"}],
              "extlinks": [{"url": "https://www.discogs.com/artist/3847115"}, {"url": "https://www.discogs.com/artist/3926070"}]},
             {"title": "Talk:Jack Schneider", "extlinks": [{"url": "https://archive.org/details/js2020-01-01"}]}]}}
-    names, links, boxed = walk.page_facts(wiki_get, "Jack Schneider")
+    names, links, boxed, cats = walk.page_facts(wiki_get, "Jack Schneider")
+    assert cats == {"Category:Walk_Requested"}
     assert boxed and links == {"discogs-artist": ["3847115"], "lma": ["js2020-01-01"]}                # the one said outside the box, and the talk page's
     assert posted[0][1] is True and "Which picker" not in posted[0][0]["text"] and posted[0][0]["title"] == "Jack Schneider"
 
@@ -379,12 +381,19 @@ class FakeWiki:
     """The wiki's API as the editor meets it: tokens, a bot password's login, an edit."""
     def __init__(self, login="Success", edit=None):
         self.calls, self.login, self.edit = [], login, edit or {"edit": {"result": "Success", "newrevid": 18201}}
+        self.text = "{{MusicianInfo|name=Jack Schneider}}\n[[Category:Walk Requested]]\n"
+        self.saved = ["2026-11-20T05:00:00Z"]                    # when the page's newest revision was saved, at each read; the wiki's clock says 05:20:00
 
     def open(self, req, timeout=None):
         from urllib.parse import parse_qs, urlsplit
         q = {k: v[0] for k, v in parse_qs(req.data.decode() if req.data else urlsplit(req.full_url).query).items()}
         self.calls.append((req.get_method(), q))
-        if q["action"] == "query":
+        if q["action"] == "query" and "meta" not in q:
+            body = {"curtimestamp": "2026-11-20T05:20:00Z", "query": {"pages": [
+                {"title": q["titles"], "revisions": [{"revid": 41, "timestamp": (self.saved.pop(0) if len(self.saved) > 1 else self.saved[0]),
+                                                      "slots": {"main": {"content": self.text}}}]}
+                if self.text is not None else {"title": q["titles"], "missing": True}]}}
+        elif q["action"] == "query":
             body = {"query": {"tokens": {q["type"] + "token": q["type"] + "+\\"}}}
         elif q["action"] == "login":
             body = {"login": {"result": self.login}}
@@ -454,16 +463,23 @@ def test_past_its_budget_a_walk_lists_the_rest_by_name_and_link_alone():
     assert "* [https://www.discogs.com/artist/7190407 Jack Schneider]\n" in box and "* [https://musicbrainz.org/artist/" + MB_TWO[1][0] + " Jack Schneider]\n" in box
 
 
-def test_a_question_still_waiting_is_dropped_when_its_page_leaves_the_category(tmp_path):
+def test_a_question_still_waiting_is_dropped_only_when_its_page_is_in_neither_category(tmp_path):
+    # the walk itself moves a page from Walk Requested to Walked: its question stays (magent and blu, 20 Nov 2026)
     run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), None)
-    saved, read = [], []
-    facts = lambda t: read.append(t) or (["Jack Schneider"], {}, False)
-    done, waiting, report = run_ask(tmp_path, facts, lambda *a: saved.append(a) or 5, asked=())      # the category is empty now
-    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
-    assert saved == [] and read == [] and w["box"] == {"state": "dropped: the page left the category", "at": "2026-11-20T04:00:00Z"}
-    assert "dropped: the page left the category" in report[0] and w["asks"]
-    run_ask(tmp_path, facts, lambda *a: saved.append(a) or 5)                                        # back in the category with no new walk due: it stays dropped
-    assert saved == []
+    saved = []
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False, {"Category:Walked"}), lambda *a: saved.append(a) or 5, asked=())
+    assert len(saved) == 1 and json.load(open(tmp_path / "walked.json"))["Jack Schneider"]["box"]["state"] == "written"
+    # someone took it out of both: it isn't asked
+    other = tmp_path / "out"
+    other.mkdir()
+    run_ask(other, lambda t: (["Jack Schneider"], {}, False), None)
+    saved = []
+    done, waiting, report = run_ask(other, lambda t: (["Jack Schneider"], {}, False, set()), lambda *a: saved.append(a) or 5, asked=())
+    w = json.load(open(other / "walked.json"))["Jack Schneider"]
+    assert saved == [] and w["box"] == {"state": "dropped: the page is in neither category", "at": "2026-11-20T04:00:00Z"} and w["asks"]
+    assert "dropped: the page is in neither category" in report[0]
+    run_ask(other, lambda t: (["Jack Schneider"], {}, False, {"Category:Walk_Requested"}), lambda *a: saved.append(a) or 5)
+    assert saved == []                                           # put back with no new walk due: it stays dropped
 
 
 def test_a_walk_by_hand_leaves_other_pages_questions_waiting(tmp_path):
@@ -472,3 +488,172 @@ def test_a_walk_by_hand_leaves_other_pages_questions_waiting(tmp_path):
     walk.run(str(tmp_path), [("Sam Jones", "2026-11-20T05:00:00Z")], lambda t: ([t], {}, False), [], look=ask_look(discogs=SIX[:1]),
              stamp=lambda: "2026-11-20T05:00:00Z", prepend=lambda *a: saved.append(a) or 5, by="hand")
     assert saved == [] and json.load(open(tmp_path / "walked.json"))["Jack Schneider"]["box"]["state"] == "wanted"
+
+
+# ---------------------------------------------------------------------------
+# The queue: a walked page goes from Walk Requested to Walked
+# ---------------------------------------------------------------------------
+
+def test_the_request_becomes_walked_where_it_stood_and_nothing_else_changes():
+    swap = lambda text: walk.swap_category(text)[0]
+    page = "{{MusicianInfo|name=J}}\nHe plays.\n[[Category:Walk Requested]]\n[[Category:Banjo players]]\n"
+    assert walk.swap_category(page) == (page.replace("Walk Requested", "Walked"), None)
+    assert swap("a\n[[category:walk_requested|Schneider, Jack]] [[Category:X]]\nb") == "a\n[[Category:Walked|Schneider, Jack]] [[Category:X]]\nb"
+    assert swap("[[Category:Walk_Requested| ]]") == "[[Category:Walked| ]]"                             # a sort key of a space, to head the list: kept as it is
+    assert swap("[[Category:Walked|Schneider, Jack]]\n[[Category:Walk Requested|Jack]]") == "[[Category:Walked|Schneider, Jack]]\n"   # in Walked already: its own key stands
+    assert swap("a\n[[Category:X]] [[Category:Walk Requested]]") == "a\n[[Category:X]] [[Category:Walked]]"
+    assert swap("a\n  [[ Category : Walk  Requested ]]") == "a\n  [[Category:Walked]]"
+    # in Walked already: the request goes, and its own line with it
+    assert swap("a\n[[Category:Walked]]\n[[Category:Walk Requested]]\nb\n") == "a\n[[Category:Walked]]\nb\n"
+    assert swap("[[Category:Walk Requested]]\n[[Category:Walk Requested]]") == "[[Category:Walked]]\n"
+    assert swap("a\n[[Category:Walked]] [[Category:Walk Requested]]") == "a\n[[Category:Walked]] "
+
+
+def test_a_page_whose_own_text_does_not_hold_the_category_is_not_rewritten():
+    for text in ("{{Walk me}}", "see [[:Category:Walk Requested]]", "<nowiki>[[Category:Walk Requested]]</nowiki>",
+                 "<!-- [[Category:Walk Requested]] -->", "<pre>[[Category:Walk Requested]]</pre>", "[[Category:Walk Requested players]]", ""):
+        assert walk.swap_category(text) == (None, walk.NOT_IN_TEXT), text
+    both = "<!-- [[Category:Walk Requested]] -->\n[[Category:Walk Requested]]"
+    assert walk.swap_category(both)[0] == "<!-- [[Category:Walk Requested]] -->\n[[Category:Walked]]"   # the real one moves, the comment stays
+
+
+def test_a_request_that_shares_its_line_with_words_is_left_for_the_gate_would_refuse_it():
+    # PickiPediaVerification lets a bot add or change a line unmarked only where it begins with a category
+    for text in ("He plays bass. [[Category:Bassists]] [[Category:Walk Requested|Partin, Jeff]]\n",
+                 "a [[Category:Walked]] x [[Category:Walk Requested]] y", "[[category:x]] [[Category:Walk Requested]]",
+                 "{{MusicianInfo|name=J}}[[Category:Walk Requested]]", "* [[Category:Walk Requested]]"):
+        assert walk.swap_category(text) == (None, walk.SHARES_A_LINE), text
+
+
+def moved(tmp_path):
+    return json.load(open(tmp_path / "walked.json"))["Jack Schneider"].get("category")
+
+
+def test_a_walk_that_is_done_moves_its_page_the_box_first(tmp_path):
+    did = []
+    done, waiting, report = walk.run(str(tmp_path), [("Jack Schneider", "2026-11-20T03:11:18Z")], lambda t: (["Jack Schneider"], {}, False), [],
+                                     look=ask_look(), stamp=lambda: "2026-11-20T04:00:00Z",
+                                     prepend=lambda *a: did.append("box") or 7, swap=lambda title, summary: did.append(("swap", title, summary)) or 8)
+    assert did[0] == "box" and did[1][:2] == ("swap", "Jack Schneider") and "Put Walk Requested back to walk again" in did[1][2] and len(did) == 2
+    assert moved(tmp_path) == {"state": "moved to Walked", "at": "2026-11-20T04:00:00Z", "rev": 8}
+    assert "Which picker box: written (revision 7); category: moved to Walked (revision 8)" in report[0]
+
+
+def test_with_no_login_nothing_moves_and_the_walk_is_as_it_was(tmp_path):
+    done, waiting, report = run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), None)
+    assert done == 1 and moved(tmp_path) is None and "category" not in report[0]
+    done, waiting, report = run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), None)     # still in the category: not walked again
+    assert done == 0 and report == []
+
+
+def test_pages_walked_before_and_still_in_the_category_are_moved_by_a_later_run(tmp_path):
+    asked = [("Charlie Worsham", "2026-11-19T18:00:00Z"), ("Jack Schneider", "2026-11-20T03:11:18Z")]
+    one = ask_look(discogs=SIX[:1])
+    walk.run(str(tmp_path), asked, lambda t: ([t], {}), [], look=one, stamp=lambda: "2026-11-20T04:00:00Z")       # no login: both walked, both stay
+    did = []
+    done, waiting, report = walk.run(str(tmp_path), asked, lambda t: ([t], {}), [], look=one, stamp=lambda: "2026-11-20T06:00:00Z",
+                                     swap=lambda title, summary: did.append(title) or 9)
+    assert done == 0 and did == ["Charlie Worsham", "Jack Schneider"] and moved(tmp_path)["state"] == "moved to Walked"
+    assert "Charlie Worsham: walked 2026-11-20T04:00:00Z; category: moved to Walked (revision 9)" in report
+    walk.run(str(tmp_path), asked, lambda t: ([t], {}), [], look=one, stamp=lambda: "2026-11-20T06:05:00Z", swap=lambda title, summary: did.append(title) or 9)
+    assert len(did) == 2                                         # the wiki's list a build behind: not moved twice
+
+
+def test_putting_the_request_back_walks_the_page_again_and_moves_it_again(tmp_path):
+    one, did, facts = ask_look(discogs=SIX[:1]), [], lambda t: ([t], {})
+    swap = lambda title, summary: did.append(title) or 9
+    walk.run(str(tmp_path), [("Jack Schneider", "2026-11-20T03:11:18Z")], facts, [], look=one, stamp=lambda: "2026-11-20T04:00:00Z", swap=swap)
+    done, _, _ = walk.run(str(tmp_path), [], facts, [], look=one, stamp=lambda: "2026-11-20T04:05:00Z", swap=swap)     # out of the queue: nothing to do
+    assert done == 0 and did == ["Jack Schneider"]
+    done, _, report = walk.run(str(tmp_path), [("Jack Schneider", "2026-11-27T12:00:00Z")], facts, [], look=one, stamp=lambda: "2026-11-27T12:03:00Z", swap=swap)
+    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
+    assert done == 1 and did == ["Jack Schneider"] * 2 and w["walked"] == "2026-11-27T12:03:00Z" and w["category"]["at"] == "2026-11-27T12:03:00Z"
+
+
+def test_a_move_the_wiki_refuses_keeps_the_walk_and_is_tried_again_after_an_hour(tmp_path):
+    asked, one, tries = [("Jack Schneider", "2026-11-20T03:11:18Z")], ask_look(discogs=SIX[:1]), []
+
+    def conflict(title, summary):
+        raise RuntimeError("the wiki said editconflict")
+    done, _, report = walk.run(str(tmp_path), asked, lambda t: ([t], {}), [], look=one, stamp=lambda: "2026-11-20T04:00:00Z", swap=conflict)
+    assert done == 1 and moved(tmp_path) == {"state": "wanted", "note": "the wiki said editconflict", "tried": "2026-11-20T04:00:00Z"}
+    assert json.load(open(tmp_path / "walked.json"))["Jack Schneider"]["sources"] == ["discogs 384711500"]
+    later = lambda when: walk.run(str(tmp_path), asked, lambda t: ([t], {}), [], look=one, stamp=lambda: when, swap=lambda t, s: tries.append(t) or 9)
+    later("2026-11-20T04:05:00Z")
+    assert tries == []
+    later("2026-11-20T05:00:00Z")
+    assert tries == ["Jack Schneider"] and moved(tmp_path)["state"] == "moved to Walked"
+
+
+def test_a_page_in_the_category_by_a_template_is_left_and_said_so_once_an_hour(tmp_path):
+    asked, one, tries = [("Jack Schneider", "2026-11-20T03:11:18Z")], ask_look(discogs=SIX[:1]), []
+    swap = lambda title, summary: tries.append(title) or walk.NOT_IN_TEXT   # a reason, not a revision: nothing was saved
+    for when in ("2026-11-20T04:00:00Z", "2026-11-20T04:05:00Z", "2026-11-20T04:10:00Z"):
+        walk.run(str(tmp_path), asked, lambda t: ([t], {}), [], look=one, stamp=lambda: when, swap=swap)
+    assert len(tries) == 1 and moved(tmp_path) == {"state": "left: the category is not in the page's own text", "tried": "2026-11-20T04:00:00Z"}
+
+
+def test_a_walk_by_hand_moves_nothing(tmp_path):
+    did = []
+    walk.run(str(tmp_path), [("Jack Schneider", "2026-11-20T03:11:18Z")], lambda t: ([t], {}), [], look=ask_look(discogs=SIX[:1]),
+             stamp=lambda: "2026-11-20T04:00:00Z", swap=lambda *a: did.append(a) or 9, by="hand")
+    assert did == [] and moved(tmp_path) is None
+
+
+def test_moving_stops_with_the_budget(tmp_path):
+    asked = [(f"Picker {n}", "2026-11-20T03:00:00Z") for n in "ABC"]
+    one = ask_look(discogs=SIX[:1])
+    walk.run(str(tmp_path), asked, lambda t: ([t], {}), [], look=one, stamp=lambda: "2026-11-20T04:00:00Z")
+    now, did = [0.0], []
+
+    def swap(title, summary):
+        now[0] += 20
+        did.append(title)
+        return 9
+    walk.run(str(tmp_path), asked, lambda t: ([t], {}), [], budget=30, look=one, clock=lambda: now[0], stamp=lambda: "2026-11-20T06:00:00Z", swap=swap)
+    assert did == ["Picker A", "Picker B"]                       # the third waits for the next build
+
+
+def test_the_editor_moves_a_page_against_the_revision_it_read():
+    wiki = FakeWiki()
+    prepend = walk.wiki_editor("https://wiki.example/", "Blu@walk", "s3cret", opener=wiki)
+    assert prepend.swap("Jack Schneider", "why") == 18201
+    edit = [q for m, q in wiki.calls if q["action"] == "edit"][0]
+    assert edit["text"] == "{{MusicianInfo|name=Jack Schneider}}\n[[Category:Walked]]\n" and edit["nocreate"] == "1" and edit["assert"] == "user"
+    assert (edit["baserevid"], edit["basetimestamp"], edit["starttimestamp"]) == ("41", "2026-11-20T05:00:00Z", "2026-11-20T05:20:00Z")
+    assert [q["action"] for m, q in wiki.calls].count("login") == 1 and prepend("A B", "x", "y") == 18201      # one login for both
+    assert [q["action"] for m, q in wiki.calls].count("login") == 1
+
+
+def test_the_editor_saves_nothing_where_the_text_has_no_request_and_says_what_the_wiki_said():
+    wiki = FakeWiki()
+    wiki.text = "{{MusicianInfo|name=Jack Schneider}}\n{{Walk me}}\n"
+    assert walk.wiki_editor("https://wiki.example/", "Blu@walk", "s3cret", opener=wiki).swap("Jack Schneider", "why") == walk.NOT_IN_TEXT
+    wiki.text = "He plays bass. [[Category:Walk Requested]]\n"
+    assert walk.wiki_editor("https://wiki.example/", "Blu@walk", "s3cret", opener=wiki).swap("Jeff Partin", "why") == walk.SHARES_A_LINE
+    assert not [q for m, q in wiki.calls if q["action"] == "edit"]
+    wiki = FakeWiki(edit={"error": {"code": "editconflict", "info": "s3cret"}})
+    for text, word in ((wiki.text, "the wiki said editconflict"), (None, "no such page")):
+        wiki.text = text
+        try:
+            walk.wiki_editor("https://wiki.example/", "Blu@walk", "s3cret", opener=wiki).swap("Jack Schneider", "why")
+            assert False, "it should have raised"
+        except RuntimeError as e:
+            assert word in str(e) and "s3cret" not in str(e)
+
+
+def test_the_editor_does_not_save_over_a_revision_made_this_second():
+    # the walk's own box, a second old: wait, read again, then save
+    wiki, slept = FakeWiki(), []
+    wiki.saved = ["2026-11-20T05:19:59Z", "2026-11-20T05:19:57Z"]
+    prepend = walk.wiki_editor("https://wiki.example/", "Blu@walk", "s3cret", opener=wiki, sleep=slept.append)
+    assert prepend.swap("Jack Schneider", "why") == 18201 and slept == [1.5]
+    assert [q["action"] for m, q in wiki.calls if "meta" not in q].count("query") == 2 and [q for m, q in wiki.calls if q["action"] == "edit"][0]["basetimestamp"] == "2026-11-20T05:19:57Z"
+    # edited again meanwhile: nothing is saved, and the move waits
+    wiki, slept = FakeWiki(), []
+    wiki.saved = ["2026-11-20T05:20:00Z", "2026-11-20T05:19:59Z"]
+    try:
+        walk.wiki_editor("https://wiki.example/", "Blu@walk", "s3cret", opener=wiki, sleep=slept.append).swap("Jack Schneider", "why")
+        assert False, "it should have raised"
+    except RuntimeError as e:
+        assert "edited a moment ago" in str(e) and slept == [2.5] and not [q for m, q in wiki.calls if q["action"] == "edit"]

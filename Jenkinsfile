@@ -383,6 +383,10 @@ REQS
                         # edits the wiki, and it needs a bot password in Jenkins' environment
                         # (CONNECTOME_WALK_BOT_USER, CONNECTOME_WALK_BOT_PASSWORD; maybelle-config). Without one the
                         # question waits in walked.json. One such walk is 25 seconds of paced lookups (blu's machine).
+                        # With the same login a walk that is done moves its page from Category:Walk Requested to
+                        # Category:Walked, so the first is a queue and putting it back on a page walks it again
+                        # (Justin, magent and blu, #connectome, 20 Nov 2026). Without the login nothing moves, and a
+                        # page is walked once for each time it was put in the category, as before.
                         WALKED=0
                         timeout 90 "${PY}" connectome_walk.py --cache "${CACHE}" --budget 30 || WALKED=$?
                         if [ "${WALKED}" -eq 124 ]; then

@@ -9,8 +9,9 @@ Justin, #connectome, 18 Nov 2026, 06:20Z: "I don't want [[Category:Walk Requeste
 trigger Artificial Dumb only." So a walk is plain lookups, the same for whoever runs them, and nothing inferred:
 
   who          the pages in Category:Walk_Requested, and when each was put there (categorymembers' timestamp). A page
-               is walked when it was put there after its last walk, so taking the category off and putting it back
-               walks it again.
+               is walked when it was put there after its last walk. The category is a queue: when a page's walk is
+               done the walk takes it out of Walk Requested and puts it in Category:Walked, and putting Walk
+               Requested back on the page walks it again (see "The queue" below).
   names        the page's title, its {{MusicianInfo}} name=, and the titles of the redirects to it; only names of two
                words or more, since one word ("Bronwyn") is too loose to look anybody up by.
   links        Discogs releases and artists, MusicBrainz releases and artists, and archive.org items linked from the
@@ -36,11 +37,21 @@ a {{Which picker|status=proposed}} box put at the top. This is the one place a w
 writes there. A page that has a box already, by hand or from a walk, gets no second one. With no login for the wiki
 in the build (CONNECTOME_WALK_BOT_USER and CONNECTOME_WALK_BOT_PASSWORD, a bot password; never printed), nothing is
 written to the page: the question waits in walked.json ("box": wanted), and a later run with a login writes it. A
-save the wiki refuses waits too, and is tried again after an hour. A question still waiting when its page leaves the
-category is dropped.
+save the wiki refuses waits too, and is tried again after an hour. A question still waiting is dropped only when
+its page is in neither category: someone took it out of both.
+
+The queue (Justin, #connectome, 20 Nov 2026, 04:29Z: "the category seems to stay even after the walk", and 04:41Z:
+"what's the disadvantage of removing the category once the walk is complete?"; settled with magent, 05:11Z). With
+the same login, a walk that is done rewrites one thing in the page's own text: [[Category:Walk Requested]] becomes
+[[Category:Walked]], where it stood. So Walk Requested holds only pages waiting for a walk, Walked those that have
+had one, and "walk again" is putting Walk Requested back. Every page still in Walk Requested from a walk already
+done is moved too, a few a run. A page that is in the category by a template, not in its own text, is left as it
+is, and so is one whose request shares its line with other words (the wiki's gate lets a bot change no such
+line); walked.json says which. With no login nothing moves, and a page is still walked once for each time it was put
+in the category, as before.
 
 What a walk finds goes into the cache, never into git, each line saying which request added it:
-  walked.json          page -> {"requested", "by", "walked", "names", "sources", "notes", "asks", "box"}
+  walked.json          page -> {"requested", "by", "walked", "names", "sources", "notes", "asks", "box", "category"}
   walked_sources.txt   the sources, in connectome_sources.txt's shape, under a comment naming the page and the times
   walked_names.txt     the names, for the LMA reader
 """
@@ -60,6 +71,11 @@ import rambler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CATEGORY = "Category:Walk_Requested"
+WALKED = "Category:Walked"
+_CAT = r"\[\[\s*Category\s*:\s*{}\s*(\|[^\]\n]*)?\]\]"
+REQUESTED_LINK = re.compile(_CAT.format(r"Walk[ _]+Requested"), re.I)
+WALKED_LINK = re.compile(_CAT.format("Walked"), re.I)
+NOT_WIKITEXT = re.compile(r"<nowiki\b.*?</nowiki\s*>|<!--.*?-->|<pre\b.*?</pre\s*>", re.I | re.S)
 CAP = {"discogs": 20, "mb": 10, "lma": 20}
 LINKS_CAP = 50                    # sources a page and its talk page can name, taken as they are
 CANDIDATES_CAP = 6                # artists of one name a walk lists for a site
@@ -71,6 +87,7 @@ SITES = {"Discogs": ("discogs", "https://www.discogs.com/artist/", re.compile(r"
 WHICH_BOX = re.compile(r"\{\{\s*Which[ _]picker\b", re.I)
 BOT_USER, BOT_PASSWORD = "CONNECTOME_WALK_BOT_USER", "CONNECTOME_WALK_BOT_PASSWORD"
 RETRY_AFTER = 3600                # seconds before a save the wiki refused is tried again: the build runs every five minutes
+SETTLED = 2                       # seconds old a revision must be before the walk saves a page's text against it (wiki_editor)
 DISCOGS_ROLES = {"Main", "Appearance", "TrackAppearance"}
 IA_QUERY = '"{name}" AND (mediatype:etree OR (mediatype:audio AND collection:taperssection))'
 IA_SEARCH = "https://archive.org/advancedsearch.php"
@@ -101,10 +118,11 @@ def wiki_getter(wiki):
     return get
 
 
-def wiki_editor(wiki, user, password, opener=None):
+def wiki_editor(wiki, user, password, opener=None, sleep=time.sleep):
     """A function putting text at the top of a page that exists, as a bot password's login: prepend(title, text,
-    summary) -> the new revision's id. Logs in at the first call. Raises with the wiki's own word for what went
-    wrong, never with the password. Standard library only, as the build's image is bare."""
+    summary) -> the new revision's id; and, as its .swap, one moving a page from Walk Requested to Walked. Logs in
+    at the first call. Raises with the wiki's own word for what went wrong, never with the password. Standard
+    library only, as the build's image is bare."""
     api = wiki.rstrip("/") + "/api.php"
     opener = opener or build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
     state = {"in": False}
@@ -118,19 +136,58 @@ def wiki_editor(wiki, user, password, opener=None):
             raise RuntimeError("the wiki said " + str(data["error"].get("code", "error")))
         return data
 
-    def prepend(title, text, summary):
+    def login():
         if not state["in"]:
             token = call({"action": "query", "meta": "tokens", "type": "login"})["query"]["tokens"]["logintoken"]
             result = call({"action": "login", "lgname": user, "lgpassword": password, "lgtoken": token}, post=True)["login"]["result"]
             if result != "Success":
                 raise RuntimeError("the wiki would not log the walk in (" + str(result) + ")")
             state["in"] = True
+
+    def prepend(title, text, summary):
+        login()
         token = call({"action": "query", "meta": "tokens", "type": "csrf"})["query"]["tokens"]["csrftoken"]
         done = call({"action": "edit", "title": title, "prependtext": text, "summary": summary, "nocreate": "1", "bot": "1",
                      "assert": "user", "token": token}, post=True).get("edit", {})
         if done.get("result") != "Success":
             raise RuntimeError("the wiki did not save it (" + str(done.get("result") or done.get("code") or "no result") + ")")
         return done.get("newrevid")
+
+    def swap(title, summary):
+        """Move a page from Walk Requested to Walked in its own text (swap_category): the new revision's id, or
+        the reason it can't be done, as a string, with nothing saved. Saved against the revision it was read at,
+        so an edit made meanwhile is not overwritten: the wiki refuses, and a later run reads the page afresh."""
+        login()
+        # MediaWiki tells one revision from the next by the second. Read a page whose newest revision was saved this
+        # very second, and an edit a person makes in that same second after the read is not seen as a conflict: the
+        # save below would lie on top of it (seen on a real 1.43.6, 20 Nov 2026: a sort key added to the request, gone).
+        # So the page is saved only against a revision at least SETTLED seconds old: any edit after the read then
+        # bears a later second, and the wiki merges it or refuses. The walk's own box, just written, is such a
+        # young revision: wait it out and read again.
+        for again in (True, False):
+            data = call({"action": "query", "titles": title, "prop": "revisions", "rvprop": "content|ids|timestamp",
+                         "rvslots": "main", "curtimestamp": "1"})
+            page = (data.get("query", {}).get("pages") or [{}])[0]
+            rev = (page.get("revisions") or [None])[0]
+            if not rev:
+                raise RuntimeError("the wiki has no such page")
+            age = since(rev["timestamp"], data["curtimestamp"])
+            if age >= SETTLED:
+                break
+            if not again:
+                raise RuntimeError("the page was edited a moment ago, and again; the move waits")
+            sleep(SETTLED - age + 0.5)
+        text, why = swap_category(rev["slots"]["main"]["content"])
+        if text is None:
+            return why
+        token = call({"action": "query", "meta": "tokens", "type": "csrf"})["query"]["tokens"]["csrftoken"]
+        done = call({"action": "edit", "title": title, "text": text, "summary": summary, "nocreate": "1", "bot": "1",
+                     "assert": "user", "baserevid": rev["revid"], "basetimestamp": rev["timestamp"],
+                     "starttimestamp": data["curtimestamp"], "token": token}, post=True).get("edit", {})
+        if done.get("result") != "Success":
+            raise RuntimeError("the wiki did not save it (" + str(done.get("result") or done.get("code") or "no result") + ")")
+        return done.get("newrevid", rev["revid"])
+    prepend.swap = swap
     return prepend
 
 
@@ -193,6 +250,46 @@ def linked(urls):
     return out
 
 
+NOT_IN_TEXT = "the category is not in the page's own text"
+SHARES_A_LINE = "the request shares its line with other words, and the wiki lets a bot change no such line"
+
+
+def swap_category(text):
+    """A page's wikitext with [[Category:Walk Requested]] turned into [[Category:Walked]] where it stood, its sort
+    key kept: (the new text, None), or (None, why not). A link in a comment, <nowiki> or <pre> is not one. Already in Walked: the
+    request just goes, and a line it leaves empty with it. Nothing else in the text is touched.
+
+    Why not: the text has no such link of its own (the page is in the category by a template); or the link shares
+    its line with words, and PickiPediaVerification's gate takes any changed line that doesn't begin with a
+    category for a new claim and refuses a bot's edit that makes one (seen on a real wiki, 20 Nov 2026). A line of
+    nothing but categories, as they are nearly always written, is changed freely."""
+    skip = [m.span() for m in NOT_WIKITEXT.finditer(text)]
+    real = lambda m: not any(a <= m.start() < b for a, b in skip)
+    found = [m for m in REQUESTED_LINK.finditer(text) if real(m)]
+    if not found:
+        return None, NOT_IN_TEXT
+    has = any(real(m) for m in WALKED_LINK.finditer(text))
+    out, at = [], 0
+    for n, m in enumerate(found):
+        out.append(text[at:m.start()])
+        at = m.end()
+        if n == 0 and not has:
+            out.append("[[Category:Walked" + (m.group(1) or "") + "]]")   # its sort key goes with it (re's review, 20 Nov 2026)
+            continue
+        # the link goes, and its line with it where nothing else is on it
+        before = "".join(out)
+        start = before.rfind("\n") + 1
+        end = text.find("\n", at)
+        if not before[start:].strip() and not text[at:len(text) if end < 0 else end].strip():
+            out = [before[:start]]
+            at = len(text) if end < 0 else end + 1
+    new = "".join(out) + text[at:]
+    was = {line.strip() for line in text.split("\n")}
+    if any(line.strip() and line.strip() not in was and not line.strip().startswith("[[Category:") for line in new.split("\n")):
+        return None, SHARES_A_LINE
+    return new, None
+
+
 def without_boxes(text):
     """A page's wikitext with every {{Which picker}} call taken out, braces matched; and whether there was one."""
     out, at, found = [], 0, False
@@ -216,16 +313,18 @@ def without_boxes(text):
 
 
 def page_facts(wiki_get, title):
-    """The names to look the page's picker up by, what the page and its talk page link, and whether the page asks
-    which picker it is already. The artists a {{Which picker}} box lists are links on the page too, and they are the
+    """The names to look the page's picker up by, what the page and its talk page link, whether the page asks
+    which picker it is already, and which of the walk's two categories it is in (a set of their names). The artists a {{Which picker}} box lists are links on the page too, and they are the
     question: with a box on it, the page's links are those it has without the box (the wiki parses it so)."""
-    data = wiki_get({"action": "query", "titles": f"{title}|Talk:{title}", "prop": "redirects|extlinks|revisions",
-                     "rvprop": "content", "rvslots": "main", "rdlimit": "max", "ellimit": "max"})
-    names, urls, boxed = [title], [], False
+    data = wiki_get({"action": "query", "titles": f"{title}|Talk:{title}", "prop": "redirects|extlinks|revisions|categories",
+                     "rvprop": "content", "rvslots": "main", "rdlimit": "max", "ellimit": "max",
+                     "clcategories": f"{CATEGORY}|{WALKED}", "cllimit": "max"})
+    names, urls, boxed, cats = [title], [], False, set()
     for p in data.get("query", {}).get("pages", []):
         if p.get("title") != title:
             urls += [e.get("url", "") for e in p.get("extlinks", [])]
             continue
+        cats = {c["title"].replace(" ", "_") for c in p.get("categories", [])}
         names += [r["title"] for r in p.get("redirects", [])]
         text = ((p.get("revisions") or [{}])[0].get("slots", {}).get("main", {}).get("content", ""))
         rest, boxed = without_boxes(text)
@@ -244,7 +343,7 @@ def page_facts(wiki_get, title):
         if len(n.split()) >= 2 and n.casefold() not in seen:
             seen.add(n.casefold())
             kept.append(n)
-    return kept, linked(urls), boxed
+    return kept, linked(urls), boxed, cats
 
 
 # ---------------------------------------------------------------------------
@@ -531,15 +630,16 @@ def write_files(cache, walked):
 
 
 def run(cache, asked, facts, known_paths, budget=None, look=LOOKUPS, clock=time.monotonic, stamp=now_iso, by="category",
-        prepend=None):
+        prepend=None, swap=None):
     """Walk the requests due, the oldest first, starting no new walk once budget seconds have gone; a walk started
     is finished. asked: [(page, when it was asked for)], from the category (by="category") or by hand ("hand", asked
     now). A page the wiki doesn't answer for waits for the next run. Writes the cache's files. Returns (walks,
     waiting, report lines).
 
-    facts(title) -> (names, links) or (names, links, whether the page has a {{Which picker}} box). prepend: the
-    wiki's editor (wiki_editor), or None with no login: then a walk's question waits in walked.json, and a later
-    run that has a login writes it, while there is budget left."""
+    facts(title) -> (names, links), or with whether the page has a {{Which picker}} box, or with that and the set
+    of the walk's categories the page is in. prepend: the wiki's editor (wiki_editor), or None with no login: then
+    a walk's question waits in walked.json, and a later run that has a login writes it, while there is budget
+    left. swap: the editor's .swap, moving a walked page from Walk Requested to Walked; None, and nothing moves."""
     path = os.path.join(cache, "walked.json")
     walked = json.load(open(path)) if os.path.exists(path) else {}
     todo = due(asked, walked)
@@ -548,7 +648,7 @@ def run(cache, asked, facts, known_paths, budget=None, look=LOOKUPS, clock=time.
         if budget is not None and clock() - start >= budget:
             break
         try:
-            names, links, boxed = (tuple(facts(title)) + (False,))[:3]
+            names, links, boxed, cats = four(facts(title))
         except Exception as e:
             report.append(f"{title}: not walked, the wiki didn't answer ({e}); next run")
             continue
@@ -560,36 +660,77 @@ def run(cache, asked, facts, known_paths, budget=None, look=LOOKUPS, clock=time.
         if asks:
             walked[title]["asks"] = asks
             settle_box(title, walked[title], boxed, links, prepend, stamp)
-        write_files(cache, walked)
+        write_files(cache, walked)                           # the walk is kept before the page is moved: a move that fails loses nothing
+        if by == "category":                                 # the box first, then out of the queue: the page reads top to bottom as it happened
+            settle_category(title, walked[title], swap, stamp)
+            write_files(cache, walked)
         done += 1
-        report.append(f"{title}: {len(sources)} sources ({'; '.join(notes)})" + box_says(walked[title]))
+        report.append(f"{title}: {len(sources)} sources ({'; '.join(notes)})" + box_says(walked[title]) + category_says(walked[title]))
     # Questions an earlier run could not put on their pages (no login then, or the wiki said no): now, one by one.
-    # A page taken out of the category since is no longer asking for a walk, and is not asked which (re's review).
-    still = {t for t, _ in asked}
+    # A page someone has taken out of both categories since is not asked which (re's review; the walk itself moves
+    # a page from one to the other, and that drops nothing).
     for title in sorted(t for t, w in walked.items() if (w.get("box") or {}).get("state") == "wanted"):
         if by != "category":
             break                                            # a walk by hand settles only what it walked
-        if title not in still:
-            walked[title]["box"] = {"state": "dropped: the page left the category", "at": stamp()}
-            write_files(cache, walked)
-            report.append(f"{title}: the question from its walk of {walked[title]['walked']}" + box_says(walked[title]))
-            continue
         if prepend is None or (budget is not None and clock() - start >= budget):
             break
         tried = walked[title]["box"].get("tried")
         if tried and since(tried, stamp()) < RETRY_AFTER:
             continue                                         # the wiki said no not long ago (or in this very run)
         try:
-            names, links, boxed = (tuple(facts(title)) + (False,))[:3]
+            names, links, boxed, cats = four(facts(title))
         except Exception as e:
             report.append(f"{title}: its question waits, the wiki didn't answer ({e})")
             continue
-        settle_box(title, walked[title], boxed, links, prepend, stamp)
+        if cats is not None and not cats:
+            walked[title]["box"] = {"state": "dropped: the page is in neither category", "at": stamp()}
+        else:
+            settle_box(title, walked[title], boxed, links, prepend, stamp)
         write_files(cache, walked)
         report.append(f"{title}: the question from its walk of {walked[title]['walked']}" + box_says(walked[title]))
+    # Pages still in Walk Requested whose walk is done: walked before there was a login, or before the walk moved
+    # pages at all, or the wiki refused the move. Out of the queue now, one by one.
+    for title, requested in sorted(asked):
+        w = walked.get(title)
+        if by != "category" or swap is None or (budget is not None and clock() - start >= budget):
+            break
+        if not w or requested > w.get("requested", "") or (w.get("category") or {}).get("at", "") >= w["walked"]:
+            continue                                         # never walked, or due a walk, or moved since this walk
+        tried = (w.get("category") or {}).get("tried")
+        if tried and since(tried, stamp()) < RETRY_AFTER:
+            continue
+        settle_category(title, w, swap, stamp)
+        write_files(cache, walked)
+        report.append(f"{title}: walked {w['walked']}" + category_says(w))
     if not os.path.exists(os.path.join(cache, "walked_sources.txt")):
         write_files(cache, walked)
     return done, len(todo) - done, report
+
+
+def four(facts):
+    """What a page says, whichever shape it came in: names, links, whether it has a box (no, if unsaid), and the
+    set of the walk's categories it is in (None, if unsaid: then nothing is concluded from it)."""
+    facts = tuple(facts)
+    return facts[0], facts[1], facts[2] if len(facts) > 2 else False, facts[3] if len(facts) > 3 else None
+
+
+def settle_category(title, w, swap, stamp):
+    """Take a walked page out of Walk Requested and into Walked: w["category"] says what came of it. With no login
+    nothing is tried and nothing is said. A save the wiki refuses (an edit made meanwhile, say) is wanted still,
+    and tried again after RETRY_AFTER."""
+    if swap is None:
+        return
+    try:
+        rev = swap(title, "Connectome walk (Artificial Dumb): walked, so out of Walk Requested and into Walked. Put Walk Requested back to walk again.")
+        w["category"] = ({"state": "left: " + rev, "tried": stamp()} if isinstance(rev, str) else
+                         {"state": "moved to Walked", "at": stamp(), "rev": rev})
+    except Exception as e:
+        w["category"] = {"state": "wanted", "note": str(e)[:120], "tried": stamp()}
+
+
+def category_says(w):
+    c = w.get("category")
+    return "" if not c else f"; category: {c['state']}" + (f" (revision {c['rev']})" if c.get("rev") else "") + (f" ({c['note']})" if c.get("note") else "")
 
 
 def since(then, now):
@@ -615,7 +756,7 @@ def main(argv):
     ap.add_argument("--request", action="append", default=[], metavar="PAGE",
                     help="walk this page now, in the category or not (repeatable)")
     ap.add_argument("--no-edit", action="store_true",
-                    help="write no Which picker box to the wiki, login or not: the question stays in walked.json")
+                    help="write nothing to the wiki, login or not: no Which picker box, and no page moved to Walked")
     args = ap.parse_args(argv[1:])
     os.makedirs(args.cache, exist_ok=True)
     wiki_get = wiki_getter(args.wiki)
@@ -623,7 +764,8 @@ def main(argv):
     prepend = wiki_editor(args.wiki, user, password) if user and password and not args.no_edit else None
     asked = [(t, now_iso()) for t in args.request] if args.request else requests(wiki_get)
     done, waiting, report = run(args.cache, asked, lambda t: page_facts(wiki_get, t), args.sources, args.budget,
-                                by="hand" if args.request else "category", prepend=prepend)
+                                by="hand" if args.request else "category", prepend=prepend,
+                                swap=prepend.swap if prepend else None)
     print(f"Connectome walk: {done} walked" + (f"; {waiting} waiting for the next run" if waiting else "")
           + "".join("\n  " + r for r in report))
     return 0
