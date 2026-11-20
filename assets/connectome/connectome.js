@@ -4069,12 +4069,16 @@ const pageAct = ( id ) => link( P( id ).page ? first( id ) + "'s page" : 'Start 
 /** A picker a step further out: nobody the one in the middle has a tie to, but one of their company has played with them. */
 function aFar( d ) {
 	const id = d.id, name = first( id ), by = d.by;
-	const also = K.company( G, id ).filter( ( c ) => c.id !== by && G.adj[ view.a ].has( c.id ) ).length;
-	return { kind: 'a picker' + instOf( id ) + ' · two hops out', title: name, tipTitle: name + instOf( id ),
-		lines: [ `two hops from ${ first( view.a ) }, by way of ${ first( by ) }` + ( also ? ` and ${ K.plural( also, 'other' ) }` : '' ), ...tieLines( by, id ) ],
+	// A song's own graph has a song in its middle and nobody: there the far one is a step out from one of the
+	// song's pickers, and that is all there is to say. (It read view.a all the same, and threw: no note at a
+	// hover, and a click that did nothing. Found 20 Nov 2026 on Darol Anger at Paint Exchange.)
+	const mid = view.a !== undefined && G.adj[ view.a ] ? view.a : undefined;
+	const also = mid === undefined ? 0 : K.company( G, id ).filter( ( c ) => c.id !== by && G.adj[ mid ].has( c.id ) ).length;
+	return { kind: 'a picker' + instOf( id ) + ( mid === undefined ? ' · a step out' : ' · two hops out' ), title: name, tipTitle: name + instOf( id ),
+		lines: [ mid === undefined ? `has played with ${ first( by ) }, who is on this` : `two hops from ${ first( mid ) }, by way of ${ first( by ) }` + ( also ? ` and ${ K.plural( also, 'other' ) }` : '' ), ...tieLines( by, id ) ],
 		hint: 'click: go to ' + name,
 		acts: [ act( 'Go to ' + name, () => go( { a: id, keep: [ by ] } ) ),
-			act( `${ first( view.a ) } & ${ name }: the ways between`, () => go( { a: view.a, b: id } ) ), pageAct( id ) ] };
+			...( mid === undefined ? [] : [ act( `${ first( mid ) } & ${ name }: the ways between`, () => go( { a: mid, b: id } ) ) ] ), pageAct( id ) ] };
 }
 
 function aSong( d ) {
