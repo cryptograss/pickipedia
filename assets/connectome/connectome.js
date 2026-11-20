@@ -237,6 +237,12 @@ function tellAt( step ) {
 }
 
 function rawAddress( v ) {
+	// the middle's card: asked for by a click on the middle; a soloist's view (playing) has it unless it was put away
+	const card = v.way || v.walk ? '' : ( v.playing !== undefined ? ( v.card === false ? '&card=0' : '' ) : ( v.card ? '&card=1' : '' ) );
+	return rawAddress0( v ) + card;
+}
+
+function rawAddress0( v ) {
 	if ( v.way ) {
 		return '?' + new URLSearchParams( { p: first( GAME.to ) } );           // the way found ends where it ended
 	}
@@ -279,11 +285,29 @@ function rawAddress( v ) {
 		}
 		return '?' + new URLSearchParams( q );
 	}
-	return '?' + new URLSearchParams( { a: first( v.a ), b: first( v.b ) } );
+	// the two, and the record whose tracks the reader asked to see spread out between them (its "+n")
+	return '?' + new URLSearchParams( Object.assign( { a: first( v.a ), b: first( v.b ) }, v.rec !== undefined && G.music[ v.rec ] ? { rec: G.music[ v.rec ].key } : null ) );
 }
 
 /** The view an address asks for; null when it names nothing the graph knows. (?from= and ?to= are read as a and b.) */
 function parse( q ) {
+	const v = parse0( q );
+	if ( v && q.get( 'card' ) === '1' && cardable( v ) ) {
+		v.card = true;
+	} else if ( v && q.get( 'card' ) === '0' && v.playing !== undefined ) {
+		v.card = false;
+	}
+	return v;
+}
+
+/** A view with one thing in its middle that has a card: a picker's own, a song's cut. */
+const cardable = ( v ) => !!v && !v.walk && !v.way && v.pg === undefined && v.m === undefined && v.b === undefined && ( v.cut !== undefined || v.a !== undefined );
+/** Is the middle's card out? Asked for; or the view is a soloist's, the music's own, and nobody put it away. */
+const cardOn = ( v ) => cardable( v ) && ( v.playing !== undefined ? v.card !== false : !!v.card );
+/** Out, or away again: a step of its own, so Back puts it as it was. */
+const cardTurn = () => go( Object.assign( {}, view, { card: cardOn( view ) ? ( view.playing !== undefined ? false : undefined ) : true } ) );
+
+function parse0( q ) {
 	if ( q.has( 'walk' ) ) {
 		return { walk: true };                                       // your rabbithole: the songs heard in Rabbithole, and who was followed
 	}
@@ -326,7 +350,8 @@ function parse( q ) {
 		const via = q.get( 'via' ), turn = parseInt( q.get( 'turn' ) || '', 10 );
 		return { a, keep, by: by === null ? undefined : by, via: via || undefined, turn: turn > 0 ? turn : undefined };
 	}
-	return { a, b };
+	const rec = q.get( 'rec' ) ? K.findPiece( G, q.get( 'rec' ) ) : null;
+	return rec !== null && rec !== undefined ? { a, b, rec: M( rec ).m } : { a, b };
 }
 
 /** A plain click on a link to somewhere in the graph goes there without leaving; any other kind of click is the browser's. */
@@ -500,7 +525,7 @@ function pillsFor( tie, room, most, prefer, entry ) {
 	// `entry`: the one to say, as fresh() chose it, its song first
 	const came = entry || ( prefer === undefined ? null : ( tie.ev.find( ( e ) => K.pieceFor( G, e ) === prefer ) || tie.ev.find( ( e ) => e.m === M( prefer ).m ) ) );
 	if ( came ) {                                                 // the piece the reader came by is the one to say
-		pool = [ came ].concat( pool.filter( ( e ) => e.m !== came.m ) );
+		pool = [ came ].concat( pool.filter( ( e ) => ( came.one !== undefined ? e !== came : e.m !== came.m ) ) );
 	}
 	for ( const e of pool ) {
 		if ( shown.length >= most ) {
@@ -544,6 +569,51 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
 		sc.pills.set( 'm' + lineKey( u, v ) + '.more', { stands: 'piece', x: x + moreW / 2, y, w: moreW, label: '+' + fit.more + ' more', more: true,
 			u, v, o, delay } );
 	}
+}
+
+/**
+ * The room the middle's card takes, in the frame's upper right corner: its size on the page, and its box in the
+ * drawing's own measure, which nothing of the graph is set down in. One height whatever it says, so the words
+ * arriving never re-lay the graph.
+ */
+function cardRoom( W ) {
+	const wide = svg.clientWidth || W, k = W / wide;
+	const cw = Math.round( Math.max( 150, Math.min( 236, wide * 0.3 ) ) ), ch = wide < 520 ? 80 : 100;
+	return { cw, ch, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
+}
+
+/** K.ego's ring, with a place left empty at the upper right when the middle's card is out (K.gapFor). */
+function ringFor( o, card ) {
+	if ( !card ) {
+		return K.ego( o );
+	}
+	const g = K.gapFor( o.named );
+	const lay = K.ego( Object.assign( {}, o, { turn: g.turn } ) );
+	lay.named = lay.named.filter( ( _, i ) => i !== g.gap );
+	if ( lay.far ) {
+		lay.far = lay.far.filter( ( _, i ) => i !== g.gap );
+	}
+	return lay;
+}
+
+/** Nothing small under the card: a bead or one a step further out that came to stand in its corner goes, with its lines and what they say. */
+function clearCard( sc, W ) {
+	const b = cardRoom( W ).box;
+	for ( const [ key, d ] of [ ...sc.nodes ] ) {
+		// a bead by its own size; one a step out by its name's, which is written beside it
+		const padX = d.kind === 'far' ? tx( 110 ) : 12, padY = d.kind === 'far' ? tx( 20 ) : 12;
+		if ( ( d.kind === 'dot' || d.kind === 'far' ) && d.x > b.x1 - padX && d.y < b.y2 + padY ) {
+			sc.nodes.delete( key );
+			for ( const part of [ sc.lines, sc.pills ] ) {
+				for ( const [ k, l ] of [ ...part ] ) {
+					if ( l.a === key || l.b === key || l.owner === key ) {
+						part.delete( k );
+					}
+				}
+			}
+		}
+	}
+	return sc;
 }
 
 /* ------------------------------------------------------------------------------------------------------------
@@ -619,11 +689,23 @@ function sayHop( sc, lay, h, t1, t2, u, v, tie, room ) {
 	}
 }
 
-function pairScene( a, b ) {
+function pairScene( a, b, rec ) {
 	const { W, H } = frame();
 	const sc = newScene();
-	const tie = G.adj[ a ].get( b ) || null;
+	const whole = G.adj[ a ].get( b ) || null;
+	// A record the two share several tracks of says one of them on a line and "+n" for the rest. Asked for by its
+	// "+n" (Justin, #connectome, 20 Nov 2026, 14:16Z: "if we have '+<n>' in there, that needs to do something.
+	// Probably a rainbow graph showing all those songs in between the two, with other involved pickers as hops
+	// where relevant"), that record is spread out here: a strand to each of its tracks, named, before the rest of
+	// what the two share; and those who are on that record with both come first among the ways by one picker.
+	const spread = rec !== undefined && whole ? whole.ev.find( ( e ) => e.m === rec && e.how === K.TRACK && e.songs.length > 1 ) : null;
+	const tie = spread ? Object.assign( {}, whole, { ev: spread.songs.map( ( song ) => Object.assign( {}, spread, { songs: [ song ], one: song } ) )
+		.concat( whole.ev.filter( ( e ) => e !== spread ) ) } ) : whole;
+	const onRec = ( t ) => !!t && t.ev.some( ( e ) => e.m === rec );
 	const all = K.mutuals( G, a, b );
+	if ( spread ) {
+		all.sort( ( x, y ) => ( onRec( y.ta ) && onRec( y.tb ) ? 1 : 0 ) - ( onRec( x.ta ) && onRec( x.tb ) ? 1 : 0 ) );      // a stable sort: otherwise as they were
+	}
 	const played = all.filter( ( m ) => m.played );
 	if ( !tie && !all.length ) {
 		return ladderScene( a, b, W, H, sc );
@@ -636,7 +718,9 @@ function pairScene( a, b ) {
 
 	// What the two share: the loudest few said on their strands, the rest thin strands round them.
 	const shared = [];
-	const said = tie ? Math.min( tie.ev.length, small ? 1 : ( H > 640 ? 4 : ( H > 460 ? 3 : 2 ) ) ) : 0;
+	const usual = small ? 1 : ( H > 640 ? 4 : ( H > 460 ? 3 : 2 ) );
+	// the record spread out: every track of it named, as far as the frame's height goes with three rows left for the ways round
+	const said = tie ? Math.min( tie.ev.length, spread ? Math.max( usual, Math.min( spread.songs.length, Math.floor( ( H - TOP - BOTTOM ) / ( 2 * ROW ) ) - 3 ) ) : usual ) : 0;
 	const thin = tie ? Math.min( tie.ev.length - said, H > 460 ? 12 : 6 ) : 0;
 	// what's said on the straight line keeps clear of a name under either end
 	const pillRoom = Math.max( 96, Math.min( 300, W * 0.36, W - 2 * 76 - ( en.sa ? 0 : en.la + en.lb ) ) );
@@ -683,12 +767,13 @@ function pairScene( a, b ) {
 		}
 		if ( x.e ) {                                                 // something the two share: its own arc, end to end
 			const piece = K.pieceFor( G, x.e ), o = lit === null ? 1 : 0.4;
-			sc.lines.set( 's' + lineKey( a, b ) + '.' + x.e.m, { a: 'p' + a, b: 'p' + b, u: a, v: b, tie, e: x.e, piece, stands: 'piece', strand: true,
+			const key = lineKey( a, b ) + '.' + x.e.m + ( x.e.one !== undefined ? '·' + x.e.one : '' );            // a track of the record spread out: a strand of its own
+			sc.lines.set( 's' + key, { a: 'p' + a, b: 'p' + b, u: a, v: b, tie, e: x.e, piece, stands: 'piece', strand: true,
 				role: 'direct', fine: !x.fit, emph: x === shared[ 0 ] && lit === null, w: strandWidth( x.e ) + ( x.fit ? 1.5 : 0 ), o: x.fit ? o : o * 0.8,
 				bow: bow( st, 0, 1 ), delay: 100 + i * 25 } );
 			if ( x.fit ) {
 				const mk = st.marks[ 0 ], p = x.fit;
-				sc.pills.set( 'm' + lineKey( a, b ) + '.' + p.e.m, { stands: 'piece', piece, is: 'm' + piece, x: mk.x, y: mk.y, w: p.w, label: p.label,
+				sc.pills.set( 'm' + key, { stands: 'piece', piece, is: 'm' + piece, x: mk.x, y: mk.y, w: p.w, label: p.label,
 					glyph: p.glyph, tier: p.tier, e: p.e, u: a, v: b, o, delay: 140 + i * 25, play: p.play, song: p.song } );
 			}
 			return;
@@ -724,13 +809,15 @@ function pairScene( a, b ) {
 	} );
 
 	sc.pool = pool;
-	sc.tie = tie;
+	sc.tie = whole;
 	sc.lit = lit;
 	sc.loose = needLoose;
 	sc.ways = twos;
 	sc.head = [ nameLink( a ), ' and ', nameLink( b ) ];
 	const both = played.length;
-	if ( tie && tie.played ) {
+	if ( spread ) {
+		sc.sub = [ h( 'b', null, K.plural( spread.songs.length, 'track' ) + ' together on ' + K.clip( K.naming( G, spread ).long, 60 ) ), ' · ', K.together( whole ), ' in all' ];
+	} else if ( tie && tie.played ) {
 		sc.sub = [ h( 'b', null, K.together( tie ) ) ];
 	} else if ( tie ) {
 		sc.sub = [ K.together( tie ) ];
@@ -1004,7 +1091,8 @@ function egoScene( v ) {
 	// another turn of the company, where there are more than one view names; those the reader came by stay, and the goal
 	const stay = kept.filter( pinned ).length;
 	const ring = K.turned( kept, stay, Math.max( 1, want - stay ), v.turn || 0 );
-	const lay = K.ego( { W, H, named: want, dots: ring.length - want, far: true } );
+	const carded = cardOn( v );                                     // their card in the upper right corner: one seat fewer round them
+	const lay = ringFor( { W, H, named: want, dots: ring.length - want + ( carded && want > 2 ? 1 : 0 ), far: true }, carded );
 	// Rabbithole's traverse (Justin, #connectome, 18 Nov 2026: "I want the solos to traverse to the picker, but
 	// ensuring that the song still remains very visible; as big as the picker"): the one taking the solo in the
 	// middle, and the song in the ring's top seat, drawn as the song's own view draws it in its middle. Going from
@@ -1314,7 +1402,7 @@ function walkScene() {
 		// a long walk scrolls: the frame is as tall as the walk, and the stage scrolls it; the ensemble of the
 		// song on now hangs under the last circle, and wants its room
 		const need = !lay.rows ? 60 : lay.at[ lay.at.length - 1 ].y + ( lay.cols > 1 ? R + 15 + 28 + 26 : 50 ) + ( !MINI && steps.length ? 48 : 0 );
-		svg.style.height = MINI ? '' : Math.max( need, stage.clientHeight - ( $( 'say' ).offsetHeight || 0 ) - ( $( 'legend' ).offsetHeight || 0 ) ) + 'px';
+		svg.style.height = MINI ? '' : Math.max( need, stage.clientHeight - ( $( 'say' ).offsetHeight || 0 ) ) + 'px';
 		return { shown, lay, W };
 	};
 	let { W, H } = frame( true ), fit = place( W, H );
@@ -1595,6 +1683,65 @@ function stepFromShell( d ) {
 
 // What Rabbithole says: the walk, the song on now, whether it plays, and whether the drawer is open; or, from its
 // traverse, where the graph in its pane should go.
+/*
+ * The ensemble list's lights, on the graph too (Justin, #connectome, 20 Nov 2026, 14:16Z: "The effects in the
+ * ensemble chart are looking great. I want to also see them in some form in the bacon graph. If a picker is
+ * visible and they get a flourish, show the flourish in the graph as well as the ensemble list. Same for solos,
+ * etc. Let's make the effects give the sense of a match between the ensemble list and the bacon graph").
+ * Rabbithole says what its list shows ({ rabbithole: 'fx', playing, band: [ { name, title, scene, singing,
+ * enter, light: { kind, color, level, pulse } } ] }), each time it changes; whoever of that band is in sight here
+ * wears a ring round their mark for it: steady and green while they take the lead, dashed for a pickup, and the
+ * list's own colour and beat for a flourish, a spotlight or the whole band's flash. Paused with the song.
+ */
+let FX = null;
+function fxApply() {
+	if ( !G ) {
+		return;
+	}
+	const band = new Map();
+	for ( const b of FX && Array.isArray( FX.band ) ? FX.band : [] ) {
+		const byTitle = b.title ? K.find( G, b.title ) : null;
+		const id = byTitle !== null ? byTitle : K.find( G, b.name );         // a chart's "Justin Holmes" is the page's, and the graph's, "Justin Myles Holmes"
+		if ( id !== null ) {
+			band.set( id, b );
+		}
+	}
+	svg.classList.toggle( 'fx-paused', !FX || !FX.playing );
+	for ( const [ , it ] of live.node ) {
+		const d = it.d, el = it.el;
+		const b = !it.dead && d.stands === 'picker' ? band.get( d.id ) : null;
+		const light = b && b.light ? b.light : null;
+		const on = {
+			'fx-lead': !!b && b.scene === 'lead', 'fx-pickup': !!b && b.scene === 'pickup', 'fx-enter': !!b && !!b.enter,
+			'fx-flourish': !!light && light.kind === 'flourish', 'fx-glow': !!light && light.kind === 'spotlight', 'fx-band': !!light && light.kind === 'bandFlash',
+		};
+		const any = Object.values( on ).some( Boolean );
+		let ring = el.querySelector( 'circle.fxr' );
+		if ( !any ) {
+			if ( ring ) {
+				ring.remove();
+				el.classList.remove( 'fx', ...Object.keys( on ) );
+			}
+			continue;
+		}
+		if ( !ring ) {
+			const main = el.querySelector( 'image.face, circle.dot, circle.ring' );
+			const r = main ? ( parseFloat( main.getAttribute( 'r' ) ) || parseFloat( main.getAttribute( 'width' ) ) / 2 || 8 ) : 8;
+			ring = s( 'circle', { class: 'fxr', r: r + ( r < 7 ? 4 : 6 ) } );
+			el.insertBefore( ring, el.firstChild );
+		}
+		el.classList.add( 'fx' );
+		for ( const [ name, yes ] of Object.entries( on ) ) {
+			el.classList.toggle( name, yes );
+		}
+		if ( light ) {
+			ring.style.setProperty( '--fx-color', String( light.color || '' ).replace( /[^\w\s(),.%#-]/g, '' ) );
+			ring.style.setProperty( '--fx-level', String( Math.max( 0.35, Math.min( 1.3, Number( light.level ) || 0.7 ) ) ) );
+			ring.style.setProperty( '--fx-pulse', Math.max( 0.5, Math.min( 6, Number( light.pulse ) || 1.2 ) ) + 's' );
+		}
+	}
+}
+
 window.addEventListener( 'message', ( ev ) => {
 	if ( !HOST || ev.origin !== location.origin || ev.source !== window.parent || !ev.data ) {
 		return;
@@ -1605,6 +1752,11 @@ window.addEventListener( 'message', ( ev ) => {
 	}
 	if ( ev.data.rabbithole === 'step' ) {
 		stepFromShell( ev.data );
+		return;
+	}
+	if ( ev.data.rabbithole === 'fx' ) {
+		FX = ev.data;                                                // what the ensemble list is showing now
+		fxApply();
 		return;
 	}
 	if ( ev.data.rabbithole !== 'walk' ) {
@@ -1619,6 +1771,7 @@ window.addEventListener( 'message', ( ev ) => {
 	if ( SHELL && typeof d.steering === 'boolean' && d.steering !== steering ) {
 		steering = d.steering;                                       // the reader steers, or the music does: the bar and the way come, or neither
 		document.body.classList.toggle( 'steering', steering );
+	document.body.classList.toggle( 'shell', !!SHELL );
 		if ( G && view ) {
 			pathSay();
 		}
@@ -1670,6 +1823,7 @@ document.body.classList.toggle( 'mini', MINI );
 if ( HOST ) {
 	document.body.classList.add( 'in-rabbithole' );
 	document.body.classList.toggle( 'steering', steering );
+	document.body.classList.toggle( 'shell', !!SHELL );
 	// Ways out, inside the player: a song plays there, and a page opens in its pane, not over the player.
 	document.addEventListener( 'click', ( ev ) => {
 		const a = ev.target.closest && ev.target.closest( 'a[href]' );
@@ -1919,7 +2073,8 @@ function songScene( v ) {
 	}
 	const outer = [ ...chosen.values() ].sort( ( x, y ) => ( y.tie.ev.length - x.tie.ev.length ) || ( y.tie.w - x.tie.w ) )
 		.slice( 0, W > 700 && H > 560 ? 20 : ( W > 460 || H > 500 ? 12 : 8 ) );
-	const lay = K.ego( { W, H, named: Math.min( ids.length, 12 ), dots: outer.length } );
+	// the song's card out: everyone on it keeps a seat, round a ring with one more place, the upper right one left empty
+	const lay = ringFor( { W, H, named: Math.min( ids.length, 12 ) + ( cardOn( v ) && ids.length > 1 ? 1 : 0 ), dots: outer.length }, cardOn( v ) );
 	const n = lay.named.length, mine = ids.slice( 0, n );
 	const pan = slide( 'c' + v.cut, lay.C );
 	const seats = K.seat( lay.named, mine.map( ( id ) => wanted( 'c' + v.cut + '·' + id, pan ) ) );
@@ -2269,12 +2424,27 @@ const draw = {
 		const gl = glyph( d.glyph );
 		gl.setAttribute( 'transform', `translate(${ -d.w / 2 + 14 } 0)` );
 		g.appendChild( gl );
-		g.appendChild( s( 'text', { x: -d.w / 2 + 25, y: tx( 4.3 ) }, d.label ) );
+		// "+n": the other tracks of the record these two share. A mark of its own: its click spreads them out between the two.
+		const plus = spreads( d ) ? /^(.*\S)\s(\+\d+)$/.exec( d.label ) : null;
+		const t = s( 'text', { x: -d.w / 2 + 25, y: tx( 4.3 ) }, plus ? plus[ 1 ] + ' ' : d.label );
+		if ( plus ) {
+			const n = s( 'tspan', { class: 'plus' }, plus[ 2 ] );
+			n.appendChild( s( 'title', null, `All ${ d.e.songs.length } tracks ${ first( d.u ) } and ${ first( d.v ) } share on it, spread out between them` ) );
+			t.appendChild( n );
+		}
+		g.appendChild( t );
 		if ( d.play ) {                                              // a track that plays: the rabbit takes you there
 			g.appendChild( playChip( d.w / 2 - 37, 0, d.play, d.song ) );
 		}
 	}
 };
+
+/** Does this pill's "+n" lead anywhere: several tracks of one record, between two pickers who are both known, not already spread out. */
+function spreads( d ) {
+	return !!d.e && d.e.how === K.TRACK && d.e.songs && d.e.songs.length > 1 && d.u >= 0 && d.v >= 0 && !!G.adj[ d.u ] && G.adj[ d.u ].has( d.v ) &&
+		!( view.b !== undefined && view.rec === d.e.m && lineKey( view.a, view.b ) === lineKey( d.u, d.v ) );
+}
+const spreadOut = ( d ) => go( { a: d.u, b: d.v, rec: d.e.m } );
 
 /** The way into Rabbithole, small: a rabbit and a play mark. */
 function playMark() {
@@ -2972,7 +3142,7 @@ function label( v ) {
 	return v.b === undefined ? first( v.a ) : first( v.a ) + ' ⟷ ' + first( v.b );
 }
 
-const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.m === w.m && v.s === w.s && v.cut === w.cut && v.pg === w.pg &&
+const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.rec === w.rec && cardOn( v ) === cardOn( w ) && v.m === w.m && v.s === w.s && v.cut === w.cut && v.pg === w.pg &&
 	v.playing === w.playing;
 
 /** Where each thing in sight is now, by what it stands for: a picker ('p' and their number) or a piece ('m' and its). */
@@ -3004,24 +3174,6 @@ function settled( sc ) {
 let turned = 0;                  // when the view last changed
 let lost = '';                   // an address that named nothing the graph knows: said under the headline until the reader moves on
 
-/**
- * The legend says what's in sight, and what's in sight goes by the room there is: the web wants so much, the step
- * further more. Were an entry coming in to wrap the legend onto another line, the frame would lose that line, the
- * view might no longer have the room, the entry would go, the frame would get its line back, and round again for
- * ever (seen at 1280 by 734 to 746, 14 Nov 2026, before this). So the legend is always as tall as it would be
- * with everything in it that a frame this wide could ever show.
- */
-function steady() {
-	const legend = $( 'legend' );
-	const most = K.ego( { W: svg.clientWidth * ( coarse || MINI ? 1 : K.shrink( 1, 1, zoomed() ) ), H: 4000, named: 8, dots: 0, far: true } );   // as wide as it may ever be laid out
-	legend.style.minHeight = '';
-	stage.classList.remove( 'webbed', 'deep' );
-	stage.classList.add( ...[ most.web && 'webbed', most.far && 'deep' ].filter( Boolean ) );
-	const tall = legend.offsetHeight;
-	stage.classList.remove( 'webbed', 'deep' );                      // show() says which of them the view has, once it knows
-	legend.style.minHeight = tall + 'px';
-}
-
 /** Show the view. again: the same view, laid out afresh because the frame changed; everyone keeps the seat they had. */
 /** The frame a view is drawn for: its size, and what else sets the drawing's scale. A view is put back as drawn only into the same frame. */
 function fitNow() {
@@ -3040,7 +3192,6 @@ function show( quick, again ) {
 	stage.classList.toggle( 'dual', view.m !== undefined || !!view.walk );
 	stage.classList.toggle( 'walking', !!view.walk );
 	document.querySelector( 'main' ).classList.toggle( 'walking', !!view.walk );
-	steady();
 	if ( kept ) {
 		// What stands round the graph first (its headline, the way come), since those set the frame it is measured by.
 		$( 'say' ).firstElementChild.replaceChildren( ...kept.scene.head.filter( Boolean ) );
@@ -3054,18 +3205,25 @@ function show( quick, again ) {
 		words( kept.T );
 		svg.setAttribute( 'viewBox', kept.box );
 	} else {
-		scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.pg !== undefined ? pageScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
+		scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.pg !== undefined ? pageScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b, view.rec ) );
+		if ( cardOn( view ) ) {
+			clearCard( scene, frame().W );                           // nothing small left under the card's corner
+		}
 	}
 	if ( !view.walk && !view.way ) {
 		drawn.set( view, { scene, fit: fitNow(), box: svg.getAttribute( 'viewBox' ), S, T, sel: Object.assign( {}, sel ) } );
 	}
+	stage.classList.toggle( 'carded', cardOn( view ) );
 	stage.classList.toggle( 'webbed', !!scene.web );
 	stage.classList.toggle( 'deep', !!scene.deep );
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
 	$( 'say' ).lastElementChild.replaceChildren( ...( lost && trail.length < 2 ? [ lost ] : scene.sub ) );
 	put( scene, quick );
 	keptSay();
+	cardSay();
+	fxApply();
 	qrSay();
+	qrRoom( quick );
 	fillPanel();
 	$( 'pa' ).value = view.way || view.walk || view.pg !== undefined || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
 	$( 'pb' ).value = view.way || view.walk || view.pg !== undefined || view.m !== undefined || view.b === undefined ? '' : first( view.b );
@@ -3085,6 +3243,9 @@ function show( quick, again ) {
  * of the line it was on, and the other pieces named in sight; from one piece to the next, the one left behind.
  */
 function carry( v ) {
+	if ( view && cardable( v ) && cardable( view ) && v.a === view.a && v.cut === view.cut && v.playing === view.playing && cardOn( v ) !== cardOn( view ) ) {
+		return v;                                                    // the same view with its card out, or put away: the way in as it was
+	}
 	if ( !view || !scene || v.walk || v.way || v.pg !== undefined || v.b !== undefined || v.cut !== undefined || v.s !== undefined ||
 		v.playing !== undefined ) {
 		return v;                                                    // two pickers, a cut, a page or a solo: a view of its own, nothing brought along
@@ -3663,7 +3824,7 @@ async function openKept( id ) {
 }
 
 /**
- * The QR code at the legend's right end (Justin, #connectome, 16 Nov 2026: "always a QR code visible. So if I'm showing someone
+ * The QR code in the graph's corner (Justin, #connectome, 16 Nov 2026: "always a QR code visible. So if I'm showing someone
  * one, they can take a QR code of it with their phone and pick up right where I left off"): this view's own
  * address, or a kept graph's, as a reader would open it, not as Rabbithole frames it. Not for the walk, which
  * lives in the browser it was walked in.
@@ -3686,6 +3847,62 @@ function qrSay() {
 	pic.setAttribute( 'viewBox', `0 0 ${ p.side } ${ p.side }` );
 	pic.firstElementChild.setAttribute( 'd', p.d );
 	box.setAttribute( 'aria-label', 'A QR code of this view, ' + url + ': scan it to pick up here on a phone' );
+}
+
+/**
+ * The card of the one in the middle, in the graph's upper right corner, where the ring has left a place empty
+ * (Justin, #connectome, 20 Nov 2026, 14:16Z). A picker's: their picture, their name as the way to their page,
+ * what they play, and what the headline's second line says of them. A song's: its name and that line. It is the
+ * soloist's card in Rabbithole, where the music's own view has no headline and Rabbithole no band under the graph.
+ */
+function cardSay() {
+	const el = $( 'card' ), on = !!view && cardOn( view );
+	el.hidden = !on;
+	if ( !on ) {
+		return;
+	}
+	const { cw, ch } = cardRoom( frame().W );
+	el.style.width = cw + 'px';
+	el.style.height = ch + 'px';
+	el.style.top = ( ( $( 'say' ).offsetHeight || 0 ) + 8 ) + 'px';         // the graph's own corner, under the headline where there is one
+	const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
+	if ( view.cut !== undefined && view.playing === undefined ) {
+		el.replaceChildren( h( 'div', { class: 'card-in' }, h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) ) );
+		return;
+	}
+	const p = P( view.a ), on2 = view.playing !== undefined && G.songcast[ view.playing ];
+	const role = on2 ? ( G.songcast[ view.playing ].pickers.find( ( x ) => x[ 0 ] === view.a ) || [] ) : [];
+	el.replaceChildren( ...[
+		p.img ? h( 'img', { src: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=120', alt: '' } ) : null,
+		h( 'div', { class: 'card-in' },
+			h( 'a', { class: 'card-name' + ( p.page ? '' : ' new' ), href: pageUrl( p.name ), target: '_top', title: p.page ? p.name + "'s page on PickiPedia" : 'Start ' + p.name + "'s page" }, p.name ),
+			h( 'span', { class: 'card-what' }, [ on2 ? ( role[ 2 ] || role[ 1 ] || p.inst ) : p.inst, on2 ? 'on ' + G.songcast[ view.playing ].song : '' ].filter( Boolean ).join( ' · ' ) ),
+			h( 'span', { class: 'card-more' }, ...more ) ) ].filter( Boolean ) );
+}
+
+/**
+ * The code in the corner, out of the way of the drawing: its own size where nothing of the graph comes to stand
+ * under it, a small mark of itself where a name or a mark does. Looked at once the view has slid into place.
+ */
+let qrLook = 0;
+function qrRoom( quick ) {
+	clearTimeout( qrLook );
+	const look = () => {
+		const box = $( 'qr' );
+		if ( box.hidden || box.classList.contains( 'big' ) ) {
+			return;
+		}
+		box.classList.remove( 'tight' );
+		const r = box.getBoundingClientRect();
+		box.classList.toggle( 'tight', [ ...svg.querySelectorAll( 'text, circle, image, rect:not( .reach )' ) ].some( ( el ) => {
+			const b = el.getBoundingClientRect();
+			return b.width > 0 && b.right > r.left - 4 && b.left < r.right + 4 && b.bottom > r.top - 4 && b.top < r.bottom + 4;
+		} ) );
+	};
+	if ( quick ) {
+		look();
+	}
+	qrLook = setTimeout( look, 900 );
 }
 
 /** What a kept graph says of itself, above it, and its lines marked where a source has gone since. */
@@ -3852,12 +4069,16 @@ const pageAct = ( id ) => link( P( id ).page ? first( id ) + "'s page" : 'Start 
 /** A picker a step further out: nobody the one in the middle has a tie to, but one of their company has played with them. */
 function aFar( d ) {
 	const id = d.id, name = first( id ), by = d.by;
-	const also = K.company( G, id ).filter( ( c ) => c.id !== by && G.adj[ view.a ].has( c.id ) ).length;
-	return { kind: 'a picker' + instOf( id ) + ' · two hops out', title: name, tipTitle: name + instOf( id ),
-		lines: [ `two hops from ${ first( view.a ) }, by way of ${ first( by ) }` + ( also ? ` and ${ K.plural( also, 'other' ) }` : '' ), ...tieLines( by, id ) ],
+	// A song's own graph has a song in its middle and nobody: there the far one is a step out from one of the
+	// song's pickers, and that is all there is to say. (It read view.a all the same, and threw: no note at a
+	// hover, and a click that did nothing. Found 20 Nov 2026 on Darol Anger at Paint Exchange.)
+	const mid = view.a !== undefined && G.adj[ view.a ] ? view.a : undefined;
+	const also = mid === undefined ? 0 : K.company( G, id ).filter( ( c ) => c.id !== by && G.adj[ mid ].has( c.id ) ).length;
+	return { kind: 'a picker' + instOf( id ) + ( mid === undefined ? ' · a step out' : ' · two hops out' ), title: name, tipTitle: name + instOf( id ),
+		lines: [ mid === undefined ? `has played with ${ first( by ) }, who is on this` : `two hops from ${ first( mid ) }, by way of ${ first( by ) }` + ( also ? ` and ${ K.plural( also, 'other' ) }` : '' ), ...tieLines( by, id ) ],
 		hint: 'click: go to ' + name,
 		acts: [ act( 'Go to ' + name, () => go( { a: id, keep: [ by ] } ) ),
-			act( `${ first( view.a ) } & ${ name }: the ways between`, () => go( { a: view.a, b: id } ) ), pageAct( id ) ] };
+			...( mid === undefined ? [] : [ act( `${ first( mid ) } & ${ name }: the ways between`, () => go( { a: mid, b: id } ) ) ] ), pageAct( id ) ] };
 }
 
 function aSong( d ) {
@@ -3869,6 +4090,13 @@ function aSong( d ) {
 	}
 	if ( G.plays[ d.title ] ) {
 		w.lines.push( 'it plays in Rabbithole: the ▶ beside its name' );
+	}
+	if ( view.cut !== undefined && view.playing === undefined ) {       // the song in its own middle: its card, out and away
+		w.hint = cardOn( view ) ? 'click: put its card away' : 'click: its card · click a picker round it: go to them';
+		w.acts.push( act( cardOn( view ) ? 'Put its card away' : 'Its card', cardTurn ) );
+	} else if ( d.cut !== undefined && G.songcast[ d.cut ] ) {            // the song on now, beside who's taking it: its own graph
+		w.hint = 'click: go to ' + d.title;
+		w.acts.push( act( 'Go to ' + d.title, () => go( { s: d.title, cut: d.cut } ) ) );
 	}
 	return w;
 }
@@ -3929,7 +4157,8 @@ function aPicker( d ) {
 	if ( view.b === undefined ) {
 		if ( id === view.a ) {
 			w.lines.push( P( id ).page ? '' : 'no page yet' );
-			w.hint = 'click anyone around them: go to them';
+			w.hint = cardOn( view ) ? 'click: put their card away' : 'click: their card · click anyone around them: go to them';
+			w.acts.push( act( cardOn( view ) ? 'Put their card away' : name + "'s card", cardTurn ) );
 		} else if ( !d.tie ) {                                       // a step on the way a challenge was found by: no one in the middle to share with
 			w.lines.push( P( id ).page ? '' : 'no page yet' );
 			w.acts.push( goTo );
@@ -3982,6 +4211,10 @@ function aPiece( d ) {
 		title: n.short, lines: [ n.long !== n.short ? n.long : '', d.e.songs.length > 1 ? d.e.songs.slice( 0, 6 ).join( ', ' ) + ( d.e.songs.length > 6 ? ', …' : '' ) : '',
 			K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) ], hint: "click: go to it · who's on it, and where they lead",
 		acts: [ act( 'Go to ' + K.clip( K.called( G, pc ).name, 30 ), () => go( { m: d.piece, hand: [ d.u, d.v ] } ) ) ] };
+	if ( spreads( d ) ) {
+		w.hint = `click: go to it · click +${ d.e.songs.length - 1 }: all ${ d.e.songs.length } tracks, between the two`;
+		w.acts.push( act( `All ${ d.e.songs.length } tracks ${ first( d.u ) } & ${ first( d.v ) } share on it`, () => spreadOut( d ) ) );
+	}
 	for ( const song of d.e.songs.slice( 0, 3 ) ) {
 		const to = K.playOf( G, m, song );
 		if ( to ) {
@@ -4290,6 +4523,13 @@ svg.addEventListener( 'click', ( e ) => {
 	if ( a ) {
 		e.preventDefault();                                          // a name goes where its mark goes: to them, here
 	}
+	const plus = e.target.closest( 'tspan.plus' ), pg = plus && plus.closest( 'g[data-kind]' ), pit = pg && live[ pg.dataset.kind ].get( pg.dataset.k );
+	if ( pit && !pit.dead && spreads( pit.d ) ) {                    // a pill's "+n": the rest of that record, spread out between the two
+		closeSheet();
+		hush();
+		spreadOut( pit.d );
+		return;
+	}
 	const g = pick( e );
 	if ( fingers ) {
 		if ( svg.contains( document.activeElement ) ) {
@@ -4427,7 +4667,45 @@ if ( new URLSearchParams( location.search ).has( 'faq' ) ) {
 
 $( 'back' ).addEventListener( 'click', back );
 $( 'share' ).addEventListener( 'click', onShare );
-$( 'qr' ).addEventListener( 'click', () => $( 'qr' ).classList.toggle( 'big' ) );
+$( 'qr' ).addEventListener( 'click', () => {
+	$( 'qr' ).classList.toggle( 'big' );
+	qrRoom( true );
+} );
+// The key: open while its button is pressed in (a finger, a keyboard), and for a mouse while it is on it.
+// Escape, or a press anywhere else, closes it.
+function keyed( on ) {
+	stage.classList.toggle( 'keyed', on );
+	$( 'key' ).setAttribute( 'aria-expanded', String( on ) );
+}
+// A mouse on the button or on the key (never a finger, whose hover sticks): by the script, since a browser's own
+// word on whether it can hover is not to be had everywhere (headless Firefox says it can't).
+let peekOff = 0;
+for ( const el of [ $( 'key' ), $( 'legend' ) ] ) {
+	el.addEventListener( 'pointerenter', ( e ) => {
+		if ( e.pointerType === 'mouse' ) {
+			clearTimeout( peekOff );
+			stage.classList.add( 'peek' );
+		}
+	} );
+	el.addEventListener( 'pointerleave', () => {
+		clearTimeout( peekOff );
+		peekOff = setTimeout( () => stage.classList.remove( 'peek' ), 140 );      // time to cross from the button to the key
+	} );
+}
+$( 'key' ).addEventListener( 'click', ( e ) => {
+	e.stopPropagation();
+	keyed( !stage.classList.contains( 'keyed' ) );
+} );
+document.addEventListener( 'click', ( e ) => {
+	if ( stage.classList.contains( 'keyed' ) && !e.target.closest( '#legend' ) ) {
+		keyed( false );
+	}
+} );
+document.addEventListener( 'keydown', ( e ) => {
+	if ( e.key === 'Escape' && stage.classList.contains( 'keyed' ) ) {
+		keyed( false );
+	}
+} );
 
 let finder = new Map();          // everything the boxes can find, by its name in small letters (K.catalogue)
 

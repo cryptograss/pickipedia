@@ -1444,3 +1444,27 @@ test( 'a QR code is drawn as one path, a unit a module, inside a quiet zone of f
 	assert.equal( ( p.d.match( /M/g ) || [] ).length, q.rows.flat().filter( Boolean ).length );
 	assert.ok( p.d.startsWith( 'M4 4h1v1h-1z' ) );                         // the finder's corner
 } );
+
+test( 'a ring with its card out leaves the upper right place empty, and stands nobody straight over or under the middle (Justin, 20 Nov 2026)', () => {
+	for ( let n = 3; n <= 12; n++ ) {
+		const { turn, gap } = K.gapFor( n );
+		const lay = K.ego( { W: 900, H: 700, named: n, dots: 0, turn } );
+		assert.equal( lay.named.length, n );
+		const left = lay.named[ gap ];
+		// the place left out is the one nearest 45 degrees up and to the right, and is in that quarter
+		const off = ( p ) => Math.abs( ( ( p.angle + 45 ) % 360 + 540 ) % 360 - 180 );
+		assert.ok( lay.named.every( ( p ) => off( left ) <= off( p ) + 1e-9 ), `n=${ n }: nearest the corner` );
+		assert.ok( left.x > lay.C.x && left.y < lay.C.y, `n=${ n }: up and to the right` );
+		assert.ok( Math.abs( turn ) <= 180 / n + 1e-9, `n=${ n }: at most half a step round` );
+		for ( const [ i, p ] of lay.named.entries() ) {
+			if ( i !== gap ) {
+				assert.ok( Math.abs( ( ( p.angle % 180 ) + 180 ) % 180 - 90 ) >= 8 - 1e-9 || turn === 0, `n=${ n }: place ${ i } stands clear of twelve and six` );
+			}
+		}
+	}
+	assert.equal( Math.abs( K.gapFor( 6 ).turn ), 30 );                  // six: turned half a step so one is at the corner, and five stay
+	assert.equal( K.gapFor( 8 ).turn, 0 );                               // eight: a turn would stand two upright
+	assert.deepEqual( K.gapFor( 2 ), { turn: 90, gap: -1 } );            // two: turned clear of the corner, both stay
+	assert.deepEqual( K.gapFor( 1 ), { turn: 0, gap: -1 } );
+	assert.deepEqual( K.ego( { W: 900, H: 700, named: 6, dots: 0 } ).named.map( ( p ) => p.angle ), [ -75, -15, 45, 105, 165, 225 ] );   // not asked to turn: as it was
+} );
