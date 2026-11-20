@@ -627,6 +627,17 @@ test( 'a show whose source names the band goes by the band; a cut says whose it 
 	assert.ok( K.catalogue( g ).some( ( x ) => x.label === 'Victory · track on 4masks by Justin Myles Holmes' ) );
 } );
 
+test( 'a view\'s title says which game it is: the Oracle, the Six Degrees, or the bacon between two pickers', () => {
+	// Justin, #connectome, 20 Nov 2026: "the title needs to reflect whether it's a challenge or not"
+	assert.equal( K.pageTitle( { oracle: true } ), 'The Oracle of Bluegrass Bacon' );
+	assert.equal( K.pageTitle( { oracle: true, challenge: true } ), 'The Six Degrees of Bluegrass Bacon' );
+	assert.equal( K.pageTitle( { challenge: true, of: 'Cory Walker' } ), 'The Six Degrees of Bluegrass Bacon' );   // a game on: the game, wherever it has got to
+	assert.equal( K.pageTitle( { a: 'Maddie Denton', b: 'Kyle Tuttle', of: 'Maddie Denton ⟷ Kyle Tuttle' } ), 'Bluegrass Bacon from Maddie Denton to Kyle Tuttle' );
+	assert.equal( K.pageTitle( { a: 'Maddie Denton', of: 'Maddie Denton' } ), 'Bluegrass Bacon: Maddie Denton' );
+	assert.equal( K.pageTitle( { of: 'August · 4masks' } ), 'Bluegrass Bacon: August · 4masks' );
+	assert.equal( K.pageTitle( {} ), 'The Oracle of Bluegrass Bacon' );
+} );
+
 test( 'a record a line names says whose it is: not "Various", nor anyone where no artist is credited', () => {
 	// Justin, #connectome, 19 Nov 2026: "it says 'a track on Vowel Sounds' - it needs to say the artist's name as well"
 	assert.equal( K.recordBy( { key: 'arthel:vowel sounds', artist: 'Justin Myles Holmes', title: 'Vowel Sounds' } ), 'Vowel Sounds by Justin Myles Holmes' );

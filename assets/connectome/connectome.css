@@ -940,6 +940,27 @@ body.mini #g { cursor: pointer; }
 	white-space: nowrap;
 }
 #share:not( [hidden] ) + #faqlink { margin-left: 0; }
+/* Whose graph this is, at the bar's right end, and the way to the wiki's front page (Justin, #connectome, 20 Nov
+   2026: "Full-screen bacon graphs need to have a nice pickipedia logo in the top-right"): the mark, which is the
+   logo's art with no word under it, and the word set beside it at a size it can be read. On a phone, where the
+   bar is full of its two boxes, the mark alone. */
+#home {
+	display: flex;
+	flex: none;
+	gap: 6px;
+	align-items: center;
+	margin-left: 4px;
+	color: var( --ink );
+	font: 400 19px/1 var( --name );
+	text-decoration: none;
+}
+#home img { display: block; width: 36px; height: 36px; margin: -7px 0; }
+#home:hover span,
+#home:focus span { text-decoration: underline; }
+@media ( max-width: 760px ) {
+	#home { margin-left: 0; }
+	#home span { display: none; }
+}
 #faqlink:hover,
 #faqlink:focus,
 #faqlink[ aria-expanded="true" ] { background: var( --hover ); }

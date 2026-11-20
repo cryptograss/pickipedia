@@ -261,8 +261,14 @@ $wgSVGNativeRendering = true;
 $wgUseInstantCommons = true;
 
 ## Logos
+# The art the fliers were printed from, scaled down (Justin, #connectome, 20 Nov 2026: the mark looked wonky,
+# more so zoomed in on a phone; the file before was 135px wide with the white behind the art only partly taken
+# out). The second file is 540px and stands in at 1.5x and 2x, where the skin draws it 135px wide: sharp on a
+# dense screen, and when a reader zooms in.
 $wgLogos = [
     '1x' => "$wgResourceBasePath/assets/logo.png",
+    '1.5x' => "$wgResourceBasePath/assets/logo-2x.png",
+    '2x' => "$wgResourceBasePath/assets/logo-2x.png",
 ];
 $wgFavicon = "$wgResourceBasePath/assets/favicon.ico";
 

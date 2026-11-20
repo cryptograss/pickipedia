@@ -1279,6 +1279,29 @@ export function byArtist( m ) {
 }
 
 /**
+ * What a view is called where its name stands alone: the browser's tab, and the card a shared link shows (Justin,
+ * #connectome, 20 Nov 2026, his titles word for word: bare /bacon "The Oracle of Bluegrass Bacon", a challenge "The
+ * Six Degrees of Bluegrass Bacon", two pickers "Bluegrass Bacon from <a> to <b>"). Any other view is "Bluegrass
+ * Bacon: " and what it is of, which is mine. A crawler runs no script, so the card's title is written by the web
+ * server from the address alone (rabbithole: public/bacon.html): his three are the same there, and the others as
+ * near as an address tells (a song's name without its record).
+ *
+ * @param {{oracle?: boolean, challenge?: boolean, a?: string, b?: string, of?: string}} v
+ */
+export function pageTitle( v ) {
+	if ( v.challenge ) {
+		return 'The Six Degrees of Bluegrass Bacon';
+	}
+	if ( v.oracle ) {
+		return 'The Oracle of Bluegrass Bacon';
+	}
+	if ( v.a && v.b ) {
+		return 'Bluegrass Bacon from ' + v.a + ' to ' + v.b;
+	}
+	return v.of ? 'Bluegrass Bacon: ' + v.of : 'The Oracle of Bluegrass Bacon';
+}
+
+/**
  * A record as a line names it: its title and whose it is. "It says 'a track on Vowel Sounds' - it needs to say
  * the artist's name as well" (Justin, #connectome, 19 Nov 2026): a track on Vowel Sounds by Justin Myles Holmes.
  */
