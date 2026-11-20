@@ -1206,7 +1206,24 @@ function egoScene( v ) {
 	// Each name as it will be written, so no bead is set down under one, however long it is or far it leans.
 	// A name over a seat beside the card's corner ends where the card begins, as one by the frame's edge ends there.
 	const edge = ( pos ) => ( corner && !pos.below && pos.y - 18 - tx( 18 ) < corner.y2 + 4 && pos.x < corner.x1 ? Math.min( W, corner.x1 - 2 ) : W );
-	const names = out ? out.names : mine.map( ( c, i ) => nameAt( first( c.id ), lay.named[ seats[ i ] ], edge( lay.named[ seats[ i ] ] ), FONT.named ) );
+	// Nor on the song's mark, where a seat beside the song's has its name in the song's own row: it ends short of it.
+	const nameFor = ( name, pos ) => {
+		let lo = 4, hi = edge( pos ) - 4;
+		if ( songAt ) {
+			const y1 = pos.below ? pos.y + 18 : pos.y - 18 - tx( 18 ), y2 = pos.below ? pos.y + 18 + tx( 18 ) : pos.y - 18;
+			if ( y2 > songAt.y - 34 && y1 < songAt.y + 34 ) {
+				if ( pos.x < songAt.x ) {
+					hi = Math.min( hi, songAt.x - 38 );
+				} else {
+					lo = Math.max( lo, songAt.x + 68 );
+				}
+			}
+		}
+		const lean = ( pos.lean || 0 ) * ( wide( K.clip( name, 26 ), FONT.named ) / 2 + 3 );
+		const fit = fitName( name, pos.x + lean, lo, Math.max( hi, lo + 40 ), FONT.named );
+		return { label: fit.label, dx: Math.round( lean ) + fit.dx };
+	};
+	const names = out ? out.names : mine.map( ( c, i ) => nameFor( first( c.id ), lay.named[ seats[ i ] ] ) );
 	const spots = out ? K.spread( out.open, ring.length - n ) : K.clearOf( lay.dots, names.map( ( nm, i ) => {
 		const pos = lay.named[ seats[ i ] ];
 		return nameBox( pos, nm.dx, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -18 - tx( 18 ), pos.below ? 18 + tx( 18 ) : -18 );
