@@ -1,4 +1,5 @@
-"""Tests for connectome_walk.py: who is due, what a page says, the lookups, the caps, the budget, the cache's files.
+"""Tests for connectome_walk.py: who is due, what a page says, the lookups, the caps, the budget, the cache's files,
+and the question a walk asks when a site has several artists of one name (the Which picker box).
 
 No network: every lookup is handed in. python3 -m pytest -q test_connectome_walk.py
 """
@@ -41,7 +42,8 @@ def test_a_page_says_its_names_and_what_it_and_its_talk_page_link():
                 {"url": "https://musicbrainz.org/release/0b4f1d3e-1111-2222-3333-444455556666"},
                 {"url": "https://archive.org/details/bkh2026-03-01.sbd"},
                 {"url": "https://www.discogs.com/release/38267088"}]}]}}
-    names, links = walk.page_facts(wiki_get, "Bronwyn")
+    names, links, boxed = walk.page_facts(wiki_get, "Bronwyn")
+    assert boxed is False
     # one word is too loose to look anybody up by; the redirect and MusicianInfo's name are full names
     assert names == ["Bronwyn Keith-Hynes", "Bronwyn Keith Hynes"]
     assert links == {"discogs-artist": ["123"], "discogs": ["38267088"], "mb": ["0b4f1d3e-1111-2222-3333-444455556666"],
@@ -182,3 +184,291 @@ def test_the_store_fetches_from_both_sources_files_and_reads_both_names_files(tm
     finally:
         store.fetch = orig
     assert seen == {"d": ["1", "2"], "l": ["x2025"]}
+
+
+# ---------------------------------------------------------------------------
+# Which picker: several artists of one name on a site
+# ---------------------------------------------------------------------------
+
+SIX = [(str(n), "Jack Schneider") for n in (3847115, 3926070, 5499013, 7190407, 14173018, 17542158)]
+ABOUT = {"3847115": {"releases": 24, "years": [1975, 2025], "titles": ["Streets Of September", "Something Crossed My Mind"]},
+         "3926070": {"releases": 3, "years": [2014, 2016], "titles": ["Plaza"]}}
+MB_TWO = [("7b031960-b66f-4af0-b3f8-d9d957105631", "Jack Schneider"), ("8b031960-b66f-4af0-b3f8-d9d957105631", "Jack Schneider")]
+
+
+def ask_look(discogs=SIX, mb=(), about=ABOUT):
+    def discogs_about(artist_id):
+        if artist_id not in about:
+            raise RuntimeError("HTTP Error 404")
+        return dict(about[artist_id])
+    return {"discogs_named": lambda name: list(discogs), "discogs_releases": lambda a: [f"discogs {a}00"],
+            "mb_named": lambda name: list(mb), "mb_releases": lambda a: ["mb " + a],
+            "ia_search": lambda q, rows: [], "discogs_about": discogs_about, "mb_about": lambda a: {"releases": 1, "says": "fiddler, US"}}
+
+
+def test_several_artists_of_one_name_are_asked_about_each_with_what_the_site_says():
+    asks = []
+    sources, notes = walk.walk_one("Jack Schneider", ["Jack Schneider"], {}, set(), ask_look(), asks)
+    assert sources == [] and "Discogs: 6 artists named Jack Schneider" in notes[0]
+    assert [(a["site"], a["name"], a["found"], len(a["candidates"])) for a in asks] == [("Discogs", "Jack Schneider", 6, 6)]
+    first, third = asks[0]["candidates"][0], asks[0]["candidates"][2]
+    assert first == {"url": "https://www.discogs.com/artist/3847115", "name": "Jack Schneider", "releases": 24,
+                     "years": [1975, 2025], "titles": ["Streets Of September", "Something Crossed My Mind"]}
+    assert third["url"].endswith("/5499013") and "releases" not in third and "404" in third["note"]   # the site said nothing of this one: still asked
+
+
+def test_a_linked_artist_or_a_single_one_asks_nothing():
+    asks = []
+    walk.walk_one("Jack Schneider", ["Jack Schneider"], {"discogs-artist": ["3847115"]}, set(), ask_look(), asks)
+    assert asks == []
+    walk.walk_one("Jack Schneider", ["Jack Schneider"], {}, set(), ask_look(discogs=SIX[:1]), asks)
+    assert asks == []
+
+
+def test_no_more_than_the_cap_are_looked_at_and_the_box_says_how_many_were_left():
+    many = [(str(n), "Sam Jones") for n in range(100, 100 + walk.CANDIDATES_CAP + 3)]
+    looked = []
+
+    def about(artist_id):
+        looked.append(artist_id)
+        return {"releases": 1}
+    ask = walk.candidates("Discogs", "Sam Jones", many, about)
+    assert len(looked) == walk.CANDIDATES_CAP == len(ask["candidates"]) and ask["found"] == walk.CANDIDATES_CAP + 3
+    assert "* and 3 more named Sam Jones that this walk did not look at" in walk.which_boxes([ask])
+
+
+def test_an_id_that_is_not_one_makes_no_link():
+    ask = walk.candidates("Discogs", "Sam Jones", [("12", "Sam Jones"), ("12]] [[evil", "Sam Jones"), ("../x", "Sam Jones")], None)
+    assert [c["url"] for c in ask["candidates"]] == ["https://www.discogs.com/artist/12"]
+    ask = walk.candidates("MusicBrainz", "Sam Jones", [MB_TWO[0], ("nope", "Sam Jones")], None)
+    assert [c["url"] for c in ask["candidates"]] == ["https://musicbrainz.org/artist/7b031960-b66f-4af0-b3f8-d9d957105631"]
+
+
+def test_the_box_is_one_a_site_marked_proposed_and_says_only_what_the_site_gave():
+    asks = []
+    walk.walk_one("Jack Schneider", ["Jack Schneider"], {}, set(), ask_look(mb=MB_TWO), asks)
+    box = walk.which_boxes(asks)
+    assert box.count("{{Which picker\n|status=proposed\n|site=") == 2 and box.index("site=Discogs") < box.index("site=MusicBrainz")
+    assert '* [https://www.discogs.com/artist/3847115 Jack Schneider]: 24 releases, 1975 to 2025: "Streets Of September", "Something Crossed My Mind"\n' in box
+    assert '* [https://www.discogs.com/artist/3926070 Jack Schneider]: 3 releases, 2014 to 2016: "Plaza"\n' in box
+    assert "* [https://www.discogs.com/artist/5499013 Jack Schneider]\n" in box                      # nothing known: nothing said
+    assert "* [https://musicbrainz.org/artist/7b031960-b66f-4af0-b3f8-d9d957105631 Jack Schneider] (fiddler, US): 1 release\n" in box
+    assert box.endswith("}}\n")
+    assert walk.candidate_line({"url": "u", "name": "N", "releases": 2, "years": [1956, 1956]}) == "* [u N]: 2 releases, 1956"
+    assert walk.candidate_line({"url": "u", "name": "N", "releases": 0, "years": [], "titles": []}) == "* [u N]: 0 releases"
+
+
+def test_a_sites_words_cannot_be_wikitext():
+    hostile = "A|B {{Delete}} [[Category:X]] <script>x</script> " + "'" * 3 + " ~~~~ status=verified __NOTOC__ http://evil.example }}"
+    ask = {"site": "Discogs", "name": hostile, "found": 1, "candidates": [
+        {"url": "https://www.discogs.com/artist/1", "name": hostile, "releases": 1, "says": hostile, "titles": [hostile]}]}
+    box = walk.which_boxes([ask])
+    body = box[len("{{Which picker\n|status=proposed\n|site=Discogs\n|1=\n"):-len("}}\n")]
+    for bad in ("{{", "}}", "[[", "]]", "<", "|", "'" * 2, "~~~", "=", "__", "://evil"):
+        assert bad not in body.replace("* [https://www.discogs.com/artist/1 ", ""), bad
+    assert box.count("{{") == 1 and box.count("}}") == 1          # the wiki's gate reads the call by its braces
+    assert "\n" not in walk.plain("two\nlines\r\n* three")        # nor can they start a line of their own
+
+
+def test_a_box_on_the_page_is_taken_out_before_its_links_are_read():
+    text = ("{{Which picker\n|status=proposed\n|site=Discogs\n|1=\n* [https://www.discogs.com/artist/3847115 Jack Schneider]: {{nested|x}}\n"
+            "* [https://www.discogs.com/artist/3926070 Jack Schneider (2)]\n}}\n{{MusicianInfo|name=Jack Schneider}}\nHe is [https://www.discogs.com/artist/3847115 this one].")
+    rest, boxed = walk.without_boxes(text)
+    assert boxed and "3926070" not in rest and "MusicianInfo" in rest and "this one" in rest
+    assert walk.without_boxes("{{MusicianInfo|name=A B}}") == ("{{MusicianInfo|name=A B}}", False)
+    assert walk.without_boxes("x {{which_picker|1=a") == ("x ", True)                              # never closed: all of it goes
+
+    posted = []
+
+    def wiki_get(params, post=False):
+        if params["action"] == "parse":
+            posted.append((params, post))
+            return {"parse": {"externallinks": ["https://www.discogs.com/artist/3847115"]}}
+        return {"query": {"pages": [
+            {"title": "Jack Schneider", "revisions": [{"slots": {"main": {"content": text}}}],
+             "extlinks": [{"url": "https://www.discogs.com/artist/3847115"}, {"url": "https://www.discogs.com/artist/3926070"}]},
+            {"title": "Talk:Jack Schneider", "extlinks": [{"url": "https://archive.org/details/js2020-01-01"}]}]}}
+    names, links, boxed = walk.page_facts(wiki_get, "Jack Schneider")
+    assert boxed and links == {"discogs-artist": ["3847115"], "lma": ["js2020-01-01"]}                # the one said outside the box, and the talk page's
+    assert posted[0][1] is True and "Which picker" not in posted[0][0]["text"] and posted[0][0]["title"] == "Jack Schneider"
+
+
+def run_ask(cache, facts, prepend, asked=(("Jack Schneider", "2026-11-20T03:11:18Z"),), look=None):
+    return walk.run(str(cache), list(asked), facts, [], look=look or ask_look(), stamp=lambda: "2026-11-20T04:00:00Z", prepend=prepend)
+
+
+def test_a_walk_puts_its_question_at_the_top_of_the_page_once(tmp_path):
+    saved = []
+
+    def prepend(title, text, summary):
+        saved.append((title, text, summary))
+        return 18200
+    done, waiting, report = run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), prepend)
+    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
+    assert done == 1 and len(saved) == 1 and saved[0][0] == "Jack Schneider"
+    assert saved[0][1].startswith("{{Which picker\n|status=proposed\n|site=Discogs\n") and "Artificial Dumb" in saved[0][2]
+    assert w["box"] == {"state": "written", "at": "2026-11-20T04:00:00Z", "rev": 18200} and len(w["asks"][0]["candidates"]) == 6
+    assert "Which picker box: written (revision 18200)" in report[0]
+    # the next run: not due, nothing wanted, nothing written
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, True), prepend)
+    assert len(saved) == 1
+
+
+def test_a_page_that_has_a_box_gets_no_second_one(tmp_path):
+    saved = []
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, True), lambda *a: saved.append(a))
+    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
+    assert saved == [] and w["box"]["state"] == "the page has one" and w["asks"]                      # the candidates are still listed
+
+
+def test_with_no_login_the_question_waits_and_a_later_run_writes_it(tmp_path):
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), None)
+    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
+    assert w["box"]["state"] == "wanted" and "no login" in w["box"]["note"]
+    saved = []
+    done, waiting, report = run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), lambda *a: saved.append(a) or 7)
+    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
+    assert done == 0 and len(saved) == 1 and w["box"]["state"] == "written" and w["box"]["rev"] == 7
+    assert "the question from its walk of 2026-11-20T04:00:00Z; Which picker box: written" in report[0]
+
+
+def test_a_question_that_waited_is_dropped_when_the_page_has_answered_or_been_asked(tmp_path):
+    for n, (facts, state) in enumerate(((lambda t: (["Jack Schneider"], {"discogs-artist": ["3847115"]}, False), "answered: the page links one"),
+                                        (lambda t: (["Jack Schneider"], {}, True), "the page has one"))):
+        cache = tmp_path / str(n)
+        cache.mkdir()
+        run_ask(cache, lambda t: (["Jack Schneider"], {}, False), None)
+        saved = []
+        run_ask(cache, facts, lambda *a: saved.append(a))
+        assert saved == [] and json.load(open(cache / "walked.json"))["Jack Schneider"]["box"]["state"] == state
+
+
+def test_one_site_answered_leaves_the_other_sites_question(tmp_path):
+    saved = []
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), None, look=ask_look(mb=MB_TWO))
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {"discogs-artist": ["3847115"]}, False), lambda *a: saved.append(a) or 9)
+    assert len(saved) == 1 and "site=MusicBrainz" in saved[0][1] and "site=Discogs" not in saved[0][1] and "MusicBrainz" in saved[0][2]
+
+
+def test_a_save_the_wiki_refuses_is_tried_again_next_run_and_the_walk_still_counts(tmp_path):
+    def refuses(title, text, summary):
+        raise RuntimeError("the wiki said pickipediaverification-bot-needs-proposed")
+    done, waiting, report = run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), refuses)
+    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
+    assert done == 1 and w["box"] == {"state": "wanted", "note": "the wiki said pickipediaverification-bot-needs-proposed",
+                                      "tried": "2026-11-20T04:00:00Z"}
+    assert os.path.exists(tmp_path / "walked_sources.txt")
+    tries = []
+    later = lambda when: walk.run(str(tmp_path), [("Jack Schneider", "2026-11-20T03:11:18Z")], lambda t: (["Jack Schneider"], {}, False), [],
+                                  look=ask_look(), stamp=lambda: when, prepend=lambda *a: tries.append(a) or 3)
+    later("2026-11-20T04:05:00Z")                                # the next build, five minutes on: not yet
+    later("2026-11-20T04:59:59Z")
+    assert tries == []
+    later("2026-11-20T05:00:00Z")                                # an hour on: again
+    assert len(tries) == 1 and json.load(open(tmp_path / "walked.json"))["Jack Schneider"]["box"]["rev"] == 3
+
+
+def test_old_walks_and_walks_that_asked_nothing_have_no_box(tmp_path):
+    saved = []
+    run_ask(tmp_path, lambda t: ([t], {}), lambda *a: saved.append(a), look=ask_look(discogs=SIX[:1]))   # facts in the old shape, two things
+    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
+    assert saved == [] and "box" not in w and "asks" not in w and w["sources"] == ["discogs 384711500"]
+
+
+class FakeWiki:
+    """The wiki's API as the editor meets it: tokens, a bot password's login, an edit."""
+    def __init__(self, login="Success", edit=None):
+        self.calls, self.login, self.edit = [], login, edit or {"edit": {"result": "Success", "newrevid": 18201}}
+
+    def open(self, req, timeout=None):
+        from urllib.parse import parse_qs, urlsplit
+        q = {k: v[0] for k, v in parse_qs(req.data.decode() if req.data else urlsplit(req.full_url).query).items()}
+        self.calls.append((req.get_method(), q))
+        if q["action"] == "query":
+            body = {"query": {"tokens": {q["type"] + "token": q["type"] + "+\\"}}}
+        elif q["action"] == "login":
+            body = {"login": {"result": self.login}}
+        else:
+            body = self.edit
+
+        class Answer:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self, *a):
+                return json.dumps(body).encode()
+        return Answer()
+
+
+def test_the_editor_logs_in_once_and_prepends_to_a_page_that_exists():
+    wiki = FakeWiki()
+    prepend = walk.wiki_editor("https://wiki.example/", "Blu@walk", "s3cret", opener=wiki)
+    assert prepend("Jack Schneider", "{{Which picker}}\n", "why") == 18201
+    assert prepend("Sam Jones", "{{Which picker}}\n", "why") == 18201
+    acts = [(m, q["action"]) for m, q in wiki.calls]
+    assert acts == [("GET", "query"), ("POST", "login"), ("GET", "query"), ("POST", "edit"), ("GET", "query"), ("POST", "edit")]
+    edit = wiki.calls[3][1]
+    assert edit["prependtext"] == "{{Which picker}}\n" and edit["nocreate"] == "1" and edit["assert"] == "user" and edit["token"] == "csrf+\\"
+    assert "text" not in edit and "appendtext" not in edit                                             # it can only add to the top
+    assert all("s3cret" not in json.dumps(q) for m, q in wiki.calls if m == "GET")                     # the password goes by POST only
+
+
+def test_the_editor_says_what_the_wiki_said_and_never_the_password():
+    for wiki, word in ((FakeWiki(login="Failed"), "would not log the walk in (Failed)"),
+                       (FakeWiki(edit={"error": {"code": "protectedpage", "info": "s3cret"}}), "the wiki said protectedpage"),
+                       (FakeWiki(edit={"edit": {"result": "Failure"}}), "did not save it (Failure)")):
+        try:
+            walk.wiki_editor("https://wiki.example/", "Blu@walk", "s3cret", opener=wiki)("A B", "x", "y")
+            assert False, "it should have raised"
+        except RuntimeError as e:
+            assert word in str(e) and "s3cret" not in str(e)
+
+
+def test_an_artist_is_asked_about_once_a_walk_however_many_names_find_them():
+    looked = []
+    look = ask_look()
+    look["discogs_about"] = lambda a: looked.append(a) or {"releases": 2}
+    asks = []
+    walk.walk_one("Jack Schneider", ["Jack Schneider", "Jack W. Schneider", "J. Schneider"], {}, set(), look, asks)
+    assert len(asks) == 3 and sorted(looked) == sorted(i for i, _ in SIX)                           # three names, six lookups, not eighteen
+    assert all(c["releases"] == 2 for a in asks for c in a["candidates"])
+    assert walk.which_boxes(asks).count("* [https://www.discogs.com/artist/") == 6                  # and each once in the box
+
+
+def test_past_its_budget_a_walk_lists_the_rest_by_name_and_link_alone():
+    now = [0.0]
+    look = ask_look(mb=MB_TWO)
+
+    def slow(artist_id):                                         # a site answering in ten seconds
+        now[0] += 10
+        return {"releases": 1}
+    look["discogs_about"] = look["mb_about"] = slow
+    asks = []
+    walk.walk_one("Jack Schneider", ["Jack Schneider"], {}, set(), look, asks, clock=lambda: now[0])
+    told = [("releases" in c) for a in asks for c in a["candidates"]]
+    assert told == [True, True, True] + [False] * 5 and now[0] == 30   # 25 seconds gone after the third: no fourth is asked, on either site
+    box = walk.which_boxes(asks)
+    assert "* [https://www.discogs.com/artist/7190407 Jack Schneider]\n" in box and "* [https://musicbrainz.org/artist/" + MB_TWO[1][0] + " Jack Schneider]\n" in box
+
+
+def test_a_question_still_waiting_is_dropped_when_its_page_leaves_the_category(tmp_path):
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), None)
+    saved, read = [], []
+    facts = lambda t: read.append(t) or (["Jack Schneider"], {}, False)
+    done, waiting, report = run_ask(tmp_path, facts, lambda *a: saved.append(a) or 5, asked=())      # the category is empty now
+    w = json.load(open(tmp_path / "walked.json"))["Jack Schneider"]
+    assert saved == [] and read == [] and w["box"] == {"state": "dropped: the page left the category", "at": "2026-11-20T04:00:00Z"}
+    assert "dropped: the page left the category" in report[0] and w["asks"]
+    run_ask(tmp_path, facts, lambda *a: saved.append(a) or 5)                                        # back in the category with no new walk due: it stays dropped
+    assert saved == []
+
+
+def test_a_walk_by_hand_leaves_other_pages_questions_waiting(tmp_path):
+    run_ask(tmp_path, lambda t: (["Jack Schneider"], {}, False), None)
+    saved = []
+    walk.run(str(tmp_path), [("Sam Jones", "2026-11-20T05:00:00Z")], lambda t: ([t], {}, False), [], look=ask_look(discogs=SIX[:1]),
+             stamp=lambda: "2026-11-20T05:00:00Z", prepend=lambda *a: saved.append(a) or 5, by="hand")
+    assert saved == [] and json.load(open(tmp_path / "walked.json"))["Jack Schneider"]["box"]["state"] == "wanted"
