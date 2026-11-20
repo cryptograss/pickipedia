@@ -72,7 +72,7 @@ import rambler
 HERE = os.path.dirname(os.path.abspath(__file__))
 CATEGORY = "Category:Walk_Requested"
 WALKED = "Category:Walked"
-_CAT = r"\[\[\s*Category\s*:\s*{}\s*(?:\|[^\]\n]*)?\]\]"
+_CAT = r"\[\[\s*Category\s*:\s*{}\s*(\|[^\]\n]*)?\]\]"
 REQUESTED_LINK = re.compile(_CAT.format(r"Walk[ _]+Requested"), re.I)
 WALKED_LINK = re.compile(_CAT.format("Walked"), re.I)
 NOT_WIKITEXT = re.compile(r"<nowiki\b.*?</nowiki\s*>|<!--.*?-->|<pre\b.*?</pre\s*>", re.I | re.S)
@@ -255,8 +255,8 @@ SHARES_A_LINE = "the request shares its line with other words, and the wiki lets
 
 
 def swap_category(text):
-    """A page's wikitext with [[Category:Walk Requested]] turned into [[Category:Walked]] where it stood: (the new
-    text, None), or (None, why not). A link in a comment, <nowiki> or <pre> is not one. Already in Walked: the
+    """A page's wikitext with [[Category:Walk Requested]] turned into [[Category:Walked]] where it stood, its sort
+    key kept: (the new text, None), or (None, why not). A link in a comment, <nowiki> or <pre> is not one. Already in Walked: the
     request just goes, and a line it leaves empty with it. Nothing else in the text is touched.
 
     Why not: the text has no such link of its own (the page is in the category by a template); or the link shares
@@ -274,7 +274,7 @@ def swap_category(text):
         out.append(text[at:m.start()])
         at = m.end()
         if n == 0 and not has:
-            out.append("[[Category:Walked]]")
+            out.append("[[Category:Walked" + (m.group(1) or "") + "]]")   # its sort key goes with it (re's review, 20 Nov 2026)
             continue
         # the link goes, and its line with it where nothing else is on it
         before = "".join(out)

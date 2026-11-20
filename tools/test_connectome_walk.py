@@ -498,7 +498,9 @@ def test_the_request_becomes_walked_where_it_stood_and_nothing_else_changes():
     swap = lambda text: walk.swap_category(text)[0]
     page = "{{MusicianInfo|name=J}}\nHe plays.\n[[Category:Walk Requested]]\n[[Category:Banjo players]]\n"
     assert walk.swap_category(page) == (page.replace("Walk Requested", "Walked"), None)
-    assert swap("a\n[[category:walk_requested|Schneider, Jack]] [[Category:X]]\nb") == "a\n[[Category:Walked]] [[Category:X]]\nb"
+    assert swap("a\n[[category:walk_requested|Schneider, Jack]] [[Category:X]]\nb") == "a\n[[Category:Walked|Schneider, Jack]] [[Category:X]]\nb"
+    assert swap("[[Category:Walk_Requested| ]]") == "[[Category:Walked| ]]"                             # a sort key of a space, to head the list: kept as it is
+    assert swap("[[Category:Walked|Schneider, Jack]]\n[[Category:Walk Requested|Jack]]") == "[[Category:Walked|Schneider, Jack]]\n"   # in Walked already: its own key stands
     assert swap("a\n[[Category:X]] [[Category:Walk Requested]]") == "a\n[[Category:X]] [[Category:Walked]]"
     assert swap("a\n  [[ Category : Walk  Requested ]]") == "a\n  [[Category:Walked]]"
     # in Walked already: the request goes, and its own line with it
