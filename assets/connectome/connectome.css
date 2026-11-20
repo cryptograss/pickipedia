@@ -1066,32 +1066,55 @@ body.mini #g { cursor: pointer; }
 @media ( max-width: 760px ) {
 	#kept { top: auto; bottom: 8px; left: 8px; right: 96px; max-width: none; }
 }
-/* The QR code of where the reader is: over the graph's bottom right corner, just above the legend; a click makes
-   it big enough to scan across a table, and another puts it back. */
+/* The QR code of where the reader is: at the right end of the legend's band, which keeps the room for it: the
+   legend's words wrap clear of it, and the band is as tall as the code, so the graph above is drawn a little
+   smaller and nothing of it is covered. It lay over the graph's bottom right corner, on whatever pickers' names
+   came to stand there (Justin, #connectome, 20 Nov 2026: "the cards need to do a better job of staying out of the
+   way (or the graph slightly resizing)"). The room is kept in every view, the walk and a way found too, where
+   the code isn't shown: a legend of one height keeps the graph's frame one size (steady()). A click makes the
+   code big enough to scan across a table, over the graph for as long as that is wanted, and another puts it back. */
 #qr {
 	position: absolute;
-	right: 10px;
-	bottom: calc( var( --legend, 0px ) + var( --path, 0px ) + 8px );      /* above the legend, and the way you came */
+	right: 8px;
+	bottom: calc( var( --path, 0px ) + 5px );      /* in the legend's band, above the way you came */
 	z-index: 6;
 	display: flex;
-	flex-direction: column;
+	flex-direction: row-reverse;                   /* its words up its left side: under it they cost the graph a line */
 	align-items: center;
 	gap: 2px;
-	width: 112px;
-	padding: 5px 5px 4px;
+	width: 102px;
+	padding: 4px 4px 4px 2px;
 	border: 1px solid var( --hair );
 	border-radius: 6px;
 	background: #fff;
 	color: #111;
-	font: 10px/1.2 var( --ui );
+	font: 9.5px/1.2 var( --ui );
+	white-space: nowrap;
 	cursor: zoom-in;
 }
 #qr[hidden] { display: none; }
-#qr svg { display: block; width: 100%; aspect-ratio: 1; }
+#qr svg { display: block; flex: 1 1 0; min-width: 0; aspect-ratio: 1; }
 #qr path { fill: #111; }
+#qr span { flex: none; writing-mode: vertical-rl; transform: rotate( 180deg ); }
 #qr.big { width: min( 70vmin, 380px ); cursor: zoom-out; font-size: 13px; box-shadow: 0 6px 24px rgba( 0, 0, 0, .25 ); }
+body:not( .mini ) #legend { min-height: 102px; padding-right: 120px; align-content: flex-start; }
+@media ( max-width: 760px ), ( max-height: 480px ) {
+	/* A phone, either way up: the code a little smaller, with no words beside it until it is made big (its title
+	   says them), and an entry of the legend may break where it doesn't fit beside the code. */
+	#qr { width: 82px; padding: 4px; }
+	#qr:not( .big ) span { display: none; }
+	body:not( .mini ) #legend { min-height: 92px; padding-right: 96px; }
+	#legend .lg { white-space: normal; }
+}
+@media ( max-height: 480px ) {
+	/* On its side there is little height to give: the code smaller still, a click away from one that scans easily. */
+	#qr { width: 64px; padding: 3px; }
+	body:not( .mini ) #legend { min-height: 74px; padding-right: 78px; }
+}
 @media ( max-width: 760px ) {
-	#qr { width: 84px; bottom: calc( var( --path, 0px ) + 8px ); }
+	/* Upright, where the list is under the graph and the page scrolls: the band's added height comes out of the
+	   page's length, not out of the graph. */
+	body:not( .mini ) #stage { height: calc( 78vh + 40px ); height: calc( 78svh + 40px ); min-height: 500px; }
 }
 #kept[hidden] { display: none; }
 #kept a { color: inherit; font-weight: 600; white-space: nowrap; }

@@ -2983,7 +2983,6 @@ function steady() {
 	const tall = legend.offsetHeight;
 	stage.classList.remove( 'webbed', 'deep' );                      // show() says which of them the view has, once it knows
 	legend.style.minHeight = tall + 'px';
-	stage.style.setProperty( '--legend', tall + 'px' );             // the QR code sits just above it
 }
 
 /** Show the view. again: the same view, laid out afresh because the frame changed; everyone keeps the seat they had. */
@@ -3625,7 +3624,7 @@ async function openKept( id ) {
 }
 
 /**
- * The QR code in the corner (Justin, #connectome, 16 Nov 2026: "always a QR code visible. So if I'm showing someone
+ * The QR code at the legend's right end (Justin, #connectome, 16 Nov 2026: "always a QR code visible. So if I'm showing someone
  * one, they can take a QR code of it with their phone and pick up right where I left off"): this view's own
  * address, or a kept graph's, as a reader would open it, not as Rabbithole frames it. Not for the walk, which
  * lives in the browser it was walked in.
