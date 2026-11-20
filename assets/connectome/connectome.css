@@ -1157,6 +1157,39 @@ body.mini #g { cursor: pointer; }
 	#qr { width: 54px; }
 	#legend .lg { white-space: normal; }
 }
+/* The ensemble list's lights, on whoever of the band is in sight (fxApply()): a ring round their mark. Green and
+   breathing for the lead, dashed for a pickup; a flourish, a spotlight and the band's flash in the colour and at
+   the beat the chart gives them, as Rabbithole's list shows them. */
+#g circle.fxr {
+	fill: none;
+	stroke: var( --play );
+	stroke-width: 3;
+	opacity: 0;
+	pointer-events: none;
+	transform-box: fill-box;
+	transform-origin: center;
+}
+#g g.fx-pickup circle.fxr { opacity: .7; stroke-dasharray: 3 4; }
+#g g.fx-lead circle.fxr { opacity: .9; animation: fx-breathe 2.4s ease-in-out infinite; }
+#g g.fx-enter circle.fxr { opacity: .9; animation: fx-enter .9s ease-out 1; }
+#g g.fx-band circle.fxr,
+#g g.fx-flourish circle.fxr,
+#g g.fx-glow circle.fxr {
+	stroke: var( --fx-color, rgb( 255 127 80 ) );
+	stroke-width: 5;
+	opacity: 1;
+	filter: drop-shadow( 0 0 calc( 7px * var( --fx-level, .7 ) ) var( --fx-color, rgb( 255 127 80 ) ) );
+	animation: fx-pulse var( --fx-pulse, 1.2s ) ease-in-out infinite;
+}
+#g g.fx-band circle.fxr { stroke-width: 3.5; }
+#g.fx-paused circle.fxr { animation-play-state: paused; }
+@keyframes fx-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes fx-pulse { 0%, 100% { opacity: .45; transform: scale( 1 ); } 50% { opacity: 1; transform: scale( 1.16 ); } }
+@keyframes fx-enter { 0% { opacity: 0; transform: scale( 1.9 ); } 100% { opacity: .9; transform: scale( 1 ); } }
+@media ( prefers-reduced-motion: reduce ) {
+	#g circle.fxr { animation: none !important; }
+}
+
 /* The card of the one in the middle (cardSay()): in the graph's upper right corner, where the ring leaves a place
    empty for it. One size whatever it says. */
 #card {

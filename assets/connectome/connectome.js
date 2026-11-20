@@ -1683,6 +1683,65 @@ function stepFromShell( d ) {
 
 // What Rabbithole says: the walk, the song on now, whether it plays, and whether the drawer is open; or, from its
 // traverse, where the graph in its pane should go.
+/*
+ * The ensemble list's lights, on the graph too (Justin, #connectome, 20 Nov 2026, 14:16Z: "The effects in the
+ * ensemble chart are looking great. I want to also see them in some form in the bacon graph. If a picker is
+ * visible and they get a flourish, show the flourish in the graph as well as the ensemble list. Same for solos,
+ * etc. Let's make the effects give the sense of a match between the ensemble list and the bacon graph").
+ * Rabbithole says what its list shows ({ rabbithole: 'fx', playing, band: [ { name, title, scene, singing,
+ * enter, light: { kind, color, level, pulse } } ] }), each time it changes; whoever of that band is in sight here
+ * wears a ring round their mark for it: steady and green while they take the lead, dashed for a pickup, and the
+ * list's own colour and beat for a flourish, a spotlight or the whole band's flash. Paused with the song.
+ */
+let FX = null;
+function fxApply() {
+	if ( !G ) {
+		return;
+	}
+	const band = new Map();
+	for ( const b of FX && Array.isArray( FX.band ) ? FX.band : [] ) {
+		const byTitle = b.title ? K.find( G, b.title ) : null;
+		const id = byTitle !== null ? byTitle : K.find( G, b.name );         // a chart's "Justin Holmes" is the page's, and the graph's, "Justin Myles Holmes"
+		if ( id !== null ) {
+			band.set( id, b );
+		}
+	}
+	svg.classList.toggle( 'fx-paused', !FX || !FX.playing );
+	for ( const [ , it ] of live.node ) {
+		const d = it.d, el = it.el;
+		const b = !it.dead && d.stands === 'picker' ? band.get( d.id ) : null;
+		const light = b && b.light ? b.light : null;
+		const on = {
+			'fx-lead': !!b && b.scene === 'lead', 'fx-pickup': !!b && b.scene === 'pickup', 'fx-enter': !!b && !!b.enter,
+			'fx-flourish': !!light && light.kind === 'flourish', 'fx-glow': !!light && light.kind === 'spotlight', 'fx-band': !!light && light.kind === 'bandFlash',
+		};
+		const any = Object.values( on ).some( Boolean );
+		let ring = el.querySelector( 'circle.fxr' );
+		if ( !any ) {
+			if ( ring ) {
+				ring.remove();
+				el.classList.remove( 'fx', ...Object.keys( on ) );
+			}
+			continue;
+		}
+		if ( !ring ) {
+			const main = el.querySelector( 'image.face, circle.dot, circle.ring' );
+			const r = main ? ( parseFloat( main.getAttribute( 'r' ) ) || parseFloat( main.getAttribute( 'width' ) ) / 2 || 8 ) : 8;
+			ring = s( 'circle', { class: 'fxr', r: r + ( r < 7 ? 4 : 6 ) } );
+			el.insertBefore( ring, el.firstChild );
+		}
+		el.classList.add( 'fx' );
+		for ( const [ name, yes ] of Object.entries( on ) ) {
+			el.classList.toggle( name, yes );
+		}
+		if ( light ) {
+			ring.style.setProperty( '--fx-color', String( light.color || '' ).replace( /[^\w\s(),.%#-]/g, '' ) );
+			ring.style.setProperty( '--fx-level', String( Math.max( 0.35, Math.min( 1.3, Number( light.level ) || 0.7 ) ) ) );
+			ring.style.setProperty( '--fx-pulse', Math.max( 0.5, Math.min( 6, Number( light.pulse ) || 1.2 ) ) + 's' );
+		}
+	}
+}
+
 window.addEventListener( 'message', ( ev ) => {
 	if ( !HOST || ev.origin !== location.origin || ev.source !== window.parent || !ev.data ) {
 		return;
@@ -1693,6 +1752,11 @@ window.addEventListener( 'message', ( ev ) => {
 	}
 	if ( ev.data.rabbithole === 'step' ) {
 		stepFromShell( ev.data );
+		return;
+	}
+	if ( ev.data.rabbithole === 'fx' ) {
+		FX = ev.data;                                                // what the ensemble list is showing now
+		fxApply();
 		return;
 	}
 	if ( ev.data.rabbithole !== 'walk' ) {
@@ -3157,6 +3221,7 @@ function show( quick, again ) {
 	put( scene, quick );
 	keptSay();
 	cardSay();
+	fxApply();
 	qrSay();
 	qrRoom( quick );
 	fillPanel();
