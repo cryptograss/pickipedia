@@ -425,6 +425,9 @@ main {
 	color: var( --muted );
 }
 
+/* A piece of music's note: when, then who (tipFor). */
+#tip .when { color: var( --ink ); font-weight: 600; }
+
 /* ---- the drawer: the list folds away at any width, and the graph takes the room (Justin, #connectome,
    15 Nov 2026). Beside the graph it is a strip down the list's edge; under it, a bar across. ---- */
 #drawer {
@@ -1188,14 +1191,16 @@ body.mini #g { cursor: pointer; }
 }
 
 /* The card of the one in the middle (cardSay()): in the graph's upper right corner, where the ring leaves a place
-   empty for it. One size whatever it says. */
+   empty for it. One size whatever it says (cardRoom). The picture and the name in a row, and under them the first
+   things their page says they do; `side`, a wide card, has the picture beside all of it; `tower`, a narrow one, the picture over all of it. `nopic`: no picture. */
 #card {
 	position: absolute;
 	right: 8px;
 	z-index: 5;
-	display: flex;
-	gap: 9px;
-	align-items: center;
+	display: grid;
+	grid-template: "pic name" auto "does does" minmax( 0, 1fr ) / auto minmax( 0, 1fr );
+	gap: 6px 10px;
+	align-content: start;
 	box-sizing: border-box;
 	padding: 8px 10px;
 	border: 1px solid var( --hair );
@@ -1206,32 +1211,41 @@ body.mini #g { cursor: pointer; }
 	overflow: hidden;
 }
 #card[hidden] { display: none; }
-#card img { flex: none; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
-#card .card-in { display: flex; flex: 1 1 0; flex-direction: column; gap: 2px; min-width: 0; max-height: 100%; overflow: hidden; }
-/* The name whole, on two lines where one won't hold it: in Rabbithole's pane the card is 167px wide at 1366x768 and
-   said "Cory W…" (seen on the live site, 20 Nov 2026). `slim` is a card under 200px (cardSay): a smaller picture,
-   so the words have the room. `tall` is a name that took its second line: one line less under it. */
-#card .card-name { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; color: var( --link ); font: 600 16px/1.2 var( --name ); text-decoration: none; }
-#card.slim img { width: 44px; height: 44px; }
-#card.slim .card-name { font-size: 15px; }
-#card.tall .card-more { -webkit-line-clamp: 1; line-clamp: 1; }
+#card.side { grid-template: "pic name" auto "pic does" minmax( 0, 1fr ) / auto minmax( 0, 1fr ); gap: 4px 10px; }
+#card.tower { grid-template: "pic" auto "name" auto "does" minmax( 0, 1fr ) / minmax( 0, 1fr ); justify-items: center; }
+#card.tower .card-name { font-size: 15px; text-align: center; }
+#card.tower .card-does { justify-self: stretch; }
+#card.nopic { grid-template: "name" auto "does" minmax( 0, 1fr ) / minmax( 0, 1fr ); }
+#card img { grid-area: pic; align-self: start; width: 84px; height: 84px; border-radius: 50%; object-fit: cover; }
+/* The name whole, on two lines where one won't hold it (a long single word breaks). */
+#card .card-name { grid-area: name; align-self: center; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; color: var( --link ); font: 600 16px/1.2 var( --name ); text-decoration: none; }
+#card.side .card-name { align-self: start; }
 #card b.card-name { color: var( --ink ); }
 #card a.card-name:hover, #card a.card-name:focus { text-decoration: underline; }
-#card .card-what { overflow: hidden; color: var( --ink ); text-overflow: ellipsis; white-space: nowrap; }
-#card .card-more { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+/* What their page says they do: each line as many lines as cardFit() gave it (--n), cut with an ellipsis after. */
+#card .card-does { grid-area: does; display: flex; flex-direction: column; gap: 2px; min-height: 0; margin: 0; padding: 0; overflow: hidden; list-style: none; }
+#card .card-does li { display: -webkit-box; flex: none; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: var( --n, 1 ); line-clamp: var( --n, 1 ); overflow-wrap: anywhere; }
+#card .card-does li[hidden] { display: none; }
+#card .card-does a { color: inherit; text-decoration: underline; text-decoration-color: var( --axis ); }
+#card .card-does a:hover, #card .card-does a:focus { color: var( --link ); }
+/* A song's card: what the headline's second line says of it. */
+#card .card-more { grid-area: does; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 #card .card-more a { color: inherit; }
 #stage.carded #kept { right: auto; left: 14px; }
 /* In Rabbithole while the music steers, the graph has no headline: Rabbithole's own bar names the song, and the
    card names whoever is taking it (Justin, 20 Nov 2026: "In rabbithole mode, I'm not sure we even need the top bar
    at all"). It comes back with the search bar when the reader steers. */
 body.shell:not( .steering ) #say { display: none; }
-@media ( max-width: 520px ) {
-	#card { gap: 7px; padding: 6px 8px; }
-	#card img, #card.slim img { width: 40px; height: 40px; }
-	#card .card-name, #card.slim .card-name { font-size: 14px; }
-	#card .card-more { -webkit-line-clamp: 1; line-clamp: 1; }
-	#card.tall .card-more { display: none; }
-}
+/* `compact`: where the ring leaves the corner no more room than it had (cardRoom). */
+#card.compact { gap: 4px 7px; padding: 6px 8px; }
+#card.compact img { width: 44px; height: 44px; }
+#card.compact .card-name { font-size: 14px; }
+/* `small`: the card on a phone-sized drawing (cardRoom), whatever the window's width. */
+#card.small { gap: 5px 8px; padding: 6px 8px; }
+#card.small img { width: 58px; height: 58px; }
+#card.small .card-name { font-size: 15px; }
+#card.small .card-does { gap: 1px; }
+#card.small .card-more { -webkit-line-clamp: 1; line-clamp: 1; }
 #kept[hidden] { display: none; }
 #kept a { color: inherit; font-weight: 600; white-space: nowrap; }
 g.kept-changed path.core, g.kept-changed path.thread { stroke-dasharray: 7 4; }
@@ -1366,8 +1380,42 @@ body.challenge header.bar .join { display: none; }
 	scrollbar-width: thin;
 }
 #path[ hidden ] { display: none; }
+/* The ×: start over from here. It stays at the strip's left edge, on a band of its own from that edge, and the
+   way scrolls under the band (the -12px is the strip's own padding, so nothing of a step shows left of it). */
+#path { display: flex; align-items: center; }
+#pathx {
+	position: sticky;
+	left: -12px;
+	z-index: 1;
+	order: -1;
+	display: flex;
+	flex: none;
+	align-items: center;
+	align-self: stretch;
+	margin-left: -12px;
+	padding: 0 8px 0 12px;
+	background: var( --surface );                                  /* the page's own, which is what the strip lies on */
+}
+#pathx[ hidden ] { display: none; }
+#path #pathx button {
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 1px solid var( --axis );
+	border-radius: 50%;
+	background: var( --surface );
+	color: var( --ink2 );
+	font: 400 16px/1 var( --ui );
+	cursor: pointer;
+}
+#path #pathx button:hover, #path #pathx button:focus-visible { background: var( --hover ); color: var( --ink ); }
+@media ( pointer: coarse ) {
+	#path #pathx button { width: 30px; height: 30px; }
+}
 #path ol {
 	display: flex;
+	flex: none;
 	align-items: center;
 	width: max-content;
 	margin: 0;
