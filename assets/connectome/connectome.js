@@ -578,20 +578,29 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
  *
  * Justin, #connectome, 20 Nov 2026, 19:41Z: "it can afford to be a _little_ bigger ... I still want it to include
  * the first 3 or so details from their MusicianInfo card. And the picture can be maybe 30% bigger." So it holds
- * a picture of 84px (58 on a phone, from 64 and 44), the name, and three lines of what their page says they do:
- *   a phone (the drawing under 520px wide): up to 200px by 126, the picture and the name in a row, a line each under;
- *   up to 270px wide (Rabbithole's pane on a laptop): by 176, laid the same, with a fourth line to share out;
- *   wider: up to 300px by 150, the picture beside everything, six lines to share out.
- * `side` says which way it is laid, `small` that it is the phone's.
+ * a picture of 84px (58 on the small one, from 64 and 44), the name, and what their page says they do. How big it
+ * may be is what the ring leaves of the corner, which goes by the drawing's shape (each was swept for marks under it):
+ *   `side`, a drawing 675px wide or more: 300px wide, the picture beside everything. 104px high, and more where the
+ *     drawing is tall, to 150: a ring of eight has a name a fifth of the way down (the card it replaces was 100);
+ *   520 to 675px wide and 640 tall (Rabbithole's pane on a 1366px laptop): 208 to 269px by 176, the picture and the
+ *     name in a row, four lines under;
+ *   `tower`, 440 to 520px wide and 560 tall or more (the pane on a 1280px laptop): the song's name beside a
+ *     soloist comes to within 150px of the corner there, so 150px by 212, the picture over the name over the lines;
+ *   `compact`, under 440px wide and over 500 tall (a phone with the graph alone: a ring of six in a narrow frame,
+ *     with a name 90px under the top and 150 from the side): the size it was, 150px by 80, a 44px picture, one line;
+ *   `small`, anything else (a phone in Rabbithole; a low window): up to 200px by 126, laid as the second.
  */
 function cardRoom( W ) {
-	const wide = svg.clientWidth || W, k = W / wide, phone = wide < 520;
+	const wide = svg.clientWidth || W, tall = svg.clientHeight || 0, k = W / wide;
 	// A song's own card says its name and a line or two: the size it had, so the ring round a song keeps all its pickers.
 	const song = !!view && view.cut !== undefined && view.playing === undefined;
-	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) :
-		( phone ? Math.max( 160, Math.min( 200, wide * 0.46 ) ) : Math.max( 200, Math.min( 300, wide * 0.4 ) ) ) );
-	const side = !song && cw >= 270, ch = song ? ( phone ? 80 : 100 ) : ( phone ? 126 : ( side ? 150 : 176 ) );
-	return { cw, ch, side, small: phone, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
+	const side = !song && wide >= 675, tower = !song && wide >= 440 && wide < 520 && tall >= 560, compact = !song && wide < 440 && tall > 500;
+	const small = song ? wide < 520 : ( !side && !tower && !compact && !( wide >= 520 && tall >= 640 ) );
+	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) : ( side ? 300 : ( tower || compact ? 150 :
+		( small ? Math.max( 160, Math.min( 200, wide * 0.46 ) ) : Math.max( 208, Math.min( 269, wide * 0.4 ) ) ) ) ) );
+	const ch = Math.round( song ? ( wide < 520 ? 80 : 100 ) :
+		( side ? Math.max( 104, Math.min( 150, tall * 0.2 - 30 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : 176 ) ) ) ) );
+	return { cw, ch, side, tower, compact, small, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
 }
 
 /** K.ego's ring, with a place left empty at the upper right when the middle's card is out (K.gapFor). */
@@ -3669,6 +3678,7 @@ function pathSay() {
 			h( 'span', { class: 'target' }, '🎯 ', first( GAME.to ) ) ) );
 	}
 	nav.hidden = steps.length < ( GAME ? 1 : 2 );                 // outside a challenge, one place is no way yet
+	$( 'pathx' ).hidden = !!GAME;                                // a challenge's chain is the game's own: it has its restart
 	stage.style.setProperty( '--path', nav.hidden ? '0px' : nav.offsetHeight + 'px' );   // the QR code sits above it too
 	if ( fresh.length ) {
 		void ol.offsetWidth;                                     // laid out closed, so they open
@@ -3961,11 +3971,13 @@ function cardSay() {
 	if ( !on ) {
 		return;
 	}
-	const { cw, ch, side, small } = cardRoom( frame().W );
+	const { cw, ch, side, tower, compact, small } = cardRoom( frame().W );
 	el.style.width = cw + 'px';
 	el.style.height = ch + 'px';
 	el.style.top = ( ( $( 'say' ).offsetHeight || 0 ) + 8 ) + 'px';         // the graph's own corner, under the headline where there is one
 	el.classList.toggle( 'side', side );
+	el.classList.toggle( 'tower', tower );
+	el.classList.toggle( 'compact', compact );
 	el.classList.toggle( 'small', small );
 	if ( view.cut !== undefined && view.playing === undefined ) {
 		const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
@@ -4850,6 +4862,18 @@ if ( new URLSearchParams( location.search ).has( 'faq' ) ) {
 }
 
 $( 'back' ).addEventListener( 'click', back );
+// The way come, let go (Justin, #connectome, 20 Nov 2026, 19:41Z: "The path at the bottom is feeling a little
+// unwieldy. It needs like an 'x' to start over"). The view in sight stays as it is drawn, and is where the way
+// starts now; this step of the history remembers the shorter way, and Back still goes back to the ones before.
+$( 'pathx' ).firstElementChild.addEventListener( 'click', () => {
+	if ( GAME || !view || trail.length < 2 ) {
+		return;
+	}
+	trail.splice( 0, trail.length - 1 );
+	$( 'back' ).hidden = true;
+	pathSay();
+	stamp( false );
+} );
 $( 'share' ).addEventListener( 'click', onShare );
 $( 'qr' ).addEventListener( 'click', () => {
 	$( 'qr' ).classList.toggle( 'big' );
