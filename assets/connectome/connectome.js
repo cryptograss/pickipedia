@@ -3861,13 +3861,21 @@ function cardSay() {
 	if ( !on ) {
 		return;
 	}
-	const { cw, ch } = cardRoom( frame().W );
+	const { cw, ch } = cardRoom( frame().W ), slim = cw < 200;
 	el.style.width = cw + 'px';
 	el.style.height = ch + 'px';
 	el.style.top = ( ( $( 'say' ).offsetHeight || 0 ) + 8 ) + 'px';         // the graph's own corner, under the headline where there is one
+	el.classList.toggle( 'slim', slim );
+	// A name that took its second line leaves a line less under it (the card is one size whatever it says).
+	const fit = () => {
+		const name = el.querySelector( '.card-name' );
+		el.classList.remove( 'tall' );
+		el.classList.toggle( 'tall', !!name && name.offsetHeight > parseFloat( getComputedStyle( name ).lineHeight ) * 1.5 );
+	};
 	const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
 	if ( view.cut !== undefined && view.playing === undefined ) {
 		el.replaceChildren( h( 'div', { class: 'card-in' }, h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) ) );
+		fit();
 		return;
 	}
 	const p = P( view.a ), on2 = view.playing !== undefined && G.songcast[ view.playing ];
@@ -3876,8 +3884,10 @@ function cardSay() {
 		p.img ? h( 'img', { src: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=120', alt: '' } ) : null,
 		h( 'div', { class: 'card-in' },
 			h( 'a', { class: 'card-name' + ( p.page ? '' : ' new' ), href: pageUrl( p.name ), target: '_top', title: p.page ? p.name + "'s page on PickiPedia" : 'Start ' + p.name + "'s page" }, p.name ),
-			h( 'span', { class: 'card-what' }, [ on2 ? ( role[ 2 ] || role[ 1 ] || p.inst ) : p.inst, on2 ? 'on ' + G.songcast[ view.playing ].song : '' ].filter( Boolean ).join( ' · ' ) ),
+			// what they play, and on which song; a slim card says the first alone, the song being named beside it in the graph
+			h( 'span', { class: 'card-what' }, [ on2 ? ( role[ 2 ] || role[ 1 ] || p.inst ) : p.inst, on2 && !slim ? 'on ' + G.songcast[ view.playing ].song : '' ].filter( Boolean ).join( ' · ' ) ),
 			h( 'span', { class: 'card-more' }, ...more ) ) ].filter( Boolean ) );
+	fit();
 }
 
 /**
@@ -4256,13 +4266,22 @@ function aFarLine( d ) {
 		acts: [ act( 'Open these two', () => go( { a: view.a, b: d.c } ) ) ] };
 }
 
+/**
+ * The records a tie holds several tracks of, as ways to each spread out between the two: what the "+n" on its
+ * pill does, for a line whose pills aren't drawn (a phone's ring draws none; seen on the live site, 20 Nov 2026).
+ */
+function spreadActs( t, a, b ) {
+	return t.ev.filter( ( e ) => e.how === K.TRACK && e.songs && e.songs.length > 1 ).slice( 0, 3 )
+		.map( ( e ) => act( `All ${ e.songs.length } tracks on ${ K.clip( G.music[ e.m ].title || G.music[ e.m ].key, 26 ) }`, () => go( { a, b, rec: e.m } ) ) );
+}
+
 function aTie( d ) {
 	const t = d.tie, top = K.naming( G, t.ev[ 0 ] );
 	const w = { kind: 'two pickers', title: `${ first( d.u ) } & ${ first( d.v ) }`,
 		lines: [ K.together( t ), K.clip( top.short, 44 ) + ( t.ev.length > 1 ? `, and ${ t.ev.length - 1 } more` : '' ) ], hint: '', acts: [] };
 	if ( view.b === undefined ) {
 		w.hint = 'click: open these two';
-		w.acts.push( act( 'Open these two', () => go( { a: view.a, b: d.c } ) ) );
+		w.acts.push( act( 'Open these two', () => go( { a: view.a, b: d.c } ) ), ...spreadActs( t, view.a, d.c ) );
 	} else if ( d.role === 'direct' ) {
 		w.acts.push( act( 'Everything they share', () => {
 			choose( { picker: null } );
@@ -4515,6 +4534,23 @@ svg.addEventListener( 'focusout', () => {
 		hush();
 	}
 } );
+/**
+ * The "+n" a click means. Under a pointer, the mark itself. Under a finger it is 14px by 12, so a tap beside it, on
+ * its end of its pill, means it too (seen at 390x844 on the live site, 20 Nov 2026).
+ */
+function plusAt( e ) {
+	const on = e.target.closest( 'tspan.plus' );
+	if ( on || !fingers ) {
+		return on;
+	}
+	const pill = e.target.closest( 'g.pill' ), n = pill && pill.querySelector( 'tspan.plus' );
+	if ( !n ) {
+		return null;
+	}
+	const b = n.getBoundingClientRect();
+	return e.clientX > b.left - 12 && e.clientX < b.right + 12 ? n : null;
+}
+
 svg.addEventListener( 'click', ( e ) => {
 	const a = e.target.closest( 'a' );
 	if ( a && ( a.classList.contains( 'play' ) || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey ) ) {
@@ -4523,7 +4559,7 @@ svg.addEventListener( 'click', ( e ) => {
 	if ( a ) {
 		e.preventDefault();                                          // a name goes where its mark goes: to them, here
 	}
-	const plus = e.target.closest( 'tspan.plus' ), pg = plus && plus.closest( 'g[data-kind]' ), pit = pg && live[ pg.dataset.kind ].get( pg.dataset.k );
+	const plus = plusAt( e ), pg = plus && plus.closest( 'g[data-kind]' ), pit = pg && live[ pg.dataset.kind ].get( pg.dataset.k );
 	if ( pit && !pit.dead && spreads( pit.d ) ) {                    // a pill's "+n": the rest of that record, spread out between the two
 		closeSheet();
 		hush();
