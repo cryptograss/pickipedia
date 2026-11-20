@@ -237,6 +237,12 @@ function tellAt( step ) {
 }
 
 function rawAddress( v ) {
+	// the middle's card: asked for by a click on the middle; a soloist's view (playing) has it unless it was put away
+	const card = v.way || v.walk ? '' : ( v.playing !== undefined ? ( v.card === false ? '&card=0' : '' ) : ( v.card ? '&card=1' : '' ) );
+	return rawAddress0( v ) + card;
+}
+
+function rawAddress0( v ) {
 	if ( v.way ) {
 		return '?' + new URLSearchParams( { p: first( GAME.to ) } );           // the way found ends where it ended
 	}
@@ -285,6 +291,23 @@ function rawAddress( v ) {
 
 /** The view an address asks for; null when it names nothing the graph knows. (?from= and ?to= are read as a and b.) */
 function parse( q ) {
+	const v = parse0( q );
+	if ( v && q.get( 'card' ) === '1' && cardable( v ) ) {
+		v.card = true;
+	} else if ( v && q.get( 'card' ) === '0' && v.playing !== undefined ) {
+		v.card = false;
+	}
+	return v;
+}
+
+/** A view with one thing in its middle that has a card: a picker's own, a song's cut. */
+const cardable = ( v ) => !!v && !v.walk && !v.way && v.pg === undefined && v.m === undefined && v.b === undefined && ( v.cut !== undefined || v.a !== undefined );
+/** Is the middle's card out? Asked for; or the view is a soloist's, the music's own, and nobody put it away. */
+const cardOn = ( v ) => cardable( v ) && ( v.playing !== undefined ? v.card !== false : !!v.card );
+/** Out, or away again: a step of its own, so Back puts it as it was. */
+const cardTurn = () => go( Object.assign( {}, view, { card: cardOn( view ) ? ( view.playing !== undefined ? false : undefined ) : true } ) );
+
+function parse0( q ) {
 	if ( q.has( 'walk' ) ) {
 		return { walk: true };                                       // your rabbithole: the songs heard in Rabbithole, and who was followed
 	}
@@ -546,6 +569,51 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
 		sc.pills.set( 'm' + lineKey( u, v ) + '.more', { stands: 'piece', x: x + moreW / 2, y, w: moreW, label: '+' + fit.more + ' more', more: true,
 			u, v, o, delay } );
 	}
+}
+
+/**
+ * The room the middle's card takes, in the frame's upper right corner: its size on the page, and its box in the
+ * drawing's own measure, which nothing of the graph is set down in. One height whatever it says, so the words
+ * arriving never re-lay the graph.
+ */
+function cardRoom( W ) {
+	const wide = svg.clientWidth || W, k = W / wide;
+	const cw = Math.round( Math.max( 150, Math.min( 236, wide * 0.3 ) ) ), ch = wide < 520 ? 80 : 100;
+	return { cw, ch, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
+}
+
+/** K.ego's ring, with a place left empty at the upper right when the middle's card is out (K.gapFor). */
+function ringFor( o, card ) {
+	if ( !card ) {
+		return K.ego( o );
+	}
+	const g = K.gapFor( o.named );
+	const lay = K.ego( Object.assign( {}, o, { turn: g.turn } ) );
+	lay.named = lay.named.filter( ( _, i ) => i !== g.gap );
+	if ( lay.far ) {
+		lay.far = lay.far.filter( ( _, i ) => i !== g.gap );
+	}
+	return lay;
+}
+
+/** Nothing small under the card: a bead or one a step further out that came to stand in its corner goes, with its lines and what they say. */
+function clearCard( sc, W ) {
+	const b = cardRoom( W ).box;
+	for ( const [ key, d ] of [ ...sc.nodes ] ) {
+		// a bead by its own size; one a step out by its name's, which is written beside it
+		const padX = d.kind === 'far' ? tx( 110 ) : 12, padY = d.kind === 'far' ? tx( 20 ) : 12;
+		if ( ( d.kind === 'dot' || d.kind === 'far' ) && d.x > b.x1 - padX && d.y < b.y2 + padY ) {
+			sc.nodes.delete( key );
+			for ( const part of [ sc.lines, sc.pills ] ) {
+				for ( const [ k, l ] of [ ...part ] ) {
+					if ( l.a === key || l.b === key || l.owner === key ) {
+						part.delete( k );
+					}
+				}
+			}
+		}
+	}
+	return sc;
 }
 
 /* ------------------------------------------------------------------------------------------------------------
@@ -1023,7 +1091,8 @@ function egoScene( v ) {
 	// another turn of the company, where there are more than one view names; those the reader came by stay, and the goal
 	const stay = kept.filter( pinned ).length;
 	const ring = K.turned( kept, stay, Math.max( 1, want - stay ), v.turn || 0 );
-	const lay = K.ego( { W, H, named: want, dots: ring.length - want, far: true } );
+	const carded = cardOn( v );                                     // their card in the upper right corner: one seat fewer round them
+	const lay = ringFor( { W, H, named: want, dots: ring.length - want + ( carded && want > 2 ? 1 : 0 ), far: true }, carded );
 	// Rabbithole's traverse (Justin, #connectome, 18 Nov 2026: "I want the solos to traverse to the picker, but
 	// ensuring that the song still remains very visible; as big as the picker"): the one taking the solo in the
 	// middle, and the song in the ring's top seat, drawn as the song's own view draws it in its middle. Going from
@@ -1638,6 +1707,7 @@ window.addEventListener( 'message', ( ev ) => {
 	if ( SHELL && typeof d.steering === 'boolean' && d.steering !== steering ) {
 		steering = d.steering;                                       // the reader steers, or the music does: the bar and the way come, or neither
 		document.body.classList.toggle( 'steering', steering );
+	document.body.classList.toggle( 'shell', !!SHELL );
 		if ( G && view ) {
 			pathSay();
 		}
@@ -1689,6 +1759,7 @@ document.body.classList.toggle( 'mini', MINI );
 if ( HOST ) {
 	document.body.classList.add( 'in-rabbithole' );
 	document.body.classList.toggle( 'steering', steering );
+	document.body.classList.toggle( 'shell', !!SHELL );
 	// Ways out, inside the player: a song plays there, and a page opens in its pane, not over the player.
 	document.addEventListener( 'click', ( ev ) => {
 		const a = ev.target.closest && ev.target.closest( 'a[href]' );
@@ -1938,7 +2009,8 @@ function songScene( v ) {
 	}
 	const outer = [ ...chosen.values() ].sort( ( x, y ) => ( y.tie.ev.length - x.tie.ev.length ) || ( y.tie.w - x.tie.w ) )
 		.slice( 0, W > 700 && H > 560 ? 20 : ( W > 460 || H > 500 ? 12 : 8 ) );
-	const lay = K.ego( { W, H, named: Math.min( ids.length, 12 ), dots: outer.length } );
+	// the song's card out: everyone on it keeps a seat, round a ring with one more place, the upper right one left empty
+	const lay = ringFor( { W, H, named: Math.min( ids.length, 12 ) + ( cardOn( v ) && ids.length > 1 ? 1 : 0 ), dots: outer.length }, cardOn( v ) );
 	const n = lay.named.length, mine = ids.slice( 0, n );
 	const pan = slide( 'c' + v.cut, lay.C );
 	const seats = K.seat( lay.named, mine.map( ( id ) => wanted( 'c' + v.cut + '·' + id, pan ) ) );
@@ -3006,7 +3078,7 @@ function label( v ) {
 	return v.b === undefined ? first( v.a ) : first( v.a ) + ' ⟷ ' + first( v.b );
 }
 
-const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.rec === w.rec && v.m === w.m && v.s === w.s && v.cut === w.cut && v.pg === w.pg &&
+const same = ( v, w ) => !!v && !!w && v.a === w.a && v.b === w.b && v.rec === w.rec && cardOn( v ) === cardOn( w ) && v.m === w.m && v.s === w.s && v.cut === w.cut && v.pg === w.pg &&
 	v.playing === w.playing;
 
 /** Where each thing in sight is now, by what it stands for: a picker ('p' and their number) or a piece ('m' and its). */
@@ -3070,16 +3142,21 @@ function show( quick, again ) {
 		svg.setAttribute( 'viewBox', kept.box );
 	} else {
 		scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.pg !== undefined ? pageScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b, view.rec ) );
+		if ( cardOn( view ) ) {
+			clearCard( scene, frame().W );                           // nothing small left under the card's corner
+		}
 	}
 	if ( !view.walk && !view.way ) {
 		drawn.set( view, { scene, fit: fitNow(), box: svg.getAttribute( 'viewBox' ), S, T, sel: Object.assign( {}, sel ) } );
 	}
+	stage.classList.toggle( 'carded', cardOn( view ) );
 	stage.classList.toggle( 'webbed', !!scene.web );
 	stage.classList.toggle( 'deep', !!scene.deep );
 	$( 'say' ).firstElementChild.replaceChildren( ...scene.head.filter( Boolean ) );
 	$( 'say' ).lastElementChild.replaceChildren( ...( lost && trail.length < 2 ? [ lost ] : scene.sub ) );
 	put( scene, quick );
 	keptSay();
+	cardSay();
 	qrSay();
 	qrRoom( quick );
 	fillPanel();
@@ -3101,6 +3178,9 @@ function show( quick, again ) {
  * of the line it was on, and the other pieces named in sight; from one piece to the next, the one left behind.
  */
 function carry( v ) {
+	if ( view && cardable( v ) && cardable( view ) && v.a === view.a && v.cut === view.cut && v.playing === view.playing && cardOn( v ) !== cardOn( view ) ) {
+		return v;                                                    // the same view with its card out, or put away: the way in as it was
+	}
 	if ( !view || !scene || v.walk || v.way || v.pg !== undefined || v.b !== undefined || v.cut !== undefined || v.s !== undefined ||
 		v.playing !== undefined ) {
 		return v;                                                    // two pickers, a cut, a page or a solo: a view of its own, nothing brought along
@@ -3705,6 +3785,37 @@ function qrSay() {
 }
 
 /**
+ * The card of the one in the middle, in the graph's upper right corner, where the ring has left a place empty
+ * (Justin, #connectome, 20 Nov 2026, 14:16Z). A picker's: their picture, their name as the way to their page,
+ * what they play, and what the headline's second line says of them. A song's: its name and that line. It is the
+ * soloist's card in Rabbithole, where the music's own view has no headline and Rabbithole no band under the graph.
+ */
+function cardSay() {
+	const el = $( 'card' ), on = !!view && cardOn( view );
+	el.hidden = !on;
+	if ( !on ) {
+		return;
+	}
+	const { cw, ch } = cardRoom( frame().W );
+	el.style.width = cw + 'px';
+	el.style.height = ch + 'px';
+	el.style.top = ( ( $( 'say' ).offsetHeight || 0 ) + 8 ) + 'px';         // the graph's own corner, under the headline where there is one
+	const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
+	if ( view.cut !== undefined && view.playing === undefined ) {
+		el.replaceChildren( h( 'div', { class: 'card-in' }, h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) ) );
+		return;
+	}
+	const p = P( view.a ), on2 = view.playing !== undefined && G.songcast[ view.playing ];
+	const role = on2 ? ( G.songcast[ view.playing ].pickers.find( ( x ) => x[ 0 ] === view.a ) || [] ) : [];
+	el.replaceChildren( ...[
+		p.img ? h( 'img', { src: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=120', alt: '' } ) : null,
+		h( 'div', { class: 'card-in' },
+			h( 'a', { class: 'card-name' + ( p.page ? '' : ' new' ), href: pageUrl( p.name ), target: '_top', title: p.page ? p.name + "'s page on PickiPedia" : 'Start ' + p.name + "'s page" }, p.name ),
+			h( 'span', { class: 'card-what' }, [ on2 ? ( role[ 2 ] || role[ 1 ] || p.inst ) : p.inst, on2 ? 'on ' + G.songcast[ view.playing ].song : '' ].filter( Boolean ).join( ' · ' ) ),
+			h( 'span', { class: 'card-more' }, ...more ) ) ].filter( Boolean ) );
+}
+
+/**
  * The code in the corner, out of the way of the drawing: its own size where nothing of the graph comes to stand
  * under it, a small mark of itself where a name or a mark does. Looked at once the view has slid into place.
  */
@@ -3911,6 +4022,13 @@ function aSong( d ) {
 	if ( G.plays[ d.title ] ) {
 		w.lines.push( 'it plays in Rabbithole: the ▶ beside its name' );
 	}
+	if ( view.cut !== undefined && view.playing === undefined ) {       // the song in its own middle: its card, out and away
+		w.hint = cardOn( view ) ? 'click: put its card away' : 'click: its card · click a picker round it: go to them';
+		w.acts.push( act( cardOn( view ) ? 'Put its card away' : 'Its card', cardTurn ) );
+	} else if ( d.cut !== undefined && G.songcast[ d.cut ] ) {            // the song on now, beside who's taking it: its own graph
+		w.hint = 'click: go to ' + d.title;
+		w.acts.push( act( 'Go to ' + d.title, () => go( { s: d.title, cut: d.cut } ) ) );
+	}
 	return w;
 }
 
@@ -3970,7 +4088,8 @@ function aPicker( d ) {
 	if ( view.b === undefined ) {
 		if ( id === view.a ) {
 			w.lines.push( P( id ).page ? '' : 'no page yet' );
-			w.hint = 'click anyone around them: go to them';
+			w.hint = cardOn( view ) ? 'click: put their card away' : 'click: their card · click anyone around them: go to them';
+			w.acts.push( act( cardOn( view ) ? 'Put their card away' : name + "'s card", cardTurn ) );
 		} else if ( !d.tie ) {                                       // a step on the way a challenge was found by: no one in the middle to share with
 			w.lines.push( P( id ).page ? '' : 'no page yet' );
 			w.acts.push( goTo );

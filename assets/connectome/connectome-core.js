@@ -1829,6 +1829,28 @@ export function foxZoom( r, least ) {
 }
 
 /**
+ * A ring of n places with one of them left empty at the upper right, for the card of the one in the middle
+ * (Justin, #connectome, 20 Nov 2026, 14:16Z: "form the graph with only five spokes instead of six ... And show it
+ * in the upper-right corner, where we have no sixth spoke"). Returns { turn, gap }: how far round to turn ego()'s
+ * ring so a place stands at the upper right (45 degrees up), and which place that is, to be left out. The turn
+ * is at most half a step. Where it would stand anyone straight over or under the middle (within 8 degrees; a
+ * ring of eight), the ring isn't turned, and the place nearest the upper right is the one left out. Two places
+ * or fewer: turned clear of the corner, nobody left out (gap -1).
+ */
+export function gapFor( n ) {
+	if ( n < 3 ) {
+		return { turn: n === 2 ? 90 : 0, gap: -1 };
+	}
+	const step = 360 / n, base = -90 + step / 4;
+	const j = Math.round( ( -45 - base ) / step );
+	const gap = ( ( j % n ) + n ) % n;
+	const turn = -45 - ( base + step * j );
+	const upright = Array.from( { length: n }, ( _, i ) => base + step * i + turn )
+		.some( ( d, i ) => i !== gap && Math.abs( ( ( d % 180 ) + 180 ) % 180 - 90 ) < 8 );
+	return { turn: upright ? 0 : turn, gap };
+}
+
+/**
  * One picker and their company: the picker in the middle, the closest around them on an oval that starts a
  * quarter step past noon (nobody sits at twelve or at six, as on the cards), and the rest in two wider ovals.
  * Returns { C, rx, ry, web, far, named: [{x, y, below, angle, seat, of, lean}], dots: [{x, y}] }: seat, which
@@ -1847,7 +1869,7 @@ export function foxZoom( r, least ) {
  * as in, and beside() finds each name its place; and dots are every place a bead might go, on one oval between
  * the two, for the caller to take those that are clear of the names and the lines once they are known.
  */
-export function ego( { W, H, named, dots, far = false } ) {
+export function ego( { W, H, named, dots, far = false, turn = 0 } ) {
 	const C = { x: Math.round( W / 2 ), y: Math.round( H / 2 ) };
 	const n = Math.max( 0, named );
 	// a step further shows in a frame a little smaller than it first did (Justin, #connectome, 15 Nov 2026):
@@ -1858,7 +1880,7 @@ export function ego( { W, H, named, dots, far = false } ) {
 	const out = { C, named: [], dots: [], rx, ry, web: n > 1 && ( deep || ( rx >= 170 && ry >= 130 ) ), far: deep ? [] : null };
 	const on = ( deg, f ) => ( { x: Math.round( C.x + rx * f * Math.cos( deg * Math.PI / 180 ) ), y: Math.round( C.y + ry * f * Math.sin( deg * Math.PI / 180 ) ) } );
 	for ( let i = 0; i < n; i++ ) {
-		const deg = -90 + 360 / n / 4 + ( 360 / n ) * i;
+		const deg = -90 + 360 / n / 4 + ( 360 / n ) * i + turn;         // turn: the whole ring round by so many degrees (gapFor)
 		const rad = deg * Math.PI / 180;
 		const y = C.y + ry * Math.sin( rad );
 		out.named.push( { x: Math.round( C.x + rx * Math.cos( rad ) ), y: Math.round( y ), below: y > C.y + 1, angle: deg, seat: i, of: n,
