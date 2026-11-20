@@ -1314,7 +1314,7 @@ function walkScene() {
 		// a long walk scrolls: the frame is as tall as the walk, and the stage scrolls it; the ensemble of the
 		// song on now hangs under the last circle, and wants its room
 		const need = !lay.rows ? 60 : lay.at[ lay.at.length - 1 ].y + ( lay.cols > 1 ? R + 15 + 28 + 26 : 50 ) + ( !MINI && steps.length ? 48 : 0 );
-		svg.style.height = MINI ? '' : Math.max( need, stage.clientHeight - ( $( 'say' ).offsetHeight || 0 ) - ( $( 'legend' ).offsetHeight || 0 ) ) + 'px';
+		svg.style.height = MINI ? '' : Math.max( need, stage.clientHeight - ( $( 'say' ).offsetHeight || 0 ) ) + 'px';
 		return { shown, lay, W };
 	};
 	let { W, H } = frame( true ), fit = place( W, H );
@@ -3004,24 +3004,6 @@ function settled( sc ) {
 let turned = 0;                  // when the view last changed
 let lost = '';                   // an address that named nothing the graph knows: said under the headline until the reader moves on
 
-/**
- * The legend says what's in sight, and what's in sight goes by the room there is: the web wants so much, the step
- * further more. Were an entry coming in to wrap the legend onto another line, the frame would lose that line, the
- * view might no longer have the room, the entry would go, the frame would get its line back, and round again for
- * ever (seen at 1280 by 734 to 746, 14 Nov 2026, before this). So the legend is always as tall as it would be
- * with everything in it that a frame this wide could ever show.
- */
-function steady() {
-	const legend = $( 'legend' );
-	const most = K.ego( { W: svg.clientWidth * ( coarse || MINI ? 1 : K.shrink( 1, 1, zoomed() ) ), H: 4000, named: 8, dots: 0, far: true } );   // as wide as it may ever be laid out
-	legend.style.minHeight = '';
-	stage.classList.remove( 'webbed', 'deep' );
-	stage.classList.add( ...[ most.web && 'webbed', most.far && 'deep' ].filter( Boolean ) );
-	const tall = legend.offsetHeight;
-	stage.classList.remove( 'webbed', 'deep' );                      // show() says which of them the view has, once it knows
-	legend.style.minHeight = tall + 'px';
-}
-
 /** Show the view. again: the same view, laid out afresh because the frame changed; everyone keeps the seat they had. */
 /** The frame a view is drawn for: its size, and what else sets the drawing's scale. A view is put back as drawn only into the same frame. */
 function fitNow() {
@@ -3040,7 +3022,6 @@ function show( quick, again ) {
 	stage.classList.toggle( 'dual', view.m !== undefined || !!view.walk );
 	stage.classList.toggle( 'walking', !!view.walk );
 	document.querySelector( 'main' ).classList.toggle( 'walking', !!view.walk );
-	steady();
 	if ( kept ) {
 		// What stands round the graph first (its headline, the way come), since those set the frame it is measured by.
 		$( 'say' ).firstElementChild.replaceChildren( ...kept.scene.head.filter( Boolean ) );
@@ -3066,6 +3047,7 @@ function show( quick, again ) {
 	put( scene, quick );
 	keptSay();
 	qrSay();
+	qrRoom( quick );
 	fillPanel();
 	$( 'pa' ).value = view.way || view.walk || view.pg !== undefined || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
 	$( 'pb' ).value = view.way || view.walk || view.pg !== undefined || view.m !== undefined || view.b === undefined ? '' : first( view.b );
@@ -3663,7 +3645,7 @@ async function openKept( id ) {
 }
 
 /**
- * The QR code at the legend's right end (Justin, #connectome, 16 Nov 2026: "always a QR code visible. So if I'm showing someone
+ * The QR code in the graph's corner (Justin, #connectome, 16 Nov 2026: "always a QR code visible. So if I'm showing someone
  * one, they can take a QR code of it with their phone and pick up right where I left off"): this view's own
  * address, or a kept graph's, as a reader would open it, not as Rabbithole frames it. Not for the walk, which
  * lives in the browser it was walked in.
@@ -3686,6 +3668,31 @@ function qrSay() {
 	pic.setAttribute( 'viewBox', `0 0 ${ p.side } ${ p.side }` );
 	pic.firstElementChild.setAttribute( 'd', p.d );
 	box.setAttribute( 'aria-label', 'A QR code of this view, ' + url + ': scan it to pick up here on a phone' );
+}
+
+/**
+ * The code in the corner, out of the way of the drawing: its own size where nothing of the graph comes to stand
+ * under it, a small mark of itself where a name or a mark does. Looked at once the view has slid into place.
+ */
+let qrLook = 0;
+function qrRoom( quick ) {
+	clearTimeout( qrLook );
+	const look = () => {
+		const box = $( 'qr' );
+		if ( box.hidden || box.classList.contains( 'big' ) ) {
+			return;
+		}
+		box.classList.remove( 'tight' );
+		const r = box.getBoundingClientRect();
+		box.classList.toggle( 'tight', [ ...svg.querySelectorAll( 'text, circle, image, rect:not( .reach )' ) ].some( ( el ) => {
+			const b = el.getBoundingClientRect();
+			return b.width > 0 && b.right > r.left - 4 && b.left < r.right + 4 && b.bottom > r.top - 4 && b.top < r.bottom + 4;
+		} ) );
+	};
+	if ( quick ) {
+		look();
+	}
+	qrLook = setTimeout( look, 900 );
 }
 
 /** What a kept graph says of itself, above it, and its lines marked where a source has gone since. */
@@ -4427,7 +4434,30 @@ if ( new URLSearchParams( location.search ).has( 'faq' ) ) {
 
 $( 'back' ).addEventListener( 'click', back );
 $( 'share' ).addEventListener( 'click', onShare );
-$( 'qr' ).addEventListener( 'click', () => $( 'qr' ).classList.toggle( 'big' ) );
+$( 'qr' ).addEventListener( 'click', () => {
+	$( 'qr' ).classList.toggle( 'big' );
+	qrRoom( true );
+} );
+// The key: open while its button is pressed in (a finger, a keyboard), and for a pointer while it is on it (the
+// stylesheet's :hover). Escape, or a press anywhere else, closes it.
+function keyed( on ) {
+	stage.classList.toggle( 'keyed', on );
+	$( 'key' ).setAttribute( 'aria-expanded', String( on ) );
+}
+$( 'key' ).addEventListener( 'click', ( e ) => {
+	e.stopPropagation();
+	keyed( !stage.classList.contains( 'keyed' ) );
+} );
+document.addEventListener( 'click', ( e ) => {
+	if ( stage.classList.contains( 'keyed' ) && !e.target.closest( '#legend' ) ) {
+		keyed( false );
+	}
+} );
+document.addEventListener( 'keydown', ( e ) => {
+	if ( e.key === 'Escape' && stage.classList.contains( 'keyed' ) ) {
+		keyed( false );
+	}
+} );
 
 let finder = new Map();          // everything the boxes can find, by its name in small letters (K.catalogue)
 
