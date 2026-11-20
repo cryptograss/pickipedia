@@ -18,8 +18,8 @@
   inside out around it. The ways out to a wiki page are said as that ("page ↗").
 
   A pointer that hovers gets a note beside what it's over, and its click goes further in. A finger can't
-  hover: its touch opens a sheet saying what it touched, with the ways further in, the page, and the way back
-  to the graph as buttons.
+  hover: its tap goes further in, as a click does, and holding it still on a mark opens a sheet saying what
+  it's on, with the other ways on, the page, and the way back to the graph as buttons.
 
   connectome-core.js decides what a view holds and where it sits; connectome.js draws it; graph.json, built
   at deploy by tools/connectome_card.py, is everything it knows. No library, and nothing fetched from
@@ -68,7 +68,7 @@
 		<button type="button" id="qr" hidden title="Scan it to pick up here on a phone; click to make it bigger"><svg aria-hidden="true"><path></path></svg><span>scan to pick up here</span></button>
 		<svg id="g" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="The connectome"></svg>
 		<div id="tip" role="status" hidden></div>
-		<div id="sheet" role="dialog" aria-label="What you touched" hidden></div>
+		<div id="sheet" role="dialog" aria-label="What you're holding" hidden></div>
 		<section id="faq" role="dialog" aria-labelledby="faq-h" hidden>
 			<div class="faq-top"><h2 id="faq-h">Questions and answers</h2><button type="button" class="x" aria-label="Back to the graph" title="Back to the graph">×</button></div>
 			<div class="faq-body"></div>

@@ -18,7 +18,7 @@
  * beside a track's name plays it in Rabbithole.
  *
  * The ways out to a wiki page are always said as that: "page ↗" by the headline, an arrow beside a name in a
- * list, a button on a finger's sheet. A name itself goes to that picker or that piece, here.
+ * list, a button on the sheet a finger's hold opens. A name itself goes to that picker or that piece, here.
  *
  * The web (Justin, #connectome, 14 Nov 2026): round one picker, or one piece, the lines among those around them
  * are drawn too where the frame has room, thin and behind the rest: who of the company have played with each
@@ -30,7 +30,7 @@
  * and the way there stays drawn.
  *
  * what() says what any mark stands for and the ways on from it; a pointer gets that as a note and a click, a
- * finger as a sheet of buttons. A thing that is in two views running keeps its place or slides to its new one,
+ * finger as a tap that goes and, held still, a sheet of buttons. A thing that is in two views running keeps its place or slides to its new one,
  * whatever its shape in each: a pill that becomes a circle grows from where the pill was.
  *
  * Every string from graph.json reaches the page as text, never as markup.
@@ -3921,7 +3921,8 @@ function aPickerBetween( d ) {
 	const id = d.who[ 0 ], name = first( id );
 	const w = { kind: ( d.who.length > 1 ? K.plural( d.who.length, 'picker' ) + ' on both · ' : '' ) + 'a picker' + instOf( id ), title: name, tipTitle: name + instOf( id ),
 		lines: [ 'on both ' + K.called( G, M( d.px ) ).name + ' and ' + K.called( G, M( d.py ) ).name, d.who.length > 1 ? 'as ' + ( d.who.length > 2 ? 'are ' : 'is ' ) + listNames( d.who.slice( 1 ) ) : '' ],
-		hint: 'click: go to ' + name, acts: d.who.slice( 0, 4 ).map( ( p ) => act( 'Go to ' + first( p ), () => go( { a: p, keep: d.who } ) ) ) };
+		hint: 'click: go to ' + name, choice: d.who.length > 1,
+		acts: d.who.slice( 0, 4 ).map( ( p ) => act( 'Go to ' + first( p ), () => go( { a: p, keep: d.who } ) ) ) };
 	w.acts.push( pageAct( id ) );
 	return w;
 }
@@ -4052,13 +4053,42 @@ function click( g ) {
 }
 
 /* ------------------------------------------------------------------------------------------------------------
- * A finger. It can't hover, so its first touch asks and doesn't act: a sheet says what was touched, with every
- * way on from it as a button and × (or a touch on the open graph) to go back to exploring. A second touch on
- * the same mark does what a click does. A finger is blunt, too: the picker nearest the touch is the one meant,
- * not whichever bead's halo happens to lie on top.
+ * A finger. It can't hover. Its tap does what a click does: it goes. Holding a mark still (HOLD ms) opens a
+ * sheet saying what's under the finger, with the other ways on from it as buttons and × (or a touch on the open
+ * graph) to go back to exploring. (Justin, #connectome, 20 Nov 2026, 02:08Z: "on mobile, it might work better
+ * if clicking once navigates, and click-and-hold brings up the infobox (then we don't need the 'Go to <picker>'
+ * button)". Until then the first touch asked and the second went.) What a tap does has no button on the sheet;
+ * its last line says it. A mark with nowhere to go (the one in the middle) opens its sheet at a tap, so no touch
+ * does nothing. A finger is blunt, too: the picker nearest the touch is the one meant, not whichever bead's
+ * halo happens to lie on top.
  * --------------------------------------------------------------------------------------------------------- */
 
-function openSheet( g ) {
+const HOLD = 400;                // ms a finger stays put before it's asking, not going: Android's own long press
+let press = null;                // a finger down on a mark and not yet moved: { id, x, y, g, timer }
+let heldNow = false;             // this touch opened the sheet: the click a browser may send as it lifts isn't a tap
+
+function unpress() {
+	if ( press ) {
+		clearTimeout( press.timer );
+		press = null;
+	}
+}
+
+/** The finger stayed: say what it's on. Whichever comes first asks for it, the timer or the browser's long press. */
+function holdOpen() {
+	const g = press && press.g;
+	unpress();
+	if ( !g || !g.isConnected || !what( g ) ) {
+		return;
+	}
+	heldNow = true;
+	openSheet( g );
+	if ( navigator.vibrate ) {
+		navigator.vibrate( 8 );                                      // where a phone can: felt, as its own long press is
+	}
+}
+
+function openSheet( g, tapped ) {
 	const w = what( g );
 	if ( !w ) {
 		return;
@@ -4071,23 +4101,30 @@ function openSheet( g ) {
 	} else {
 		g.classList.add( 'hot' );
 	}
-	const go1 = w.acts[ 0 ];
+	// A tap does the first: no button for it where the hint says so. Several of a kind (the pickers on one line)
+	// are a choice, and stay.
+	const go1 = w.acts[ 0 ], taps = !!( go1 && go1.run ), said = taps && !!w.hint && !w.choice;
+	const acts = w.acts.filter( ( a ) => !( said && a === go1 ) );
+	const foot = w.hint && ( taps || !/^click:/.test( w.hint ) ) ? w.hint.replace( /^click/, 'tap' ) : '';
+	// Opened by a tap, there being nowhere to go: the one place the graph says a hold asks about anything.
+	const more = tapped ? 'hold a finger on anything: what it is' : '';
 	sheet.replaceChildren( ...[
 		h( 'button', { type: 'button', class: 'x', 'aria-label': 'Back to the graph', onclick: closeSheet }, '×' ),
 		h( 'div', { class: 'k' }, w.kind ),
 		h( 'b', null, w.title ),
 		...w.lines.filter( Boolean ).map( ( l ) => h( 'div', { class: 'l' }, l ) ),
-		h( 'div', { class: 'acts' }, w.acts.map( ( a ) => a.href ?
+		acts.length ? h( 'div', { class: 'acts' }, acts.map( ( a ) => a.href ?
 			h( 'a', { class: a.kind, href: a.href, target: a.kind === 'source' ? '_blank' : '_top', rel: a.kind === 'source' ? 'noopener' : null },
 				a.kind === 'play' ? playMark() : null, a.label ) :
 			h( 'button', { type: 'button', class: a === go1 ? 'in first' : 'in', onclick: () => {
 				closeSheet();
 				a.run();
-			} }, a.label ) ) ),
-		go1 && go1.run ? h( 'div', { class: 'again' }, 'or touch it again' ) : null ].filter( Boolean ) );
+			} }, a.label ) ) ) : null,
+		foot ? h( 'div', { class: 'again' }, foot ) : null,
+		more ? h( 'div', { class: 'again' }, more ) : null ].filter( Boolean ) );
 	const at = g.getBoundingClientRect(), box = stage.getBoundingClientRect();
 	// Out of the way of what it's about: on the other half of the frame, and no taller than the room there, or
-	// "touch it again" would have nothing left to touch (seen at phone size, 15 Nov 2026: a tall sheet lay on its own mark).
+	// its mark would have nothing left to tap (seen at phone size, 15 Nov 2026: a tall sheet lay on its own mark).
 	const up = at.top + at.height / 2 > box.top + box.height / 2;
 	sheet.classList.toggle( 'up', up );
 	sheet.style.maxHeight = '';
@@ -4129,6 +4166,36 @@ document.addEventListener( 'pointerdown', ( e ) => {
 	fingers = e.pointerType === 'touch' || e.pointerType === 'pen';
 }, true );
 
+svg.addEventListener( 'pointerdown', ( e ) => {
+	unpress();                                                       // a second finger is a pinch, not a hold
+	heldNow = false;
+	if ( !fingers || !e.isPrimary ) {
+		return;
+	}
+	const g = pick( e );
+	if ( g ) {
+		press = { id: e.pointerId, x: e.clientX, y: e.clientY, g, timer: setTimeout( holdOpen, HOLD ) };
+	}
+} );
+document.addEventListener( 'pointermove', ( e ) => {
+	if ( press && e.pointerId === press.id && Math.hypot( e.clientX - press.x, e.clientY - press.y ) > 10 ) {
+		unpress();                                                   // it moved: a scroll or a slip
+	}
+}, true );
+[ 'pointerup', 'pointercancel' ].forEach( ( on ) => document.addEventListener( on, unpress, true ) );
+// A phone's own long press: its menu for a link (a name here is one) would cover the sheet. A mouse keeps its menu.
+svg.addEventListener( 'contextmenu', ( e ) => {
+	if ( fingers ) {
+		e.preventDefault();
+		holdOpen();
+	}
+} );
+svg.addEventListener( 'dragstart', ( e ) => {
+	if ( fingers ) {
+		e.preventDefault();                                          // nor does a held name get dragged off
+	}
+} );
+
 let wheeled = 0, wheelSum = 0;
 svg.addEventListener( 'wheel', ( e ) => {
 	if ( MINI || !view || view.walk ) {
@@ -4149,7 +4216,7 @@ svg.addEventListener( 'wheel', ( e ) => {
 }, { passive: false } );
 svg.addEventListener( 'pointerover', ( e ) => {
 	if ( e.pointerType && e.pointerType !== 'mouse' ) {
-		return;                                                      // a finger doesn't hover: its touch opens the sheet
+		return;                                                      // a finger doesn't hover: holding still opens the sheet
 	}
 	const g = e.target.closest( '[data-k]' );
 	hush();
@@ -4190,11 +4257,16 @@ svg.addEventListener( 'click', ( e ) => {
 		if ( svg.contains( document.activeElement ) ) {
 			document.activeElement.blur();                           // a touch isn't the keyboard: no ring left round the mark
 		}
-		if ( g && g.dataset.k === held ) {                           // touched again: go on in
+		if ( heldNow ) {                                             // the finger that held, lifting
+			heldNow = false;
+			return;
+		}
+		const w = g && what( g );
+		if ( w && w.acts[ 0 ] && w.acts[ 0 ].run ) {                 // a tap goes
 			closeSheet();
-			click( g );
-		} else if ( g ) {
-			openSheet( g );
+			w.acts[ 0 ].run();
+		} else if ( w && g.dataset.k !== held ) {                    // nowhere to go from it: say what it is
+			openSheet( g, true );
 		} else if ( held !== null ) {
 			closeSheet();
 		} else if ( sel.picker !== null ) {
