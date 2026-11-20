@@ -270,7 +270,7 @@ main {
 .pk.song text,
 .pk.page text { stroke-width: 6px; }
 .pk.song text,
-.pk.page text { font-size: 17px; }
+.pk.page text { font-size: calc( 17px * var( --t, 1 ) ); }
 
 /* A page in the middle of its own graph: a sheet with a turned corner and three lines of writing. */
 .pk.page .leaf { fill: var( --surface ); stroke: var( --ink ); stroke-width: 1.4; stroke-linejoin: round; }
@@ -280,11 +280,11 @@ main {
 #say .kind svg { vertical-align: -2px; margin-right: 6px; }
 
 /* A bead's own name: small, light, on paper of its own so a line under it doesn't cross the letters. */
-.pk.dot .bead-name { font: 400 11px Georgia, "Times New Roman", serif; fill: var( --ink2 ); stroke: var( --surface );
+.pk.dot .bead-name { font: 400 calc( 11px * var( --t, 1 ) ) Georgia, "Times New Roman", serif; fill: var( --ink2 ); stroke: var( --surface );
 	stroke-width: 3px; paint-order: stroke; stroke-linejoin: round; }
 
 /* A picker a step further out: a small dot, and a name in lighter type than the company's. */
-.pk.far text { font-weight: 400; font-size: 13px; }
+.pk.far text { font-weight: 400; font-size: calc( 13px * var( --t, 1 ) ); }
 
 /* ---- pickers ---- */
 .dot {
@@ -321,7 +321,7 @@ main {
 .pk.hot .dot.hollow { stroke-width: 2.5; }
 
 .pk text {
-	font: 700 14px var( --name );
+	font: 700 calc( 14px * var( --t, 1 ) ) var( --name );
 	fill: var( --link );
 	paint-order: stroke;
 	stroke: var( --surface );
@@ -330,7 +330,7 @@ main {
 }
 
 .pk.nopage text { fill: var( --ink ); }
-.pk.subject text { font-size: 17px; }
+.pk.subject text { font-size: calc( 17px * var( --t, 1 ) ); }
 .pk a:hover text,
 .pk a:focus text { text-decoration: underline; }
 
@@ -358,7 +358,7 @@ main {
 }
 
 .pill text {
-	font: 600 12.5px var( --ui );
+	font: 600 calc( 12.5px * var( --t, 1 ) ) var( --ui );
 	fill: var( --ink );
 }
 
@@ -733,12 +733,12 @@ a.play:focus {
 
 /* A piece's name is set as music is on a pill, not as a picker's name is. */
 .mu text {
-	font: 600 13px var( --ui );
+	font: 600 calc( 13px * var( --t, 1 ) ) var( --ui );
 	fill: var( --ink );
 }
 
 .mu text.sub {
-	font: 400 11.5px var( --ui );
+	font: 400 calc( 11.5px * var( --t, 1 ) ) var( --ui );
 	fill: var( --ink2 );
 }
 
@@ -753,14 +753,14 @@ a.play:focus {
 }
 
 .pill.tag text {
-	font: 700 12.5px var( --name );
+	font: 700 calc( 12.5px * var( --t, 1 ) ) var( --name );
 	fill: var( --link );
 }
 
 .pill.tag.nopage text { fill: var( --ink ); }
 
 .pill.tag tspan.n {
-	font: 400 11.5px var( --ui );
+	font: 400 calc( 11.5px * var( --t, 1 ) ) var( --ui );
 	fill: var( --ink2 );
 }
 
@@ -887,7 +887,7 @@ g.day text { font: 700 11px var( --ui ); fill: var( --muted ); letter-spacing: .
 .ln.road .core.th { stroke: var( --ink2 ); }
 #stage:not( .walking ) #legend .wk { display: none; }
 .pill.rn { pointer-events: none; }
-.pill.rn text { font: italic 400 12px var( --name ); fill: var( --ink2 ); stroke: var( --surface ); stroke-width: 4px; paint-order: stroke; stroke-linejoin: round; }
+.pill.rn text { font: italic 400 calc( 12px * var( --t, 1 ) ) var( --name ); fill: var( --ink2 ); stroke: var( --surface ); stroke-width: 4px; paint-order: stroke; stroke-linejoin: round; }
 
 /* In the player, the graph sits right under the player's own bar, with no search or "connect to" over it
    (Justin, #connectome, 19 Nov 2026, 03:15Z: "just get the bacon graph right under the green top bar"). */

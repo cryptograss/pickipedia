@@ -41,11 +41,26 @@ const NS = 'http://www.w3.org/2000/svg';
 const HOME = /(^|\.)pickipedia\.xyz$/.test( location.hostname ) ? '' : 'https://pickipedia.xyz';
 const ICON = HOME + '/index.php?title=Special:Redirect/file/Instrument-icon-';
 const FACE = HOME + '/index.php?title=Special:Redirect/file/';       // a picker's own picture, by its file's name on the wiki
-const FONT = { named: '700 14px Georgia, "Times New Roman", serif', subject: '700 17px Georgia, "Times New Roman", serif',
-	far: '400 13px Georgia, "Times New Roman", serif', bead: '400 11px Georgia, "Times New Roman", serif',
-	pill: '600 12.5px system-ui, -apple-system, "Segoe UI", sans-serif', tag: '700 12.5px Georgia, "Times New Roman", serif',
-	piece: '600 13px system-ui, -apple-system, "Segoe UI", sans-serif', sub: '400 11.5px system-ui, -apple-system, "Segoe UI", sans-serif',
-	road: 'italic 400 12px Georgia, "Times New Roman", serif' };
+/*
+ * How big the graph's words are written beside its marks. Justin, #connectome, 20 Nov 2026, 02:42Z: "on desktop at
+ * least, text needs to be about 25% bigger per graph-zoom-level than it current is. It's difficult to get robust
+ * readable names and also a vibrant graph in the same view." So at every step of zoom a name, a pill's words and a
+ * tag's are a quarter bigger than the circles and lines were drawn for, and a view holds what it held. T is that,
+ * set with the frame (frame()): 1 on a finger's screen, in the dock and in the walk, which keep their own sizes.
+ * FONT says each kind of word at T, for measuring; the stylesheet writes them at --t, which frame() sets alike.
+ * tx( n ): a length that is a word's (its height, the room a name may take) at T. down( px ): how much lower a
+ * word of px sits under its mark, so that its top stays where it was.
+ */
+const TEXT = 1.25;
+let T = 1;
+const SERIF = 'Georgia, "Times New Roman", serif', SANS = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+const KINDS = { named: [ '700', 14, SERIF ], subject: [ '700', 17, SERIF ], far: [ '400', 13, SERIF ], bead: [ '400', 11, SERIF ],
+	pill: [ '600', 12.5, SANS ], tag: [ '700', 12.5, SERIF ], piece: [ '600', 13, SANS ], own: [ '600', 17, SANS ], sub: [ '400', 11.5, SANS ],
+	road: [ 'italic 400', 12, SERIF ] };
+const FONT = {};
+Object.keys( KINDS ).forEach( ( k ) => Object.defineProperty( FONT, k, { get: () => `${ KINDS[ k ][ 0 ] } ${ +( KINDS[ k ][ 1 ] * T ).toFixed( 3 ) }px ${ KINDS[ k ][ 2 ] }` } ) );
+const tx = ( n ) => Math.round( n * T * 10 ) / 10;
+const down = ( px ) => Math.round( ( T - 1 ) * 0.74 * px );
 const still = window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
 const FAINT = 0.22;              // between two pickers, a route through someone not named: behind the rest, still there
 const STRAIGHT = { x: 0, y: 0 };
@@ -351,9 +366,14 @@ function glyphBox( kind ) {
  * (own: its height is the walk's own), and a finger's screen keep their own pixels.
  */
 let S = 1;                                                          // how many times smaller the drawing is than the frame's pixels
+function words( t ) {
+	T = t;
+	svg.style.setProperty( '--t', String( t ) );
+}
 function frame( own ) {
 	const cw = svg.clientWidth, ch = svg.clientHeight;
 	S = MINI || own || coarse ? 1 : K.shrink( cw, ch, zoomed(), CLOSER[ closer ] );
+	words( MINI || own || coarse ? 1 : TEXT );
 	const W = Math.max( MINI ? 200 : 300, Math.round( cw * S ) ), H = Math.max( MINI ? 120 : 240, Math.round( ch * S ) );   // the dock's few steps: its own size
 	svg.setAttribute( 'viewBox', `0 0 ${ W } ${ H }` );
 	return { W, H };
@@ -432,14 +452,14 @@ function nameBeads( sc, C, pts, boxes, W, H, all ) {
 		boxes.push( { x1: d.x - d.r - 2, y1: d.y - d.r - 2, x2: d.x + d.r + 2, y2: d.y + d.r + 2 } );
 	}
 	for ( const d of beads ) {
-		const label = cut( first( d.id ), FONT.bead, 130 ), w = wide( label, FONT.bead );
-		let b = K.beside( d, d.r + 2, w, 12, pts, boxes, { W, H }, { x: d.x - C.x, y: d.y - C.y } );
+		const label = cut( first( d.id ), FONT.bead, tx( 130 ) ), w = wide( label, FONT.bead );
+		let b = K.beside( d, d.r + 2, w, tx( 12 ), pts, boxes, { W, H }, { x: d.x - C.x, y: d.y - C.y } );
 		if ( !b && all ) {
 			const t = Math.atan2( d.y - C.y, d.x - C.x ), cx = Math.cos( t ), side = Math.abs( cx ) > 0.4;
-			const x = side ? Math.sign( cx ) * ( d.r + 4 ) : 0, y = side ? 4 : ( Math.sin( t ) > 0 ? d.r + 12 : -d.r - 5 );
+			const x = side ? Math.sign( cx ) * ( d.r + 4 ) : 0, y = side ? tx( 4 ) : ( Math.sin( t ) > 0 ? d.r + 12 + down( 11 ) : -d.r - 5 );
 			const anchor = side ? ( cx > 0 ? 'start' : 'end' ) : 'middle';
 			const x1 = d.x + x - ( anchor === 'start' ? 0 : anchor === 'end' ? w : w / 2 );
-			b = { x, y, anchor, box: { x1, y1: d.y + y - 10, x2: x1 + w, y2: d.y + y + 3 } };
+			b = { x, y, anchor, box: { x1, y1: d.y + y - tx( 10 ), x2: x1 + w, y2: d.y + y + tx( 3 ) } };
 		}
 		if ( b ) {
 			d.label = label;
@@ -924,8 +944,8 @@ function further( v, lay, mine, seats, seatOf, web, W, H ) {
 	const clear = ( l, of, pad ) => K.clearOf( l, of, pad ).length === l.length;
 	const on = K.beyond( G, v.a, mine.map( ( c ) => c.id ), 2, v.keep || [] ), fars = [];
 	disc( lay.C, 26 );
-	const mid = wide( cut( first( v.a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
-	discs.push( { x1: lay.C.x - mid, y1: lay.C.y + 22, x2: lay.C.x + mid, y2: lay.C.y + 41 } );   // the middle's own name, tucked under it
+	const mid = wide( cut( first( v.a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ), FONT.subject ) / 2;
+	discs.push( { x1: lay.C.x - mid, y1: lay.C.y + 22, x2: lay.C.x + mid, y2: lay.C.y + 22 + tx( 19 ) } );   // the middle's own name, tucked under it
 	mine.forEach( ( c, i ) => {
 		const from = seatOf.get( c.id );
 		line( lay.C, from );
@@ -938,7 +958,7 @@ function further( v, lay, mine, seats, seatOf, web, W, H ) {
 		}
 	} );
 	web.forEach( ( t ) => line( seatOf.get( t.u ), seatOf.get( t.v ), t.bow ) );
-	const names = mine.map( ( c ) => place( first( c.id ), seatOf.get( c.id ), 14, FONT.named, 16, 150 ) ||
+	const names = mine.map( ( c ) => place( first( c.id ), seatOf.get( c.id ), 14, FONT.named, tx( 16 ), tx( 150 ) ) ||
 		nameAt( first( c.id ), seatOf.get( c.id ), W, FONT.named ) );
 	mine.forEach( ( c, i ) => {                                      // the second: a bead, to whichever side its line keeps clear of the names
 		if ( !on[ i ][ 1 ] ) {
@@ -953,7 +973,7 @@ function further( v, lay, mine, seats, seatOf, web, W, H ) {
 		}
 	} );
 	for ( const f of fars ) {
-		f.name = f.named ? place( first( f.id ), f.at, 6, FONT.far, 15, 132 ) : null;
+		f.name = f.named ? place( first( f.id ), f.at, 6, FONT.far, tx( 15 ), tx( 132 ) ) : null;
 		f.named = !!f.name;                                          // no room for the name: a bead, and the note says who
 	}
 	// The rest of the company: where nothing else is, and where the thin line to it from the middle crosses no name.
@@ -1011,16 +1031,16 @@ function egoScene( v ) {
 	const names = out ? out.names : mine.map( ( c, i ) => nameAt( first( c.id ), lay.named[ seats[ i ] ], W, FONT.named ) );
 	const spots = out ? K.spread( out.open, ring.length - n ) : K.clearOf( lay.dots, names.map( ( nm, i ) => {
 		const pos = lay.named[ seats[ i ] ];
-		return nameBox( pos, nm.dx, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -36, pos.below ? 36 : -18 );
+		return nameBox( pos, nm.dx, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -18 - tx( 18 ), pos.below ? 18 + tx( 18 ) : -18 );
 	} ), 10 );
 	const shown = n + spots.length;
 	const beads = K.seat( spots, ring.slice( n, shown ).map( ( c ) => wanted( 'p' + c.id, pan ) ) );
 	// Where the line the reader came by says what it is: a little past halfway out, or further, until its band
 	// is clear of the middle's own name (Justin, #connectome, 15 Nov 2026: a label never on the middle's name).
 	const midBox = ( () => {
-		const half = wide( cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
-		const R = G.people[ a ].img ? 26 : 22, base = lay.C.y + R + 10;        // as draw.node sets the subject's name
-		return { x1: lay.C.x - half - 4, y1: base - 16, x2: lay.C.x + half + 4, y2: base + 6 };
+		const half = wide( cut( first( a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ), FONT.subject ) / 2;
+		const R = G.people[ a ].img ? 26 : 22, base = lay.C.y + R + 10 + down( 17 );        // as draw.node sets the subject's name
+		return { x1: lay.C.x - half - 4, y1: base - tx( 16 ), x2: lay.C.x + half + 4, y2: base + 6 };
 	} )();
 	const homeward = ( pos, room ) => {
 		let at;
@@ -1033,7 +1053,7 @@ function egoScene( v ) {
 		return at;
 	};
 	// The one in the middle is named there too, as on the cards, though the headline says who it is (Justin, #connectome, 15 Nov 2026).
-	addNode( sc, a, lay.C, 'subject', { rabbit: true, label: cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ) } );
+	addNode( sc, a, lay.C, 'subject', { rabbit: true, label: cut( first( a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ) } );
 	if ( songAt ) {                                                  // the song on now, and the line from it to who's taking it
 		const cuts = ( playing.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean );
 		const tier = cuts.length ? Math.max( ...cuts.map( ( c ) => c.tier ) ) : 0;
@@ -1080,11 +1100,20 @@ function egoScene( v ) {
 	const taken = [ ...sc.pills.values() ].map( ( p ) => ( { x1: p.x - p.w / 2, y1: p.y - 12, x2: p.x + p.w / 2, y2: p.y + 12 } ) )
 		.concat( [ { x1: lay.C.x - 30, y1: lay.C.y - 30, x2: lay.C.x + 30, y2: lay.C.y + 30 } ],
 			mine.map( ( c ) => seatOf.get( c.id ) ).map( ( p ) => ( { x1: p.x - 17, y1: p.y - 17, x2: p.x + 17, y2: p.y + 17 } ) ) );
-	const midName = wide( cut( first( a ), FONT.subject, Math.min( 240, W - 24 ) ), FONT.subject ) / 2;
-	taken.push( { x1: lay.C.x - midName, y1: lay.C.y + 22, x2: lay.C.x + midName, y2: lay.C.y + 41 } );
+	// and the names as written: bigger words reach further along the lines than the circles do
+	if ( out ) {
+		taken.push( ...out.boxes );
+	} else {
+		mine.forEach( ( c, i ) => {
+			const pos = seatOf.get( c.id );
+			taken.push( nameBox( pos, names[ i ].dx || 0, wide( names[ i ].label, FONT.named ) / 2, pos.below ? 18 : -18 - tx( 18 ), pos.below ? 18 + tx( 18 ) : -18 ) );
+		} );
+	}
+	const midName = wide( cut( first( a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ), FONT.subject ) / 2;
+	taken.push( { x1: lay.C.x - midName, y1: lay.C.y + 22, x2: lay.C.x + midName, y2: lay.C.y + 22 + tx( 19 ) } );
 	if ( songAt ) {                                                  // the song's mark and its name over it
 		const half = Math.max( 34, wide( K.clip( playing.song, 30 ), FONT.named ) / 2 );
-		taken.push( { x1: songAt.x - half, y1: songAt.y - 54, x2: songAt.x + half, y2: songAt.y + 34 } );
+		taken.push( { x1: songAt.x - half, y1: songAt.y - 40 - tx( 14 ), x2: songAt.x + half, y2: songAt.y + 34 } );
 	}
 	const onLine = ( from, to, f, room ) => ( { x1: from.x + ( to.x - from.x ) * f - room / 2, x2: from.x + ( to.x - from.x ) * f + room / 2, y: from.y + ( to.y - from.y ) * f } );
 	// Who is named in sight: a line that says a song ends at its artist or its writer, or at another of its ensemble
@@ -1168,7 +1197,7 @@ function egoScene( v ) {
 				const pos = lay.named[ seats[ i ] ], nm = names[ i ];
 				pts.push( ...K.along( lay.C, pos ) );
 				boxes.push( { x1: pos.x - 15, y1: pos.y - 15, x2: pos.x + 15, y2: pos.y + 15 },
-					nameBox( pos, nm.dx || 0, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -36, pos.below ? 36 : -18 ) );
+					nameBox( pos, nm.dx || 0, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -18 - tx( 18 ), pos.below ? 18 + tx( 18 ) : -18 ) );
 			} );
 			web.forEach( ( t ) => pts.push( ...K.along( seatOf.get( t.u ), seatOf.get( t.v ), t.bow ) ) );
 		}
@@ -1686,10 +1715,11 @@ function addPiece( sc, id, at, kind, more ) {
 }
 
 /** A piece's name and the line under it, kept in the frame; and where it plays, when it does. */
-function pieceLabel( id, pos, W ) {
+function pieceLabel( id, pos, W, own ) {
 	const pc = M( id ), c = K.called( G, pc );
 	const play = pc.kind === 'track' ? K.playOf( G, G.music[ pc.m ], pc.song ) : '';
-	const name = nameAt( K.clip( c.name, 24 ), pos, W - ( play ? 40 : 0 ), FONT.piece );
+	// the one in the middle is written bigger (the stylesheet's .pk.subject), and is measured as written
+	const name = nameAt( K.clip( c.name, 24 ), pos, W - ( play ? 40 : 0 ), own ? FONT.own : FONT.piece );
 	const sub = c.sub ? nameAt( K.clip( c.sub, 24 ), pos, W, FONT.sub ) : null;
 	return { label: name.label, dx: name.dx, sub: sub ? sub.label : '', sdx: sub ? sub.dx : 0, play };
 }
@@ -1705,19 +1735,21 @@ function pieceScene( v ) {
 	const seats = K.seat( lay.named, L.named.slice( 0, n ).map( ( x ) => wanted( 'm' + x.id, pan ) ) );
 	// Each piece's name and the line under it, as they will be written, so no bead is set down under them.
 	const names = L.named.slice( 0, n ).map( ( x, i ) => pieceLabel( x.id, lay.named[ seats[ i ] ], W ) );
-	const spots = K.clearOf( lay.dots, names.map( ( nm, i ) => {
+	const written = names.map( ( nm, i ) => {
 		const pos = lay.named[ seats[ i ] ], half = wide( nm.label, FONT.piece ) / 2, under = nm.sub ? wide( nm.sub, FONT.sub ) / 2 : 0;
 		const x1 = Math.min( nm.dx - half, nm.sdx - under ), x2 = Math.max( nm.dx + half + ( nm.play ? 40 : 0 ), nm.sdx + under );
-		return nameBox( pos, ( x1 + x2 ) / 2, ( x2 - x1 ) / 2, pos.below ? 19 : ( nm.sub ? -49 : -36 ), pos.below ? ( nm.sub ? 50 : 36 ) : -19 );
-	} ), 10 );
+		return nameBox( pos, ( x1 + x2 ) / 2, ( x2 - x1 ) / 2, pos.below ? 19 : -19 - tx( nm.sub ? 30 : 17 ), pos.below ? 19 + tx( nm.sub ? 31 : 17 ) : -19 );
+	} );
+	const spots = K.clearOf( lay.dots, written, 10 );
 	const all = L.named.concat( L.rest ).slice( 0, n + spots.length );
 	const beads = K.seat( spots, all.slice( n ).map( ( x ) => wanted( 'm' + x.id, pan ) ) );
-	const own = pieceLabel( v.m, { x: lay.C.x, y: lay.C.y }, W );
+	const own = pieceLabel( v.m, { x: lay.C.x, y: lay.C.y }, W, true );
 	addPiece( sc, v.m, lay.C, 'subject', Object.assign( { below: true }, own ) );
 	// The middle's name and the line under it (whose a cut is, its record's artist: Justin, #connectome, 15 Nov
 	// 2026), as drawPiece sets them: no tag goes on them.
-	const ownHalf = Math.max( wide( own.label, FONT.piece ), own.sub ? wide( own.sub, FONT.sub ) : 0 ) / 2 + ( own.play ? 40 : 0 ) + 8;
-	const middle = { x1: lay.C.x - ownHalf, y1: lay.C.y + 26, x2: lay.C.x + ownHalf, y2: lay.C.y + ( own.sub ? 60 : 46 ) };
+	const ownHalf = Math.max( wide( own.label, FONT.own ), own.sub ? wide( own.sub, FONT.sub ) : 0 ) / 2 + ( own.play ? 40 : 0 ) + 8;
+	const middle = { x1: lay.C.x - ownHalf, y1: lay.C.y + 26, x2: lay.C.x + ownHalf, y2: lay.C.y + 26 + tx( own.sub ? 38 : 24 ) };
+	const tags = [];                                                 // the tags set down so far: none goes on a name, or on another
 	all.forEach( ( x, i ) => {
 		const named = i < n;
 		const pos = named ? lay.named[ seats[ i ] ] : spots[ beads[ i - n ] ];
@@ -1731,16 +1763,21 @@ function pieceScene( v ) {
 			// have none: there the tag sits against the piece, on the side the line comes in by.
 			const extra = x.via.length > 1 ? ' +' + ( x.via.length - 1 ) : '', ew = wide( extra, FONT.sub );
 			const full = 28 + wide( K.clip( first( x.via[ 0 ] ), 26 ), FONT.tag ) + ew;
-			const most = Math.min( 176, W * 0.42 );
-			let at = K.tagAt( lay.C, pos, 24, 15, most, 23, [ middle ], Math.min( full, most ) );
+			const most = Math.min( tx( 176 ), W * 0.42 );
+			let at = K.tagAt( lay.C, pos, 24, 15, most, 23, [ middle ].concat( written, tags ), Math.min( full, most ) );
 			if ( at.room < Math.min( full, most ) ) {
-				// against the piece, on the side the line comes in by; or, where that is on the middle's name, the other
+				// against the piece, on the side its name isn't; where that is on the middle's name or another's, out
+				// beyond its own name; nowhere clear, where it was first put
 				const x = pos.x + K.nudge( pos.x, Math.min( full, most ) / 2, 4, W - 4 ), half = Math.min( full, most ) / 2;
-				const onName = ( y ) => x + half > middle.x1 && x - half < middle.x2 && y + 12 > middle.y1 && y - 12 < middle.y2;
-				const y = pos.y + ( pos.below ? -32 : 32 );
-				at = { x, y: onName( y ) ? pos.y + ( pos.below ? 32 : -32 ) : y, room: most };
+				const taken = [ middle ].concat( written, tags );
+				const on = ( y ) => y < 14 || y > H - 14 || taken.some( ( o ) => x + half > o.x1 && x - half < o.x2 && y + 12 > o.y1 && y - 12 < o.y2 );
+				const mine = written[ i ], y = pos.y + ( pos.below ? -32 : 32 );
+				const past = pos.below ? mine.y2 + 15 : mine.y1 - 15;
+				at = { x, y: !on( y ) ? y : ( !on( past ) ? past : y ), room: most };
 			}
 			const label = cut( first( x.via[ 0 ] ), FONT.tag, at.room - 28 - ew );
+			const tagHalf = ( 28 + wide( label, FONT.tag ) + ew ) / 2;
+			tags.push( { x1: at.x - tagHalf, y1: at.y - 12, x2: at.x + tagHalf, y2: at.y + 12 } );
 			sc.pills.set( 'w' + threadKey( v.m, x.id ), { id: x.via[ 0 ], who: x.via, stands: 'picker', is: 'p' + x.via[ 0 ], tag: true, px: v.m, py: x.id,
 				x: Math.round( at.x ), y: Math.round( at.y ), w: 28 + wide( label, FONT.tag ) + ew, label, extra, o: 1, delay: 160 + i * 40 } );
 		}
@@ -1821,7 +1858,7 @@ function pageScene( v ) {
 			const pos = seatOf.get( id ), nm = nameAt( first( id ), pos, W, FONT.named );
 			return { x: pos.x + nm.dx, y: pos.y + ( pos.below ? 24 : -32 ), w: wide( nm.label, FONT.named ) / 2 + 3 };
 		} );
-		const clash = ( b, d ) => Math.abs( b.x - d.x ) < b.w + d.w && Math.abs( b.y - d.y ) < 22;
+		const clash = ( b, d ) => Math.abs( b.x - d.x ) < b.w + d.w && Math.abs( b.y - d.y ) < tx( 22 );
 		// each one a step out sits, as near as there's room, by the one on the page whose company they are, so
 		// the line out to them is short and crosses nothing (the strongest first, as the list is ordered)
 		const turn = ( pt ) => Math.atan2( pt.y - lay.C.y, pt.x - lay.C.x );
@@ -1914,7 +1951,7 @@ function songScene( v ) {
 			const pos = seatOf.get( id ), nm = nameAt( first( id ), pos, W, FONT.named );
 			return { x: pos.x + nm.dx, y: pos.y + ( pos.below ? 24 : -32 ), w: wide( nm.label, FONT.named ) / 2 + 3 };
 		} );
-		const clash = ( b, d ) => Math.abs( b.x - d.x ) < b.w + d.w && Math.abs( b.y - d.y ) < 22;
+		const clash = ( b, d ) => Math.abs( b.x - d.x ) < b.w + d.w && Math.abs( b.y - d.y ) < tx( 22 );
 		const oseats = K.seat( lay.dots, seated.map( ( c ) => wanted( 'c' + v.cut + '·o' + c.id, pan ) ) );
 		seated.forEach( ( c, i ) => {
 			const at = lay.dots[ oseats[ i ] ], nm = nameAt( first( c.id ), at, W, FONT.far );
@@ -2017,14 +2054,14 @@ function drawPiece( g, d ) {
 		stepLabel( g, d, R, address( { m: d.piece } ), c.name );
 		return;
 	}
-	const y = d.below ? R + 17 : ( d.sub ? -R - 21 : -R - 8 );
+	const y = d.below ? R + 17 + down( d.kind === 'subject' ? 17 : 13 ) : ( d.sub ? -R - 7 - tx( 14 ) : -R - 8 );
 	const name = s( 'a', { href: address( { m: d.piece } ), 'aria-label': 'Go to ' + c.name }, s( 'text', { x: d.dx || 0, y, 'text-anchor': 'middle' }, d.label ) );
 	if ( d.sub ) {
-		name.appendChild( s( 'text', { class: 'sub', x: d.sdx || 0, y: y + 14, 'text-anchor': 'middle' }, d.sub ) );
+		name.appendChild( s( 'text', { class: 'sub', x: d.sdx || 0, y: y + tx( 14 ), 'text-anchor': 'middle' }, d.sub ) );
 	}
 	g.appendChild( name );
 	if ( d.play ) {
-		g.appendChild( playChip( ( d.dx || 0 ) + wide( d.label, FONT.piece ) / 2 + 5, y - 4.5, d.play, pc.song ) );
+		g.appendChild( playChip( ( d.dx || 0 ) + wide( d.label, d.kind === 'subject' ? FONT.own : FONT.piece ) / 2 + 5, y - tx( 4.5 ), d.play, pc.song ) );
 	}
 }
 
@@ -2040,7 +2077,7 @@ function drawTag( g, d ) {
 	}
 	g.appendChild( s( 'rect', { x: -d.w / 2, y: -11.5, width: d.w, height: 23, rx: 5 } ) );
 	g.appendChild( s( 'circle', { class: 'dot' + ( p.page ? '' : ' hollow' ), cx: -d.w / 2 + 11, cy: 0, r: 3.6 } ) );
-	const t = s( 'text', { x: -d.w / 2 + 20, y: 4.3 }, d.label );
+	const t = s( 'text', { x: -d.w / 2 + 20, y: tx( 4.3 ) }, d.label );
 	if ( d.extra ) {
 		t.appendChild( s( 'tspan', { class: 'n' }, d.extra ) );
 	}
@@ -2077,7 +2114,7 @@ const draw = {
 				s( 'path', { class: 'leaf', d: 'M-7 -11 h9 l5 5 v17 h-14 z' } ),
 				s( 'path', { class: 'writ', d: 'M2 -11 v5 h5 M-4 -1 h8 M-4 3 h8 M-4 7 h5' } ) ) );
 			g.appendChild( s( 'a', { href: pageUrl( d.title ), target: '_top', 'aria-label': 'The page: ' + d.title },
-				s( 'text', { y: 46, 'text-anchor': 'middle' }, K.clip( d.title, 30 ) ) ) );
+				s( 'text', { y: 46 + down( 17 ), 'text-anchor': 'middle' }, K.clip( d.title, 30 ) ) ) );
 			return;
 		}
 		if ( d.stands === 'song' ) {
@@ -2095,7 +2132,7 @@ const draw = {
 			const to = d.cut ? '/rabbithole/?track=' + encodeURIComponent( d.cut ) : '';
 			// Named, as every middle is (Justin, #connectome, 15 Nov 2026), over whatever of the web runs under the name.
 			g.appendChild( s( 'a', { href: G.songs[ d.title ] ? pageUrl( 'Song:' + d.title ) : address( { s: d.title, cut: d.cut } ),
-				'aria-label': 'About ' + d.title }, s( 'text', { y: d.above ? -40 : 46, 'text-anchor': 'middle' }, K.clip( d.title, 30 ) ) ) );
+				'aria-label': 'About ' + d.title }, s( 'text', { y: d.above ? -40 : 46 + down( 17 ), 'text-anchor': 'middle' }, K.clip( d.title, 30 ) ) ) );
 			if ( to ) {
 				g.appendChild( playChip( 28, 0, to, d.title ) );
 			}
@@ -2157,11 +2194,11 @@ const draw = {
 		const big = d.kind === 'subject';
 		const label = d.label || K.clip( p.name, 26 );
 		const at = d.at ? { x: d.at.x, y: d.at.y, 'text-anchor': d.at.anchor } :   // where the scene found it room (K.beside)
-			d.side === 'left' ? { x: -R - 12, y: 6, 'text-anchor': 'end' } :
-				d.side === 'right' ? { x: R + 12, y: 6, 'text-anchor': 'start' } :
+			d.side === 'left' ? { x: -R - 12, y: tx( 6 ), 'text-anchor': 'end' } :
+				d.side === 'right' ? { x: R + 12, y: tx( 6 ), 'text-anchor': 'start' } :
 					// the middle's name tucked in tight, its top just over the circle's rim, clear of the pills on the
 					// lines out of it (Justin, #connectome, 15 Nov 2026)
-					{ x: d.dx || 0, y: d.below ? R + ( big ? 10 : 18 ) : -R - 8, 'text-anchor': 'middle' };
+					{ x: d.dx || 0, y: d.below ? R + ( big ? 10 + down( 17 ) : 18 + down( 14 ) ) : -R - 8, 'text-anchor': 'middle' };
 		g.appendChild( s( 'a', { href: address( { a: d.id } ), 'aria-label': 'Go to ' + p.name }, s( 'text', at, label ) ) );
 	},
 	line( g, d ) {
@@ -2226,13 +2263,13 @@ const draw = {
 		}
 		g.appendChild( s( 'rect', { x: -d.w / 2, y: -12, width: d.w, height: 24, rx: 12 } ) );
 		if ( d.more ) {
-			g.appendChild( s( 'text', { x: 0, y: 4.3, 'text-anchor': 'middle' }, d.label ) );
+			g.appendChild( s( 'text', { x: 0, y: tx( 4.3 ), 'text-anchor': 'middle' }, d.label ) );
 			return;
 		}
 		const gl = glyph( d.glyph );
 		gl.setAttribute( 'transform', `translate(${ -d.w / 2 + 14 } 0)` );
 		g.appendChild( gl );
-		g.appendChild( s( 'text', { x: -d.w / 2 + 25, y: 4.3 }, d.label ) );
+		g.appendChild( s( 'text', { x: -d.w / 2 + 25, y: tx( 4.3 ) }, d.label ) );
 		if ( d.play ) {                                              // a track that plays: the rabbit takes you there
 			g.appendChild( playChip( d.w / 2 - 37, 0, d.play, d.song ) );
 		}
@@ -3014,12 +3051,13 @@ function show( quick, again ) {
 	if ( kept && kept.fit === fitNow() && !view.walk && !view.way ) {
 		scene = kept.scene;                                          // as it was drawn: nothing laid out again
 		S = kept.S;
+		words( kept.T );
 		svg.setAttribute( 'viewBox', kept.box );
 	} else {
 		scene = view.way ? wayScene() : view.walk ? walkScene( view ) : view.pg !== undefined ? pageScene( view ) : view.cut !== undefined ? songScene( view ) : view.m !== undefined ? pieceScene( view ) : ( view.b === undefined ? egoScene( view ) : pairScene( view.a, view.b ) );
 	}
 	if ( !view.walk && !view.way ) {
-		drawn.set( view, { scene, fit: fitNow(), box: svg.getAttribute( 'viewBox' ), S, sel: Object.assign( {}, sel ) } );
+		drawn.set( view, { scene, fit: fitNow(), box: svg.getAttribute( 'viewBox' ), S, T, sel: Object.assign( {}, sel ) } );
 	}
 	stage.classList.toggle( 'webbed', !!scene.web );
 	stage.classList.toggle( 'deep', !!scene.deep );
