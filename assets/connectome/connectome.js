@@ -4667,11 +4667,26 @@ $( 'qr' ).addEventListener( 'click', () => {
 	$( 'qr' ).classList.toggle( 'big' );
 	qrRoom( true );
 } );
-// The key: open while its button is pressed in (a finger, a keyboard), and for a pointer while it is on it (the
-// stylesheet's :hover). Escape, or a press anywhere else, closes it.
+// The key: open while its button is pressed in (a finger, a keyboard), and for a mouse while it is on it.
+// Escape, or a press anywhere else, closes it.
 function keyed( on ) {
 	stage.classList.toggle( 'keyed', on );
 	$( 'key' ).setAttribute( 'aria-expanded', String( on ) );
+}
+// A mouse on the button or on the key (never a finger, whose hover sticks): by the script, since a browser's own
+// word on whether it can hover is not to be had everywhere (headless Firefox says it can't).
+let peekOff = 0;
+for ( const el of [ $( 'key' ), $( 'legend' ) ] ) {
+	el.addEventListener( 'pointerenter', ( e ) => {
+		if ( e.pointerType === 'mouse' ) {
+			clearTimeout( peekOff );
+			stage.classList.add( 'peek' );
+		}
+	} );
+	el.addEventListener( 'pointerleave', () => {
+		clearTimeout( peekOff );
+		peekOff = setTimeout( () => stage.classList.remove( 'peek' ), 140 );      // time to cross from the button to the key
+	} );
 }
 $( 'key' ).addEventListener( 'click', ( e ) => {
 	e.stopPropagation();

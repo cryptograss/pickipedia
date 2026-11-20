@@ -232,10 +232,7 @@ main {
 	color: var( --ink2 );
 	font-size: 12px;
 }
-#stage.keyed #legend { display: flex; }
-@media ( hover: hover ) {
-	#key:hover + #legend, #legend:hover { display: flex; }
-}
+#stage.keyed #legend, #stage.peek #legend { display: flex; }
 
 #legend .lg { white-space: nowrap; }
 #legend svg { vertical-align: -1px; }
