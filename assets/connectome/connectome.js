@@ -573,13 +573,25 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
 
 /**
  * The room the middle's card takes, in the frame's upper right corner: its size on the page, and its box in the
- * drawing's own measure, which nothing of the graph is set down in. One height whatever it says, so the words
+ * drawing's own measure, which nothing of the graph is set down in. One size whatever it says, so the words
  * arriving never re-lay the graph.
+ *
+ * Justin, #connectome, 20 Nov 2026, 19:41Z: "it can afford to be a _little_ bigger ... I still want it to include
+ * the first 3 or so details from their MusicianInfo card. And the picture can be maybe 30% bigger." So it holds
+ * a picture of 84px (58 on a phone, from 64 and 44), the name, and three lines of what their page says they do:
+ *   a phone (the drawing under 520px wide): up to 200px by 126, the picture and the name in a row, a line each under;
+ *   up to 270px wide (Rabbithole's pane on a laptop): by 176, laid the same, with a fourth line to share out;
+ *   wider: up to 300px by 150, the picture beside everything, six lines to share out.
+ * `side` says which way it is laid, `small` that it is the phone's.
  */
 function cardRoom( W ) {
-	const wide = svg.clientWidth || W, k = W / wide;
-	const cw = Math.round( Math.max( 150, Math.min( 236, wide * 0.3 ) ) ), ch = wide < 520 ? 80 : 100;
-	return { cw, ch, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
+	const wide = svg.clientWidth || W, k = W / wide, phone = wide < 520;
+	// A song's own card says its name and a line or two: the size it had, so the ring round a song keeps all its pickers.
+	const song = !!view && view.cut !== undefined && view.playing === undefined;
+	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) :
+		( phone ? Math.max( 160, Math.min( 200, wide * 0.46 ) ) : Math.max( 200, Math.min( 300, wide * 0.4 ) ) ) );
+	const side = !song && cw >= 270, ch = song ? ( phone ? 80 : 100 ) : ( phone ? 126 : ( side ? 150 : 176 ) );
+	return { cw, ch, side, small: phone, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
 }
 
 /** K.ego's ring, with a place left empty at the upper right when the middle's card is out (K.gapFor). */
@@ -599,10 +611,23 @@ function ringFor( o, card ) {
 /** Nothing small under the card: a bead or one a step further out that came to stand in its corner goes, with its lines and what they say. */
 function clearCard( sc, W ) {
 	const b = cardRoom( W ).box;
+	// A bead by its own size, and by its name's where it has one written beside it (nameBeads); one a step out by
+	// its name's, which is always written beside it.
+	const under = ( d ) => {
+		if ( d.kind === 'far' ) {
+			return d.x > b.x1 - tx( 110 ) && d.y < b.y2 + tx( 20 );
+		}
+		if ( d.x > b.x1 - 12 && d.y < b.y2 + 12 ) {
+			return true;
+		}
+		if ( d.label && d.at ) {
+			const w = wide( d.label, FONT.bead ), x1 = d.x + d.at.x - ( d.at.anchor === 'start' ? 0 : ( d.at.anchor === 'end' ? w : w / 2 ) );
+			return x1 + w > b.x1 - 6 && d.y + d.at.y - tx( 10 ) < b.y2 + 6;
+		}
+		return false;
+	};
 	for ( const [ key, d ] of [ ...sc.nodes ] ) {
-		// a bead by its own size; one a step out by its name's, which is written beside it
-		const padX = d.kind === 'far' ? tx( 110 ) : 12, padY = d.kind === 'far' ? tx( 20 ) : 12;
-		if ( ( d.kind === 'dot' || d.kind === 'far' ) && d.x > b.x1 - padX && d.y < b.y2 + padY ) {
+		if ( ( d.kind === 'dot' || d.kind === 'far' ) && under( d ) ) {
 			sc.nodes.delete( key );
 			for ( const part of [ sc.lines, sc.pills ] ) {
 				for ( const [ k, l ] of [ ...part ] ) {
@@ -3874,44 +3899,130 @@ function qrSay() {
 }
 
 /**
- * The card of the one in the middle, in the graph's upper right corner, where the ring has left a place empty
- * (Justin, #connectome, 20 Nov 2026, 14:16Z). A picker's: their picture, their name as the way to their page,
- * what they play, and what the headline's second line says of them. A song's: its name and that line. It is the
- * soloist's card in Rabbithole, where the music's own view has no headline and Rabbithole no band under the graph.
+ * What a picker's page says they do: the first lines of the box {{MusicianInfo}} draws there (its list,
+ * ul.thinkingentity-verbs), in the wiki's own words and with its links. Asked of the wiki once a picker, by the
+ * explorer itself, so the card is the same in Rabbithole and out of it. A page with no such list, or no answer:
+ * no lines. Each line is its parts in order: a string, or { t, href } for a link to a page that exists.
  */
+const DOES = 3;
+const doesOf = new Map();
+function doesFrom( html ) {
+	const list = html ? new DOMParser().parseFromString( html, 'text/html' ).querySelector( 'ul.thinkingentity-verbs' ) : null;
+	const parts = ( node, out ) => {
+		for ( const c of node.childNodes ) {
+			if ( c.nodeType === 3 ) {
+				out.push( c.nodeValue );
+			} else if ( c.nodeType === 1 && c.tagName === 'A' && !c.classList.contains( 'new' ) && /^\/wiki\//.test( c.getAttribute( 'href' ) || '' ) ) {
+				out.push( { t: c.textContent, href: c.getAttribute( 'href' ) } );
+			} else if ( c.nodeType === 1 ) {
+				parts( c, out );                                         // bold, italics, a link to no page yet: their words
+			}
+		}
+		return out;
+	};
+	return list ? [ ...list.children ].filter( ( li ) => li.tagName === 'LI' ).slice( 0, DOES ).map( ( li ) => parts( li, [] ) )
+		.filter( ( line ) => line.some( ( x ) => ( typeof x === 'string' ? x : x.t ).trim() ) ) : [];
+}
+function cardDoes( name ) {
+	if ( !doesOf.has( name ) ) {
+		const q = new URLSearchParams( { action: 'parse', page: name, prop: 'text', redirects: 1, disableeditsection: 1, disablelimitreport: 1,
+			format: 'json', formatversion: 2, maxage: 600, smaxage: 600 } );
+		if ( HOME ) {
+			q.set( 'origin', '*' );                                  // a preview of the wiki's files asks the wiki from outside
+		}
+		doesOf.set( name, fetch( HOME + '/api.php?' + q ).then( ( r ) => ( r.ok ? r.json() : Promise.reject( new Error( String( r.status ) ) ) ) )
+			.then( ( d ) => doesFrom( d && d.parse && d.parse.text ) )
+			.catch( () => {
+				doesOf.delete( name );                               // no answer this time: asked again when they next come round
+				return [];
+			} ) );
+	}
+	return doesOf.get( name );
+}
+
+/**
+ * The lines under the name share out what room the card has: a line each first, the last ones left out where even
+ * that won't go; then any line that is cut gets another, in order, while there is room. Nothing is cut mid-line.
+ */
+function cardFit( el ) {
+	const ul = el.querySelector( '.card-does' ), lis = ul ? [ ...ul.children ] : [];
+	if ( !lis.length ) {
+		return;
+	}
+	lis.forEach( ( li ) => {
+		li.hidden = false;
+		li.style.setProperty( '--n', 1 );
+	} );
+	const lh = parseFloat( getComputedStyle( lis[ 0 ] ).lineHeight ), gap = parseFloat( getComputedStyle( ul ).rowGap ) || 0, room = ul.clientHeight + 0.5;
+	const n = Math.max( 0, Math.min( lis.length, Math.floor( ( room + gap ) / ( lh + gap ) ) ) );
+	lis.forEach( ( li, i ) => {
+		li.hidden = i >= n;
+	} );
+	let spare = n ? Math.floor( ( room - n * lh - ( n - 1 ) * gap ) / lh ) : 0;
+	for ( let lines = 2; spare > 0 && lines <= 6; lines++ ) {
+		for ( const li of lis.slice( 0, n ) ) {
+			if ( spare > 0 && li.scrollHeight > li.clientHeight + 1 ) {
+				li.style.setProperty( '--n', lines );
+				spare--;
+			}
+		}
+	}
+}
+
+/**
+ * The card of the one in the middle, in the graph's upper right corner, where the ring has left a place empty
+ * (Justin, #connectome, 20 Nov 2026, 14:16Z). A picker's: their picture, their name as the way to their page, and
+ * the first three things their page's {{MusicianInfo}} says they do (19:41Z: "it doesn't need to show instrument
+ * or 'Has played...' details"). No page, or a page that says none: the picture and the name. A song's: its name
+ * and what the headline's second line says. It is the soloist's card in Rabbithole, where the music's own view has
+ * no headline and Rabbithole no band under the graph.
+ */
+let cardFor = null;              // whose lines the card is waiting on
 function cardSay() {
 	const el = $( 'card' ), on = !!view && cardOn( view );
 	el.hidden = !on;
+	cardFor = null;
 	if ( !on ) {
 		return;
 	}
-	const { cw, ch } = cardRoom( frame().W ), slim = cw < 200;
+	const { cw, ch, side, small } = cardRoom( frame().W );
 	el.style.width = cw + 'px';
 	el.style.height = ch + 'px';
 	el.style.top = ( ( $( 'say' ).offsetHeight || 0 ) + 8 ) + 'px';         // the graph's own corner, under the headline where there is one
-	el.classList.toggle( 'slim', slim );
-	// A name that took its second line leaves a line less under it (the card is one size whatever it says).
-	const fit = () => {
-		const name = el.querySelector( '.card-name' );
-		el.classList.remove( 'tall' );
-		el.classList.toggle( 'tall', !!name && name.offsetHeight > parseFloat( getComputedStyle( name ).lineHeight ) * 1.5 );
-	};
-	const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
+	el.classList.toggle( 'side', side );
+	el.classList.toggle( 'small', small );
 	if ( view.cut !== undefined && view.playing === undefined ) {
-		el.replaceChildren( h( 'div', { class: 'card-in' }, h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) ) );
-		fit();
+		const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
+		el.classList.add( 'nopic' );
+		el.replaceChildren( h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) );
 		return;
 	}
-	const p = P( view.a ), on2 = view.playing !== undefined && G.songcast[ view.playing ];
-	const role = on2 ? ( G.songcast[ view.playing ].pickers.find( ( x ) => x[ 0 ] === view.a ) || [] ) : [];
-	el.replaceChildren( ...[
-		p.img ? h( 'img', { src: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=120', alt: '' } ) : null,
-		h( 'div', { class: 'card-in' },
-			h( 'a', { class: 'card-name' + ( p.page ? '' : ' new' ), href: pageUrl( p.name ), target: '_top', title: p.page ? p.name + "'s page on PickiPedia" : 'Start ' + p.name + "'s page" }, p.name ),
-			// what they play, and on which song; a slim card says the first alone, the song being named beside it in the graph
-			h( 'span', { class: 'card-what' }, [ on2 ? ( role[ 2 ] || role[ 1 ] || p.inst ) : p.inst, on2 && !slim ? 'on ' + G.songcast[ view.playing ].song : '' ].filter( Boolean ).join( ' · ' ) ),
-			h( 'span', { class: 'card-more' }, ...more ) ) ].filter( Boolean ) );
-	fit();
+	const p = P( view.a );
+	const face = p.img ? h( 'img', { src: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=180', alt: '' } ) : null;
+	if ( face ) {                                                    // a picture that won't come: the name has its room
+		face.addEventListener( 'error', () => {
+			face.remove();
+			el.classList.add( 'nopic' );
+			cardFit( el );
+		} );
+	}
+	el.classList.toggle( 'nopic', !face );
+	const does = h( 'ul', { class: 'card-does' } );
+	el.replaceChildren( ...[ face,
+		h( 'a', { class: 'card-name' + ( p.page ? '' : ' new' ), href: pageUrl( p.name ), target: '_top', title: p.page ? p.name + "'s page on PickiPedia" : 'Start ' + p.name + "'s page" }, p.name ),
+		does ].filter( Boolean ) );
+	if ( !p.page ) {
+		return;
+	}
+	const who = cardFor = p.name;
+	cardDoes( p.name ).then( ( lines ) => {
+		if ( cardFor !== who || !does.isConnected ) {
+			return;                                                  // the card is someone else's by now
+		}
+		does.replaceChildren( ...lines.map( ( line ) => h( 'li', null,
+			...line.map( ( x ) => ( typeof x === 'string' ? x : h( 'a', { href: HOME + x.href, target: '_top' }, x.t ) ) ) ) ) );
+		cardFit( el );
+	} );
 }
 
 /**
@@ -4036,9 +4147,8 @@ function comeTo( state ) {
  * The pointer, and the keys
  * --------------------------------------------------------------------------------------------------------- */
 
-function say( at, title, lines, hint ) {
-	tip.replaceChildren( h( 'b', null, title ), ...lines.filter( Boolean ).map( ( l ) => h( 'div', null, l ) ),
-		hint ? h( 'span', { class: 'do' }, hint ) : null );
+function say( at, ...parts ) {
+	tip.replaceChildren( ...parts.filter( Boolean ) );
 	tip.hidden = false;
 	const box = stage.getBoundingClientRect(), r = at.getBoundingClientRect();
 	const w = tip.offsetWidth, ht = tip.offsetHeight;
@@ -4366,7 +4476,45 @@ function hover( g ) {
 	} else {
 		g.classList.add( 'hot' );
 	}
-	say( g, w.tipTitle || w.title, w.lines, w.hint );
+	if ( view.walk ) {                                               // your rabbithole: a song heard says its own note, as it did
+		say( g, h( 'b', null, w.tipTitle || w.title ), ...w.lines.filter( Boolean ).map( ( l ) => h( 'div', null, l ) ),
+			w.hint ? h( 'span', { class: 'do' }, w.hint ) : null );
+		return;
+	}
+	const t = tipFor( g );
+	if ( t ) {
+		say( g, t.when ? h( 'div', { class: 'when' }, t.when ) : null, t.who ? h( 'div', null, t.who ) : null );
+	}
+}
+
+/**
+ * What a pointer resting on a mark is told (Justin, #connectome, 20 Nov 2026, 19:41Z: "The tooltip on hover is
+ * _way_ too much. It's very distracting. I don't think a tooltip is really required for pickers at all, and for
+ * shows/songs, make it very terse, just showing the date and ensemble"). A picker, wherever they stand: nothing.
+ * A line between two pickers: nothing. A show, a record, a track or a song: when it was, and who is on it of
+ * those the sources here name, six at most and then how many more. null: no note. The lines and names a pointer
+ * lights are lit as before, and the sheet a held finger opens says all it did.
+ */
+const TIP_NAMES = 6;
+function tipFor( g ) {
+	const it = live[ g.dataset.kind ].get( g.dataset.k ), d = it && !it.dead ? it.d : null;
+	let when = '', cast = [];
+	if ( !d ) {
+		return null;
+	}
+	if ( d.stands === 'song' ) {
+		const entry = d.cut !== undefined && G.songcast ? G.songcast[ d.cut ] : null;
+		when = ( entry && entry.recorded ) || ( d.cuts && d.cuts[ 0 ] ? K.when( d.cuts[ 0 ].date ) : '' );
+		cast = entry ? entry.pickers.map( ( x ) => x[ 0 ] ).filter( ( id ) => id >= 0 && P( id ) ) : [];
+	} else if ( ( d.stands === 'piece' || d.stands === 'loose' ) && !d.more && d.piece !== undefined && M( d.piece ) ) {
+		const pc = M( d.piece );
+		when = K.when( G.music[ pc.m ].date );
+		cast = pc.cast || [];
+	} else {
+		return null;
+	}
+	const who = cast.slice( 0, TIP_NAMES ).map( first ).join( ', ' ) + ( cast.length > TIP_NAMES ? ` and ${ cast.length - TIP_NAMES } more` : '' );
+	return when || who ? { when, who } : null;
 }
 
 function click( g ) {
