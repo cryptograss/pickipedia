@@ -573,13 +573,34 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
 
 /**
  * The room the middle's card takes, in the frame's upper right corner: its size on the page, and its box in the
- * drawing's own measure, which nothing of the graph is set down in. One height whatever it says, so the words
+ * drawing's own measure, which nothing of the graph is set down in. One size whatever it says, so the words
  * arriving never re-lay the graph.
+ *
+ * Justin, #connectome, 20 Nov 2026, 19:41Z: "it can afford to be a _little_ bigger ... I still want it to include
+ * the first 3 or so details from their MusicianInfo card. And the picture can be maybe 30% bigger." So it holds
+ * a picture of 84px (58 on the small one, from 64 and 44), the name, and what their page says they do. How big it
+ * may be is what the ring leaves of the corner, which goes by the drawing's shape (each was swept for marks under it):
+ *   `side`, a drawing 675px wide or more: 300px wide, the picture beside everything. 104px high, and more where the
+ *     drawing is tall, to 150: a ring of eight has a name a fifth of the way down (the card it replaces was 100);
+ *   520 to 675px wide and 640 tall (Rabbithole's pane on a 1366px laptop): 208 to 269px by 176, the picture and the
+ *     name in a row, four lines under;
+ *   `tower`, 440 to 520px wide and 560 tall or more (the pane on a 1280px laptop): the song's name beside a
+ *     soloist comes to within 150px of the corner there, so 150px by 212, the picture over the name over the lines;
+ *   `compact`, under 440px wide and over 500 tall (a phone with the graph alone: a ring of six in a narrow frame,
+ *     with a name 90px under the top and 150 from the side): the size it was, 150px by 80, a 44px picture, one line;
+ *   `small`, anything else (a phone in Rabbithole; a low window): up to 200px by 126, laid as the second.
  */
 function cardRoom( W ) {
-	const wide = svg.clientWidth || W, k = W / wide;
-	const cw = Math.round( Math.max( 150, Math.min( 236, wide * 0.3 ) ) ), ch = wide < 520 ? 80 : 100;
-	return { cw, ch, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
+	const wide = svg.clientWidth || W, tall = svg.clientHeight || 0, k = W / wide;
+	// A song's own card says its name and a line or two: the size it had, so the ring round a song keeps all its pickers.
+	const song = !!view && view.cut !== undefined && view.playing === undefined;
+	const side = !song && wide >= 675, tower = !song && wide >= 440 && wide < 520 && tall >= 560, compact = !song && wide < 440 && tall > 500;
+	const small = song ? wide < 520 : ( !side && !tower && !compact && !( wide >= 520 && tall >= 640 ) );
+	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) : ( side ? 300 : ( tower || compact ? 150 :
+		( small ? Math.max( 160, Math.min( 200, wide * 0.46 ) ) : Math.max( 208, Math.min( 269, wide * 0.4 ) ) ) ) ) );
+	const ch = Math.round( song ? ( wide < 520 ? 80 : 100 ) :
+		( side ? Math.max( 104, Math.min( 150, tall * 0.2 - 30 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : 176 ) ) ) ) );
+	return { cw, ch, side, tower, compact, small, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
 }
 
 /** K.ego's ring, with a place left empty at the upper right when the middle's card is out (K.gapFor). */
@@ -587,7 +608,7 @@ function ringFor( o, card ) {
 	if ( !card ) {
 		return K.ego( o );
 	}
-	const g = K.gapFor( o.named );
+	const g = K.gapFor( o.named, !!o.over );
 	const lay = K.ego( Object.assign( {}, o, { turn: g.turn } ) );
 	lay.named = lay.named.filter( ( _, i ) => i !== g.gap );
 	if ( lay.far ) {
@@ -599,10 +620,23 @@ function ringFor( o, card ) {
 /** Nothing small under the card: a bead or one a step further out that came to stand in its corner goes, with its lines and what they say. */
 function clearCard( sc, W ) {
 	const b = cardRoom( W ).box;
+	// A bead by its own size, and by its name's where it has one written beside it (nameBeads); one a step out by
+	// its name's, which is always written beside it.
+	const under = ( d ) => {
+		if ( d.kind === 'far' ) {
+			return d.x > b.x1 - tx( 110 ) && d.y < b.y2 + tx( 20 );
+		}
+		if ( d.x > b.x1 - 12 && d.y < b.y2 + 12 ) {
+			return true;
+		}
+		if ( d.label && d.at ) {
+			const w = wide( d.label, FONT.bead ), x1 = d.x + d.at.x - ( d.at.anchor === 'start' ? 0 : ( d.at.anchor === 'end' ? w : w / 2 ) );
+			return x1 + w > b.x1 - 6 && d.y + d.at.y - tx( 10 ) < b.y2 + 6;
+		}
+		return false;
+	};
 	for ( const [ key, d ] of [ ...sc.nodes ] ) {
-		// a bead by its own size; one a step out by its name's, which is written beside it
-		const padX = d.kind === 'far' ? tx( 110 ) : 12, padY = d.kind === 'far' ? tx( 20 ) : 12;
-		if ( ( d.kind === 'dot' || d.kind === 'far' ) && d.x > b.x1 - padX && d.y < b.y2 + padY ) {
+		if ( ( d.kind === 'dot' || d.kind === 'far' ) && under( d ) ) {
 			sc.nodes.delete( key );
 			for ( const part of [ sc.lines, sc.pills ] ) {
 				for ( const [ k, l ] of [ ...part ] ) {
@@ -1029,7 +1063,10 @@ function further( v, lay, mine, seats, seatOf, web, W, H ) {
 		return b ? { label, at: { x: b.x, y: b.y, anchor: b.anchor } } : null;
 	};
 	const clear = ( l, of, pad ) => K.clearOf( l, of, pad ).length === l.length;
-	const on = K.beyond( G, v.a, mine.map( ( c ) => c.id ), 2, v.keep || [] ), fars = [];
+	// One of the band the middle has no tie with has a seat here all the same (egoScene's `apart`): not a step further too.
+	const seated = new Set( mine.map( ( c ) => c.id ) ), strangers = mine.filter( ( c ) => c.apart ).length;
+	const on = K.beyond( G, v.a, mine.map( ( c ) => c.id ), 2 + strangers, v.keep || [] )
+		.map( ( l ) => ( strangers ? l.filter( ( f ) => !seated.has( f.id ) ).slice( 0, 2 ) : l ) ), fars = [];
 	disc( lay.C, 26 );
 	const mid = wide( cut( first( v.a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ), FONT.subject ) / 2;
 	discs.push( { x1: lay.C.x - mid, y1: lay.C.y + 22, x2: lay.C.x + mid, y2: lay.C.y + 22 + tx( 19 ) } );   // the middle's own name, tucked under it
@@ -1084,23 +1121,67 @@ function egoScene( v ) {
 	// goal), then the goal _needs_ to be displayed, and in the big six that are nearest").
 	const came = new Set( ( v.keep || [] ).filter( ( k ) => G.adj[ a ].has( k ) ) );
 	const goal = GAME && !GAME.done && GAME.to !== a && G.adj[ a ].has( GAME.to ) && !came.has( GAME.to ) ? GAME.to : undefined;
-	const pinned = ( c ) => came.has( c.id ) || c.id === goal;
-	const queue = K.keeping( G, a, comp, goal === undefined ? v.keep : ( v.keep || [] ).concat( goal ) );
-	const kept = K.fewPer( G, queue, 2, queue.filter( pinned ).length );
-	const want = Math.min( kept.length, H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 ) );
-	// another turn of the company, where there are more than one view names; those the reader came by stay, and the goal
-	const stay = kept.filter( pinned ).length;
-	const ring = K.turned( kept, stay, Math.max( 1, want - stay ), v.turn || 0 );
-	const carded = cardOn( v );                                     // their card in the upper right corner: one seat fewer round them
-	const lay = ringFor( { W, H, named: want, dots: ring.length - want + ( carded && want > 2 ? 1 : 0 ), far: true }, carded );
 	// Rabbithole's traverse (Justin, #connectome, 18 Nov 2026: "I want the solos to traverse to the picker, but
 	// ensuring that the song still remains very visible; as big as the picker"): the one taking the solo in the
 	// middle, and the song in the ring's top seat, drawn as the song's own view draws it in its middle. Going from
 	// the song's view to here, the soloist moves into the middle and the song up to the top.
 	const playing = v.playing !== undefined && G.songcast ? G.songcast[ v.playing ] : null;
+	// And the rest of the band round them the whole time (Justin, #connectome, 20 Nov 2026, 19:41Z: "whoever is next
+	// in order of solos is already shown. Otherwise, it jumps to someone who is, at the time the jump starts, off
+	// the page ... it probably just makes sense to keep the ensemble visible the whole time"): everyone else on the
+	// cut holds a named seat ahead of the soloist's other company, the same seat from one solo to the next. `band`:
+	// those of them the soloist has a tie with; `apart`: those the sources tie to nobody here, who are on the song
+	// all the same, and hang on a line from it.
+	const others = playing ? K.bandOf( G, playing, a ) : [];
+	const band = others.filter( ( id ) => G.adj[ a ].has( id ) ), apart = others.filter( ( id ) => !G.adj[ a ].has( id ) );
+	const inBand = new Set( band );
+	const pinned = ( c ) => came.has( c.id ) || c.id === goal || inBand.has( c.id );
+	const queue = K.keeping( G, a, comp, band.concat( goal === undefined ? ( v.keep || [] ) : ( v.keep || [] ).concat( goal ) ) );
+	const kept = K.fewPer( G, queue, 2, queue.filter( pinned ).length );
+	const carded = cardOn( v );                                     // their card in the upper right corner: one seat fewer round them
+	// The places round the middle: as many as the frame names, and while a song plays as many as its band takes
+	// (K.bandSeats: with the song's own and the card's empty one), where the frame holds them.
+	const usual = H > 560 && W > 700 ? 8 : ( W > 460 || H > 500 ? 6 : 4 );
+	const want = playing ? K.bandSeats( others.length, usual, carded, W, H ) : Math.min( kept.length, usual );
+	// another turn of the company, where there are more than one view names; those the reader came by stay, and the goal
+	const stay = kept.filter( pinned ).length + apart.length;
+	const ring = K.turned( kept, stay - apart.length, Math.max( 1, want - stay ), v.turn || 0 );
+	ring.splice( band.length, 0, ...apart.map( ( id ) => ( { id, tie: { w: 0.35, ev: [], played: false }, apart: true } ) ) );
+	// How many of the company are left for beads: all but those the ring names (a place is the card's, where it is
+	// out, and one the song's while it plays).
+	const places = want - ( carded && want > 2 ? 1 : 0 );
+	const need = Math.max( 0, ring.length - places + ( playing && places > 1 ? 1 : 0 ) );
+	const lay = ringFor( { W, H, named: want, dots: playing && carded ? Math.ceil( need * 1.5 ) + 2 : need, far: true, over: !!playing }, carded );
+	// The card's corner, in the drawing's own measure: nothing named is set down under it.
+	const corner = carded ? cardRoom( W ).box : null;
+	if ( playing && carded ) {
+		// Nothing small pointing up at the card while the music steers (the same message: "maybe we can reduce the
+		// number of small one pointing to the upper-right if rabbithole is playing"): no bead in the upper right,
+		// and the beads there would have been are spread round the rest.
+		lay.dots = K.spread( lay.dots.filter( ( p ) => !( p.x > lay.C.x + 20 && p.y < lay.C.y - 20 ) ), need + 2 );
+	}
+	if ( corner && lay.named.length ) {
+		// The ring sits clear below the card: where its top place would be under the card's corner, the whole of
+		// it is set down lower, as far as the frame has room under it.
+		// By the named places alone, which are the same for every one of a band: the ring is as low for each solo.
+		const top = Math.min( ...lay.named.map( ( p ) => p.y ) ), foot = Math.max( ...lay.named.map( ( p ) => p.y ) );
+		const lower = Math.round( Math.max( 0, Math.min( corner.y2 + ( playing ? 30 : 22 ) - top, H - 44 - tx( 18 ) - foot ) ) );
+		if ( lower > 0 ) {
+			const drop = ( p ) => {
+				p.y += lower;
+			};
+			[ lay.C, ...lay.named, ...lay.dots ].forEach( drop );
+			( lay.far || [] ).forEach( ( f ) => [ f.main, ...f.sides ].forEach( drop ) );
+			lay.dots = lay.dots.filter( ( p ) => p.y < H - 10 );
+		}
+	}
 	let songAt = null;
 	if ( playing && lay.named.length > 1 ) {
-		const top = lay.named.reduce( ( best, p, i ) => ( p.y < lay.named[ best ].y ? i : best ), 0 );
+		// the top seat; where the card's corner comes down over that one, the highest that is clear of it
+		const under = ( p ) => !!corner && p.x + 62 > corner.x1 && p.y - 26 < corner.y2;       // its mark, and the way into Rabbithole beside it
+		const high = ( from ) => from.reduce( ( best, i ) => ( best < 0 || lay.named[ i ].y < lay.named[ best ].y ? i : best ), -1 );
+		const all = lay.named.map( ( _, i ) => i ), clear = all.filter( ( i ) => !under( lay.named[ i ] ) );
+		const top = high( clear.length ? clear : all );
 		songAt = lay.named[ top ];
 		lay.named = lay.named.filter( ( _, i ) => i !== top );
 		if ( lay.far ) {
@@ -1108,21 +1189,47 @@ function egoScene( v ) {
 		}
 	}
 	const n = lay.named.length, mine = ring.slice( 0, n );
-	const pan = slide( 'p' + a, lay.C );
-	const seats = K.seat( lay.named, mine.map( ( c ) => wanted( 'p' + c.id, pan ) ) );
+	// While a song plays nothing slides: each of the band wants the seat they have, and the one whose solo is over
+	// (they were in the middle) the seat the next one has left. Otherwise the whole picture slides as one.
+	const pan = playing ? { x: 0, y: 0 } : slide( 'p' + a, lay.C );
+	const left = playing ? was.get( 'p' + a ) : null;
+	const wantOf = ( is ) => {
+		const w = wanted( is, pan );
+		return w && left && Math.hypot( w.x - lay.C.x, w.y - lay.C.y ) < 24 ? left : w;
+	};
+	const seats = K.seat( lay.named, mine.map( ( c ) => wantOf( 'p' + c.id ) ) );
 	const seatOf = new Map( mine.map( ( c, i ) => [ c.id, lay.named[ seats[ i ] ] ] ) );
 	// The web: who of the company have played with each other.
 	const web = K.among( G, [ ...seatOf.keys() ], looseOnly ).map( ( t ) => Object.assign( t, { bow: K.arc( lay, seatOf.get( t.u ), seatOf.get( t.v ) ) } ) );
 	// A step further, where there's room: then it says where the names and the beads go, since there are lines out as well as in.
 	const out = lay.far ? further( v, lay, mine, seats, seatOf, web, W, H ) : null;
 	// Each name as it will be written, so no bead is set down under one, however long it is or far it leans.
-	const names = out ? out.names : mine.map( ( c, i ) => nameAt( first( c.id ), lay.named[ seats[ i ] ], W, FONT.named ) );
+	// A name over a seat beside the card's corner ends where the card begins, as one by the frame's edge ends there.
+	const edge = ( pos ) => ( corner && !pos.below && pos.y - 18 - tx( 18 ) < corner.y2 + 4 && pos.x < corner.x1 ? Math.min( W, corner.x1 - 2 ) : W );
+	// Nor on the song's mark, where a seat beside the song's has its name in the song's own row: it ends short of it.
+	const nameFor = ( name, pos ) => {
+		let lo = 4, hi = edge( pos ) - 4;
+		if ( songAt ) {
+			const y1 = pos.below ? pos.y + 18 : pos.y - 18 - tx( 18 ), y2 = pos.below ? pos.y + 18 + tx( 18 ) : pos.y - 18;
+			if ( y2 > songAt.y - 34 && y1 < songAt.y + 34 ) {
+				if ( pos.x < songAt.x ) {
+					hi = Math.min( hi, songAt.x - 38 );
+				} else {
+					lo = Math.max( lo, songAt.x + 68 );
+				}
+			}
+		}
+		const lean = ( pos.lean || 0 ) * ( wide( K.clip( name, 26 ), FONT.named ) / 2 + 3 );
+		const fit = fitName( name, pos.x + lean, lo, Math.max( hi, lo + 40 ), FONT.named );
+		return { label: fit.label, dx: Math.round( lean ) + fit.dx };
+	};
+	const names = out ? out.names : mine.map( ( c, i ) => nameFor( first( c.id ), lay.named[ seats[ i ] ] ) );
 	const spots = out ? K.spread( out.open, ring.length - n ) : K.clearOf( lay.dots, names.map( ( nm, i ) => {
 		const pos = lay.named[ seats[ i ] ];
 		return nameBox( pos, nm.dx, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -18 - tx( 18 ), pos.below ? 18 + tx( 18 ) : -18 );
 	} ), 10 );
 	const shown = n + spots.length;
-	const beads = K.seat( spots, ring.slice( n, shown ).map( ( c ) => wanted( 'p' + c.id, pan ) ) );
+	const beads = K.seat( spots, ring.slice( n, shown ).map( ( c ) => wantOf( 'p' + c.id ) ) );
 	// Where the line the reader came by says what it is: a little past halfway out, or further, until its band
 	// is clear of the middle's own name (Justin, #connectome, 15 Nov 2026: a label never on the middle's name).
 	const midBox = ( () => {
@@ -1142,11 +1249,44 @@ function egoScene( v ) {
 	};
 	// The one in the middle is named there too, as on the cards, though the headline says who it is (Justin, #connectome, 15 Nov 2026).
 	addNode( sc, a, lay.C, 'subject', { rabbit: true, label: cut( first( a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ) } );
+	// The song's name, over it: between whatever is named to either side of it in its own row, the card's corner
+	// among them, and cut short where that leaves it less room than it takes.
+	const songName = ( () => {
+		if ( !songAt ) {
+			return null;
+		}
+		const y1 = songAt.y - 40 - tx( 17 ), y2 = songAt.y - 36;   // written as a middle's name is (FONT.subject), with the paper round its letters
+		let lo = 7, hi = W - 7;
+		const keep = ( x1, x2 ) => {
+			if ( x1 > songAt.x ) {
+				hi = Math.min( hi, x1 - 9 );
+			} else if ( x2 < songAt.x ) {
+				lo = Math.max( lo, x2 + 9 );
+			}
+		};
+		if ( corner && y1 < corner.y2 + 4 ) {
+			keep( corner.x1, 1e5 );
+		}
+		mine.forEach( ( c, i ) => {
+			const pos = lay.named[ seats[ i ] ], nm = names[ i ];
+			if ( pos.y + 16 > y1 && pos.y - 16 < y2 ) {                // their mark
+				keep( pos.x - 16, pos.x + 16 );
+			}
+			if ( !out && nm ) {                                      // and their name, where this view says where names go
+				const b = nameBox( pos, nm.dx || 0, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -18 - tx( 18 ), pos.below ? 18 + tx( 18 ) : -18 );
+				if ( b.y2 > y1 && b.y1 < y2 ) {
+					keep( b.x1, b.x2 );
+				}
+			}
+		} );
+		return fitName( K.clip( playing.song, 30 ), songAt.x, lo, Math.max( hi, lo + 40 ), FONT.subject );
+	} )();
+	const songHalf = songName ? Math.max( 34, wide( songName.label, FONT.subject ) / 2 + 3 ) : 0, songDx = songName ? songName.dx : 0;
 	if ( songAt ) {                                                  // the song on now, and the line from it to who's taking it
 		const cuts = ( playing.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean );
 		const tier = cuts.length ? Math.max( ...cuts.map( ( c ) => c.tier ) ) : 0;
 		sc.nodes.set( 'song', { stands: 'song', is: 'song', x: songAt.x, y: songAt.y, kind: 'song', o: 1, title: playing.song, tier,
-			cuts: [ cuts[ 0 ] ].filter( Boolean ), cut: v.playing, above: true } );
+			cuts: [ cuts[ 0 ] ].filter( Boolean ), cut: v.playing, above: true, dx: songDx, label: songName.label } );
 		sc.lines.set( 'sp' + a, { a: 'song', b: 'p' + a, u: -1, v: a, tie: { played: true, tier, w: 1 }, stands: 'tie',
 			w: lineWidth( { w: 1 } ), o: 1, role: 'spoke', c: a, quiet: true, delay: 120 } );
 	}
@@ -1155,7 +1295,14 @@ function egoScene( v ) {
 		const pos = named ? lay.named[ seats[ i ] ] : spots[ beads[ i - n ] ];
 		const by = named && came.has( c.id );
 		addNode( sc, c.id, pos, named ? 'named' : 'dot',
-			Object.assign( { r: dotRadius( c.tie.w ), delay: named ? 80 + i * 40 : 300, tie: c.tie }, named ? names[ i ] : null ) );
+			Object.assign( { r: dotRadius( c.tie.w ), delay: named ? 80 + i * 40 : 300, tie: c.apart ? undefined : c.tie }, named ? names[ i ] : null ) );
+		if ( c.apart ) {                                             // on the song, and tied to the soloist by nothing the sources name: the song's line says so
+			if ( songAt ) {
+				sc.lines.set( 'sp' + c.id, { a: 'song', b: 'p' + c.id, u: -1, v: c.id, tie: { played: true, tier: 0, w: 0.35 }, stands: 'tie',
+					w: lineWidth( { w: 0.35 } ), o: named ? 0.6 : 0, role: 'spoke', c: c.id, quiet: true, fine: !named, delay: 300 } );
+			}
+			return;
+		}
 		// With a step further in sight, the rest of the company are on thin lines from the middle, as on the cards:
 		// then every dot says how it is reached. Without, their lines wait for a pointer.
 		addLine( sc, a, c.id, c.tie, { o: named ? ( by ? 1 : 0.9 ) : ( out ? FAINT : 0 ), quiet: !named, fine: !named && !!out, emph: by,
@@ -1200,8 +1347,7 @@ function egoScene( v ) {
 	const midName = wide( cut( first( a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ), FONT.subject ) / 2;
 	taken.push( { x1: lay.C.x - midName, y1: lay.C.y + 22, x2: lay.C.x + midName, y2: lay.C.y + 22 + tx( 19 ) } );
 	if ( songAt ) {                                                  // the song's mark and its name over it
-		const half = Math.max( 34, wide( K.clip( playing.song, 30 ), FONT.named ) / 2 );
-		taken.push( { x1: songAt.x - half, y1: songAt.y - 40 - tx( 14 ), x2: songAt.x + half, y2: songAt.y + 34 } );
+		taken.push( { x1: songAt.x + songDx - songHalf, y1: songAt.y - 40 - tx( 17 ), x2: songAt.x + Math.max( songDx + songHalf, 34 ), y2: songAt.y + 34 } );
 	}
 	const onLine = ( from, to, f, room ) => ( { x1: from.x + ( to.x - from.x ) * f - room / 2, x2: from.x + ( to.x - from.x ) * f + room / 2, y: from.y + ( to.y - from.y ) * f } );
 	// Who is named in sight: a line that says a song ends at its artist or its writer, or at another of its ensemble
@@ -1234,7 +1380,7 @@ function egoScene( v ) {
 	};
 	ring.slice( 0, shown ).forEach( ( c, i ) => {
 		const pos = i < n ? seatOf.get( c.id ) : spots[ beads[ i - n ] ], len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y );
-		if ( said.has( lineKey( a, c.id ) ) ) {
+		if ( c.apart || said.has( lineKey( a, c.id ) ) ) {
 			return;
 		}
 		// A label lies across its line, not along it: it may be wider than the line is long, if nothing else is there.
@@ -2287,7 +2433,7 @@ const draw = {
 			const to = d.cut ? '/rabbithole/?track=' + encodeURIComponent( d.cut ) : '';
 			// Named, as every middle is (Justin, #connectome, 15 Nov 2026), over whatever of the web runs under the name.
 			g.appendChild( s( 'a', { href: G.songs[ d.title ] ? pageUrl( 'Song:' + d.title ) : address( { s: d.title, cut: d.cut } ),
-				'aria-label': 'About ' + d.title }, s( 'text', { y: d.above ? -40 : 46 + down( 17 ), 'text-anchor': 'middle' }, K.clip( d.title, 30 ) ) ) );
+				'aria-label': 'About ' + d.title }, s( 'text', { x: d.dx || 0, y: d.above ? -40 : 46 + down( 17 ), 'text-anchor': 'middle' }, d.label || K.clip( d.title, 30 ) ) ) );
 			if ( to ) {
 				g.appendChild( playChip( 28, 0, to, d.title ) );
 			}
@@ -2539,9 +2685,10 @@ function sync( kind, next, now ) {
 		if ( it.sig !== sg ) {
 			draw[ kind ]( it.el, d );
 			it.sig = sg;
+			it.wd = null;                                                // drawn afresh: its paths have no shape yet (put's tick)
 		}
 		Object.assign( it, { d, fx: it.x, fy: it.y, fo: it.o, fq: it.q || null, tx: d.x, ty: d.y, to: d.o === undefined ? 1 : d.o, t0: now,
-			delay: fresh && !it.born ? ( d.delay || 0 ) : 0, dead: false } );
+			delay: fresh && !it.born ? ( d.delay || 0 ) * WAIT : 0, dead: false } );
 		if ( kind === 'line' && d.glint ) {
 			spark( it, d.glint );
 		} else if ( kind === 'node' && d.glintTo ) {
@@ -2584,8 +2731,15 @@ function pathOf( it, e ) {
 		`${ A }Q${ ( ( a.x + b.x ) / 2 + q.x ).toFixed( 1 ) } ${ ( ( a.y + b.y ) / 2 + q.y ).toFixed( 1 ) } ${ B }`;
 }
 
+/**
+ * How long a view takes to slide into place, and how much of each mark's own wait it keeps. It was 420 ms with the
+ * waits whole, which had the last bead arrive 720 ms after a click (Justin, #connectome, 20 Nov 2026: "clicking
+ * around the graph feels clunky"): now the last is in by 450 ms, and there are fewer frames to draw.
+ */
+const SLIDE = 300, WAIT = 0.5;
+
 function put( next, quick ) {
-	const D = quick || still ? 0 : 420;
+	const D = quick || still ? 0 : SLIDE;
 	const now = performance.now();
 	sync( 'node', next.nodes, now );
 	sync( 'pill', next.pills, now );
@@ -2608,23 +2762,38 @@ function put( next, quick ) {
 					live[ kind ].delete( key );
 					continue;
 				}
-				it.el.setAttribute( 'opacity', it.o.toFixed( 3 ) );
+				// Only what changed is written (wo, wt, wd: as last written). Most of a view is not moving while it
+				// changes: what leaves fades where it stands, what arrives fades in where it will be, and only what
+				// stays slides. Writing every mark's place and every line's shape on every frame had the browser lay
+				// out and paint the whole drawing each frame: a click took a second of a laptop's main thread, in
+				// frames of 70 ms (Justin, #connectome, 20 Nov 2026: "clicking around the graph feels clunky").
+				const o = it.o.toFixed( 3 );
+				if ( it.wo !== o ) {
+					it.el.setAttribute( 'opacity', it.wo = o );
+				}
 				if ( kind === 'line' ) {
 					const p = pathOf( it, e );
-					if ( p ) {
+					if ( p && it.wd !== p ) {
+						it.wd = p;
 						for ( const c of it.el.children ) {
 							c.setAttribute( 'd', p );
 						}
 					}
 				} else {
-					it.el.setAttribute( 'transform', `translate(${ it.x.toFixed( 1 ) } ${ it.y.toFixed( 1 ) })` );
+					const at = `translate(${ it.x.toFixed( 1 ) } ${ it.y.toFixed( 1 ) })`;
+					if ( it.wt !== at ) {
+						it.el.setAttribute( 'transform', it.wt = at );
+					}
 				}
 			}
 		}
 		if ( busy ) {
 			raf = requestAnimationFrame( tick );
+		} else {
+			svg.classList.remove( 'sliding' );
 		}
 	};
+	svg.classList.toggle( 'sliding', !!D );                          // no easing of a line's shade by the stylesheet while this sets it frame by frame
 	if ( D ) {
 		raf = requestAnimationFrame( tick );
 	} else {
@@ -3644,6 +3813,7 @@ function pathSay() {
 			h( 'span', { class: 'target' }, '🎯 ', first( GAME.to ) ) ) );
 	}
 	nav.hidden = steps.length < ( GAME ? 1 : 2 );                 // outside a challenge, one place is no way yet
+	$( 'pathx' ).hidden = !!GAME;                                // a challenge's chain is the game's own: it has its restart
 	stage.style.setProperty( '--path', nav.hidden ? '0px' : nav.offsetHeight + 'px' );   // the QR code sits above it too
 	if ( fresh.length ) {
 		void ol.offsetWidth;                                     // laid out closed, so they open
@@ -3651,7 +3821,8 @@ function pathSay() {
 	}
 	if ( !nav.hidden ) {                                         // the newest in sight, once the new ones have opened
 		nav.scrollTo( { left: nav.scrollWidth, behavior: still ? 'auto' : 'smooth' } );
-		setTimeout( () => nav.scrollTo( { left: nav.scrollWidth, behavior: still ? 'auto' : 'smooth' } ), still ? 0 : 380 );
+		// at a frame, where the page is laid out anyway: from a timer it had the page laid out again in mid-slide
+		setTimeout( () => requestAnimationFrame( () => nav.scrollTo( { left: 1e6, behavior: still ? 'auto' : 'smooth' } ) ), still ? 0 : 380 );
 	}
 }
 
@@ -3850,44 +4021,132 @@ function qrSay() {
 }
 
 /**
- * The card of the one in the middle, in the graph's upper right corner, where the ring has left a place empty
- * (Justin, #connectome, 20 Nov 2026, 14:16Z). A picker's: their picture, their name as the way to their page,
- * what they play, and what the headline's second line says of them. A song's: its name and that line. It is the
- * soloist's card in Rabbithole, where the music's own view has no headline and Rabbithole no band under the graph.
+ * What a picker's page says they do: the first lines of the box {{MusicianInfo}} draws there (its list,
+ * ul.thinkingentity-verbs), in the wiki's own words and with its links. Asked of the wiki once a picker, by the
+ * explorer itself, so the card is the same in Rabbithole and out of it. A page with no such list, or no answer:
+ * no lines. Each line is its parts in order: a string, or { t, href } for a link to a page that exists.
  */
+const DOES = 3;
+const doesOf = new Map();
+function doesFrom( html ) {
+	const list = html ? new DOMParser().parseFromString( html, 'text/html' ).querySelector( 'ul.thinkingentity-verbs' ) : null;
+	const parts = ( node, out ) => {
+		for ( const c of node.childNodes ) {
+			if ( c.nodeType === 3 ) {
+				out.push( c.nodeValue );
+			} else if ( c.nodeType === 1 && c.tagName === 'A' && !c.classList.contains( 'new' ) && /^\/wiki\//.test( c.getAttribute( 'href' ) || '' ) ) {
+				out.push( { t: c.textContent, href: c.getAttribute( 'href' ) } );
+			} else if ( c.nodeType === 1 ) {
+				parts( c, out );                                         // bold, italics, a link to no page yet: their words
+			}
+		}
+		return out;
+	};
+	return list ? [ ...list.children ].filter( ( li ) => li.tagName === 'LI' ).slice( 0, DOES ).map( ( li ) => parts( li, [] ) )
+		.filter( ( line ) => line.some( ( x ) => ( typeof x === 'string' ? x : x.t ).trim() ) ) : [];
+}
+function cardDoes( name ) {
+	if ( !doesOf.has( name ) ) {
+		const q = new URLSearchParams( { action: 'parse', page: name, prop: 'text', redirects: 1, disableeditsection: 1, disablelimitreport: 1,
+			format: 'json', formatversion: 2, maxage: 600, smaxage: 600 } );
+		if ( HOME ) {
+			q.set( 'origin', '*' );                                  // a preview of the wiki's files asks the wiki from outside
+		}
+		doesOf.set( name, fetch( HOME + '/api.php?' + q ).then( ( r ) => ( r.ok ? r.json() : Promise.reject( new Error( String( r.status ) ) ) ) )
+			.then( ( d ) => doesFrom( d && d.parse && d.parse.text ) )
+			.catch( () => {
+				doesOf.delete( name );                               // no answer this time: asked again when they next come round
+				return [];
+			} ) );
+	}
+	return doesOf.get( name );
+}
+
+/**
+ * The lines under the name share out what room the card has: a line each first, the last ones left out where even
+ * that won't go; then any line that is cut gets another, in order, while there is room. Nothing is cut mid-line.
+ */
+function cardFit( el ) {
+	const ul = el.querySelector( '.card-does' ), lis = ul ? [ ...ul.children ] : [];
+	if ( !lis.length ) {
+		return;
+	}
+	lis.forEach( ( li ) => {
+		li.hidden = false;
+		li.style.setProperty( '--n', 1 );
+	} );
+	const lh = parseFloat( getComputedStyle( lis[ 0 ] ).lineHeight ), gap = parseFloat( getComputedStyle( ul ).rowGap ) || 0, room = ul.clientHeight + 0.5;
+	const n = Math.max( 0, Math.min( lis.length, Math.floor( ( room + gap ) / ( lh + gap ) ) ) );
+	lis.forEach( ( li, i ) => {
+		li.hidden = i >= n;
+	} );
+	let spare = n ? Math.floor( ( room - n * lh - ( n - 1 ) * gap ) / lh ) : 0;
+	for ( let lines = 2; spare > 0 && lines <= 6; lines++ ) {
+		for ( const li of lis.slice( 0, n ) ) {
+			if ( spare > 0 && li.scrollHeight > li.clientHeight + 1 ) {
+				li.style.setProperty( '--n', lines );
+				spare--;
+			}
+		}
+	}
+}
+
+/**
+ * The card of the one in the middle, in the graph's upper right corner, where the ring has left a place empty
+ * (Justin, #connectome, 20 Nov 2026, 14:16Z). A picker's: their picture, their name as the way to their page, and
+ * the first three things their page's {{MusicianInfo}} says they do (19:41Z: "it doesn't need to show instrument
+ * or 'Has played...' details"). No page, or a page that says none: the picture and the name. A song's: its name
+ * and what the headline's second line says. It is the soloist's card in Rabbithole, where the music's own view has
+ * no headline and Rabbithole no band under the graph.
+ */
+let cardFor = null;              // whose lines the card is waiting on
 function cardSay() {
 	const el = $( 'card' ), on = !!view && cardOn( view );
 	el.hidden = !on;
+	cardFor = null;
 	if ( !on ) {
 		return;
 	}
-	const { cw, ch } = cardRoom( frame().W ), slim = cw < 200;
+	const { cw, ch, side, tower, compact, small } = cardRoom( frame().W );
 	el.style.width = cw + 'px';
 	el.style.height = ch + 'px';
 	el.style.top = ( ( $( 'say' ).offsetHeight || 0 ) + 8 ) + 'px';         // the graph's own corner, under the headline where there is one
-	el.classList.toggle( 'slim', slim );
-	// A name that took its second line leaves a line less under it (the card is one size whatever it says).
-	const fit = () => {
-		const name = el.querySelector( '.card-name' );
-		el.classList.remove( 'tall' );
-		el.classList.toggle( 'tall', !!name && name.offsetHeight > parseFloat( getComputedStyle( name ).lineHeight ) * 1.5 );
-	};
-	const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
+	el.classList.toggle( 'side', side );
+	el.classList.toggle( 'tower', tower );
+	el.classList.toggle( 'compact', compact );
+	el.classList.toggle( 'small', small );
 	if ( view.cut !== undefined && view.playing === undefined ) {
-		el.replaceChildren( h( 'div', { class: 'card-in' }, h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) ) );
-		fit();
+		const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
+		el.classList.add( 'nopic' );
+		el.replaceChildren( h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) );
 		return;
 	}
-	const p = P( view.a ), on2 = view.playing !== undefined && G.songcast[ view.playing ];
-	const role = on2 ? ( G.songcast[ view.playing ].pickers.find( ( x ) => x[ 0 ] === view.a ) || [] ) : [];
-	el.replaceChildren( ...[
-		p.img ? h( 'img', { src: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=120', alt: '' } ) : null,
-		h( 'div', { class: 'card-in' },
-			h( 'a', { class: 'card-name' + ( p.page ? '' : ' new' ), href: pageUrl( p.name ), target: '_top', title: p.page ? p.name + "'s page on PickiPedia" : 'Start ' + p.name + "'s page" }, p.name ),
-			// what they play, and on which song; a slim card says the first alone, the song being named beside it in the graph
-			h( 'span', { class: 'card-what' }, [ on2 ? ( role[ 2 ] || role[ 1 ] || p.inst ) : p.inst, on2 && !slim ? 'on ' + G.songcast[ view.playing ].song : '' ].filter( Boolean ).join( ' · ' ) ),
-			h( 'span', { class: 'card-more' }, ...more ) ) ].filter( Boolean ) );
-	fit();
+	const p = P( view.a );
+	const face = p.img ? h( 'img', { src: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=180', alt: '' } ) : null;
+	if ( face ) {                                                    // a picture that won't come: the name has its room
+		face.addEventListener( 'error', () => {
+			face.remove();
+			el.classList.add( 'nopic' );
+			cardFit( el );
+		} );
+	}
+	el.classList.toggle( 'nopic', !face );
+	const does = h( 'ul', { class: 'card-does' } );
+	el.replaceChildren( ...[ face,
+		h( 'a', { class: 'card-name' + ( p.page ? '' : ' new' ), href: pageUrl( p.name ), target: '_top', title: p.page ? p.name + "'s page on PickiPedia" : 'Start ' + p.name + "'s page" }, p.name ),
+		does ].filter( Boolean ) );
+	if ( !p.page ) {
+		return;
+	}
+	const who = cardFor = p.name;
+	cardDoes( p.name ).then( ( lines ) => {
+		if ( cardFor !== who || !does.isConnected ) {
+			return;                                                  // the card is someone else's by now
+		}
+		does.replaceChildren( ...lines.map( ( line ) => h( 'li', null,
+			...line.map( ( x ) => ( typeof x === 'string' ? x : h( 'a', { href: HOME + x.href, target: '_top' }, x.t ) ) ) ) ) );
+		cardFit( el );
+	} );
 }
 
 /**
@@ -3904,15 +4163,25 @@ function qrRoom( quick ) {
 		}
 		box.classList.remove( 'tight' );
 		const r = box.getBoundingClientRect();
-		box.classList.toggle( 'tight', [ ...svg.querySelectorAll( 'text, circle, image, rect:not( .reach )' ) ].some( ( el ) => {
+		// Only the marks that have come to stand near its corner are asked where they are, by where the view put
+		// them: asking every word and circle of the drawing cost a laptop some 50 ms, a second after every click.
+		const m = svg.getScreenCTM(), near = [];
+		for ( const kind of m ? [ 'node', 'pill' ] : [] ) {
+			for ( const [ , it ] of live[ kind ] ) {
+				if ( !it.dead && it.to > 0.05 && m.a * it.tx + m.e > r.left - 280 && m.d * it.ty + m.f > r.top - 70 ) {
+					near.push( it.el );
+				}
+			}
+		}
+		box.classList.toggle( 'tight', near.some( ( g ) => [ ...g.querySelectorAll( 'text, circle, image, rect:not( .reach )' ) ].some( ( el ) => {
 			const b = el.getBoundingClientRect();
 			return b.width > 0 && b.right > r.left - 4 && b.left < r.right + 4 && b.bottom > r.top - 4 && b.top < r.bottom + 4;
-		} ) );
+		} ) ) );
 	};
 	if ( quick ) {
 		look();
 	}
-	qrLook = setTimeout( look, 900 );
+	qrLook = setTimeout( look, SLIDE + 380 );                        // once the view has slid into place
 }
 
 /** What a kept graph says of itself, above it, and its lines marked where a source has gone since. */
@@ -4002,9 +4271,8 @@ function comeTo( state ) {
  * The pointer, and the keys
  * --------------------------------------------------------------------------------------------------------- */
 
-function say( at, title, lines, hint ) {
-	tip.replaceChildren( h( 'b', null, title ), ...lines.filter( Boolean ).map( ( l ) => h( 'div', null, l ) ),
-		hint ? h( 'span', { class: 'do' }, hint ) : null );
+function say( at, ...parts ) {
+	tip.replaceChildren( ...parts.filter( Boolean ) );
 	tip.hidden = false;
 	const box = stage.getBoundingClientRect(), r = at.getBoundingClientRect();
 	const w = tip.offsetWidth, ht = tip.offsetHeight;
@@ -4332,7 +4600,45 @@ function hover( g ) {
 	} else {
 		g.classList.add( 'hot' );
 	}
-	say( g, w.tipTitle || w.title, w.lines, w.hint );
+	if ( view.walk ) {                                               // your rabbithole: a song heard says its own note, as it did
+		say( g, h( 'b', null, w.tipTitle || w.title ), ...w.lines.filter( Boolean ).map( ( l ) => h( 'div', null, l ) ),
+			w.hint ? h( 'span', { class: 'do' }, w.hint ) : null );
+		return;
+	}
+	const t = tipFor( g );
+	if ( t ) {
+		say( g, t.when ? h( 'div', { class: 'when' }, t.when ) : null, t.who ? h( 'div', null, t.who ) : null );
+	}
+}
+
+/**
+ * What a pointer resting on a mark is told (Justin, #connectome, 20 Nov 2026, 19:41Z: "The tooltip on hover is
+ * _way_ too much. It's very distracting. I don't think a tooltip is really required for pickers at all, and for
+ * shows/songs, make it very terse, just showing the date and ensemble"). A picker, wherever they stand: nothing.
+ * A line between two pickers: nothing. A show, a record, a track or a song: when it was, and who is on it of
+ * those the sources here name, six at most and then how many more. null: no note. The lines and names a pointer
+ * lights are lit as before, and the sheet a held finger opens says all it did.
+ */
+const TIP_NAMES = 6;
+function tipFor( g ) {
+	const it = live[ g.dataset.kind ].get( g.dataset.k ), d = it && !it.dead ? it.d : null;
+	let when = '', cast = [];
+	if ( !d ) {
+		return null;
+	}
+	if ( d.stands === 'song' ) {
+		const entry = d.cut !== undefined && G.songcast ? G.songcast[ d.cut ] : null;
+		when = ( entry && entry.recorded ) || ( d.cuts && d.cuts[ 0 ] ? K.when( d.cuts[ 0 ].date ) : '' );
+		cast = entry ? entry.pickers.map( ( x ) => x[ 0 ] ).filter( ( id ) => id >= 0 && P( id ) ) : [];
+	} else if ( ( d.stands === 'piece' || d.stands === 'loose' ) && !d.more && d.piece !== undefined && M( d.piece ) ) {
+		const pc = M( d.piece );
+		when = K.when( G.music[ pc.m ].date );
+		cast = pc.cast || [];
+	} else {
+		return null;
+	}
+	const who = cast.slice( 0, TIP_NAMES ).map( first ).join( ', ' ) + ( cast.length > TIP_NAMES ? ` and ${ cast.length - TIP_NAMES } more` : '' );
+	return when || who ? { when, who } : null;
 }
 
 function click( g ) {
@@ -4702,6 +5008,18 @@ if ( new URLSearchParams( location.search ).has( 'faq' ) ) {
 }
 
 $( 'back' ).addEventListener( 'click', back );
+// The way come, let go (Justin, #connectome, 20 Nov 2026, 19:41Z: "The path at the bottom is feeling a little
+// unwieldy. It needs like an 'x' to start over"). The view in sight stays as it is drawn, and is where the way
+// starts now; this step of the history remembers the shorter way, and Back still goes back to the ones before.
+$( 'pathx' ).firstElementChild.addEventListener( 'click', () => {
+	if ( GAME || !view || trail.length < 2 ) {
+		return;
+	}
+	trail.splice( 0, trail.length - 1 );
+	$( 'back' ).hidden = true;
+	pathSay();
+	stamp( false );
+} );
 $( 'share' ).addEventListener( 'click', onShare );
 $( 'qr' ).addEventListener( 'click', () => {
 	$( 'qr' ).classList.toggle( 'big' );

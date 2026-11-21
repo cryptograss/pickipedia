@@ -1468,3 +1468,22 @@ test( 'a ring with its card out leaves the upper right place empty, and stands n
 	assert.deepEqual( K.gapFor( 1 ), { turn: 0, gap: -1 } );
 	assert.deepEqual( K.ego( { W: 900, H: 700, named: 6, dots: 0 } ).named.map( ( p ) => p.angle ), [ -75, -15, 45, 105, 165, 225 ] );   // not asked to turn: as it was
 } );
+
+test( 'while a song plays: the rest of the band, the ring that seats them, and a place over the middle', () => {
+	const G = { people: [ {}, {}, {}, {} ] };
+	const cut = { pickers: [ [ 2, 'banjo' ], [ 0, 'guitar' ], [ -1, 'fiddle' ], [ 3, 'bass' ], [ 0, 'vocals' ], [ 9, 'drums' ] ] };
+	assert.deepEqual( K.bandOf( G, cut, 0 ), [ 2, 3 ] );               // the soloist left out; one the graph doesn't know, and one past its end, too
+	assert.deepEqual( K.bandOf( G, cut, 2 ), [ 0, 3 ] );               // each once, in the page's order
+	assert.deepEqual( K.bandOf( G, null, 0 ), [] );
+	// five others, the song and the card's corner: seven places in the pane at 1366x768 (557x734), whoever takes the solo
+	assert.equal( K.bandSeats( 5, 6, true, 557, 734 ), 7 );
+	assert.equal( K.bandSeats( 5, 6, false, 557, 734 ), 6 );
+	assert.equal( K.bandSeats( 7, 6, true, 557, 734 ), 9 );            // a band of eight
+	assert.equal( K.bandSeats( 7, 6, true, 567, 573 ), 8 );            // a shorter frame holds eight places: one of the seven is a bead
+	assert.equal( K.bandSeats( 5, 4, true, 390, 460 ), 6 );            // a phone: six places, four of the five named
+	assert.equal( K.bandSeats( 1, 8, true, 1111, 1046 ), 8 );          // a duo: never fewer than the frame names anyway
+	// seven places: turned so one is at the corner, though that stands one nearly straight over the middle; never under it
+	assert.equal( K.gapFor( 7 ).turn, 0 );
+	assert.ok( Math.abs( K.gapFor( 7, true ).turn + 19.29 ) < 0.01 );
+	assert.equal( K.gapFor( 8, true ).turn, 0 );                        // eight: the turn would stand one straight under
+} );

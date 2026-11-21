@@ -1458,6 +1458,38 @@ export function keeping( G, id, comp, keep = [] ) {
 }
 
 /**
+ * The rest of a cut's band, for the view of one of them taking a solo: every other picker the song's page puts
+ * on the cut and the graph knows, in the page's order, each once.
+ */
+export function bandOf( G, cut, soloist ) {
+	const out = [];
+	for ( const p of ( cut && cut.pickers ) || [] ) {
+		const id = p[ 0 ];
+		if ( Number.isInteger( id ) && id >= 0 && id < G.people.length && id !== soloist && !out.includes( id ) ) {
+			out.push( id );
+		}
+	}
+	return out;
+}
+
+/**
+ * How many places the ring has while a song plays (Justin, #connectome, 20 Nov 2026, 19:41Z: "keep the ensemble
+ * visible the whole time"): a place for each of the band, one for the song, and with the card out one left empty
+ * for it; never fewer than the frame names anyway (`usual`), and never more than the frame holds. It is the same
+ * for every one of the band taking a solo, whoever else they have played with, so the ring is the same ring from
+ * one solo to the next and everyone keeps their seat. A frame too small for the whole band names as many as it
+ * holds; the rest are beads.
+ *
+ * band: how many others are on the cut. carded: the middle's card is out. W, H: the frame, in the drawing's
+ * measure. Returns the places asked of ego(): the song's and the card's among them.
+ */
+export function bandSeats( band, usual, carded, W, H ) {
+	const extra = 1 + ( carded ? 1 : 0 );
+	const holds = W >= 520 && H >= 600 ? 10 : ( ( W >= 520 && H >= 440 ) || ( W >= 440 && H >= 640 ) ? 8 : ( W >= 340 && H >= 400 ? 6 : 4 ) );
+	return Math.min( Math.max( band + extra, usual ), Math.max( holds, usual ) );
+}
+
+/**
  * Who sits where when the view changes. wants[i] is where the i-th would be had the whole picture only slid
  * (null for one who wasn't in it). Each of those takes the free place nearest that, the first in line choosing
  * first; the newcomers fill what's left, in order. Returns each one's place, as a number in places (-1 past
@@ -1836,8 +1868,10 @@ export function foxZoom( r, least ) {
  * is at most half a step. Where it would stand anyone straight over or under the middle (within 8 degrees; a
  * ring of eight), the ring isn't turned, and the place nearest the upper right is the one left out. Two places
  * or fewer: turned clear of the corner, nobody left out (gap -1).
+ *
+ * over: a place straight over the middle is no bar to the turn (the song's seat while it plays).
  */
-export function gapFor( n ) {
+export function gapFor( n, over = false ) {
 	if ( n < 3 ) {
 		return { turn: n === 2 ? 90 : 0, gap: -1 };
 	}
@@ -1845,8 +1879,10 @@ export function gapFor( n ) {
 	const j = Math.round( ( -45 - base ) / step );
 	const gap = ( ( j % n ) + n ) % n;
 	const turn = -45 - ( base + step * j );
+	// over: the place straight over the middle may be taken (a song's, while it plays: its name is over it, and
+	// no name of the middle's is there to run through); straight under never, where the middle's own name is.
 	const upright = Array.from( { length: n }, ( _, i ) => base + step * i + turn )
-		.some( ( d, i ) => i !== gap && Math.abs( ( ( d % 180 ) + 180 ) % 180 - 90 ) < 8 );
+		.some( ( d, i ) => i !== gap && Math.abs( ( ( d % 180 ) + 180 ) % 180 - 90 ) < 8 && !( over && Math.sin( d * Math.PI / 180 ) < 0 ) );
 	return { turn: upright ? 0 : turn, gap };
 }
 
