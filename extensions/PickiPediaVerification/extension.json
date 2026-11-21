@@ -91,6 +91,7 @@
 			],
 			"dependencies": [
 				"mediawiki.api",
+				"mediawiki.Title",
 				"jquery"
 			]
 		}
