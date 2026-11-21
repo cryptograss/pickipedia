@@ -599,7 +599,8 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
  *     01:56Z: "The cards can be much longer now that you've made room - we can afford ~200 characters of the first
  *     three items instead of 40 or whatever we're doing now." At the pane's size (909 by 734) it is 400 by 176:
  *     eight lines of some 48 characters among the three, so a long line has about 190 where the others are short.
- *     The ring is set down below the card (egoScene), so every 16px more of card is a line less of ring;
+ *     The ring is set down below the card as far as the frame has room under it (egoScene): a taller card moves the
+ *     ring down, and past that room stands beside the ring's top seats;
  *   520 to 675px wide and 640 tall: 208 to 269px by 176 to 200, the picture and the name in a row, the lines under;
  *   `tower`, 440 to 520px wide and 560 tall or more (the pane on a 1280px laptop): the song's name beside a
  *     soloist comes to within 150px of the corner there, so 150px by 212, the picture over the name over the lines;
