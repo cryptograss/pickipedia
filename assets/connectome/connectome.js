@@ -593,26 +593,31 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
  * the first 3 or so details from their MusicianInfo card. And the picture can be maybe 30% bigger." So it holds
  * a picture of 84px (58 on the small one, from 64 and 44), the name, and what their page says they do. How big it
  * may be is what the ring leaves of the corner, which goes by the drawing's shape (each was swept for marks under it):
- *   `side`, a drawing 675px wide or more: 300px wide, the picture beside everything. 104px high, and more where the
- *     drawing is tall, to 150: a ring of eight has a name a fifth of the way down (the card it replaces was 100);
- *   520 to 675px wide and 640 tall (Rabbithole's pane on a 1366px laptop): 208 to 269px by 176, the picture and the
- *     name in a row, four lines under;
+ *   `side`, a drawing 675px wide or more (Rabbithole's pane on a laptop, now that no list stands beside the
+ *     graph): the picture beside everything, 300 to 430px wide (0.44 of the drawing) and 130 to 180 high (0.24 of
+ *     it). It was 300 by 104 to 150, which held some 40 characters of each line. Justin, #connectome, 21 Nov 2026,
+ *     01:56Z: "The cards can be much longer now that you've made room - we can afford ~200 characters of the first
+ *     three items instead of 40 or whatever we're doing now." At the pane's size (909 by 734) it is 400 by 176:
+ *     eight lines of some 48 characters among the three, so a long line has about 190 where the others are short.
+ *     The ring is set down below the card (egoScene), so every 16px more of card is a line less of ring;
+ *   520 to 675px wide and 640 tall: 208 to 269px by 176 to 200, the picture and the name in a row, the lines under;
  *   `tower`, 440 to 520px wide and 560 tall or more (the pane on a 1280px laptop): the song's name beside a
  *     soloist comes to within 150px of the corner there, so 150px by 212, the picture over the name over the lines;
  *   `compact`, under 440px wide and over 500 tall (a phone with the graph alone: a ring of six in a narrow frame,
  *     with a name 90px under the top and 150 from the side): the size it was, 150px by 80, a 44px picture, one line;
  *   `small`, anything else (a phone in Rabbithole; a low window): up to 200px by 126, laid as the second.
  */
+const SIDE = { w: 430, h: 180 }, MID_H = 200;       // the most a card beside a wide drawing takes, and the height of one on a middling drawing
 function cardRoom( W ) {
 	const wide = svg.clientWidth || W, tall = svg.clientHeight || 0, k = W / wide;
 	// A song's own card says its name and a line or two: the size it had, so the ring round a song keeps all its pickers.
 	const song = !!view && view.cut !== undefined && view.playing === undefined;
 	const side = !song && wide >= 675, tower = !song && wide >= 440 && wide < 520 && tall >= 560, compact = !song && wide < 440 && tall > 500;
 	const small = song ? wide < 520 : ( !side && !tower && !compact && !( wide >= 520 && tall >= 640 ) );
-	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) : ( side ? 300 : ( tower || compact ? 150 :
+	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) : ( side ? Math.max( 300, Math.min( SIDE.w, wide * 0.44 ) ) : ( tower || compact ? 150 :
 		( small ? Math.max( 160, Math.min( 200, wide * 0.46 ) ) : Math.max( 208, Math.min( 269, wide * 0.4 ) ) ) ) ) );
 	const ch = Math.round( song ? ( wide < 520 ? 80 : 100 ) :
-		( side ? Math.max( 104, Math.min( 150, tall * 0.2 - 30 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : 176 ) ) ) ) );
+		( side ? Math.max( 130, Math.min( SIDE.h, tall * 0.24 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : Math.max( 176, Math.min( MID_H, tall * 0.28 ) ) ) ) ) ) );
 	return { cw, ch, side, tower, compact, small, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
 }
 
@@ -1181,7 +1186,8 @@ function egoScene( v ) {
 		// it is set down lower, as far as the frame has room under it.
 		// By the named places alone, which are the same for every one of a band: the ring is as low for each solo.
 		const top = Math.min( ...lay.named.map( ( p ) => p.y ) ), foot = Math.max( ...lay.named.map( ( p ) => p.y ) );
-		const lower = Math.round( Math.max( 0, Math.min( corner.y2 + ( playing ? 30 : 22 ) - top, H - 44 - tx( 18 ) - foot ) ) );
+		// (Not playing, a seat's name may be written over and beside it, a step further being in sight: the room for that.)
+		const lower = Math.round( Math.max( 0, Math.min( corner.y2 + ( playing ? 30 : 24 + tx( 18 ) ) - top, H - 44 - tx( 18 ) - foot ) ) );
 		if ( lower > 0 ) {
 			const drop = ( p ) => {
 				p.y += lower;
@@ -3969,12 +3975,41 @@ function qrSay() {
 
 /**
  * What a picker's page says they do: the first lines of the box {{MusicianInfo}} draws there (its list,
- * ul.thinkingentity-verbs), in the wiki's own words and with its links. Asked of the wiki once a picker, by the
+ * ul.thinkingentity-verbs), in the wiki's own words and with its links, each to about 200 characters (DOES_LONG;
+ * the longest of the cast's was 194 when this was written). Asked of the wiki once a picker, by the
  * explorer itself, so the card is the same in Rabbithole and out of it. A page with no such list, or no answer:
  * no lines. Each line is its parts in order: a string, or { t, href } for a link to a page that exists.
  */
-const DOES = 3;
+const DOES = 3, DOES_LONG = 200;
 const doesOf = new Map();
+/** A line's parts, ended at about `most` characters: on a word, with an ellipsis, a link kept whole or left out. */
+function clipLine( line, most ) {
+	const out = [];
+	let n = 0;
+	for ( const x of line ) {
+		const t = typeof x === 'string' ? x : x.t;
+		if ( n + t.length <= most ) {
+			out.push( x );
+			n += t.length;
+			continue;
+		}
+		if ( typeof x === 'string' ) {
+			const cut = t.slice( 0, Math.max( 0, most - n ) ), at = cut.lastIndexOf( ' ' );
+			const kept = ( at > 0 ? cut.slice( 0, at ) : ( n ? '' : cut ) ).replace( /[\s,;:.\u2014-]+$/, '' );
+			if ( kept ) {
+				out.push( kept );
+			}
+		}
+		const last = out.length - 1;
+		if ( last >= 0 && typeof out[ last ] === 'string' ) {
+			out[ last ] = out[ last ].replace( /[\s,;:.\u2014-]+$/, '' ) + '…';
+		} else {
+			out.push( '…' );
+		}
+		return out;
+	}
+	return out;
+}
 function doesFrom( html ) {
 	const list = html ? new DOMParser().parseFromString( html, 'text/html' ).querySelector( 'ul.thinkingentity-verbs' ) : null;
 	const parts = ( node, out ) => {
@@ -3989,7 +4024,7 @@ function doesFrom( html ) {
 		}
 		return out;
 	};
-	return list ? [ ...list.children ].filter( ( li ) => li.tagName === 'LI' ).slice( 0, DOES ).map( ( li ) => parts( li, [] ) )
+	return list ? [ ...list.children ].filter( ( li ) => li.tagName === 'LI' ).slice( 0, DOES ).map( ( li ) => clipLine( parts( li, [] ), DOES_LONG ) )
 		.filter( ( line ) => line.some( ( x ) => ( typeof x === 'string' ? x : x.t ).trim() ) ) : [];
 }
 function cardDoes( name ) {
@@ -4011,7 +4046,8 @@ function cardDoes( name ) {
 
 /**
  * The lines under the name share out what room the card has: a line each first, the last ones left out where even
- * that won't go; then any line that is cut gets another, in order, while there is room. Nothing is cut mid-line.
+ * that won't go; then any line that is cut gets another, in order, while there is room (to fourteen: a line of
+ * 200 characters in the narrowest card that has the room). Nothing is cut mid-line.
  */
 function cardFit( el ) {
 	const ul = el.querySelector( '.card-does' ), lis = ul ? [ ...ul.children ] : [];
@@ -4028,7 +4064,7 @@ function cardFit( el ) {
 		li.hidden = i >= n;
 	} );
 	let spare = n ? Math.floor( ( room - n * lh - ( n - 1 ) * gap ) / lh ) : 0;
-	for ( let lines = 2; spare > 0 && lines <= 6; lines++ ) {
+	for ( let lines = 2; spare > 0 && lines <= 14; lines++ ) {
 		for ( const li of lis.slice( 0, n ) ) {
 			if ( spare > 0 && li.scrollHeight > li.clientHeight + 1 ) {
 				li.style.setProperty( '--n', lines );
