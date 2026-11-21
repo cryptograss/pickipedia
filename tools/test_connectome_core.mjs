@@ -1487,3 +1487,96 @@ test( 'while a song plays: the rest of the band, the ring that seats them, and a
 	assert.ok( Math.abs( K.gapFor( 7, true ).turn + 19.29 ) < 0.01 );
 	assert.equal( K.gapFor( 8, true ).turn, 0 );                        // eight: the turn would stand one straight under
 } );
+
+/* A trunk (Justin, #connectome, 21 Nov 2026, 01:56Z): those between two pickers who share one show with an end are one line from that end. */
+const TRUNKS = K.build( {
+	v: 1, built: '2026-11-21', month: '2026-11', featured: [],
+	people: [ 'Honza', 'Jakub', 'Jirka', 'Petr', 'Jarda', 'Sky', 'Solo' ].map( ( n ) => [ n, 0, '' ] ),
+	music: [
+		[ 'show:one', 'show', '', 'block 17350845', 'The First Night', 2, 'gh/1.yaml', '' ],
+		[ 'show:two', 'show', '', 'block 17451407', 'The Second Night', 2, 'gh/2.yaml', '' ],
+		[ 'show:three', 'show', '', 'block 22504683', 'A Later Night', 2, 'gh/3.yaml', '' ],
+		[ 'discogs:9', 'record', 'Some Band', '2020', 'A Record', 1, 'https://www.discogs.com/release/9', '' ]
+	],
+	cast: [ [], [], [], [] ],
+	ties: [
+		[ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ], [ 2, 2, 1, [] ] ] ],
+		[ 0, 2, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ], [ 1, 2, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ],
+		[ 0, 3, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ], [ 1, 3, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ],
+		[ 0, 4, [ [ 0, 2, 1, [] ] ] ], [ 1, 4, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ],
+		[ 0, 5, [ [ 2, 2, 1, [] ] ] ], [ 1, 5, [ [ 2, 2, 1, [] ], [ 3, 3, 1, [ 'A Song' ] ] ] ],
+		[ 0, 6, [ [ 3, 3, 1, [ 'A Song' ] ] ] ], [ 1, 6, [ [ 3, 3, 1, [ 'Another' ] ] ] ]
+	],
+	songs: {}, plays: {}
+} );
+
+test( 'those who share one show with an end are one group: the most first, each piece said once, the far end saying another they all share', () => {
+	const who = ( g ) => g.members.map( ( x ) => TRUNKS.people[ x.id ].name ).sort();
+	const { groups, left } = K.trunks( TRUNKS, K.mutuals( TRUNKS, 0, 1 ) );
+	assert.equal( groups.length, 2 );
+	assert.deepEqual( who( groups[ 0 ] ), [ 'Jarda', 'Jirka', 'Petr' ] );
+	assert.equal( groups[ 0 ].side, 'a' );
+	assert.equal( groups[ 0 ].m, 0 );                               // the first night: all three were on it with Honza
+	assert.deepEqual( groups[ 0 ].say, { m: 0, how: K.STAGE, songs: [] } );
+	assert.equal( groups[ 0 ].far.m, 1 );                           // and with Jakub the second night as well: another piece, not the same one twice
+	assert.equal( groups[ 0 ].same, true );
+	// the other two are on one record with Jakub, on different songs of it: a group from his end, which says the record
+	assert.deepEqual( who( groups[ 1 ] ), [ 'Sky', 'Solo' ] );
+	assert.equal( groups[ 1 ].side, 'b' );
+	assert.deepEqual( groups[ 1 ].say, { m: 3, how: K.STAGE, songs: [] } );
+	assert.equal( groups[ 1 ].far, null );                          // with Honza they share nothing in common: a later night one, the record the other
+	assert.equal( groups[ 1 ].same, false );
+	assert.equal( left.length, 0 );
+	// a group is no bigger than asked, its loudest; the ones cut are not gathered again under the same piece
+	const two = K.trunks( TRUNKS, K.mutuals( TRUNKS, 0, 1 ), { most: 2 } );
+	assert.equal( two.groups[ 0 ].members.length, 2 );
+	assert.ok( two.groups.every( ( g, i ) => two.groups.every( ( o, j ) => i === j || ( g.m !== o.m && ( !o.far || g.m !== o.far.m ) ) ) ) );
+	// a piece already said elsewhere is no trunk's
+	assert.ok( K.trunks( TRUNKS, K.mutuals( TRUNKS, 0, 1 ), { not: [ 0 ] } ).groups.every( ( g ) => g.m !== 0 && ( !g.far || g.far.m !== 0 ) ) );
+	// with nobody sharing a piece, no groups, and everyone left
+	assert.equal( K.trunks( TRUNKS, K.mutuals( TRUNKS, 0, 1 ), { min: 9 } ).groups.length, 0 );
+	assert.equal( K.trunks( TRUNKS, K.mutuals( TRUNKS, 0, 1 ), { min: 9 } ).left.length, 5 );
+} );
+
+test( 'a trunk says the one song all of its pickers share with the end, else the record', () => {
+	const m = ( id, a, b ) => ( { id, ta: { ev: a }, tb: { ev: b } } );
+	const one = K.trunks( TRUNKS, [ m( 2, [ { m: 3, how: 3, songs: [ 'A Song', 'B' ] } ], [ { m: 0, how: 2, songs: [] } ] ), m( 3, [ { m: 3, how: 3, songs: [ 'A Song' ] } ], [ { m: 1, how: 2, songs: [] } ] ) ] );
+	assert.deepEqual( one.groups[ 0 ].say, { m: 3, how: K.TRACK, songs: [ 'A Song' ] } );
+	assert.equal( one.groups[ 0 ].far, null );                      // nothing all of them share with the other end
+	assert.equal( one.groups[ 0 ].same, false );
+	const none = K.trunks( TRUNKS, [ m( 2, [ { m: 3, how: 3, songs: [ 'A Song' ] } ], [] ), m( 3, [ { m: 3, how: 1, songs: [] } ], [] ) ] );
+	assert.deepEqual( none.groups[ 0 ].say, { m: 3, how: K.RECORD, songs: [] } );   // one of them only on the record: the record, and not as played
+} );
+
+test( 'a trunk in the rainbow: its pickers one over another, clear of each other; a branch keeps between the trunk and its picker', () => {
+	const marks = [ { r: 16, w: 120 }, { r: 9, w: 90 }, { r: 9, w: 100 }, { r: 14, w: 110 } ];
+	const lay = K.rainbow( { W: 1014, H: 668, la: 110, lb: 110, fill: 3, names: { a: { w: 110, side: 'left', r: 22 }, b: { w: 110, side: 'right', r: 22 } },
+		strands: [ { half: 15, marks: [ { pill: true, w: 220 } ] }, { half: 15, marks: [ { pill: true, w: 220 } ] }, { half: 0, marks: [], group: { marks, wa: 157, wb: 157 } },
+			{ half: 15, marks: [ { r: 9, w: 100 } ] }, { half: 15, marks: [ { r: 9, w: 100 } ] } ] } );
+	const st = lay.strands[ 2 ], g = st.group;
+	assert.equal( g.rows.length, 4 );
+	assert.ok( g.rows.every( ( r ) => r.named && r.at === 'under' && Math.abs( r.x - g.rows[ 0 ].x ) < 0.01 ) );      // one column, each named under their circle
+	g.rows.slice( 1 ).forEach( ( r, k ) => assert.ok( r.y - g.rows[ k ].y >= marks[ k ].r + 22 + marks[ k + 1 ].r, 'a name is clear of the circle under it' ) );
+	assert.ok( g.tF < g.tM && g.tM < g.tJ && g.pa.t < g.tF && g.pb.t > g.tJ );
+	// every picker of the trunk is within the room the trunk was given: no other strand's arc passes through them
+	const others = lay.strands.filter( ( s, i ) => i !== 2 && s ).map( ( s ) => s.h );
+	const lo = Math.min( ...g.rows.map( ( r ) => r.h ) ), hi = Math.max( ...g.rows.map( ( r ) => r.h ) );
+	assert.ok( others.every( ( h ) => h < lo - 5 || h > hi + 5 ), 'no strand between the trunk\'s own arcs' );
+	// a branch: from the trunk's arc at the fork to its picker, never outside the two arcs
+	const leg = K.run( lay.A, lay.B, st.h, g.rows[ 0 ].h, g.tF, g.tM, 0, 0.4, 30 );
+	assert.ok( Math.hypot( leg[ 30 ].x - g.rows[ 0 ].x, leg[ 30 ].y - g.rows[ 0 ].y ) < 0.01 );
+	const fork = K.onArc( lay.A, lay.B, st.h, g.tF );
+	assert.ok( Math.hypot( leg[ 0 ].x - fork.x, leg[ 0 ].y - fork.y ) < 0.01 );
+	leg.forEach( ( p, i ) => {
+		const t = g.tF + ( g.tM - g.tF ) * i / 30, y1 = K.onArc( lay.A, lay.B, st.h, t ).y, y2 = K.onArc( lay.A, lay.B, g.rows[ 0 ].h, t ).y;
+		assert.ok( p.y >= Math.min( y1, y2 ) - 0.01 && p.y <= Math.max( y1, y2 ) + 0.01 );
+	} );
+	assert.ok( leg.slice( 13 ).every( ( p, i ) => Math.abs( p.y - K.onArc( lay.A, lay.B, g.rows[ 0 ].h, g.tF + ( g.tM - g.tF ) * ( i + 13 ) / 30 ).y ) < 0.01 ), 'level with its picker for the rest' );
+	// too narrow a frame for a branch each way: no fork, and the strand is left out
+	assert.equal( K.fork( 400, 600, 0, 0, 157, 157 ), null );
+	assert.equal( K.rainbow( { W: 400, H: 600, strands: [ { half: 15, marks: [] }, { half: 0, marks: [], group: { marks, wa: 157, wb: 157 } } ] } ).strands[ 1 ], null );
+	// nothing said at one end: a stub, and the pickers stand nearer that end
+	const stub = K.fork( 1014, 668, 110, 110, 157, 0 );
+	assert.equal( stub.pb, null );
+	assert.ok( stub.tM > K.fork( 1014, 668, 110, 110, 157, 157 ).tM );
+} );
