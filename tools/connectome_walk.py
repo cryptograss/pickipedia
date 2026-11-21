@@ -25,7 +25,7 @@ trigger Artificial Dumb only." So a walk is plain lookups, the same for whoever 
                Tapers Section, where these pickers' tapes mostly are (18 Nov 2026: Tristan Scroggins 7 there, 0 in
                etree; Maddie Dalton 2 and 0). And audio anywhere on archive.org whose creator is the name: the item
                saying who made it, as a band's own uploads do (Justin and re, #walk, 21 Nov 2026: Rail Yard Ghosts,
-               no MusicBrainz artist and 12 items of their own, none in etree or the Tapers Section). A name only
+               12 items of their own, none in etree or the Tapers Section). A name only
                mentioned outside those two collections, in a radio show's playlist or a podcast, isn't enough.
 
 Two or more artists of one name on a site, and none linked: nothing from that site, and the walk says so. At most CAP
