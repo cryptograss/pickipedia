@@ -701,31 +701,35 @@ function endsNamed( a, b, en ) {
 
 /**
  * What a hop of a lit way is, said on it: where a pill is clear of the pickers, names and pills already set down, a
- * briefer one where the full one finds nowhere, and at the last one that laps a little onto the hop's own two
- * pickers. A hop with no room even for that says nothing here: the line is still the tie, a pointer at it says what
- * it is, and the list has it whole.
+ * briefer one where the full one finds nowhere, and then the least it can say (a show its night alone). A hop with
+ * no room even for that says nothing here: the line is still the tie, and a click on it opens its two pickers.
+ *
+ * It used to end by lapping a show's pill 17px onto the hop's own two pickers, so a show kept its night however
+ * short the hop: on the running site that put a label's body into a face on 3 of 60 pairs (21 Nov 2026), up to
+ * 9.6px in. A face is never under a label (re and Justin, #connectome, 20 Nov 2026): now the last try touches the
+ * rim of a picker's ground and no more.
  */
 function sayHop( sc, lay, h, t1, t2, u, v, tie, room ) {
 	const free = ( box ) => !lay.taken.some( ( q ) => box.x1 < q.x2 && box.x2 > q.x1 && box.y1 < q.y2 && box.y2 > q.y1 );
 	const boxAt = ( p, w ) => ( { x1: p.x - w / 2 - 3, y1: p.y - 12, x2: p.x + w / 2 + 3, y2: p.y + 12 } );
-	const put = ( p, part, box ) => {
+	const put = ( p, part, box, bare ) => {
 		lay.taken.push( box );
-		placePills( sc, u, v, tie, p.x - room * part / 2, p.x + room * part / 2, p.y, 1, 1, 60 );
+		placePills( sc, u, v, tie, p.x - room * part / 2, p.x + room * part / 2, p.y, 1, 1, 60, undefined, undefined, undefined, bare );
 	};
-	for ( const part of [ 1, 0.72, 0.5 ] ) {
-		const w = pillsFor( tie, room * part, 1 ).used;
+	for ( const [ part, bare ] of [ [ 1, false ], [ 0.72, false ], [ 0.5, false ], [ 0.5, true ], [ 0.34, true ] ] ) {
+		const w = pillsFor( tie, room * part, 1, undefined, undefined, bare ).used;
 		for ( const f of [ 0.5, 0.38, 0.62, 0.26, 0.74 ] ) {
 			const p = K.onArc( lay.A, lay.B, h, t1 + ( t2 - t1 ) * f );
 			if ( free( boxAt( p, w ) ) ) {
-				put( p, part, boxAt( p, w ) );
+				put( p, part, boxAt( p, w ), bare );
 				return;
 			}
 		}
 	}
-	// A show keeps its night however short the hop: at the hop's middle, its ends over the edge of the hop's own two pickers.
-	const w = pillsFor( tie, room * 0.5, 1 ).used, mid = K.onArc( lay.A, lay.B, h, ( t1 + t2 ) / 2 );
-	if ( free( boxAt( mid, w - 34 ) ) ) {
-		put( mid, 0.5, boxAt( mid, w ) );
+	// At the hop's middle, its ends as far as the rim of the ground its own two pickers stand on.
+	const w = pillsFor( tie, room * 0.34, 1, undefined, undefined, true ).used, mid = K.onArc( lay.A, lay.B, h, ( t1 + t2 ) / 2 );
+	if ( free( boxAt( mid, w - 10 ) ) ) {
+		put( mid, 0.34, boxAt( mid, w ), true );
 	}
 }
 
@@ -780,7 +784,38 @@ function pairScene( a, b, rec, plain ) {
 	const trunked = [], inTrunk = new Set(), onTrunk = new Set(), everyone = pool;
 	if ( !spread && !plain ) {
 		const across = spanOf( W, en ) - 2 * 38 - 120;              // less the ends' own room and the least two branches take (K.fork)
-		let high = H - TOP - BOTTOM - tallOf( sharing( tie ? tie.ev : [] ) ) - 2 * ROW;      // a row kept for whoever is on no trunk
+		// The room there is, as K.rainbow will hand it out: over the straight line and under it, each strand to
+		// the side less taken. What the two share is counted whole here, though what a trunk says will not be a
+		// strand of its own: so a trunk planned for is a trunk there is room for.
+		const sides = [ Math.round( H / 2 ) - TOP, H - BOTTOM - Math.round( H / 2 ) ], edge = [ 0, 0 ];
+		let begun = false;
+		const seat = ( half, take ) => {
+			if ( !begun ) {
+				if ( half > Math.min( sides[ 0 ], sides[ 1 ] ) ) {
+					return false;
+				}
+				if ( take ) {
+					edge[ 0 ] = edge[ 1 ] = half;
+					begun = true;
+				}
+				return true;
+			}
+			let side = edge[ 0 ] <= edge[ 1 ] ? 0 : 1;
+			if ( edge[ side ] + 2 * half > sides[ side ] + 0.5 ) {
+				side = 1 - side;
+			}
+			if ( edge[ side ] + 2 * half > sides[ side ] + 0.5 ) {
+				return false;
+			}
+			if ( take ) {
+				edge[ side ] += 2 * half;
+			}
+			return true;
+		};
+		if ( sel.picker !== null || !tie ) {
+			seat( 34, true );                                          // a lit way on the straight line
+		}
+		sharing( tie ? tie.ev : [] ).forEach( ( x ) => seat( x.fit ? ROW : 3, true ) );
 		for ( const g of K.trunks( G, pool.filter( ( m ) => m.id !== sel.picker ).slice( 0, 40 ), { most: 6 } ).groups ) {
 			const says = ( e, room ) => pillsFor( { ev: [ e ] }, room, 1, undefined, e, true ).shown[ 0 ];
 			const each = Math.max( 92, Math.min( 240, ( across - 24 ) / 2 ) );
@@ -798,13 +833,13 @@ function pairScene( a, b, rec, plain ) {
 			const room = Math.max( 64, Math.min( 200, 2 * ( 1 - TURN ) * ( at.fan + 16 ) - 6 ) );     // a name under its circle: no wider than the branches run level either side
 			const mark = ( m ) => ( { r: R_OF( m.id ), w: Math.min( room, wide( first( m.id ), FONT.named ) ) } );
 			let members = g.members.slice();
-			while ( members.length > 1 && 2 * K.trunkHalf( members.map( mark ), at ) > high ) {
+			while ( members.length > 1 && !seat( K.trunkHalf( members.map( mark ), at ), false ) ) {
 				members = members.slice( 0, -1 );
 			}
 			if ( members.length < 2 ) {
 				continue;
 			}
-			high -= 2 * K.trunkHalf( members.map( mark ), at );
+			seat( K.trunkHalf( members.map( mark ), at ), true );
 			trunked.push( { g, members, key, far, room, marks: members.map( mark ) } );
 			members.forEach( ( m ) => inTrunk.add( m.id ) );
 			onTrunk.add( K.pieceFor( G, g.say ) );

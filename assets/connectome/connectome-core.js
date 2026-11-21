@@ -1717,7 +1717,8 @@ const TOGETHER = 1.35;
  * pills on it are at a's end and at b's (0: nothing said there, and the trunk is a stub). Returns null where the
  * frame is too narrow for a branch each way, else { tF, tJ (how far along the fork and the join are), tM (the
  * pickers between them), fan (how long a branch runs, to its picker's circle), pa, pb (where each pill's middle
- * is, along; null with none) }.
+ * is, along; null with none) }. ina, inb: how far in from each end the trunk's room begins, where a name under the
+ * end reaches further in than the end's own circle.
  */
 const slot = ( m ) => 2 * m.r + ( m.w ? 26 : 8 );          // a picker of a trunk: their circle, and their name under it
 
@@ -1726,9 +1727,9 @@ export function trunkHalf( marks, at ) {
 	return marks.reduce( ( sum, m ) => sum + slot( m ), 0 ) / ( 2 * 4 * at.tM * ( 1 - at.tM ) ) + 4;
 }
 
-export function fork( W, H, la, lb, wa, wb ) {
+export function fork( W, H, la, lb, wa, wb, ina = END, inb = END ) {
 	const { A, B } = ends( W, H, la, lb ), span = B.x - A.x;
-	const x0 = A.x + END + GAP, x1 = B.x - END - GAP;
+	const x0 = A.x + Math.max( END, ina ) + GAP, x1 = B.x - Math.max( END, inb ) - GAP;
 	const fa = x0 + ( wa ? wa - LAP : STUB ), fb = x1 - ( wb ? wb - LAP : STUB );
 	if ( fb - fa < 2 * FAN + 32 ) {
 		return null;
@@ -1830,7 +1831,28 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 		if ( st.group ) {
 			// A trunk: its pickers one over another where it is widest open, each on the arc through both ends
 			// that passes their place, so a branch to them (run()) keeps between the trunk's arc and theirs.
-			const at = st.forked, g = st.group, yc = A.y - sign * h * st.c;
+			const g = st.group, pillBox = ( t, w ) => boxOf( { pill: true, w }, onArc( A, B, sign * h, t ), null );
+			const hit = ( t, w ) => t !== null && !clear( pillBox( t, w ) );
+			let at = st.forked;
+			if ( hit( at.pa, g.wa ) || hit( at.pb, g.wb ) ) {
+				// What it says would lie on a name under an end, which reaches further in than the end's circle:
+				// the trunk's room begins past the name. With no room then, the strand is left out.
+				const past = ( nm ) => ( nm && !nm.side ? nm.w / 2 + 8 : END );
+				at = fork( W, H, la, lb, g.wa, g.wb, hit( at.pa, g.wa ) ? past( names.a ) : END, hit( at.pb, g.wb ) ? past( names.b ) : END );
+				if ( !at || hit( at.pa, g.wa ) || hit( at.pb, g.wb ) ) {
+					return null;
+				}
+			}
+			const pill = ( t, w ) => {
+				if ( t === null ) {
+					return null;
+				}
+				const p = onArc( A, B, sign * h, t );
+				taken.push( ...pillBox( t, w ) );
+				return { t, x: p.x, y: p.y };
+			};
+			const pa = pill( at.pa, g.wa ), pb = pill( at.pb, g.wb );
+			const c = 4 * at.tM * ( 1 - at.tM ), yc = A.y - sign * h * c;
 			const tall = g.marks.reduce( ( sum, m ) => sum + slot( m ), 0 ) * st.by, x = A.x + ( B.x - A.x ) * at.tM;
 			let y = yc - tall / 2;
 			const rows = g.marks.map( ( m ) => {
@@ -1838,17 +1860,9 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 				y += slot( m ) * st.by;
 				const named = !!m.w && clear( boxOf( m, p, 'under' ) );
 				taken.push( ...boxOf( m, p, named ? 'under' : null ) );
-				return { t: at.tM, x: p.x, y: p.y, h: ( A.y - p.y ) / st.c, named, at: named ? 'under' : null };
+				return { t: at.tM, x: p.x, y: p.y, h: ( A.y - p.y ) / c, named, at: named ? 'under' : null };
 			} );
-			const pill = ( t, w ) => {
-				if ( t === null ) {
-					return null;
-				}
-				const p = onArc( A, B, sign * h, t );
-				taken.push( ...boxOf( { pill: true, w }, p, null ) );
-				return { t, x: p.x, y: p.y };
-			};
-			const out = { h: sign * h, side, marks: [], group: { tF: at.tF, tJ: at.tJ, tM: at.tM, fan: at.fan, pa: pill( at.pa, g.wa ), pb: pill( at.pb, g.wb ), rows } };
+			const out = { h: sign * h, side, marks: [], group: { tF: at.tF, tJ: at.tJ, tM: at.tM, fan: at.fan, pa, pb, rows } };
 			if ( first ) {
 				edge[ 0 ] = edge[ 1 ] = st.half;
 				first = false;
