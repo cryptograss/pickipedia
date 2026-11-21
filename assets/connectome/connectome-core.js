@@ -412,6 +412,81 @@ export function mutuals( G, a, b ) {
 }
 
 /**
+ * Those of the mutuals who share one show or record with an end, in groups: a way across drawn once for all of
+ * them, not once each (Justin, #connectome, 21 Nov 2026, 01:56Z: "Make this a single line emerging from one side,
+ * then have a pill for the show, and then have it branch into the three (or more) common pickers that the two ends
+ * of the rainbow share, and then back into one line (with another fully shared pill, if one is available)
+ * connecting all the way to the other picker").
+ *
+ * mutuals: as mutuals() gives them ({ id, ta, tb }), loudest first. The biggest group goes first: of every show or
+ * record that `min` or more of them share with one end, the one the most share, and of two as many the one that
+ * comes first (standing(): a Permanent track, a Permanent show, ...); then the same among those left. A group is
+ * at most `most` strong, its loudest; the rest of its company are left, and are not gathered again under that
+ * piece. Each piece is said once: one a group goes by, or says at its far end, is no other group's.
+ *
+ * Returns { groups: [ { side: 'a' | 'b' (the end its piece is shared with), m (the piece, in G.music), say (what
+ * to call it, as an entry of a tie: its one song where all of them share just the one), members: [mutual],
+ * far: null | { m, say } (another piece every one of them shares with the other end), same (all of them share
+ * the group's own piece with the other end too: one stage, or one record, with both) } ], left: [mutual] }.
+ */
+export function trunks( G, mutuals, { min = 2, most = 6, not = [] } = {} ) {
+	const said = new Set( not ), done = new Set();              // pieces said; and ( side, piece ) once gathered
+	const sayOf = ( m, evs ) => {
+		const tracks = evs.every( ( e ) => e.how === TRACK && e.songs.length );
+		const common = tracks ? evs[ 0 ].songs.filter( ( song ) => evs.every( ( e ) => e.songs.includes( song ) ) ) : [];
+		const how = Math.min( ...evs.map( ( e ) => e.how ) );
+		return common.length === 1 ? { m, how: TRACK, songs: common } : { m, how: how >= STAGE ? STAGE : RECORD, songs: [] };
+	};
+	const first = ( x, y ) => ( y.n - x.n ) || ( y.rank - x.rank ) || ( G.music[ y.m ].tier - G.music[ x.m ].tier ) || ( x.side < y.side ? -1 : x.side > y.side ? 1 : 0 ) || ( x.m - y.m );
+	const groups = [];
+	let left = mutuals.slice();
+	for ( ;; ) {
+		const by = new Map();
+		for ( const x of left ) {
+			for ( const [ side, t ] of [ [ 'a', x.ta ], [ 'b', x.tb ] ] ) {
+				for ( const e of t.ev ) {
+					const key = side + e.m;
+					if ( said.has( e.m ) || done.has( key ) ) {
+						continue;
+					}
+					if ( !by.has( key ) ) {
+						by.set( key, { side, m: e.m, members: [], evs: [] } );
+					}
+					const c = by.get( key );
+					if ( c.members[ c.members.length - 1 ] !== x ) {         // a tie may hold a record twice over (a track, and the record whole)
+						c.members.push( x );
+						c.evs.push( e );
+					}
+				}
+			}
+		}
+		const cands = [ ...by.values() ].filter( ( c ) => c.members.length >= min ).map( ( c ) => Object.assign( c, { n: Math.min( most, c.members.length ),
+			rank: standing( G.music[ c.m ], Math.min( ...c.evs.map( ( e ) => e.how ) ) ) } ) ).sort( first );
+		if ( !cands.length ) {
+			break;
+		}
+		const c = cands[ 0 ], members = c.members.slice( 0, most ), evs = c.evs.slice( 0, most );
+		done.add( c.side + c.m );
+		said.add( c.m );
+		// the other end: what every one of them shares with it
+		const other = ( x ) => ( c.side === 'a' ? x.tb : x.ta );
+		const all = other( members[ 0 ] ).ev.map( ( e ) => e.m ).filter( ( m, i, l ) => l.indexOf( m ) === i )
+			.filter( ( m ) => members.every( ( x ) => other( x ).ev.some( ( e ) => e.m === m ) ) );
+		const evOf = ( m ) => members.map( ( x ) => other( x ).ev.find( ( e ) => e.m === m ) );
+		const far = all.filter( ( m ) => !said.has( m ) ).map( ( m ) => ( { m, evs: evOf( m ) } ) )
+			.map( ( o ) => Object.assign( o, { rank: standing( G.music[ o.m ], Math.min( ...o.evs.map( ( e ) => e.how ) ) ) } ) )
+			.sort( ( x, y ) => ( y.rank - x.rank ) || ( G.music[ y.m ].tier - G.music[ x.m ].tier ) || ( x.m - y.m ) )[ 0 ] || null;
+		if ( far ) {
+			said.add( far.m );
+		}
+		groups.push( { side: c.side, m: c.m, say: sayOf( c.m, evs ), members, far: far ? { m: far.m, say: sayOf( far.m, far.evs ) } : null, same: all.includes( c.m ) } );
+		const gone = new Set( members );
+		left = left.filter( ( x ) => !gone.has( x ) );
+	}
+	return { groups, left };
+}
+
+/**
  * The web among some pickers: every tie between two of them who have played together (or, with loose, who share
  * a record), each once, in the order the pickers were given. Round one picker these are the far legs of the
  * two-hop ways from them to their own company: who of the company have played with each other.
@@ -1615,8 +1690,54 @@ export function arcBow( A, B, h, t1, t2 ) {
 	return { x: ( dy / len ) * k, y: -( dx / len ) * k };
 }
 
+/**
+ * A run of points from the arc that stands h1 over the straight line, at t1 along, to the arc that stands h2, at t2:
+ * a branch leaving a trunk, or coming back to one. It changes arcs over the stretch [ from, to ] of its own length
+ * and keeps to its arc for the rest, so it never leaves the room between the two arcs: no strand outside them is
+ * crossed, and of two branches off one trunk neither crosses the other.
+ */
+export function run( A, B, h1, h2, t1, t2, from = 0, to = 1, n = 16 ) {
+	const pts = [];
+	for ( let i = 0; i <= n; i++ ) {
+		const u = i / n, v = Math.max( 0, Math.min( 1, ( u - from ) / ( ( to - from ) || 1 ) ) ), e = v * v * ( 3 - 2 * v );
+		pts.push( onArc( A, B, h1 + ( h2 - h1 ) * e, t1 + ( t2 - t1 ) * u ) );
+	}
+	return pts;
+}
+
 const hits = ( p, q ) => p.x1 < q.x2 && p.x2 > q.x1 && p.y1 < q.y2 && p.y2 > q.y1;
 const ALONG = [ 0.5, 0.36, 0.64, 0.25, 0.75, 0.43, 0.57, 0.3, 0.7, 0.2, 0.8 ];   // where along its strand a mark may sit, the middle first
+
+const END = 30, GAP = 8, STUB = 34, LAP = 6, FAN = 44;     // a trunk: clear of an end's circle; its length with nothing said on it; how far a fork hides under its pill; the least a branch runs
+/** How far apart a trunk's branches may stand, of the room the frame has to spare: less than plain strands (`fill`), so a group stays one thing. */
+const TOGETHER = 1.35;
+
+/**
+ * Where a trunk forks and where it joins again, between two ends as rainbow() sets them: wa, wb are how wide the
+ * pills on it are at a's end and at b's (0: nothing said there, and the trunk is a stub). Returns null where the
+ * frame is too narrow for a branch each way, else { tF, tJ (how far along the fork and the join are), tM (the
+ * pickers between them), fan (how long a branch runs, to its picker's circle), pa, pb (where each pill's middle
+ * is, along; null with none) }. ina, inb: how far in from each end the trunk's room begins, where a name under the
+ * end reaches further in than the end's own circle.
+ */
+const slot = ( m ) => 2 * m.r + ( m.w ? 26 : 8 );          // a picker of a trunk: their circle, and their name under it
+
+/** Half the room a trunk takes at the rainbow's middle, for its pickers ({ r, w }) one over another where fork() (at) puts them. */
+export function trunkHalf( marks, at ) {
+	return marks.reduce( ( sum, m ) => sum + slot( m ), 0 ) / ( 2 * 4 * at.tM * ( 1 - at.tM ) ) + 4;
+}
+
+export function fork( W, H, la, lb, wa, wb, ina = END, inb = END ) {
+	const { A, B } = ends( W, H, la, lb ), span = B.x - A.x;
+	const x0 = A.x + Math.max( END, ina ) + GAP, x1 = B.x - Math.max( END, inb ) - GAP;
+	const fa = x0 + ( wa ? wa - LAP : STUB ), fb = x1 - ( wb ? wb - LAP : STUB );
+	if ( fb - fa < 2 * FAN + 32 ) {
+		return null;
+	}
+	const at = ( x ) => ( x - A.x ) / span;
+	return { tF: at( fa ), tJ: at( fb ), tM: at( ( fa + fb ) / 2 ), fan: ( fb - fa ) / 2 - 16,
+		pa: wa ? at( x0 + wa / 2 ) : null, pb: wb ? at( x1 - wb / 2 ) : null };
+}
 
 /**
  * Where the strands go, and where on each its marks sit.
@@ -1631,7 +1752,11 @@ const ALONG = [ 0.5, 0.36, 0.64, 0.25, 0.75, 0.43, 0.57, 0.3, 0.7, 0.2, 0.8 ];  
  * fill: with room to spare, how many times further apart the strands may stand to fill the frame.
  *
  * Returns { A, B, taken (every box set down), strands: [ null | { h, side, marks: [{ t, x, y, named, at: 'right' | 'left' | 'under' | null }] } ] }: null
- * for a strand the frame had no room for. A name that would lie on another mark or run off the frame is tried
+ * for a strand the frame had no room for. A strand may be a trunk in place of marks: `group`, { marks: [{ r, w }]
+ * (the pickers it branches into, the first uppermost, each named under their circle), wa, wb (fork()) }. It takes
+ * the room its pickers need one over another, and comes back as { h, side, group: { tF, tJ, tM, pa, pb (each
+ * pill's place: { t, x, y }, or null), rows: [{ t, x, y, h (the arc through both ends that this picker is on),
+ * named, at: 'under' }] } }. A name that would lie on another mark or run off the frame is tried
  * further along the strand and on the mark's other side; with nowhere clear, the mark is set down without it
  * (named: false). Of several marks on one strand, each one's name is tried first on the side away from the others,
  * so the stretch of the strand between them is left in sight.
@@ -1642,6 +1767,14 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 	// With fewer strands than the frame has room for, they stand further apart, up to `fill` times, and fill it:
 	// as far as the fuller side of the straight line allows.
 	const need = [ 0, 0 ];
+	asked = asked.map( ( st ) => {
+		if ( !st.group ) {
+			return st;
+		}
+		const at = fork( W, H, la, lb, st.group.wa, st.group.wb );
+		const c = at ? 4 * at.tM * ( 1 - at.tM ) : 1;             // how high an arc stands where the pickers are, of its height at its middle
+		return Object.assign( {}, st, { marks: [], forked: at, c, half: at ? trunkHalf( st.group.marks, at ) : 0 } );
+	} );
 	asked.forEach( ( st, i ) => {
 		if ( i === 0 ) {
 			need[ 0 ] = need[ 1 ] = st.half;
@@ -1650,7 +1783,7 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 		}
 	} );
 	const wide = Math.max( 1, Math.min( fill, room[ 0 ] / Math.max( 1, need[ 0 ] ), room[ 1 ] / Math.max( 1, need[ 1 ] ) ) );
-	const strands = asked.map( ( st ) => Object.assign( {}, st, { half: st.half * wide } ) );
+	const strands = asked.map( ( st ) => Object.assign( {}, st, { half: st.half * ( st.group ? Math.min( wide, TOGETHER ) : wide ), by: st.group ? Math.min( wide, TOGETHER ) : wide } ) );
 	const edge = [ 0, 0 ];                                   // how far out each side is taken
 	const taken = [];
 	for ( const [ P, nm ] of [ [ A, names.a ], [ B, names.b ] ] ) {
@@ -1666,6 +1799,9 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 	let first = true;
 	const out = strands.map( ( st, i ) => {
 		let side = edge[ 0 ] <= edge[ 1 ] ? 0 : 1, h;
+		if ( st.group && !st.forked ) {
+			return null;
+		}
 		if ( first ) {
 			h = 0;
 		} else {
@@ -1692,6 +1828,49 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 			return b;
 		};
 		const clear = ( bs ) => bs.every( ( b ) => b.x1 >= 3 && b.x2 <= W - 3 && !taken.some( ( q ) => hits( b, q ) ) );
+		if ( st.group ) {
+			// A trunk: its pickers one over another where it is widest open, each on the arc through both ends
+			// that passes their place, so a branch to them (run()) keeps between the trunk's arc and theirs.
+			const g = st.group, pillBox = ( t, w ) => boxOf( { pill: true, w }, onArc( A, B, sign * h, t ), null );
+			const hit = ( t, w ) => t !== null && !clear( pillBox( t, w ) );
+			let at = st.forked;
+			if ( hit( at.pa, g.wa ) || hit( at.pb, g.wb ) ) {
+				// What it says would lie on a name under an end, which reaches further in than the end's circle:
+				// the trunk's room begins past the name. With no room then, the strand is left out.
+				const past = ( nm ) => ( nm && !nm.side ? nm.w / 2 + 8 : END );
+				at = fork( W, H, la, lb, g.wa, g.wb, hit( at.pa, g.wa ) ? past( names.a ) : END, hit( at.pb, g.wb ) ? past( names.b ) : END );
+				if ( !at || hit( at.pa, g.wa ) || hit( at.pb, g.wb ) ) {
+					return null;
+				}
+			}
+			const pill = ( t, w ) => {
+				if ( t === null ) {
+					return null;
+				}
+				const p = onArc( A, B, sign * h, t );
+				taken.push( ...pillBox( t, w ) );
+				return { t, x: p.x, y: p.y };
+			};
+			const pa = pill( at.pa, g.wa ), pb = pill( at.pb, g.wb );
+			const c = 4 * at.tM * ( 1 - at.tM ), yc = A.y - sign * h * c;
+			const tall = g.marks.reduce( ( sum, m ) => sum + slot( m ), 0 ) * st.by, x = A.x + ( B.x - A.x ) * at.tM;
+			let y = yc - tall / 2;
+			const rows = g.marks.map( ( m ) => {
+				const p = { x, y: y + ( m.r + 4 ) * st.by };
+				y += slot( m ) * st.by;
+				const named = !!m.w && clear( boxOf( m, p, 'under' ) );
+				taken.push( ...boxOf( m, p, named ? 'under' : null ) );
+				return { t: at.tM, x: p.x, y: p.y, h: ( A.y - p.y ) / c, named, at: named ? 'under' : null };
+			} );
+			const out = { h: sign * h, side, marks: [], group: { tF: at.tF, tJ: at.tJ, tM: at.tM, fan: at.fan, pa, pb, rows } };
+			if ( first ) {
+				edge[ 0 ] = edge[ 1 ] = st.half;
+				first = false;
+			} else {
+				edge[ side ] = h + st.half;
+			}
+			return out;
+		}
 		// One mark: anywhere along, each strand starting somewhere else, so the marks fill the frame and don't
 		// stand in a column. More: spread evenly, and all slid together a little either way. `at`: where the
 		// strand's marks belong (a picker's place in a chain), and a little either way of that.

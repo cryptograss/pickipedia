@@ -678,6 +678,7 @@ function clearCard( sc, W ) {
  * --------------------------------------------------------------------------------------------------------- */
 
 const ROW = 15;                  // half the room a strand with names on it takes
+const TURN = 0.4;                // how much of its length a branch of a trunk takes to reach its own picker's arc: it runs level for the rest
 const R_OF = ( id ) => ( P( id ).img ? 16 : ( P( id ).inst ? 14 : 9 ) );      // a named picker's circle, as draw.node draws it
 const nameMark = ( id ) => ( { r: R_OF( id ), w: wide( K.clip( first( id ), 26 ), FONT.named ) + 4 } );
 /** How far apart the two ends stand, as K.rainbow will set them: what a hop of a way across has for its name and what it says. */
@@ -714,35 +715,39 @@ function endsNamed( a, b, en ) {
 
 /**
  * What a hop of a lit way is, said on it: where a pill is clear of the pickers, names and pills already set down, a
- * briefer one where the full one finds nowhere, and at the last one that laps a little onto the hop's own two
- * pickers. A hop with no room even for that says nothing here: the line is still the tie, a pointer at it says what
- * it is, and the list has it whole.
+ * briefer one where the full one finds nowhere, and then the least it can say (a show its night alone). A hop with
+ * no room even for that says nothing here: the line is still the tie, and a click on it opens its two pickers.
+ *
+ * It used to end by lapping a show's pill 17px onto the hop's own two pickers, so a show kept its night however
+ * short the hop: on the running site that put a label's body into a face on 3 of 60 pairs (21 Nov 2026), up to
+ * 9.6px in. A face is never under a label (re and Justin, #connectome, 20 Nov 2026): now the last try touches the
+ * rim of a picker's ground and no more.
  */
 function sayHop( sc, lay, h, t1, t2, u, v, tie, room ) {
 	const free = ( box ) => !lay.taken.some( ( q ) => box.x1 < q.x2 && box.x2 > q.x1 && box.y1 < q.y2 && box.y2 > q.y1 );
 	const boxAt = ( p, w ) => ( { x1: p.x - w / 2 - 3, y1: p.y - 12, x2: p.x + w / 2 + 3, y2: p.y + 12 } );
-	const put = ( p, part, box ) => {
+	const put = ( p, part, box, bare ) => {
 		lay.taken.push( box );
-		placePills( sc, u, v, tie, p.x - room * part / 2, p.x + room * part / 2, p.y, 1, 1, 60 );
+		placePills( sc, u, v, tie, p.x - room * part / 2, p.x + room * part / 2, p.y, 1, 1, 60, undefined, undefined, undefined, bare );
 	};
-	for ( const part of [ 1, 0.72, 0.5 ] ) {
-		const w = pillsFor( tie, room * part, 1 ).used;
+	for ( const [ part, bare ] of [ [ 1, false ], [ 0.72, false ], [ 0.5, false ], [ 0.5, true ], [ 0.34, true ] ] ) {
+		const w = pillsFor( tie, room * part, 1, undefined, undefined, bare ).used;
 		for ( const f of [ 0.5, 0.38, 0.62, 0.26, 0.74 ] ) {
 			const p = K.onArc( lay.A, lay.B, h, t1 + ( t2 - t1 ) * f );
 			if ( free( boxAt( p, w ) ) ) {
-				put( p, part, boxAt( p, w ) );
+				put( p, part, boxAt( p, w ), bare );
 				return;
 			}
 		}
 	}
-	// A show keeps its night however short the hop: at the hop's middle, its ends over the edge of the hop's own two pickers.
-	const w = pillsFor( tie, room * 0.5, 1 ).used, mid = K.onArc( lay.A, lay.B, h, ( t1 + t2 ) / 2 );
-	if ( free( boxAt( mid, w - 34 ) ) ) {
-		put( mid, 0.5, boxAt( mid, w ) );
+	// At the hop's middle, its ends as far as the rim of the ground its own two pickers stand on.
+	const w = pillsFor( tie, room * 0.34, 1, undefined, undefined, true ).used, mid = K.onArc( lay.A, lay.B, h, ( t1 + t2 ) / 2 );
+	if ( free( boxAt( mid, w - 10 ) ) ) {
+		put( mid, 0.34, boxAt( mid, w ), true );
 	}
 }
 
-function pairScene( a, b, rec ) {
+function pairScene( a, b, rec, plain ) {
 	const { W, H } = frame();
 	const sc = newScene();
 	const whole = G.adj[ a ].get( b ) || null;
@@ -770,21 +775,101 @@ function pairScene( a, b, rec ) {
 	const small = W < 560, TOP = 20, BOTTOM = 20;
 
 	// What the two share: the loudest few said on their strands, the rest thin strands round them.
-	const shared = [];
 	const usual = small ? 1 : ( H > 640 ? 4 : ( H > 460 ? 3 : 2 ) );
-	// the record spread out: every track of it named, as far as the frame's height goes with three rows left for the ways round
-	const said = tie ? Math.min( tie.ev.length, spread ? Math.max( usual, Math.min( spread.songs.length, Math.floor( ( H - TOP - BOTTOM ) / ( 2 * ROW ) ) - 3 ) ) : usual ) : 0;
-	const thin = tie ? Math.min( tie.ev.length - said, H > 460 ? 12 : 6 ) : 0;
 	// what's said on the straight line keeps clear of a name under either end
 	const pillRoom = Math.max( 96, Math.min( 300, W * 0.36, W - 2 * 76 - ( en.sa ? 0 : en.la + en.lb ) ) );
-	( tie ? tie.ev.slice( 0, said + thin ) : [] ).forEach( ( e, i ) => {
-		shared.push( { e, fit: i < said ? pillsFor( tie, pillRoom, 1, undefined, e ).shown[ 0 ] : null } );
-	} );
+	const sharing = ( evs ) => {
+		// the record spread out: every track of it named, as far as the frame's height goes with three rows left for the ways round
+		const said = Math.min( evs.length, spread ? Math.max( usual, Math.min( spread.songs.length, Math.floor( ( H - TOP - BOTTOM ) / ( 2 * ROW ) ) - 3 ) ) : usual );
+		const thin = Math.min( evs.length - said, H > 460 ? 12 : 6 );
+		return evs.slice( 0, said + thin ).map( ( e, i ) => ( { e, fit: i < said ? pillsFor( tie, pillRoom, 1, undefined, e ).shown[ 0 ] : null } ) );
+	};
+	const tallOf = ( list ) => list.reduce( ( sum, x ) => sum + ( x.fit ? 2 * ROW : 6 ), 0 );
+
+	// Those who share one show or record with an end, on one trunk (Justin, #connectome, 21 Nov 2026, 01:56Z: "A way
+	// to make relationship rainbows look less chaotic: Share initial connections on one side ... Make this a
+	// single line emerging from one side, then have a pill for the show, and then have it branch into the three
+	// (or more) common pickers that the two ends of the rainbow share, and then back into one line (with another
+	// fully shared pill, if one is available) connecting all the way to the other picker."). Where the frame is
+	// wide enough for what the trunk says and a branch each way, and as many of a group as it is tall enough for:
+	// the rest of them, and every group there is no room for, are ways of their own as before. One whose way is
+	// lit is out of their group, on the straight line. A record spread out keeps the old shape: its tracks are
+	// what that view is for.
+	const trunked = [], inTrunk = new Set(), onTrunk = new Set(), everyone = pool;
+	if ( !spread && !plain ) {
+		const across = spanOf( W, en ) - 2 * 38 - 120;              // less the ends' own room and the least two branches take (K.fork)
+		// The room there is, as K.rainbow will hand it out: over the straight line and under it, each strand to
+		// the side less taken. What the two share is counted whole here, though what a trunk says will not be a
+		// strand of its own: so a trunk planned for is a trunk there is room for.
+		const sides = [ Math.round( H / 2 ) - TOP, H - BOTTOM - Math.round( H / 2 ) ], edge = [ 0, 0 ];
+		let begun = false;
+		const seat = ( half, take ) => {
+			if ( !begun ) {
+				if ( half > Math.min( sides[ 0 ], sides[ 1 ] ) ) {
+					return false;
+				}
+				if ( take ) {
+					edge[ 0 ] = edge[ 1 ] = half;
+					begun = true;
+				}
+				return true;
+			}
+			let side = edge[ 0 ] <= edge[ 1 ] ? 0 : 1;
+			if ( edge[ side ] + 2 * half > sides[ side ] + 0.5 ) {
+				side = 1 - side;
+			}
+			if ( edge[ side ] + 2 * half > sides[ side ] + 0.5 ) {
+				return false;
+			}
+			if ( take ) {
+				edge[ side ] += 2 * half;
+			}
+			return true;
+		};
+		if ( sel.picker !== null || !tie ) {
+			seat( 34, true );                                          // a lit way on the straight line
+		}
+		sharing( tie ? tie.ev : [] ).forEach( ( x ) => seat( x.fit ? ROW : 3, true ) );
+		for ( const g of K.trunks( G, pool.filter( ( m ) => m.id !== sel.picker ).slice( 0, 40 ), { most: 6 } ).groups ) {
+			const says = ( e, room ) => pillsFor( { ev: [ e ] }, room, 1, undefined, e, true ).shown[ 0 ];
+			const each = Math.max( 92, Math.min( 240, ( across - 24 ) / 2 ) );
+			const key = says( g.say, g.far ? each : Math.min( 240, across - 34 ) );
+			let far = g.far ? says( g.far.say, each ) : null;
+			const forkOf = ( fw ) => ( g.side === 'a' ? K.fork( W, H, en.la, en.lb, key.w, fw ) : K.fork( W, H, en.la, en.lb, fw, key.w ) );
+			let at = forkOf( far ? far.w : 0 );
+			if ( !at && far ) {                                         // no room to say both: the far end's trunk says nothing
+				far = null;
+				at = forkOf( 0 );
+			}
+			if ( !at ) {
+				continue;
+			}
+			const room = Math.max( 64, Math.min( 200, 2 * ( 1 - TURN ) * ( at.fan + 16 ) - 6 ) );     // a name under its circle: no wider than the branches run level either side
+			const mark = ( m ) => ( { r: R_OF( m.id ), w: Math.min( room, wide( first( m.id ), FONT.named ) ) } );
+			let members = g.members.slice();
+			while ( members.length > 1 && !seat( K.trunkHalf( members.map( mark ), at ), false ) ) {
+				members = members.slice( 0, -1 );
+			}
+			if ( members.length < 2 ) {
+				continue;
+			}
+			seat( K.trunkHalf( members.map( mark ), at ), true );
+			trunked.push( { g, members, key, far, room, marks: members.map( mark ) } );
+			members.forEach( ( m ) => inTrunk.add( m.id ) );
+			onTrunk.add( K.pieceFor( G, g.say ) );
+			if ( far ) {
+				onTrunk.add( K.pieceFor( G, g.far.say ) );
+			}
+		}
+		pool = pool.filter( ( m ) => !inTrunk.has( m.id ) );
+	}
+	// Each piece is said once ([[Cryptograss:Bacon graphs/Priority]], rule 5): what a trunk says is not a strand of its own as well.
+	const shared = sharing( tie ? tie.ev.filter( ( e ) => !onTrunk.has( K.pieceFor( G, e ) ) ) : [] );
 
 	// The room left, in strands with names on them: most to those who have played with both, some to the ways by two.
-	const span = H - TOP - BOTTOM - shared.reduce( ( sum, x ) => sum + ( x.fit ? 2 * ROW : 6 ), 0 );
-	const rows = Math.max( 1, Math.floor( span / ( 2 * ROW ) ) );
-	const twos = K.ways( G, a, b, Math.min( 8, Math.max( rows - pool.length, Math.round( rows * 0.3 ) ) ), pool.map( ( m ) => m.id ) );
+	const span = H - TOP - BOTTOM - tallOf( shared ) - trunked.reduce( ( sum, x ) => sum + 2 * K.trunkHalf( x.marks, K.fork( W, H, en.la, en.lb, x.g.side === 'a' ? x.key.w : ( x.far ? x.far.w : 0 ), x.g.side === 'a' ? ( x.far ? x.far.w : 0 ) : x.key.w ) ), 0 );
+	const rows = Math.max( trunked.length ? 0 : 1, Math.floor( span / ( 2 * ROW ) ) );
+	const twos = K.ways( G, a, b, Math.min( 8, Math.max( rows - pool.length, Math.round( rows * 0.3 ) ) ), pool.map( ( m ) => m.id ).concat( [ ...inTrunk ] ) );
 	const onTwo = new Set( twos.flat() );
 	const named = Math.max( 0, Math.min( pool.length, rows - twos.length ) );
 	const beads = pool.slice( named ).concat( rest ).filter( ( m ) => !onTwo.has( m.id ) );
@@ -803,19 +888,54 @@ function pairScene( a, b, rec ) {
 	const lit = litWay ? ( litWay.m ? litWay.m.id : sel.picker ) : null;
 	const hop = spanOf( W, en ) / 3;
 	const under = ( id, room ) => ( { r: R_OF( id ), w: Math.min( room, wide( first( id ), FONT.named ) ), under: true } );
-	const is = ( litWay ? [ litWay ] : [] ).concat( shared, ways.filter( ( x ) => x !== litWay && !x.spare ) );
-	const strands = is.map( ( x ) => ( x.e ? ( x.fit ? { half: ROW, marks: [ { pill: true, w: x.fit.w } ] } : { half: 3, marks: [] } ) :
+	const is = ( litWay ? [ litWay ] : [] ).concat( shared, trunked, ways.filter( ( x ) => x !== litWay && !x.spare ) );
+	const pillAt = ( x, end ) => ( ( x.g.side === end ? x.key : x.far ) || { w: 0 } ).w;      // how wide what a trunk says at this end is
+	const strands = is.map( ( x ) => ( x.g ? { half: 0, marks: [], group: { marks: x.marks, wa: pillAt( x, 'a' ), wb: pillAt( x, 'b' ) } } : x.e ? ( x.fit ? { half: ROW, marks: [ { pill: true, w: x.fit.w } ] } : { half: 3, marks: [] } ) :
 		x === litWay ? { half: 34, marks: x.m ? [ under( x.m.id, 200 ) ] : x.chain.slice( 1, -1 ).map( ( id ) => under( id, hop - 12 ) ) } :
 			x.m ? { half: x.bead ? 6.5 : ROW, marks: [ x.bead ? beadMark( x.m.id, dotRadius( x.m.w ) ) : nameMark( x.m.id ) ] } :
 				{ half: ROW, marks: x.chain.slice( 1, -1 ).map( nameMark ) } ) );
 
 	const lay = K.rainbow( { W, H, la: en.la, lb: en.lb, strands, top: TOP, bottom: BOTTOM, fill: 3, names: endsNamed( a, b, en ) } );
+	if ( is.some( ( x, i ) => x.g && !lay.strands[ i ] ) ) {      // a trunk the frame turned out to have no room for: none of its pickers is left out for it
+		return pairScene( a, b, rec, true );
+	}
 
 	addEnds( sc, a, b, lay, en, W );
 	const bow = ( st, t1, t2 ) => K.arcBow( lay.A, lay.B, st.h, t1, t2 );
 	is.forEach( ( x, i ) => {
 		const st = lay.strands[ i ];
 		if ( !st ) {
+			return;
+		}
+		if ( x.g ) {                                                 // a trunk: one line from an end, what it is, a branch to each of its pickers, and one line on
+			const gr = st.group, o = picked ? 0.28 : 0.9;
+			x.members.forEach( ( m, k ) => {
+				const row = gr.rows[ k ], leg = { o, role: 'leg', c: m.id, delay: 170 + i * 30 + k * 20 };
+				addOnStrand( sc, m.id, row, { r: dotRadius( m.w ), delay: 130 + i * 30 + k * 20, o: picked ? 0.55 : 1, m, room: x.room } );
+				addLine( sc, a, m.id, m.ta, Object.assign( { pts: K.run( lay.A, lay.B, st.h, row.h, gr.tF, gr.tM, 0, TURN, 30 ), pin: [ false, true ] }, leg ) );
+				addLine( sc, m.id, b, m.tb, Object.assign( { pts: K.run( lay.A, lay.B, row.h, st.h, gr.tM, gr.tJ, 1 - TURN, 1, 30 ), pin: [ true, false ] }, leg ) );
+			} );
+			const heavy = Math.min( 5.5, 2.4 + 0.55 * x.members.length );
+			for ( const end of [ 'a', 'b' ] ) {
+				const mine = x.g.side === end, id = end === 'a' ? a : b, fit = mine ? x.key : x.far, at = end === 'a' ? gr.pa : gr.pb;
+				// what this stretch is: the piece the group goes by; at the far end the other piece all of them
+				// share with it, where there was room to say so, or the same one, where they share that with
+				// both; else only that their ways on are one line here
+				const say = mine ? x.g.say : ( fit ? x.g.far.say : ( x.g.same ? x.g.say : null ) );
+				const pts = end === 'a' ? K.run( lay.A, lay.B, st.h, st.h, 0, gr.tF, 0, 1, 8 ) : K.run( lay.A, lay.B, st.h, st.h, gr.tJ, 1, 0, 1, 8 );
+				const ties = x.members.map( ( m ) => ( end === 'a' ? m.ta : m.tb ) );
+				const more = { a: 'p' + id, b: undefined, u: id, v: x.members[ 0 ].id, pts, pin: end === 'a' ? [ true, false ] : [ false, true ], role: 'trunk', w: heavy, o: picked ? 0.4 : 1, delay: 110 + i * 30 };
+				if ( say ) {
+					const piece = K.pieceFor( G, say );
+					sc.lines.set( 'tk' + end + i, Object.assign( { tie: { ev: [ say ], played: say.how >= K.STAGE, tier: G.music[ say.m ].tier }, e: say, piece, stands: 'piece', strand: true }, more ) );
+					if ( fit && at ) {
+						sc.pills.set( 'mtk' + end + say.m, { stands: 'piece', piece, is: 'm' + piece, x: at.x, y: at.y, w: fit.w, label: fit.label, glyph: fit.glyph, tier: fit.tier,
+							e: say, u: id, v: x.members[ 0 ].id, o: picked ? 0.4 : 1, delay: 150 + i * 30, play: fit.play, song: fit.song } );
+					}
+				} else {
+					sc.lines.set( 'tk' + end + i, Object.assign( { tie: { ev: [], played: ties.every( ( t ) => t.played ), tier: Math.min( ...ties.map( ( t ) => t.tier ) ) }, stands: 'tie', quiet: true }, more ) );
+				}
+			}
 			return;
 		}
 		if ( x.e ) {                                                 // something the two share: its own arc, end to end
@@ -861,7 +981,7 @@ function pairScene( a, b, rec ) {
 		}
 	} );
 
-	sc.pool = pool;
+	sc.pool = everyone;
 	sc.tie = whole;
 	sc.lit = lit;
 	sc.loose = needLoose;
@@ -2783,6 +2903,14 @@ function pull( d, a, b ) {
  */
 function pathOf( it, e ) {
 	const d = it.d, a = live.node.get( d.a ), b = live.node.get( d.b );
+	if ( d.pts ) {
+		// A stretch of a trunk, or a branch of one (pairScene): its own run of points. An end that is a picker
+		// (pin) goes where they are while they slide, and the run leans after it.
+		const n = d.pts.length - 1, p0 = d.pts[ 0 ], p1 = d.pts[ n ];
+		const da = d.pin[ 0 ] && a ? { x: a.x - p0.x, y: a.y - p0.y } : STRAIGHT, db = d.pin[ 1 ] && b ? { x: b.x - p1.x, y: b.y - p1.y } : STRAIGHT;
+		it.q = STRAIGHT;
+		return 'M' + d.pts.map( ( p, i ) => ( p.x + da.x * ( 1 - i / n ) + db.x * ( i / n ) ).toFixed( 1 ) + ' ' + ( p.y + da.y * ( 1 - i / n ) + db.y * ( i / n ) ).toFixed( 1 ) ).join( 'L' );
+	}
 	if ( !a || !b ) {
 		return null;
 	}
@@ -4542,8 +4670,12 @@ function aTie( d ) {
 			}
 		} ) );
 	} else {
-		w.hint = 'click: light this way across';
-		w.acts.push( act( 'Light this way across', () => choose( { picker: d.c } ) ), act( 'Open these two', () => go( { a: d.u, b: d.v } ) ) );
+		// Justin, #connectome, 21 Nov 2026, 01:56Z: "In a rainbow chart, if I click on a linking line, it ought to
+		// bring me directly to the full rainbow for those two, instead of changing who is in the middle of the
+		// existing rainbow graph. And of course, 'back' needs to take me back to the previous rainbow." Lighting
+		// the way was the click until then; it is the sheet's second button now, and a held finger's.
+		w.hint = 'click: open these two';
+		w.acts.push( act( 'Open these two', () => go( { a: d.u, b: d.v } ) ), act( 'Light this way across', () => choose( { picker: d.c } ) ) );
 	}
 	return w;
 }
