@@ -1208,7 +1208,13 @@ body.mini #g { cursor: pointer; }
 #card[hidden] { display: none; }
 #card img { flex: none; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
 #card .card-in { display: flex; flex: 1 1 0; flex-direction: column; gap: 2px; min-width: 0; max-height: 100%; overflow: hidden; }
-#card .card-name { overflow: hidden; color: var( --link ); font: 600 16px/1.2 var( --name ); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+/* The name whole, on two lines where one won't hold it: in Rabbithole's pane the card is 167px wide at 1366x768 and
+   said "Cory W…" (seen on the live site, 20 Nov 2026). `slim` is a card under 200px (cardSay): a smaller picture,
+   so the words have the room. `tall` is a name that took its second line: one line less under it. */
+#card .card-name { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; color: var( --link ); font: 600 16px/1.2 var( --name ); text-decoration: none; }
+#card.slim img { width: 44px; height: 44px; }
+#card.slim .card-name { font-size: 15px; }
+#card.tall .card-more { -webkit-line-clamp: 1; line-clamp: 1; }
 #card b.card-name { color: var( --ink ); }
 #card a.card-name:hover, #card a.card-name:focus { text-decoration: underline; }
 #card .card-what { overflow: hidden; color: var( --ink ); text-overflow: ellipsis; white-space: nowrap; }
@@ -1221,9 +1227,10 @@ body.mini #g { cursor: pointer; }
 body.shell:not( .steering ) #say { display: none; }
 @media ( max-width: 520px ) {
 	#card { gap: 7px; padding: 6px 8px; }
-	#card img { width: 44px; height: 44px; }
-	#card .card-name { font-size: 14px; }
+	#card img, #card.slim img { width: 40px; height: 40px; }
+	#card .card-name, #card.slim .card-name { font-size: 14px; }
 	#card .card-more { -webkit-line-clamp: 1; line-clamp: 1; }
+	#card.tall .card-more { display: none; }
 }
 #kept[hidden] { display: none; }
 #kept a { color: inherit; font-weight: 600; white-space: nowrap; }
