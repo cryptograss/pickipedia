@@ -517,7 +517,7 @@ function addLine( sc, u, v, tie, more ) {
 }
 
 /** The best of what a tie holds, as pills that fit in `room` pixels; and how many more there are. */
-function pillsFor( tie, room, most, prefer, entry ) {
+function pillsFor( tie, room, most, prefer, entry, bare ) {
 	const shown = [];
 	let used = 0;
 	const worth = tie.ev.filter( ( e ) => e.how >= K.STAGE && G.music[ e.m ].tier >= K.FULL );
@@ -543,6 +543,11 @@ function pillsFor( tie, room, most, prefer, entry ) {
 			for ( let most = n.day ? n.who.length : label.length; pad + wide( label, FONT.pill ) > room && most > 6; most-- ) {
 				label = cutTo( most );
 			}
+			// `bare`: where even that is wider than the room, a show says its night alone. Six letters of a name and
+			// a block height are 232 wide, on a line that may have 150 between two faces.
+			if ( bare && n.day && pad + wide( label, FONT.pill ) > room ) {
+				label = n.day;
+			}
 			w = pad + wide( label, FONT.pill );
 		}
 		if ( used + w > room && shown.length ) {
@@ -554,9 +559,9 @@ function pillsFor( tie, room, most, prefer, entry ) {
 	return { shown, more: tie.ev.length - shown.length, used: Math.max( 0, used - 8 ) };
 }
 
-function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, entry ) {
+function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, entry, bare ) {
 	const room = Math.abs( x2 - x1 );
-	const fit = pillsFor( tie, room - ( most > 1 ? 52 : 0 ), most, prefer, entry );
+	const fit = pillsFor( tie, room - ( most > 1 ? 52 : 0 ), most, prefer, entry, bare );
 	const moreW = fit.more > 0 && most > 1 ? 16 + wide( '+' + fit.more + ' more', FONT.pill ) : 0;
 	let x = ( x1 + x2 ) / 2 - ( fit.used + ( moreW ? moreW + 8 : 0 ) ) / 2;
 	for ( const p of fit.shown ) {
@@ -1105,6 +1110,9 @@ function further( v, lay, mine, seats, seatOf, web, W, H ) {
 	return { names, fars, open, pts, boxes: discs.concat( labels ) };
 }
 
+/** Where along the line come down its label may lie, from the middle (0) to the far end (1): a little past halfway first, then out and in by turns. */
+const WAY = [ 0.56, 0.6, 0.52, 0.64, 0.48, 0.68, 0.44, 0.72, 0.4, 0.76, 0.36, 0.8, 0.32, 0.84, 0.28, 0.88 ];
+
 function egoScene( v ) {
 	const a = v.a;
 	const { W, H } = frame();
@@ -1237,16 +1245,6 @@ function egoScene( v ) {
 		const R = G.people[ a ].img ? 26 : 22, base = lay.C.y + R + 10 + down( 17 );        // as draw.node sets the subject's name
 		return { x1: lay.C.x - half - 4, y1: base - tx( 16 ), x2: lay.C.x + half + 4, y2: base + 6 };
 	} )();
-	const homeward = ( pos, room ) => {
-		let at;
-		for ( const f of [ 0.54, 0.62, 0.7, 0.78, 0.86 ] ) {
-			at = { x: lay.C.x + ( pos.x - lay.C.x ) * f, y: lay.C.y + ( pos.y - lay.C.y ) * f };
-			if ( at.x + room / 2 < midBox.x1 || at.x - room / 2 > midBox.x2 || at.y + 13 < midBox.y1 || at.y - 13 > midBox.y2 ) {
-				break;
-			}
-		}
-		return at;
-	};
 	// The one in the middle is named there too, as on the cards, though the headline says who it is (Justin, #connectome, 15 Nov 2026).
 	addNode( sc, a, lay.C, 'subject', { rabbit: true, label: cut( first( a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ) } );
 	// The song's name, over it: between whatever is named to either side of it in its own row, the card's corner
@@ -1290,6 +1288,56 @@ function egoScene( v ) {
 		sc.lines.set( 'sp' + a, { a: 'song', b: 'p' + a, u: -1, v: a, tie: { played: true, tier, w: 1 }, stands: 'tie',
 			w: lineWidth( { w: 1 } ), o: 1, role: 'spoke', c: a, quiet: true, delay: 120 } );
 	}
+	// What stands in the drawing before any line says what it is: the middle and its name, each named face, and the
+	// names as written (bigger words reach further along the lines than the circles do), the song's mark and name.
+	const settled = [ { x1: lay.C.x - 30, y1: lay.C.y - 30, x2: lay.C.x + 30, y2: lay.C.y + 30 } ]
+		.concat( mine.map( ( c ) => seatOf.get( c.id ) ).map( ( p ) => ( { x1: p.x - 17, y1: p.y - 17, x2: p.x + 17, y2: p.y + 17 } ) ) );
+	if ( out ) {
+		settled.push( ...out.boxes );
+	} else {
+		mine.forEach( ( c, i ) => {
+			const pos = seatOf.get( c.id );
+			settled.push( nameBox( pos, names[ i ].dx || 0, wide( names[ i ].label, FONT.named ) / 2, pos.below ? 18 : -18 - tx( 18 ), pos.below ? 18 + tx( 18 ) : -18 ) );
+		} );
+	}
+	const midName = wide( cut( first( a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ), FONT.subject ) / 2;
+	settled.push( { x1: lay.C.x - midName, y1: lay.C.y + 22, x2: lay.C.x + midName, y2: lay.C.y + 22 + tx( 19 ) } );
+	if ( songAt ) {                                                  // the song's mark and its name over it
+		settled.push( { x1: songAt.x + songDx - songHalf, y1: songAt.y - 40 - tx( 17 ), x2: songAt.x + Math.max( songDx + songHalf, 34 ), y2: songAt.y + 34 } );
+	}
+	const labelled = () => [ ...sc.pills.values() ].map( ( p ) => ( { x1: p.x - p.w / 2, y1: p.y - 12, x2: p.x + p.w / 2, y2: p.y + 12 } ) );
+	/**
+	 * The line the reader came down, saying what it is: a little past halfway out, or wherever along it the label
+	 * lies clear of every face, every name and the labels already down. A label lies across its line, so on a line
+	 * that runs level it has only the run between the two faces: there it is cut to fit, a show down to its night
+	 * alone. Where nothing fits, the faces keep the room, and the line says it when its far end is pointed at.
+	 *
+	 * It was set down unlooked-at, as wide as it came (re, #connectome, 20 Nov 2026, 21:53Z: at Jonathan Mann, come
+	 * by Jake Stargel, "the 'Moon Factory' label and a show label sit on top of Jake's and Justin's circles").
+	 * Justin, the same day, 19:41Z: "always show on one of the main spokes whatever we clicked to get there."
+	 */
+	const onTheWay = ( id, pos, tie, prefer ) => {
+		const len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y ), busy = labelled().concat( settled, [ midBox ] );
+		const point = ( f ) => ( { x: lay.C.x + ( pos.x - lay.C.x ) * f, y: lay.C.y + ( pos.y - lay.C.y ) * f } );
+		const clearAt = ( w ) => WAY.find( ( f ) => {
+			const { x, y } = point( f );
+			return x - w / 2 > 3 && x + w / 2 < W - 3 && !busy.some( ( b ) => x - w / 2 < b.x2 + 2 && b.x1 < x + w / 2 + 2 && y - 12 < b.y2 + 2 && b.y1 < y + 12 + 2 );
+		} );
+		// as wide as it was first, a show with some of its name; then cut tighter and tighter, a show to its night alone
+		const room0 = Math.max( 92, Math.min( 190, len - 64 ) );
+		const rungs = [ [ room0, false ] ].concat( [ 150, 120, 96, 72 ].filter( ( r ) => r < room0 ).map( ( r ) => [ r, true ] ) );
+		for ( const [ room, bare ] of rungs ) {
+			const fit = pillsFor( tie, room, 1, prefer, undefined, bare );
+			const f = fit.shown.length ? clearAt( fit.shown[ 0 ].w ) : undefined;
+			if ( f !== undefined ) {
+				const at = point( f );
+				placePills( sc, a, id, tie, at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, prefer, undefined, undefined, bare );
+				return;
+			}
+		}
+		const at = point( 0.58 ), room = Math.min( 200, W * 0.32 );
+		placePills( sc, a, id, tie, at.x - room / 2, at.x + room / 2, at.y, 1, 0, 0, prefer, { shy: true, owner: 'p' + id, is: undefined } );
+	};
 	ring.slice( 0, shown ).forEach( ( c, i ) => {
 		const named = i < n;
 		const pos = named ? lay.named[ seats[ i ] ] : spots[ beads[ i - n ] ];
@@ -1307,10 +1355,11 @@ function egoScene( v ) {
 		// then every dot says how it is reached. Without, their lines wait for a pointer.
 		addLine( sc, a, c.id, c.tie, { o: named ? ( by ? 1 : 0.9 ) : ( out ? FAINT : 0 ), quiet: !named, fine: !named && !!out, emph: by,
 			delay: named ? 120 + i * 40 : 300, role: 'spoke', c: c.id } );
-		if ( by ) {                                                  // the line the reader came down: what it is, said on it
-			const len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y ), room = Math.max( 92, Math.min( 190, len - 64 ) );
-			const at = homeward( pos, room );
-			placePills( sc, a, c.id, c.tie, at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, v.by );
+	} );
+	// The line the reader came down says what it is, on it: once every face and name is set down, so it lies over none.
+	ring.slice( 0, n ).forEach( ( c, i ) => {
+		if ( !c.apart && came.has( c.id ) ) {
+			onTheWay( c.id, lay.named[ seats[ i ] ], c.tie, v.by );
 		}
 	} );
 	// The route home, said once and said straight (Justin, #connectome, 15 Nov 2026, 04:53Z): the cut's own
@@ -1321,34 +1370,14 @@ function egoScene( v ) {
 		const homeId = v.keep[ 0 ] !== a && seatOf.get( v.keep[ 0 ] ) ? v.keep[ 0 ] : ( v.keep[ 1 ] !== a && seatOf.get( v.keep[ 1 ] ) ? v.keep[ 1 ] : null );
 		const rec = ( home.on || [] )[ 0 ];
 		if ( homeId !== null && rec !== undefined ) {
-			const pos = seatOf.get( homeId ), len = Math.hypot( pos.x - lay.C.x, pos.y - lay.C.y );
-			const room = Math.max( 92, Math.min( 190, len - 64 ) );
-			const at = homeward( pos, room );
-			placePills( sc, a, homeId, { ev: [ { m: rec, how: K.TRACK, songs: [ home.song ] } ] },
-				at.x - room / 2, at.x + room / 2, at.y, 1, 1, 0, undefined );
+			onTheWay( homeId, seatOf.get( homeId ), { ev: [ { m: rec, how: K.TRACK, songs: [ home.song ] } ] }, undefined );
 		}
 	}
 	// A line says what it is wherever there's room for it to (Justin, #connectome, 15 Nov 2026: "almost always
 	// label lines"): the first thing the two share, by what comes first (K.standing). Where there isn't room, and
 	// on the lines to those further off, it's said when the far end is pointed at or touched.
 	const said = new Set( [ ...sc.pills.values() ].map( ( p ) => lineKey( p.u, p.v ) ) );
-	const taken = [ ...sc.pills.values() ].map( ( p ) => ( { x1: p.x - p.w / 2, y1: p.y - 12, x2: p.x + p.w / 2, y2: p.y + 12 } ) )
-		.concat( [ { x1: lay.C.x - 30, y1: lay.C.y - 30, x2: lay.C.x + 30, y2: lay.C.y + 30 } ],
-			mine.map( ( c ) => seatOf.get( c.id ) ).map( ( p ) => ( { x1: p.x - 17, y1: p.y - 17, x2: p.x + 17, y2: p.y + 17 } ) ) );
-	// and the names as written: bigger words reach further along the lines than the circles do
-	if ( out ) {
-		taken.push( ...out.boxes );
-	} else {
-		mine.forEach( ( c, i ) => {
-			const pos = seatOf.get( c.id );
-			taken.push( nameBox( pos, names[ i ].dx || 0, wide( names[ i ].label, FONT.named ) / 2, pos.below ? 18 : -18 - tx( 18 ), pos.below ? 18 + tx( 18 ) : -18 ) );
-		} );
-	}
-	const midName = wide( cut( first( a ), FONT.subject, Math.min( tx( 240 ), W - 24 ) ), FONT.subject ) / 2;
-	taken.push( { x1: lay.C.x - midName, y1: lay.C.y + 22, x2: lay.C.x + midName, y2: lay.C.y + 22 + tx( 19 ) } );
-	if ( songAt ) {                                                  // the song's mark and its name over it
-		taken.push( { x1: songAt.x + songDx - songHalf, y1: songAt.y - 40 - tx( 17 ), x2: songAt.x + Math.max( songDx + songHalf, 34 ), y2: songAt.y + 34 } );
-	}
+	const taken = labelled().concat( settled );
 	const onLine = ( from, to, f, room ) => ( { x1: from.x + ( to.x - from.x ) * f - room / 2, x2: from.x + ( to.x - from.x ) * f + room / 2, y: from.y + ( to.y - from.y ) * f } );
 	// Who is named in sight: a line that says a song ends at its artist or its writer, or at another of its ensemble
 	// only with them in sight (K.mayEnd; Justin, #connectome, 15 Nov 2026, 07:29Z).
