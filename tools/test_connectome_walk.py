@@ -108,7 +108,8 @@ def test_a_walk_adds_at_most_cap_of_each_kind_past_what_the_store_has_links_firs
     assert sum(s.startswith("lma ") for s in sources) == 1 + walk.CAP["lma"]
     assert not set(sources) & known                                  # what the store has is never added, nor counted
     assert "discogs 2" in sources and "lma tape1" in sources
-    assert queries == ['"Kyle Tuttle" AND (mediatype:etree OR (mediatype:audio AND collection:taperssection))']
+    assert queries == ['("Kyle Tuttle" AND (mediatype:etree OR (mediatype:audio AND collection:taperssection)))'
+                       ' OR (creator:"Kyle Tuttle" AND mediatype:audio)']
     assert "Discogs: 20 added of 30 found" in notes and "archive.org: 20 added of 25 found" in notes
 
 

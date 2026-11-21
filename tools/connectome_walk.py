@@ -23,7 +23,10 @@ trigger Artificial Dumb only." So a walk is plain lookups, the same for whoever 
                relationship to or are credited on (rambler.mb_records_of), one per title, newest first.
   archive.org  items whose metadata names them (the name, quoted): Live Music Archive tapes (etree), and audio in the
                Tapers Section, where these pickers' tapes mostly are (18 Nov 2026: Tristan Scroggins 7 there, 0 in
-               etree; Maddie Dalton 2 and 0).
+               etree; Maddie Dalton 2 and 0). And audio anywhere on archive.org whose creator is the name: the item
+               saying who made it, as a band's own uploads do (Justin and re, #walk, 21 Nov 2026: Rail Yard Ghosts,
+               no MusicBrainz artist and 12 items of their own, none in etree or the Tapers Section). A name only
+               mentioned outside those two collections, in a radio show's playlist or a podcast, isn't enough.
 
 Two or more artists of one name on a site, and none linked: nothing from that site, and the walk says so. At most CAP
 of each kind, and nothing the store's sources already have. Who played on what is for the readers to say
@@ -89,7 +92,8 @@ BOT_USER, BOT_PASSWORD = "CONNECTOME_WALK_BOT_USER", "CONNECTOME_WALK_BOT_PASSWO
 RETRY_AFTER = 3600                # seconds before a save the wiki refused is tried again: the build runs every five minutes
 SETTLED = 2                       # seconds old a revision must be before the walk saves a page's text against it (wiki_editor)
 DISCOGS_ROLES = {"Main", "Appearance", "TrackAppearance"}
-IA_QUERY = '"{name}" AND (mediatype:etree OR (mediatype:audio AND collection:taperssection))'
+IA_QUERY = ('("{name}" AND (mediatype:etree OR (mediatype:audio AND collection:taperssection)))'
+            ' OR (creator:"{name}" AND mediatype:audio)')
 IA_SEARCH = "https://archive.org/advancedsearch.php"
 USER_AGENT = "pickipedia-connectome-walk/0.1 (https://pickipedia.xyz; Artificial Dumb)"
 IA_INTERVAL = 1.0
