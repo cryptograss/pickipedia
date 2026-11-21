@@ -2524,6 +2524,32 @@ function cover( g, file, R, again ) {
 	return true;
 }
 
+/**
+ * A show's set stones, as a cluster of small gems with its top-left at x, y: each a diamond in its stone's three
+ * colours, outside in, as arthel draws them. Three at most, then "+n". Each says what it is to a pointer resting
+ * on it; the show's note and sheet say the rest. Nothing for a piece with none.
+ */
+function gems( piece, x, y, size = 1 ) {
+	const all = K.stonesOf( G, piece );
+	if ( !all.length ) {
+		return null;
+	}
+	const read = G.stonesRead && G.stonesRead.block ? ` Read at Arbitrum block ${ G.stonesRead.block.toLocaleString( 'en-US' ) }.` : '';
+	const g = s( 'g', { class: 'gems', transform: `translate(${ x.toFixed( 1 ) } ${ y.toFixed( 1 ) }) scale(${ size })`,
+		'aria-label': K.plural( all.length, 'set stone' ) } );
+	all.slice( 0, 3 ).forEach( ( st, i ) => {
+		const at = 7 + i * 13, gem = s( 'g', { class: 'gem', transform: `translate(${ at } 0)` },
+			s( 'title', null, `Set stone #${ st.token }: ${ K.stoneSays( st ) }.${ read }` ) );
+		[ 7, 4.6, 2.3 ].forEach( ( r, j ) => gem.appendChild( s( 'path', { d: `M0 ${ -r }L${ r } 0L0 ${ r }L${ -r } 0Z`,
+			style: 'fill:' + K.nes( st.color[ j ] ), class: j ? 'in' : 'cut' } ) ) );
+		g.appendChild( gem );
+	} );
+	if ( all.length > 3 ) {
+		g.appendChild( s( 'text', { class: 'n', x: 41, y: tx( 3.5 ) }, '+' + ( all.length - 3 ) ) );
+	}
+	return g;
+}
+
 /** A circle that is a piece of music: a ring as free as the piece is, and inside it what kind of piece. */
 function drawPiece( g, d ) {
 	const pc = M( d.piece ), c = K.called( G, pc );
@@ -2534,6 +2560,10 @@ function drawPiece( g, d ) {
 	if ( d.kind === 'dot' ) {
 		g.appendChild( s( 'circle', { class: 'halo', r: coarse ? 15 : Math.max( 12, d.r + 7 ) } ) );
 		g.appendChild( s( 'circle', { class: 'bead', r: d.r } ) );
+		const bg = gems( d.piece, d.r - 2, -d.r - 4, 0.75 );
+		if ( bg ) {
+			g.appendChild( bg );
+		}
 		return;
 	}
 	const R = d.kind === 'subject' ? 24 : 15;
@@ -2543,6 +2573,10 @@ function drawPiece( g, d ) {
 	g.appendChild( s( 'circle', { class: 'ring', r: R } ) );
 	if ( !cover( g, G.music[ pc.m ].art, R, () => drawPiece( g, d ) ) ) {
 		g.appendChild( gl );
+	}
+	const cg = gems( d.piece, R * 0.5, -R * 0.92, d.kind === 'subject' ? 1.25 : 1 );
+	if ( cg ) {
+		g.appendChild( cg );
 	}
 	if ( d.bare ) {                                              // the headline names this one
 		return;
@@ -2777,6 +2811,10 @@ const draw = {
 		g.appendChild( t );
 		if ( d.play ) {                                              // a track that plays: the rabbit takes you there
 			g.appendChild( playChip( d.w / 2 - 37, 0, d.play, d.song ) );
+		}
+		const pg = d.piece !== undefined ? gems( d.piece, d.w / 2 - 22, -12, 1 ) : null;
+		if ( pg ) {
+			g.appendChild( pg );
 		}
 	}
 };
@@ -3850,7 +3888,18 @@ function stepEl( st, i ) {
 	const hop = i > 0 ? h( 'span', { class: 'hop' + ( n > SIX ? ' over' : '' ), 'aria-hidden': 'true' }, n > 0 ? h( 'i', null, String( n ) ) : null ) : null;
 	return h( 'li', { class: 'step ' + st.kind }, hop,
 		h( 'button', { type: 'button', title: 'Back to ' + st.label, onclick: () => pathBack( st ) },
-			face || h( 'span', { class: 'mark ' + st.kind, 'aria-hidden': 'true' } ), h( 'span', { class: 'nm' }, st.label ) ) );
+			face || h( 'span', { class: 'mark ' + st.kind, 'aria-hidden': 'true' } ), h( 'span', { class: 'nm' }, st.label ),
+			st.to && st.to.m !== undefined ? gemsInline( st.to.m ) : null ) );
+}
+
+/** A show's gems in a line of text (the path's steps): the same marks, in an svg of their own; null for none. */
+function gemsInline( piece ) {
+	const n = Math.min( 3, K.stonesOf( G, piece ).length ), g = n ? gems( piece, 0, 0, 0.85 ) : null;
+	if ( !g ) {
+		return null;
+	}
+	const w = ( n * 13 + 2 + ( K.stonesOf( G, piece ).length > 3 ? 18 : 0 ) ) * 0.85;
+	return s( 'svg', { class: 'gems-inline', width: w.toFixed( 1 ), height: 14, viewBox: `0 -7 ${ w.toFixed( 1 ) } 14` }, g );
 }
 
 function pathSay() {
@@ -4621,11 +4670,18 @@ function theRest( d ) {
 }
 
 /** A piece of music on a line between two pickers. Its click turns the graph inside out, with the piece in the middle. */
+/** A show's set stones, in a line for its note and sheet: '' for none. */
+function stonesLine( piece ) {
+	const all = K.stonesOf( G, piece );
+	return all.length ? '◆ ' + K.plural( all.length, 'set stone' ) + ': ' + all.slice( 0, 3 ).map( K.stoneSays ).join( '; ' ) +
+		( all.length > 3 ? '; and ' + ( all.length - 3 ) + ' more' : '' ) : '';
+}
+
 function aPiece( d ) {
 	const pc = M( d.piece ), m = G.music[ d.e.m ], n = K.naming( G, d.e );
 	const w = { kind: m.kind === 'show' ? 'a show' : ( n.glyph === 'track' ? ( d.e.songs.length > 1 ? 'tracks on a record' : 'a track' ) : 'a record' ),
 		title: n.short, lines: [ n.long !== n.short ? n.long : '', d.e.songs.length > 1 ? d.e.songs.slice( 0, 6 ).join( ', ' ) + ( d.e.songs.length > 6 ? ', …' : '' ) : '',
-			K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) ], hint: "click: go to it · who's on it, and where they lead",
+			stonesLine( d.piece ), K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) ], hint: "click: go to it · who's on it, and where they lead",
 		acts: [ act( 'Go to ' + K.clip( K.called( G, pc ).name, 30 ), () => go( { m: d.piece, hand: [ d.u, d.v ] } ) ) ] };
 	if ( spreads( d ) ) {
 		w.hint = `click: go to it · click +${ d.e.songs.length - 1 }: all ${ d.e.songs.length } tracks, between the two`;
@@ -4659,7 +4715,7 @@ function aPieceAmong( d ) {
 		w.lines.push( 'by way of ' + listNames( d.who ), web.length ? `shares pickers with ${ K.plural( web.length, 'other' ) } here` : '' );
 		w.acts.push( act( 'Go to ' + K.clip( c.name, 30 ), () => go( { m: d.piece, hand: d.who } ) ) );
 	}
-	w.lines.push( K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) );
+	w.lines.push( stonesLine( d.piece ), K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) );
 	w.acts.push( ...waysOut( pc ) );
 	return w;
 }

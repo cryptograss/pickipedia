@@ -1618,3 +1618,10 @@ body.intro #game { display: none; }
 		gap: 8px;
 	}
 }
+
+/* A show's set stones: small gems in each stone's three colours, wherever the show is (tools/set_stones.py) */
+.gems .gem path { stroke: none; }
+.gems .gem path.cut { stroke: #1b1b1b; stroke-width: 0.9px; stroke-linejoin: round; }
+.gems .gem:hover path.cut { stroke-width: 1.6px; }
+.gems text.n { font-size: 10px; font-weight: 600; fill: #1b1b1b; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+#path .gems-inline { margin-left: 4px; vertical-align: middle; flex: none; }
