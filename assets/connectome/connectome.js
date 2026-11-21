@@ -68,7 +68,7 @@ const coarse = window.matchMedia && window.matchMedia( '(pointer: coarse)' ).mat
 const narrow = () => window.matchMedia( '(max-width: 760px)' ).matches;                 // the list is under the graph
 
 const $ = ( id ) => document.getElementById( id );
-const svg = $( 'g' ), stage = $( 'stage' ), tip = $( 'tip' ), panel = $( 'panel' ), sheet = $( 'sheet' );
+const svg = $( 'g' ), stage = $( 'stage' ), tip = $( 'tip' ), sheet = $( 'sheet' );
 
 let G = null;
 let RAW = null;                   // graph.json as read: what a kept graph is cut from
@@ -79,7 +79,6 @@ let KEPT = null;                  // a kept graph in sight: { id, doc, kept, liv
 let view = null;
 let sel = { picker: null };
 let scene = null;
-let listed = null;               // the view the list was last drawn for: its scroll is kept until the view changes
 let was = new Map();             // where each thing in sight is, by what it stands for, as the view changes
 let fingers = false;             // the last pointer down was a finger or a pen: nothing hovers, so a touch asks before it acts
 let held = null;                 // the mark whose sheet is open
@@ -96,6 +95,12 @@ const HOST = new URLSearchParams( location.search ).get( 'host' ) === 'rabbithol
 // way come show while the reader steers (the shell's traverse mode off), and stand aside while the music does.
 const SHELL = HOST && new URLSearchParams( location.search ).get( 'shell' ) === '1';
 let steering = SHELL && new URLSearchParams( location.search ).get( 'steer' ) === '1';
+// One bar (Justin, #connectome, 21 Nov 2026, 01:56Z: "integrate the top bar of rabbithole with the top bar of
+// /bacon/ ... Let's get all that stuff on one unified top bar"). A shell that has the link, the FAQ and the way to
+// PickiPedia on its own bar says so in the frame's address (bar=1), and this page puts its own bar away for good;
+// the shell's buttons then ask for the two that are this page's work ({ rabbithole: 'bar', act: 'share' | 'faq' }).
+// A shell that doesn't say so (Rabbithole as it was before) leaves this page its bar.
+const BARLESS = SHELL && new URLSearchParams( location.search ).get( 'bar' ) === '1';
 let freshStep = false;            // the shell opened a graph as a step of its own: this view gets a number of its own
 let MINI = new URLSearchParams( location.search ).get( 'walk' ) === 'mini';
 const trail = [];
@@ -217,6 +222,9 @@ function address( v ) {
 	q.set( 'host', HOST );
 	if ( SHELL ) {
 		q.set( 'shell', '1' );
+		if ( BARLESS ) {
+			q.set( 'bar', '1' );
+		}
 	}
 	return '?' + q;
 }
@@ -224,7 +232,7 @@ function address( v ) {
 /** This page's address as the shell's own: without what says it is hosted. */
 function shellAddress() {
 	const q = new URLSearchParams( location.search );
-	[ 'host', 'shell', 'steer' ].forEach( ( k ) => q.delete( k ) );
+	[ 'host', 'shell', 'steer', 'bar' ].forEach( ( k ) => q.delete( k ) );
 	const query = q.toString();
 	return location.pathname + ( query ? '?' + query : '' );
 }
@@ -585,26 +593,32 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
  * the first 3 or so details from their MusicianInfo card. And the picture can be maybe 30% bigger." So it holds
  * a picture of 84px (58 on the small one, from 64 and 44), the name, and what their page says they do. How big it
  * may be is what the ring leaves of the corner, which goes by the drawing's shape (each was swept for marks under it):
- *   `side`, a drawing 675px wide or more: 300px wide, the picture beside everything. 104px high, and more where the
- *     drawing is tall, to 150: a ring of eight has a name a fifth of the way down (the card it replaces was 100);
- *   520 to 675px wide and 640 tall (Rabbithole's pane on a 1366px laptop): 208 to 269px by 176, the picture and the
- *     name in a row, four lines under;
+ *   `side`, a drawing 675px wide or more (Rabbithole's pane on a laptop, now that no list stands beside the
+ *     graph): the picture beside everything, 300 to 430px wide (0.44 of the drawing) and 130 to 180 high (0.24 of
+ *     it). It was 300 by 104 to 150, which held some 40 characters of each line. Justin, #connectome, 21 Nov 2026,
+ *     01:56Z: "The cards can be much longer now that you've made room - we can afford ~200 characters of the first
+ *     three items instead of 40 or whatever we're doing now." At the pane's size (909 by 734) it is 400 by 176:
+ *     eight lines of some 48 characters among the three, so a long line has about 190 where the others are short.
+ *     The ring is set down below the card as far as the frame has room under it (egoScene): a taller card moves the
+ *     ring down, and past that room stands beside the ring's top seats;
+ *   520 to 675px wide and 640 tall: 208 to 269px by 176 to 200, the picture and the name in a row, the lines under;
  *   `tower`, 440 to 520px wide and 560 tall or more (the pane on a 1280px laptop): the song's name beside a
  *     soloist comes to within 150px of the corner there, so 150px by 212, the picture over the name over the lines;
  *   `compact`, under 440px wide and over 500 tall (a phone with the graph alone: a ring of six in a narrow frame,
  *     with a name 90px under the top and 150 from the side): the size it was, 150px by 80, a 44px picture, one line;
  *   `small`, anything else (a phone in Rabbithole; a low window): up to 200px by 126, laid as the second.
  */
+const SIDE = { w: 430, h: 180 }, MID_H = 200;       // the most a card beside a wide drawing takes, and the height of one on a middling drawing
 function cardRoom( W ) {
 	const wide = svg.clientWidth || W, tall = svg.clientHeight || 0, k = W / wide;
 	// A song's own card says its name and a line or two: the size it had, so the ring round a song keeps all its pickers.
 	const song = !!view && view.cut !== undefined && view.playing === undefined;
 	const side = !song && wide >= 675, tower = !song && wide >= 440 && wide < 520 && tall >= 560, compact = !song && wide < 440 && tall > 500;
 	const small = song ? wide < 520 : ( !side && !tower && !compact && !( wide >= 520 && tall >= 640 ) );
-	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) : ( side ? 300 : ( tower || compact ? 150 :
+	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) : ( side ? Math.max( 300, Math.min( SIDE.w, wide * 0.44 ) ) : ( tower || compact ? 150 :
 		( small ? Math.max( 160, Math.min( 200, wide * 0.46 ) ) : Math.max( 208, Math.min( 269, wide * 0.4 ) ) ) ) ) );
 	const ch = Math.round( song ? ( wide < 520 ? 80 : 100 ) :
-		( side ? Math.max( 104, Math.min( 150, tall * 0.2 - 30 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : 176 ) ) ) ) );
+		( side ? Math.max( 130, Math.min( SIDE.h, tall * 0.24 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : Math.max( 176, Math.min( MID_H, tall * 0.28 ) ) ) ) ) ) );
 	return { cw, ch, side, tower, compact, small, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
 }
 
@@ -1173,7 +1187,8 @@ function egoScene( v ) {
 		// it is set down lower, as far as the frame has room under it.
 		// By the named places alone, which are the same for every one of a band: the ring is as low for each solo.
 		const top = Math.min( ...lay.named.map( ( p ) => p.y ) ), foot = Math.max( ...lay.named.map( ( p ) => p.y ) );
-		const lower = Math.round( Math.max( 0, Math.min( corner.y2 + ( playing ? 30 : 22 ) - top, H - 44 - tx( 18 ) - foot ) ) );
+		// (Not playing, a seat's name may be written over and beside it, a step further being in sight: the room for that.)
+		const lower = Math.round( Math.max( 0, Math.min( corner.y2 + ( playing ? 30 : 24 + tx( 18 ) ) - top, H - 44 - tx( 18 ) - foot ) ) );
 		if ( lower > 0 ) {
 			const drop = ( p ) => {
 				p.y += lower;
@@ -1934,6 +1949,10 @@ window.addEventListener( 'message', ( ev ) => {
 		fxApply();
 		return;
 	}
+	if ( ev.data.rabbithole === 'bar' ) {                        // the shell's bar, pressed: the link, or the FAQ
+		barAct( ev.data.act );
+		return;
+	}
 	if ( ev.data.rabbithole !== 'walk' ) {
 		return;
 	}
@@ -1959,6 +1978,7 @@ window.addEventListener( 'message', ( ev ) => {
 	}
 	const wasAt = walkAt, wasCid = walkNow.cid;
 	walkNow = { cid: d.now || null, playing: !!d.playing };
+	playSay();
 	walkAt = typeof d.at === 'number' ? d.at : null;
 	if ( G && ( wasCid || wasAt !== null ) ) {                   // the walk moved on its own (Justin, item 7: webamp's back
 		                                                     // and forth "need to trigger an animation in the 'Your
@@ -1999,6 +2019,7 @@ if ( HOST ) {
 	document.body.classList.add( 'in-rabbithole' );
 	document.body.classList.toggle( 'steering', steering );
 	document.body.classList.toggle( 'shell', !!SHELL );
+	document.body.classList.toggle( 'barless', !!BARLESS );
 	// Ways out, inside the player: a song plays there, and a page opens in its pane, not over the player.
 	document.addEventListener( 'click', ( ev ) => {
 		const a = ev.target.closest && ev.target.closest( 'a[href]' );
@@ -2628,6 +2649,22 @@ function playMark() {
 	return s( 'svg', { class: 'pm', width: 30, height: 18, viewBox: '0 0 30 18', 'aria-hidden': 'true' }, r, s( 'path', { class: 'tri', d: 'M19.5 4.5v9l7.5 -4.5z' } ) );
 }
 
+/**
+ * No way to play what is playing (Justin, #connectome, 21 Nov 2026, 01:56Z: "when a new track stars playing, it
+ * goes to the center of the bacon chart, but its play button is still there, which is weird because... it's
+ * already playing"). Every play button here is a link to Rabbithole with the track in its address; the player says
+ * which track is on and whether it plays (walkNow). The ones for that track are put away while it plays, and are
+ * back when it is paused or another is on. Looked at whenever a view is drawn and whenever the player speaks.
+ */
+function playSay() {
+	const on = walkNow.playing ? walkNow.cid : null;
+	for ( const a of document.querySelectorAll( 'a.play' ) ) {
+		const href = a.getAttribute( 'href' ) || '', at = href.indexOf( '?' );
+		const cid = at < 0 ? null : new URLSearchParams( href.slice( at ) ).get( 'track' );
+		a.classList.toggle( 'on-now', !!on && cid === on );
+	}
+}
+
 /** Beside a track's name, wherever it's written: the button that plays it in Rabbithole, when it plays there. */
 function playButton( m, song ) {
 	const to = K.playOf( G, m, song );
@@ -2831,7 +2868,10 @@ function put( next, quick ) {
 }
 
 /* ------------------------------------------------------------------------------------------------------------
- * The panel: the same view as a list, each thing with where a reader can check it
+ * Ways out: a picker's name and page, a piece's pages and sources. There was a list beside the graph that said the
+ * view over again with these in it; it is gone (Justin, #connectome, 21 Nov 2026, 01:56Z: "The "middle" drawer
+ * (with <picker>'s page and "has played with") now seems superfluous. Nix it. We can add that information later
+ * on the wiki page."), and the graph has its room.
  * --------------------------------------------------------------------------------------------------------- */
 
 function sourceName( url ) {
@@ -2848,10 +2888,6 @@ function sourceName( url ) {
 		return "cryptograss's own notes";
 	}
 	return 'the source';
-}
-
-function badge( tier ) {
-	return h( 'span', { class: 'badge t' + tier }, K.TIER_NAME[ tier ] );
 }
 
 /** A picker's name, off the graph: it goes to them, here. Asked for in a new tab, it opens the graph on them. */
@@ -2875,58 +2911,6 @@ function pageMark( id, say ) {
 	return outMark( pageUrl( p.name ), p.page ? p.name + "'s page" : 'Start ' + p.name + "'s page", say ? ( p.page ? 'page ↗' : 'no page yet: start it ↗' ) : '' );
 }
 
-function pageButton( id ) {
-	const p = P( id );
-	return h( 'a', { class: 'page' + ( p.page ? '' : ' new' ), href: pageUrl( p.name ), target: '_top' },
-		p.page ? p.name + "'s page" : 'Start ' + p.name + "'s page" );
-}
-
-function evidence( tie, limit ) {
-	const hand = [ tie.a, tie.b ];
-	const rows = tie.ev.slice( 0, limit || tie.ev.length ).map( ( e ) => {
-		const m = G.music[ e.m ], n = K.naming( G, e );
-		const songs = e.songs.length ? e.songs.slice( 0, 4 ).map( ( song, i ) => {
-			const t = m.kind === 'show' ? undefined : K.trackOn( G, e.m, song );
-			return [ i ? ', ' : '', t === undefined ? '“' + K.clip( song, 60 ) + '”' :
-				h( 'a', { href: address( { m: t } ), title: 'Go to ' + song, onclick: ( ev ) => inApp( ev, () => go( { m: t, hand } ) ) }, song ), playButton( m, song ) ];
-		} ).concat( e.songs.length > 4 ? [ ` and ${ e.songs.length - 4 } more` ] : [] ) : null;
-		return h( 'li', { class: 'go', onclick: ( ev ) => {
-			if ( !ev.target.closest( 'a' ) ) {
-				go( { m: K.pieceFor( G, e ), hand } );
-			}
-		} },
-		h( 'span', { class: 'mark' }, glyphBox( n.glyph === 'track' ? 'record' : n.glyph ) ),
-		h( 'span', { class: 'body' },
-			h( 'div', { class: 't' }, m.kind === 'show' ? n.short : n.long, m.page ? outMark( wikiUrl( m.page ), m.kind === 'show' ? "The show's page" : "The record's page" ) : null ),
-			songs ? h( 'div', { class: 's' }, songs ) : null,
-			e.how === K.RECORD ? h( 'div', { class: 's' }, 'same record; no source puts them on the same track' ) : null,
-			h( 'div', { class: 's' }, badge( m.tier ), ' ', m.source ? h( 'a', { href: m.source, target: '_blank', rel: 'noopener' }, sourceName( m.source ) + ' ↗' ) : null ) ) );
-	} );
-	const out = [ h( 'ul', null, rows ) ];
-	if ( limit && tie.ev.length > limit ) {
-		out.push( h( 'div', { class: 'acts' }, h( 'button', { type: 'button', onclick: ( ev ) => {
-			ev.target.closest( '.acts' ).replaceWith( ...evidence( { a: tie.a, b: tie.b, ev: tie.ev.slice( limit ) } ) );
-		} }, `${ tie.ev.length - limit } more` ) ) );
-	}
-	return out;
-}
-
-function pairHead( u, v, tie, open ) {
-	return h( 'h3', { class: 'row' }, h( 'span', null, `${ first( u ) } & ${ first( v ) } · ${ K.times( tie ) || 'nothing yet' }` ),
-		open ? h( 'button', { type: 'button', class: 'mini', onclick: () => go( { a: u, b: v } ) }, 'open these two' ) : null );
-}
-
-/** A picker in a list: the name goes to them, the arrow to their page, the rest of the row to what the row says. */
-function personRow( id, note, act, under ) {
-	return h( 'li', { class: 'go', 'data-p': id, onclick: ( ev ) => {
-		if ( !ev.target.closest( 'a' ) ) {
-			act();
-		}
-	}, onmouseenter: () => warm( 'p' + id, true ), onmouseleave: () => warm( 'p' + id, false ) },
-	h( 'span', { class: 'body' }, nameLink( id ), pageMark( id ), h( 'span', { class: 's' }, instOf( id ) ), under ? h( 'div', { class: 's' }, under ) : null ),
-	note ? h( 'span', { class: 'n' }, note ) : null );
-}
-
 /** The ways out from a piece: Rabbithole where it plays, its pages on the wiki, and every source that says it. */
 function waysOut( pc ) {
 	const m = G.music[ pc.m ], out = [];
@@ -2946,129 +2930,6 @@ function waysOut( pc ) {
 		}
 	}
 	return out;
-}
-
-/** A piece in a list: the row goes to it; who leads there is said under it. */
-function pieceRow( x ) {
-	const pc = M( x.id ), c = K.called( G, pc );
-	return h( 'li', { class: 'go', onclick: ( ev ) => {
-		if ( !ev.target.closest( 'a' ) ) {
-			go( { m: x.id, hand: x.via } );
-		}
-	}, onmouseenter: () => warm( 'q' + x.id, true ), onmouseleave: () => warm( 'q' + x.id, false ) },
-	h( 'span', { class: 'mark' }, glyphBox( c.glyph ) ),
-	h( 'span', { class: 'body' }, h( 'div', { class: 't' }, c.name, playButton( G.music[ pc.m ], pc.song ) ),
-		c.sub ? h( 'div', { class: 's' }, c.sub ) : null, h( 'div', { class: 's' }, 'by way of ' + listNames( x.via ) ) ) );
-}
-
-function piecePanel() {
-	const pc = M( view.m ), m = G.music[ pc.m ], c = K.called( G, pc ), L = scene.leads;
-	// What each played, as the source wrote it. A track's source says it for the whole record, so a track says none.
-	const roles = new Map( pc.kind === 'track' ? [] : [ pc.m ].concat( pc.also ).flatMap( ( t ) => G.music[ t ].cast ) );
-	const ways = L.named.concat( L.rest );
-	return [
-		h( 'h2', null, c.name, playButton( m, pc.song ) ),
-		h( 'p', { class: 'sub' }, pc.kind === 'track' ? 'A track on ' + c.long : ( c.long || c.sub ) ),
-		h( 'p', null, badge( m.tier ) ),
-		h( 'div', { class: 'acts' }, waysOut( pc ).filter( ( a ) => a.kind !== 'play' ).map( ( a ) => h( 'a', { class: a.kind, href: a.href,
-			target: a.kind === 'source' ? '_blank' : '_top', rel: a.kind === 'source' ? 'noopener' : null }, a.label ) ) ),
-		h( 'h3', null, `On it, of the pickers here · ${ L.cast.length }` ),
-		h( 'ul', null, L.cast.slice( 0, 80 ).map( ( id ) => personRow( id, null, () => go( { a: id } ), roles.get( id ) || null ) ) ),
-		L.cast.length > 80 ? h( 'p', { class: 'sub' }, `and ${ L.cast.length - 80 } more` ) : null,
-		ways.length ? h( 'h3', null, `Where they lead · ${ ways.length }` ) : null,
-		h( 'ul', null, ways.slice( 0, 60 ).map( pieceRow ) ),
-		ways.length > 60 ? h( 'p', { class: 'sub' }, `and ${ ways.length - 60 } more` ) : null
-	];
-}
-
-function fillPanel() {
-	const out = [];
-	if ( view.walk ) {
-		panel.replaceChildren();                                     // the walk is its own list: nothing beside it
-		return;
-	}
-	if ( view.way ) {
-		const { way, steps } = K.wayOf( G, GAME.path );
-		out.push( h( 'h2', null, 'Your way to ' + first( GAME.to ) ),
-			h( 'p', { class: 'sub' }, `${ K.plural( GAME.jumps, 'jump' ) }; the fewest it can be done in is ${ K.plural( GAME.par, 'hop' ) }` ),
-			h( 'ul', null, way.map( ( id, i ) => personRow( id, i === 0 ? 'where you started' :
-				( steps[ i - 1 ].tie ? K.times( steps[ i - 1 ].tie ) + ' with ' + first( steps[ i - 1 ].u ) : 'typed in' ), () => go( { a: id } ) ) ) ),
-			tellBox( first( GAME.to ), gameFrom() ) );
-	} else if ( view.pg !== undefined ) {
-		const ids = G.pages[ view.pg ] || [];
-		out.push( h( 'h2', null, view.pg ), h( 'p', { class: 'sub' }, h( 'a', { href: pageUrl( view.pg ), target: '_top' }, 'the page ↗' ) ),
-			h( 'h3', null, `The pickers it links · ${ ids.length }` ),
-			h( 'ul', null, ids.map( ( id ) => personRow( id, P( id ).inst || null, () => go( { a: id } ) ) ) ) );
-	} else if ( view.cut !== undefined && G.songcast[ view.cut ] ) {
-		const scd = G.songcast[ view.cut ];
-		const cut = ( scd.on || [] ).map( ( m ) => G.music[ m ] ).filter( Boolean )[ 0 ];
-		out.push( h( 'h2', null, scd.song ), h( 'p', { class: 'sub' }, cut ? 'on ' + K.recordBy( cut )
-			+ ( scd.number ? ', track ' + scd.number : '' ) + ( scd.recorded ? ', recorded ' + scd.recorded : '' )
-			: 'no cut the sources name' ) );
-		if ( scd.pickers.length ) {
-			out.push( h( 'h3', null, `On this cut · ${ scd.pickers.length }` ), h( 'ul', null, scd.pickers.map( ( [ id, roles ] ) =>
-				personRow( id, roles || 'no instrument said', () => go( { a: id } ) ) ) ) );
-		}
-	} else if ( view.m !== undefined ) {
-		out.push( ...piecePanel() );
-	} else if ( view.b === undefined ) {
-		const a = view.a;
-		out.push( h( 'h2', null, first( a ) ), P( a ).inst ? h( 'p', { class: 'sub' }, P( a ).inst ) : null,
-			h( 'div', { class: 'acts' }, pageButton( a ) ) );
-		if ( scene.company.length ) {
-			out.push( h( 'h3', null, `Has played with · ${ scene.company.length }` ),
-				h( 'ul', null, scene.company.slice( 0, GAME && !GAME.done ? Infinity : 80 ).map( ( c ) => personRow( c.id, K.times( c.tie ), () => go( { a, b: c.id } ) ) ) ) );
-			if ( scene.company.length > 80 && !( GAME && !GAME.done ) ) {     // in a challenge, all of them: the search box is put away
-				out.push( h( 'p', { class: 'sub' }, `and ${ scene.company.length - 80 } more: find one in the box up top` ) );
-			}
-		}
-		if ( scene.far && scene.far.length ) {
-			out.push( h( 'h3', null, `A step further · ${ scene.far.length }` ),
-				h( 'ul', null, scene.far.map( ( f ) => personRow( f.id, K.times( f.tie ), () => go( { a, b: f.id } ), 'by way of ' + first( f.by ) ) ) ) );
-		}
-	} else {
-		const { a, b } = view;
-		const c = scene.chain ? null : scene.lit;
-		if ( scene.chain ) {
-			out.push( h( 'h2', null, scene.chain.map( first ).join( ' → ' ) ) );
-			for ( let i = 0; i < scene.chain.length - 1; i++ ) {
-				const u = scene.chain[ i ], v = scene.chain[ i + 1 ];
-				out.push( pairHead( u, v, G.adj[ u ].get( v ), true ), ...evidence( G.adj[ u ].get( v ), 4 ) );
-			}
-			out.push( h( 'div', { class: 'acts' }, scene.chain.slice( 1, -1 ).map( pageButton ) ) );
-		} else if ( c !== null && sel.picker !== null ) {
-			const m = scene.pool.find( ( x ) => x.id === c );
-			out.push( h( 'div', { class: 'acts' }, h( 'button', { type: 'button', onclick: () => choose( { picker: null } ) }, '← ' + first( a ) + ' & ' + first( b ) ) ),
-				h( 'h2', null, `${ first( a ) } → ${ first( c ) } → ${ first( b ) }` ),
-				h( 'p', { class: 'sub' }, first( c ) + instOf( c ) ),
-				h( 'div', { class: 'acts' }, pageButton( c ), h( 'button', { type: 'button', onclick: () => go( { a: c } ) }, 'Go to ' + first( c ) ) ),
-				pairHead( a, c, m.ta, true ), ...evidence( m.ta, 5 ), pairHead( c, b, m.tb, true ), ...evidence( m.tb, 5 ) );
-		} else {
-			out.push( h( 'h2', null, `${ first( a ) } & ${ first( b ) }` ),
-				h( 'div', { class: 'acts' }, pageButton( a ), pageButton( b ) ) );
-			if ( scene.tie ) {
-				out.push( h( 'h3', { id: 'together' }, `Together · ${ K.times( scene.tie ) }` ), ...evidence( scene.tie, 8 ) );
-			}
-			if ( scene.pool && scene.pool.length ) {
-				out.push( h( 'h3', null, ( scene.loose ? 'On a record with each · ' : 'Both have played with · ' ) + scene.pool.length ),
-					h( 'ul', null, scene.pool.slice( 0, 80 ).map( ( m ) => personRow( m.id, null, () => choose( { picker: m.id } ),
-						`${ K.times( m.ta ) } with ${ first( a ) } · ${ K.times( m.tb ) } with ${ first( b ) }` ) ) ) );
-			}
-			if ( scene.none ) {
-				out.push( h( 'p', { class: 'sub' }, 'The connectome grows with every source it reads. Know a record or a tape that joins them? Say so on their pages.' ) );
-			}
-		}
-	}
-	if ( !view.way && view.pg === undefined && view.a !== undefined && view.b === undefined && view.m === undefined && view.cut === undefined ) {
-		out.push( tellBox( first( view.a ), GAME ? gameFrom() : 'the bacon graph of ' + first( view.a ) ) );
-	}
-	out.push( h( 'p', { class: 'foot' }, `${ G.people.length } pickers, ${ G.music.length } records and shows that join them. Built ${ K.when( G.built ) }. `,
-		h( 'a', { href: 'connectome.sqlite', download: '' }, 'The whole store (SQLite)' ) ) );
-	panel.replaceChildren( ...out.flat().filter( Boolean ) );
-	if ( listed !== view ) {                                     // a new view's list starts at its top; a click in this one keeps its place
-		panel.scrollTop = 0;
-		listed = view;
-	}
 }
 
 /* ------------------------------------------------------------------------------------------------------------
@@ -3422,9 +3283,7 @@ function show( quick, again ) {
 	fxApply();
 	qrSay();
 	qrRoom( quick );
-	fillPanel();
-	$( 'pa' ).value = view.way || view.walk || view.pg !== undefined || view.cut !== undefined || view.s !== undefined ? '' : ( view.m !== undefined ? '' : first( view.a ) );
-	$( 'pb' ).value = view.way || view.walk || view.pg !== undefined || view.m !== undefined || view.b === undefined ? '' : first( view.b );
+	playSay();
 	$( 'back' ).hidden = trail.length < 2;
 	if ( !kept ) {
 		pathSay();
@@ -3557,6 +3416,34 @@ function back() {
  * --------------------------------------------------------------------------------------------------------- */
 
 const ORACLE = { mode: 'explore', goal: null };
+
+/*
+ * What losing costs, from the wiki (Justin, #connectome, 21 Nov 2026, 01:56Z: "Let's make the text "Fail, and
+ * you'll have to play the banjo. In an otherwise decent and upstanding band." part of a series of wiki-defined
+ * phrases so that other can add to them, much like the slogans on the front page of magenta"). As Magenta:Slogans
+ * is read: the page PickiPedia:Bacon taunts, one to a line that starts with *. Asked for once, as this page opens,
+ * so it is in by the time the graph is; no page, an empty one, no answer in three seconds: the line it always was.
+ * A taunt is words: quotes and links written wiki-fashion are read as their words, and it is set down as text.
+ */
+const TAUNT = "Fail, and you'll have to play the banjo. In an otherwise decent and upstanding band. Forever.";
+const TAUNTS_PAGE = 'PickiPedia:Bacon_taunts';
+let taunts = [];
+function tauntsFrom( text ) {
+	return String( text || '' ).split( '\n' ).filter( ( l ) => /^\*[^*]/.test( l ) )
+		.map( ( l ) => l.slice( 1 ).replace( /\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1' ).replace( /'{2,}/g, '' ).replace( /<[^>]*>/g, '' ).replace( /\s+/g, ' ' ).trim() )
+		.filter( ( l ) => l.length > 0 && l.length <= 240 ).slice( 0, 300 );
+}
+( function () {
+	const stop = typeof AbortController === 'function' ? new AbortController() : null;
+	const t = setTimeout( () => stop && stop.abort(), 3000 );
+	fetch( HOME + '/index.php?title=' + TAUNTS_PAGE + '&action=raw&maxage=300&smaxage=300', stop ? { signal: stop.signal } : {} )
+		.then( ( r ) => ( r.ok ? r.text() : '' ) ).then( ( text ) => {
+			taunts = tauntsFrom( text );
+		} ).catch( () => {} ).then( () => clearTimeout( t ) );
+}() );
+function taunt() {
+	return taunts.length ? taunts[ Math.floor( Math.random() * taunts.length ) ] : TAUNT;
+}
 let fromOracle = false;          // the first step out of the Oracle is one of the browser's too, so its Back comes back here
 
 /** Open the Oracle: mode 'explore' or 'challenge'; goal, whom to find (someone at random when not given). */
@@ -3571,6 +3458,13 @@ function oracleSay( mode, goal, note, again ) {
 		r.checked = r.value === mode;
 	} );
 	box.querySelector( '.ask' ).hidden = mode !== 'challenge';
+	box.querySelector( '.find' ).hidden = mode !== 'explore';
+	if ( !again ) {
+		$( 'pa' ).value = $( 'pb' ).value = '';
+	}
+	if ( mode !== 'challenge' || !again || !ORACLE.taunt ) {
+		ORACLE.taunt = taunt();                                      // one for this asking; come back to by Back, the one it had
+	}
 	box.querySelector( '.note' ).textContent = note || '';
 	oracleGoalSay();
 	oracleMinis( again );
@@ -3585,7 +3479,7 @@ function oracleSay( mode, goal, note, again ) {
 
 /** What an address this page writes for itself carries in Rabbithole, so a reload of the frame comes back hosted. */
 function hosted() {
-	return HOST ? '?host=' + HOST + ( SHELL ? '&shell=1' + ( steering ? '&steer=1' : '' ) : '' ) : '';
+	return HOST ? '?host=' + HOST + ( SHELL ? '&shell=1' + ( BARLESS ? '&bar=1' : '' ) + ( steering ? '&steer=1' : '' ) : '' ) : '';
 }
 
 function oracleDone() {
@@ -3610,7 +3504,7 @@ function oracleGoalSay() {
 		box.querySelector( '#oracle-goal' ).value = to.name;
 	}
 	const who = to.page ? h( 'a', { href: pageUrl( to.name ), target: '_top', title: to.name + "'s page on PickiPedia" }, to.name ) : h( 'b', null, to.name );
-	rules.replaceChildren( 'Find ', who, " in six jumps or less and you win. Fail, and you'll have to play the banjo. In an otherwise decent and upstanding band. Forever." );
+	rules.replaceChildren( 'Find ', who, ' in six jumps or less and you win. ' + ( ORACLE.taunt || TAUNT ) );
 }
 
 /** The four to start from, drawn small. */
@@ -3622,8 +3516,8 @@ function oracleMinis( again ) {
 	const picked = again && ORACLE.offered && ORACLE.offered.key === key && ORACLE.offered.g === G ? ORACLE.offered.picked :
 		K.oraclePick( G, ORACLE.mode === 'challenge' ? ORACLE.goal : undefined );
 	ORACLE.offered = { key, picked, g: G };
-	box.querySelector( '.pick' ).textContent = picked.length ? 'Pick where to start:' :
-		'Nowhere here leads to them yet. Try someone else.';
+	box.querySelector( '.pick' ).textContent = !picked.length ? 'Nowhere here leads to them yet. Try someone else.' :
+		( ORACLE.mode === 'challenge' ? 'Pick where to start:' : 'Or start with one of these:' );   // under the two boxes, in explore
 	box.querySelector( '.minis' ).replaceChildren( ...picked.map( miniEl ) );
 }
 
@@ -3977,6 +3871,37 @@ function onShare() {
 	} );
 }
 
+/**
+ * The shell's bar, pressed (BARLESS): its link button does what 🔗 does here, its FAQ what FAQ does. What they show
+ * is this page's own, under where the bar was: the line with the link, the answers over the graph. With no graph
+ * to keep (the Oracle), the link is the front page's own, or the challenge's.
+ */
+function barAct( act ) {
+	if ( act === 'faq' ) {
+		if ( $( 'faq' ).hidden ) {
+			openFaq();
+		} else {
+			closeFaq();
+		}
+	} else if ( act === 'share' ) {
+		if ( G && view && $( 'oracle' ).hidden && K.kindOf( view ) ) {
+			onShare();
+			return;
+		}
+		const box = $( 'shared' ), url = location.origin + ( ORACLE.mode === 'challenge' && ORACLE.goal !== null ? challengeAddress( ORACLE.goal ) : '/bacon' );
+		const copied = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText( url ) : Promise.reject( new Error( 'no clipboard' ) );
+		copied.then( () => true, () => false ).then( ( ok ) => {
+			box.replaceChildren( h( 'span', null, ok ? 'Copied: the link to this page.' : 'The link to this page:' ),
+				h( 'input', { readonly: true, value: url, 'aria-label': 'The link', onfocus: ( e ) => e.target.select() } ) );
+			box.hidden = false;
+			clearTimeout( onShare.t );
+			onShare.t = setTimeout( () => {
+				box.hidden = true;
+			}, 15000 );
+		} );
+	}
+}
+
 /** Out of a kept graph, into today's: the view asked for, said as an address in the kept graph, read in today's. */
 function leaveKept( v ) {
 	const there = new URLSearchParams( rawAddress( carry( v ) ).slice( 1 ) );
@@ -4051,12 +3976,41 @@ function qrSay() {
 
 /**
  * What a picker's page says they do: the first lines of the box {{MusicianInfo}} draws there (its list,
- * ul.thinkingentity-verbs), in the wiki's own words and with its links. Asked of the wiki once a picker, by the
+ * ul.thinkingentity-verbs), in the wiki's own words and with its links, each to about 200 characters (DOES_LONG;
+ * the longest of the cast's was 194 when this was written). Asked of the wiki once a picker, by the
  * explorer itself, so the card is the same in Rabbithole and out of it. A page with no such list, or no answer:
  * no lines. Each line is its parts in order: a string, or { t, href } for a link to a page that exists.
  */
-const DOES = 3;
+const DOES = 3, DOES_LONG = 200;
 const doesOf = new Map();
+/** A line's parts, ended at about `most` characters: on a word, with an ellipsis, a link kept whole or left out. */
+function clipLine( line, most ) {
+	const out = [];
+	let n = 0;
+	for ( const x of line ) {
+		const t = typeof x === 'string' ? x : x.t;
+		if ( n + t.length <= most ) {
+			out.push( x );
+			n += t.length;
+			continue;
+		}
+		if ( typeof x === 'string' ) {
+			const cut = t.slice( 0, Math.max( 0, most - n ) ), at = cut.lastIndexOf( ' ' );
+			const kept = ( at > 0 ? cut.slice( 0, at ) : ( n ? '' : cut ) ).replace( /[\s,;:.\u2014-]+$/, '' );
+			if ( kept ) {
+				out.push( kept );
+			}
+		}
+		const last = out.length - 1;
+		if ( last >= 0 && typeof out[ last ] === 'string' ) {
+			out[ last ] = out[ last ].replace( /[\s,;:.\u2014-]+$/, '' ) + '…';
+		} else {
+			out.push( '…' );
+		}
+		return out;
+	}
+	return out;
+}
 function doesFrom( html ) {
 	const list = html ? new DOMParser().parseFromString( html, 'text/html' ).querySelector( 'ul.thinkingentity-verbs' ) : null;
 	const parts = ( node, out ) => {
@@ -4071,7 +4025,7 @@ function doesFrom( html ) {
 		}
 		return out;
 	};
-	return list ? [ ...list.children ].filter( ( li ) => li.tagName === 'LI' ).slice( 0, DOES ).map( ( li ) => parts( li, [] ) )
+	return list ? [ ...list.children ].filter( ( li ) => li.tagName === 'LI' ).slice( 0, DOES ).map( ( li ) => clipLine( parts( li, [] ), DOES_LONG ) )
 		.filter( ( line ) => line.some( ( x ) => ( typeof x === 'string' ? x : x.t ).trim() ) ) : [];
 }
 function cardDoes( name ) {
@@ -4093,7 +4047,8 @@ function cardDoes( name ) {
 
 /**
  * The lines under the name share out what room the card has: a line each first, the last ones left out where even
- * that won't go; then any line that is cut gets another, in order, while there is room. Nothing is cut mid-line.
+ * that won't go; then any line that is cut gets another, in order, while there is room (to fourteen: a line of
+ * 200 characters in the narrowest card that has the room). Nothing is cut mid-line.
  */
 function cardFit( el ) {
 	const ul = el.querySelector( '.card-does' ), lis = ul ? [ ...ul.children ] : [];
@@ -4110,7 +4065,7 @@ function cardFit( el ) {
 		li.hidden = i >= n;
 	} );
 	let spare = n ? Math.floor( ( room - n * lh - ( n - 1 ) * gap ) / lh ) : 0;
-	for ( let lines = 2; spare > 0 && lines <= 6; lines++ ) {
+	for ( let lines = 2; spare > 0 && lines <= 14; lines++ ) {
 		for ( const li of lis.slice( 0, n ) ) {
 			if ( spare > 0 && li.scrollHeight > li.clientHeight + 1 ) {
 				li.style.setProperty( '--n', lines );
@@ -4998,6 +4953,12 @@ function openFaq( from ) {
 	box.scrollTop = 0;
 	$( 'faqlink' ).setAttribute( 'aria-expanded', 'true' );
 	body.replaceChildren( h( 'p', { class: 'faq-note' }, 'Asking the wiki…' ) );
+	// What the list beside the graph held and nothing else did: the way to tell us of a connection, and the store.
+	const on = G && view && !view.walk && !view.way && view.pg === undefined && view.m === undefined && view.cut === undefined && view.a !== undefined && $( 'oracle' ).hidden;
+	box.querySelector( '.faq-tell' ).replaceChildren( ...( G ? [
+		tellBox( GAME ? first( GAME.to ) : ( on ? first( view.a ) : '' ), GAME ? gameFrom() : ( on ? 'the bacon graph of ' + first( view.a ) : 'the bacon graph' ) ),
+		h( 'p', { class: 'foot' }, `${ G.people.length } pickers, ${ G.music.length } records and shows that join them. Built ${ K.when( G.built ) }. `,
+			h( 'a', { href: HOME + '/assets/connectome/connectome.sqlite', download: '' }, 'The whole store (SQLite)' ) ) ] : [] ) );
 	box.querySelector( '.x' ).focus();
 	wiki( { action: 'parse', page: FAQ_PAGE, prop: 'text', disableeditsection: 1, disablelimitreport: 1, disabletoc: 1 } ).then( ( r ) => {
 		if ( !r.parse || !r.parse.text ) {
@@ -5099,52 +5060,37 @@ function found( box ) {
 }
 
 /**
- * A box was filled. A song, a show or a record has the view to itself, whichever box it was typed in; two pickers
- * are shown together; one picker alone.
+ * The two boxes, on the front page (Justin, #connectome, 21 Nov 2026, 01:56Z: "Let's get rid of the two text inputs
+ * to find pickers at the top. Instead, under "explore", above the four pickers, let's have those boxes, but change
+ * their default help text to "start with" and "find a path to (optional)""). They are filled in and then sent
+ * (Enter, or "go"): a box that went as soon as it was filled would leave before the second, which is optional, could
+ * be. A song, a show or a record has the view to itself; two pickers are shown together; one picker alone.
  */
 function typed( ev ) {
-	const here = found( ev.target.id ), x = found( 'pa' ), y = found( 'pb' );
-	if ( here && here.a === undefined ) {
-		if ( !same( view, here ) ) {
-			go( here );
-		}
+	ev.preventDefault();
+	const note = $( 'oracle' ).querySelector( '.note' ), said = [ 'pa', 'pb' ].map( ( id ) => $( id ).value.trim() );
+	if ( !G ) {
 		return;
 	}
-	const a = x && x.a !== undefined ? x.a : null, b = y && y.a !== undefined ? y.a : null;
-	if ( a === null && b === null ) {
-		$( 'pa' ).value = view && view.a !== undefined ? first( view.a ) : '';
+	const x = found( 'pa' ), y = found( 'pb' ), lost = said.find( ( t, i ) => t && !( i ? y : x ) );
+	if ( lost !== undefined ) {
+		note.textContent = `The connectome doesn't know “${ lost.slice( 0, 80 ) }” yet.`;
 		return;
 	}
-	const next = a === null || b === null || b === a ? { a: a === null ? b : a } : { a, b };
-	if ( !view || next.a !== view.a || next.b !== view.b || view.m !== undefined || view.s !== undefined ) {
-		go( next );
+	if ( !x && !y ) {
+		note.textContent = 'Name a picker, a song, a show or a record to start with.';
+		return;
 	}
+	const one = x || y, other = x && y && y !== x ? y : null;
+	const next = one.a === undefined ? one : ( other && other.a !== undefined && other.a !== one.a ? { a: one.a, b: other.a } : { a: one.a } );
+	note.textContent = '';
+	fromOracle = true;
+	document.body.classList.remove( 'challenge' );
+	trail.length = 0;
+	go( next );
 }
-[ 'pa', 'pb' ].forEach( ( id ) => {
-	$( id ).addEventListener( 'change', typed );
-	$( id ).addEventListener( 'focus', ( e ) => e.target.select() );
-} );
-
-// The drawer (Justin, #connectome, 15 Nov 2026): the list folds away at any width, and stays as the reader left
-// it. The graph's frame grows into the room, and the observer below lays the view out again.
-const drawer = $( 'drawer' ), mainEl = drawer.parentElement;
-function fold( shut ) {
-	mainEl.classList.toggle( 'shut', shut );
-	drawer.setAttribute( 'aria-expanded', String( !shut ) );
-	drawer.title = shut ? 'Show the list' : 'Hide the list';
-	drawer.querySelector( '.chev' ).textContent = shut ? '‹' : '›';
-	drawer.querySelector( '.word' ).textContent = shut ? 'Show the list' : 'Hide the list';
-}
-try {
-	fold( localStorage.getItem( 'connectome-list' ) === 'shut' );
-} catch ( e ) {}                                                   // storage refused: the list starts open
-drawer.addEventListener( 'click', () => {
-	const shut = !mainEl.classList.contains( 'shut' );
-	fold( shut );
-	try {
-		localStorage.setItem( 'connectome-list', shut ? 'shut' : 'open' );
-	} catch ( e ) {}
-} );
+$( 'oracle' ).querySelector( '.find' ).addEventListener( 'submit', typed );
+[ 'pa', 'pb' ].forEach( ( id ) => $( id ).addEventListener( 'focus', ( e ) => e.target.select() ) );
 
 /** A challenge's own address: /bacon/challenge/<name>, an underscore for a space. */
 function challengeAddress( to ) {

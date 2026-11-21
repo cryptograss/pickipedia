@@ -46,9 +46,6 @@
 <body>
 <header class="bar">
 	<button type="button" id="back" title="Back to where you were" hidden>←</button>
-	<label><span class="vh">A picker, a song, a show or a record</span><input id="pa" list="names" autocomplete="off" spellcheck="false" placeholder="a picker, a song, a show…"></label>
-	<span class="join" aria-hidden="true">⟷</span>
-	<label><span class="vh">Another picker</span><input id="pb" list="names" autocomplete="off" spellcheck="false" placeholder="connect to…"></label>
 	<button type="button" id="share" title="Keep this graph as it is now, and copy a link to it" aria-label="Keep this graph, and copy its link" hidden>🔗</button>
 	<a id="faqlink" href="/wiki/Cryptograss:Bacon_graphs/FAQ" target="_top" aria-controls="faq" aria-expanded="false" title="Questions and answers about the bacon graph">FAQ</a>
 	<a id="home" href="/wiki/Main_Page" target="_top" title="PickiPedia: the front page"><img src="/assets/connectome/pickipedia-mark.png" alt="" width="36" height="36"><span>PickiPedia</span></a>
@@ -73,6 +70,7 @@
 		<section id="faq" role="dialog" aria-labelledby="faq-h" hidden>
 			<div class="faq-top"><h2 id="faq-h">Questions and answers</h2><button type="button" class="x" aria-label="Back to the graph" title="Back to the graph">×</button></div>
 			<div class="faq-body"></div>
+			<div class="faq-tell"></div>
 			<p class="faq-foot"><a href="/wiki/Cryptograss:Bacon_graphs/FAQ" target="_top">These answers live on PickiPedia ↗</a></p>
 		</section>
 		<div id="confetti" aria-hidden="true" hidden></div>
@@ -110,8 +108,6 @@
 		</footer>
 		<nav id="path" aria-label="The way you came" hidden><ol></ol><span id="pathx"><button type="button" title="Start over from here: let go of the way you came" aria-label="Start over from here">×</button></span></nav>
 	</section>
-	<button type="button" id="drawer" aria-controls="panel" aria-expanded="true" title="Hide the list"><span class="chev" aria-hidden="true">›</span><span class="word">Hide the list</span></button>
-	<aside id="panel" aria-label="What the sources say"></aside>
 	<section id="oracle" aria-labelledby="oracle-h" hidden><div class="card">
 		<h1 id="oracle-h">The Oracle of Bluegrass Bacon</h1>
 		<div class="rocker" role="radiogroup" aria-label="What to do">
@@ -122,6 +118,11 @@
 			<div class="goal-row"><label for="oracle-goal">Find a path to:</label><input id="oracle-goal" list="names" autocomplete="off" spellcheck="false"><button type="button" class="random" title="Someone else to find">random</button></div>
 			<p class="rules"></p>
 		</div>
+		<form class="find" hidden>
+			<label><span class="vh">A picker, a song, a show or a record to start with</span><input id="pa" list="names" autocomplete="off" spellcheck="false" placeholder="start with"></label>
+			<label><span class="vh">Another picker, to find a path to (optional)</span><input id="pb" list="names" autocomplete="off" spellcheck="false" placeholder="find a path to (optional)"></label>
+			<button type="submit" title="Go there">go</button>
+		</form>
 		<p class="note" role="status"></p>
 		<p class="pick"></p>
 		<div class="minis"></div>
