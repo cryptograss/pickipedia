@@ -621,7 +621,8 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
  * may be is what the ring leaves of the corner, which goes by the drawing's shape (each was swept for marks under it):
  *   `side`, a drawing 675px wide or more (Rabbithole's pane on a laptop, now that no list stands beside the
  *     graph): the picture beside everything, 300 to 430px wide (0.44 of the drawing) and 130 to 180 high (0.24 of
- *     it). It was 300 by 104 to 150, which held some 40 characters of each line. Justin, #connectome, 21 Nov 2026,
+ *     it; since 21 Nov, 23:27Z, 166 to 236 high, 0.31 of it, with a 109px picture). It was 300 by 104 to 150, which
+ *     held some 40 characters of each line. Justin, #connectome, 21 Nov 2026,
  *     01:56Z: "The cards can be much longer now that you've made room - we can afford ~200 characters of the first
  *     three items instead of 40 or whatever we're doing now." At the pane's size (909 by 734) it is 400 by 176:
  *     eight lines of some 48 characters among the three, so a long line has about 190 where the others are short.
@@ -634,7 +635,7 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
  *     with a name 90px under the top and 150 from the side): the size it was, 150px by 80, a 44px picture, one line;
  *   `small`, anything else (a phone in Rabbithole; a low window): up to 200px by 126, laid as the second.
  */
-const SIDE = { w: 430, h: 180 }, MID_H = 200;       // the most a card beside a wide drawing takes, and the height of one on a middling drawing
+const SIDE = { w: 430, h: 236 }, MID_H = 200;       // the most a card beside a wide drawing takes, and the height of one on a middling drawing
 function cardRoom( W ) {
 	const wide = svg.clientWidth || W, tall = svg.clientHeight || 0, k = W / wide;
 	// A song's own card says its name and a line or two: the size it had, so the ring round a song keeps all its pickers.
@@ -644,7 +645,7 @@ function cardRoom( W ) {
 	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) : ( side ? Math.max( 300, Math.min( SIDE.w, wide * 0.44 ) ) : ( tower || compact ? 150 :
 		( small ? Math.max( 160, Math.min( 200, wide * 0.46 ) ) : Math.max( 208, Math.min( 269, wide * 0.4 ) ) ) ) ) );
 	const ch = Math.round( song ? ( wide < 520 ? 80 : 100 ) :
-		( side ? Math.max( 130, Math.min( SIDE.h, tall * 0.24 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : Math.max( 176, Math.min( MID_H, tall * 0.28 ) ) ) ) ) ) );
+		( side ? Math.max( 166, Math.min( SIDE.h, tall * 0.31 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : Math.max( 176, Math.min( MID_H, tall * 0.28 ) ) ) ) ) ) );
 	return { cw, ch, side, tower, compact, small, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
 }
 
@@ -4297,7 +4298,10 @@ function cardSay() {
 	const { cw, ch, side, tower, compact, small } = cardRoom( frame().W );
 	el.style.width = cw + 'px';
 	el.style.height = ch + 'px';
-	el.style.top = ( ( $( 'say' ).offsetHeight || 0 ) + 8 ) + 'px';         // the graph's own corner, under the headline where there is one
+	// The graph's own corner: under the headline where there is one, else right under the bar (Justin, #connectome,
+	// 21 Nov 2026, 23:27Z: "It can also move all the way up so it's just underneath the top bar").
+	const head = $( 'say' ).offsetHeight || 0;
+	el.style.top = ( head ? head + 8 : 4 ) + 'px';
 	el.classList.toggle( 'side', side );
 	el.classList.toggle( 'tower', tower );
 	el.classList.toggle( 'compact', compact );
