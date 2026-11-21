@@ -115,7 +115,6 @@ button:focus-visible,
 	outline-offset: 2px;
 }
 
-.bar .join { color: var( --muted ); }
 
 #back {
 	padding: 2px 9px;
@@ -431,113 +430,6 @@ main {
 /* A piece of music's note: when, then who (tipFor). */
 #tip .when { color: var( --ink ); font-weight: 600; }
 
-/* ---- the drawer: the list folds away at any width, and the graph takes the room (Justin, #connectome,
-   15 Nov 2026). Beside the graph it is a strip down the list's edge; under it, a bar across. ---- */
-#drawer {
-	display: flex;
-	flex: none;
-	align-items: center;
-	justify-content: center;
-	width: 22px;
-	padding: 0;
-	border: 0;
-	border-left: 1px solid var( --hair );
-	background: var( --plane );
-	color: var( --ink2 );
-	font: 700 15px var( --ui );
-	cursor: pointer;
-}
-#drawer:hover { background: var( --hover ); color: var( --ink ); }
-#drawer:focus-visible { outline: 2px solid var( --link ); outline-offset: -2px; }
-#drawer .word { display: none; }
-main.shut #panel { display: none; }
-
-/* ---- the panel: the same, as a list a reader can check ---- */
-#panel {
-	flex: none;
-	width: 330px;
-	overflow-y: auto;
-	padding: 12px 14px 20px;
-	border-left: 1px solid var( --hair );
-	background: var( --plane );
-}
-
-#panel h2 {
-	margin: 0 0 2px;
-	font: 700 17px/1.25 var( --name );
-}
-
-#panel h3 {
-	margin: 16px 0 5px;
-	color: var( --ink2 );
-	font: 600 11.5px var( --ui );
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
-}
-
-#panel h3.row {
-	display: flex;
-	gap: 8px;
-	align-items: baseline;
-	justify-content: space-between;
-}
-
-#panel .mini {
-	flex: none;
-	padding: 1px 7px;
-	border: 1px solid var( --axis );
-	border-radius: 6px;
-	background: var( --surface );
-	color: var( --ink );
-	font: 12px var( --ui );
-	letter-spacing: 0;
-	text-transform: none;
-	cursor: pointer;
-}
-
-#panel p { margin: 4px 0; }
-#panel .sub { color: var( --ink2 ); }
-
-#panel ul {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-#panel li {
-	display: flex;
-	gap: 8px;
-	align-items: flex-start;
-	padding: 6px 6px;
-	border-radius: 6px;
-}
-
-#panel li + li { border-top: 1px solid var( --hair ); }
-#panel li.go { cursor: pointer; }
-#panel li.go:hover, #panel li.hot { background: var( --hover ); }
-#panel li .mark { flex: none; width: 18px; margin-top: 2px; }
-#panel li .body { flex: 1 1 auto; min-width: 0; }
-#panel li .t { font-weight: 600; }
-#panel li .s { color: var( --ink2 ); font-size: 12.5px; overflow-wrap: anywhere; }
-#panel li .n { flex: none; color: var( --ink2 ); font-size: 12.5px; text-align: right; white-space: nowrap; }
-#panel .who { font: 700 14px var( --name ); }
-
-.badge {
-	display: inline-block;
-	padding: 0 6px;
-	border: 1px solid var( --axis );
-	border-radius: 9px;
-	color: var( --ink2 );
-	font-size: 11px;
-	white-space: nowrap;
-}
-
-.badge.t2 {
-	border-color: var( --gold );
-	background: var( --gold-wash );
-	color: var( --ink );
-}
-
 .acts {
 	display: flex;
 	flex-wrap: wrap;
@@ -559,18 +451,6 @@ main.shut #panel { display: none; }
 .acts a.page { border-color: var( --link ); color: var( --link ); }
 .acts a.page.new { border-color: var( --axis ); color: var( --ink ); }
 .acts a:hover, .acts button:hover { background: var( --hover ); }
-
-#panel .foot {
-	margin-top: 18px;
-	color: var( --muted );
-	font-size: 12px;
-}
-
-#panel table { width: 100%; border-collapse: collapse; }
-#panel td { padding: 4px 6px; border-top: 1px solid var( --hair ); }
-#panel td.num { width: 3em; font-weight: 700; text-align: center; }
-#panel tr.go { cursor: pointer; }
-#panel tr.go:hover { background: var( --hover ); }
 
 /* ---- the way into Rabbithole: a rabbit and a play mark, green, beside a track's name ---- */
 #g a.play rect {
@@ -861,16 +741,10 @@ a.out:focus { text-decoration: underline; }
 
 #legend { box-sizing: border-box; }
 
-/* ---- narrow: the list under the graph ---- */
+/* ---- narrow. The graph has the whole of the frame: there was a list under it, and the page scrolled ---- */
 @media ( max-width: 760px ) {
-	body { height: auto; min-height: 100%; }
 	main { flex-direction: column; }
-	#stage { flex: none; height: 78vh; height: 78svh; min-height: 460px; }
 	#say { padding: 10px 12px 0; }
-	#panel { width: auto; border-top: 1px solid var( --hair ); border-left: 0; }
-	#drawer { gap: 8px; width: auto; min-height: 36px; border-top: 1px solid var( --hair ); border-left: 0; font-size: 13px; }
-	#drawer .word { display: inline; font-weight: 600; }
-	#drawer .chev { transform: rotate( -90deg ); }        /* under the graph: up to fold it, down to open it */
 	#say h1 { font-size: 18px; }
 	.bar { gap: 6px; padding: 6px 8px; }
 	.bar label { flex: 1 1 0; min-width: 0; }
@@ -878,8 +752,6 @@ a.out:focus { text-decoration: underline; }
 	.bar input { width: 100%; max-width: none; padding: 7px 8px; font-size: 16px; }
 	.bar.game #goal { flex: 1 1 9em; width: auto; min-width: 0; }      /* beside "Find a path to:", not under it */
 	#back { padding: 6px 12px; }
-	#panel h3 { font-size: 12px; }
-	.badge { font-size: 12px; }
 }
 
 /* ---- short: a phone on its side. The graph gets what height there is ---- */
@@ -891,12 +763,7 @@ a.out:focus { text-decoration: underline; }
 /* ---- a finger wants more to land on than a pointer does ---- */
 @media ( pointer: coarse ) {
 	.acts a, .acts button { padding: 8px 12px; font-size: 14px; }
-	#panel .mini { padding: 6px 10px; font-size: 13px; }
-	#panel li { padding: 10px 6px; }
-	#panel td { padding: 10px 6px; }
-	#panel a.play { padding: 5px 7px; border-radius: 14px; }
 	/* The arrow out to a page is small to the eye, and no smaller than a fingertip to the touch. */
-	#panel a.out { display: inline-block; margin: -9px 0 -9px 2px; padding: 9px 12px; font-size: 14px; }
 	#say h1 a.out { display: inline-block; padding: 6px 4px; }
 	.ln .hit { stroke-width: 24; }
 	#say h1 button.turn { padding: 5px 12px; font-size: 13px; }
@@ -904,7 +771,6 @@ a.out:focus { text-decoration: underline; }
 	#legend { bottom: calc( var( --path, 0px ) + 48px ); max-height: calc( 100% - var( --path, 0px ) - 58px ); }
 }
 @media ( pointer: coarse ) and ( min-width: 761px ) {
-	#drawer { width: 32px; }                               /* beside the graph: wide enough for a fingertip */
 }
 
 @media ( prefers-reduced-motion: reduce ) {
@@ -914,7 +780,6 @@ a.out:focus { text-decoration: underline; }
 /* ---- your rabbithole: the walk, top to bottom (Justin, #connectome, 15 Nov 2026) ---- */
 #stage.walking { overflow-y: auto; }
 #stage.walking #g { flex: none; }
-main.walking #panel, main.walking #drawer { display: none; }
 .pk text.note { font: 600 11.5px var( --ui ); fill: var( --ink2 ); stroke-width: 0; }
 .pk text.note.now { fill: var( --play ); }
 g.day text { font: 700 11px var( --ui ); fill: var( --muted ); letter-spacing: .04em; text-transform: uppercase; }
@@ -930,9 +795,14 @@ body.in-rabbithole .bar { display: none; }
 /* In the one shell, while the reader steers (the player's traverse mode off): the search bar, the challenge's bar
    and the way come, as on a page of its own. They stand aside again while the music moves the graph. */
 body.in-rabbithole.steering .bar:not([hidden]) { display: flex; }
+/* One bar (Justin, #connectome, 21 Nov 2026): a shell with the link, the FAQ and the way to PickiPedia on its own
+   bar says so (bar=1), and this page's own is put away, steering or not. The challenge's bar is not that one. */
+body.barless header.bar { display: none !important; }
+/* The song that is playing has no button to play it (connectome.js, playSay). */
+a.play.on-now { display: none; }
 
 /* In the player's dock: the few steps there's room for, and nothing else. */
-body.mini .bar, body.mini #say, body.mini #legend, body.mini #key, body.mini #panel, body.mini #drawer { display: none; }
+body.mini .bar, body.mini #say, body.mini #legend, body.mini #key { display: none; }
 body.mini, body.mini main, body.mini #stage { background: transparent; }
 body.mini #g { cursor: pointer; }
 
@@ -1020,6 +890,10 @@ body.mini #g { cursor: pointer; }
 	margin-right: auto;
 	margin-left: auto;
 }
+/* Under the answers: the way to tell us of a connection nobody wrote down, and the store. The list beside the
+   graph held them until it went (Justin, #connectome, 21 Nov 2026). */
+#faq .faq-tell { max-width: 46em; margin: 0 auto; }
+#faq .faq-tell .foot { margin: 10px 0 0; color: var( --ink2 ); font-size: 12.5px; }
 #faq .faq-top {
 	display: flex;
 	align-items: center;
@@ -1308,9 +1182,6 @@ g.kept-gone path.core, g.kept-gone path.thread { stroke-dasharray: 1.5 4; opacit
 .bar.game[hidden] { display: none; }
 
 /* The top bar's search, put away in a challenge; the game's own "Find a path to:" stays (it had gone with them). */
-body.challenge header.bar label,
-body.challenge header.bar .join { display: none; }
-
 #confetti {
 	position: absolute;
 	inset: 0;
@@ -1646,6 +1517,39 @@ body.in-rabbithole:not(.steering) #path { display: none; }
 #oracle .rules a {
 	color: var( --link );
 	font-weight: 700;
+}
+/* The two boxes, under "explore" and over the four (Justin, #connectome, 21 Nov 2026). */
+#oracle .find {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	max-width: 46em;
+	margin: 20px auto 0;
+}
+#oracle .find[ hidden ] { display: none; }
+#oracle .find label { flex: 0 1 17em; min-width: 0; }
+#oracle .find input {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 6px 9px;
+	border: 1px solid var( --axis );
+	border-radius: 6px;
+	background: var( --surface );
+	color: var( --ink );
+	font: 600 16px var( --name );
+}
+#oracle .find input::placeholder { color: var( --ink2 ); font-weight: 400; opacity: 1; }
+#oracle .find input:focus-visible { outline: 2px solid var( --link ); outline-offset: 2px; }
+#oracle .find button {
+	padding: 6px 14px;
+	border: 1px solid var( --ink );
+	border-radius: 6px;
+	background: var( --ink );
+	color: var( --surface );
+	font: 700 14px var( --ui );
+	cursor: pointer;
 }
 #oracle .note {
 	margin: 8px 0 0;
