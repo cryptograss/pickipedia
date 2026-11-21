@@ -1073,9 +1073,10 @@ def load_whole(db_path):
     db = sqlite3.connect(db_path)
     cols = [c[1] for c in db.execute('PRAGMA table_info(targets)')]
     formats = 'formats' if 'formats' in cols else "''"      # a store built before records kept their formats
+    venue, city = ('venue', 'city') if 'venue' in cols else ("''", "''")     # or before shows kept where they were
     whole = {r[0]: {'kind': r[1], 'title': r[2], 'date': r[3], 'artist': r[4], 'grp': r[5],
-                    'formats': [f for f in (r[6] or '').split('; ') if f]}
-             for r in db.execute(f'SELECT id, kind, title, date, artist, grp, {formats} FROM targets')}
+                    'formats': [f for f in (r[6] or '').split('; ') if f], 'venue': r[7] or '', 'city': r[8] or ''}
+             for r in db.execute(f'SELECT id, kind, title, date, artist, grp, {formats}, {venue}, {city} FROM targets')}
     credits = db.execute('SELECT person, roles, target, scope, source FROM credits').fetchall()
     return whole, credits
 

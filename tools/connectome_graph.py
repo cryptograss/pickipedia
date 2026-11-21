@@ -11,6 +11,8 @@ graph.json:
             its number everywhere below. The instrument is the wiki's own
             (Primary instrument), or "" when the wiki doesn't say
   music     [id, kind, artist, date, title, tier, source, page]: a record or a show.
+            In the file a row has a ninth item, its cover art, and a show that has them a tenth,
+            [name, venue, city]: its own name, and where it was.
             source is where a reader can check it; page is its wiki page, "" without one
   cast      beside each music: [picker, roles as the source wrote them], who is on it
   music     [key, kind, artist, date, title, tier, source, page, art]: art, the file its Record page's
@@ -114,6 +116,21 @@ def source_url(target_id, sources=()):
     if kind in SOURCE:
         return SOURCE[kind] + ident
     return sorted(sources)[0] if sources else ''
+
+
+def show_place(target_id, d):
+    """A show's own name, its venue and its town, as [name, venue, city]; None for a record, or a show with none.
+
+    The name is the show's title where that is its own: a cryptograss show's ("Hello Decentralization"). A
+    tape's title is archive.org's sentence ("X Live at Y on Z"), which names nothing the venue and the night
+    don't, so a tape has no name of its own; nor has a show whose title is only its file's.
+    """
+    if d.get('kind') != 'show':
+        return None
+    title = (d.get('title') or '').strip()
+    own = title and not target_id.startswith('lma:') and title != target_id.rsplit(':', 1)[-1]
+    place = [title if own else '', d.get('venue') or '', d.get('city') or '']
+    return place if any(place) else None
 
 
 def casts(pairs):
@@ -272,6 +289,9 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         page = pages.get(d.get('title', '')) if t.startswith('arthel:') and d.get('kind') == 'record' else ''
         music.append([t, d.get('kind', ''), d.get('artist', ''), d.get('date', ''), d.get('title', ''),
                       tier(t, d.get('formats')), source_url(t, sources[t]), page or '', d.get('art', '')])
+        place = show_place(t, d)
+        if place:
+            music[-1].append(place)
         # Who made it: its credit's names as the wiki knows them (makers, where the build gives them), each
         # that is a picker here
         mine = [] if d.get('kind') == 'show' else [pid[n] for n in (d['makers'] if 'makers' in d else credited(d.get('artist', '')))

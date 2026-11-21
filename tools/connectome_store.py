@@ -105,6 +105,14 @@ def from_mb(release):
 ARTHEL_ARTISTS = {"0": "Justin Holmes and the Immutable String Band"}
 
 
+def said(value):
+    """One line of what a source gave for a field: the first of a list, trimmed; '' for nothing or a placeholder."""
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    value = re.sub(r"\s+", " ", str(value or "")).strip(" ,;")
+    return "" if value.lower() in {"unknown", "n/a", "na", "none", "?", "tba"} else value
+
+
 def from_arthel(data_dir):
     """Studio cuts (songs_and_tunes) and shows, from arthel's YAML, through Homeplace's readers."""
     import yaml
@@ -133,8 +141,13 @@ def from_arthel(data_dir):
         # venue was standing in as the artist, so the graph named these shows by their title. Artist 0 is Justin
         # Holmes and the Immutable String Band (Justin, #connectome, 15 Nov 2026); an id nobody has said stays
         # unnamed (0_7: two ETHPrague shows, 2025), and that show goes by its title as before.
+        # Where it was, as its file says: the venue, and the town with its region ("Barcelona, Catalonia").
+        # (Justin, #connectome, 21 Nov 2026: "if the name of the show (festival or if the show itself has a
+        # name), city and venue are available, display them in various relevant places.")
         target = {"kind": "show", "id": "arthel:" + rec["id"], "title": rec["title"], "date": rec["date"],
-                  "artist": ARTHEL_ARTISTS.get(stem.split("-")[0], ""), "group": "arthel:" + rec["id"]}
+                  "artist": ARTHEL_ARTISTS.get(stem.split("-")[0], ""), "group": "arthel:" + rec["id"],
+                  "venue": said(data.get("venue")),
+                  "city": ", ".join(x for x in (said(data.get("locality")), said(data.get("region1"))) if x)}
         for name, p in rec["people"].items():
             for scope in sorted(p["scopes"]):
                 rows.append(credit(name, p["roles"], target, scope, [], src, "arthel", "homeplace.arthel_show"))
@@ -151,9 +164,11 @@ def from_lma(item, names):
     collections = collections if isinstance(collections, list) else [collections] if collections else []
     # The tape's collections, as archive.org lists them: the release tier is read from these (etree's
     # policy makes a tape a Permanent Release; connectome_graph.tier).
+    # Where the tape was made, as the taper filled it in: archive.org's `venue` and `coverage` (the town).
     target = {"kind": "show", "id": f"lma:{ident}", "title": m.get("title", ""), "date": m.get("date", ""),
               "artist": creator, "group": f"lma-show:{creator}|{m.get('date', '')}",
-              "formats": [f"archive.org collection: {c}" for c in collections]}
+              "formats": [f"archive.org collection: {c}" for c in collections],
+              "venue": said(m.get("venue")), "city": said(m.get("coverage"))}
     rows = []
     for name, readings in lma_lineup.read_item(item, names).items():
         for where, shape, scope, detail in readings:
@@ -256,7 +271,8 @@ def build(raw, arthel=None, lma_names=()):
 
 SCHEMA = """
 CREATE TABLE targets (id TEXT PRIMARY KEY, kind TEXT, title TEXT, date TEXT, artist TEXT, grp TEXT,
-                      formats TEXT);  -- what the source says a record came out on, "; " between
+                      formats TEXT,   -- what the source says a record came out on, "; " between
+                      venue TEXT, city TEXT);  -- where a show was, as its source says; '' for a record
 CREATE TABLE credits (n INTEGER PRIMARY KEY, person TEXT, mbid TEXT, roles TEXT, target TEXT REFERENCES targets(id),
                       scope TEXT, source TEXT, source_kind TEXT, read_by TEXT, excerpt TEXT);
 CREATE TABLE credit_tracks (credit INTEGER REFERENCES credits(n), position TEXT, title TEXT);
@@ -273,9 +289,9 @@ def to_sqlite(rows, path):
     db.executescript(SCHEMA)
     for i, r in enumerate(rows):
         t = r["target"]
-        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?)",
+        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?,?,?)",
                    (t["id"], t["kind"], t["title"], t["date"], t.get("artist", ""), t.get("group", t["id"]),
-                    "; ".join(t.get("formats") or [])))
+                    "; ".join(t.get("formats") or []), t.get("venue", ""), t.get("city", "")))
         db.execute("INSERT INTO credits VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (i, r["person"], r.get("mbid"), "; ".join(r["roles"]), t["id"], r["scope"], r["source"],
                     r["source_kind"], r["read_by"], r.get("excerpt")))

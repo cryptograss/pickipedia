@@ -546,15 +546,41 @@ function pillsFor( tie, room, most, prefer, entry, bare ) {
 		let w = pad + wide( label, FONT.pill );
 		if ( used + w > room && !shown.length ) {                     // the first one always goes in: briefer, then cut to fit
 			label = n.brief;
-			// a show keeps its night and gives up some of its name
-			const cutTo = ( k ) => ( n.day ? K.clip( n.who, k ) + ' · ' + n.day : K.clip( n.brief, k ) );
-			for ( let most = n.day ? n.who.length : label.length; pad + wide( label, FONT.pill ) > room && most > 6; most-- ) {
-				label = cutTo( most );
+			const fits = ( text ) => pad + wide( text, FONT.pill ) <= room;
+			// cut a name to fit beside `tail`, never under six letters
+			const shrink = ( name, tail ) => {
+				let text = name + tail;
+				for ( let most = name.length; !fits( text ) && most > 6; most-- ) {
+					text = K.clip( name, most ) + tail;
+				}
+				return text;
+			};
+			if ( fits( label ) ) {
+				// as it is
+			} else if ( n.named ) {
+				// a show with a name of its own gives up its night before any of its name (K.naming)
+				label = shrink( n.who, '' );
+			} else if ( n.placed ) {
+				// one known by where it was keeps the place, with as much of its night as fits beside it: the day,
+				// the month, the year (K.nights). Where not even the year fits beside the whole of it, the year stays
+				// only if ten letters of the place still fit with it: "Ryman Audito…" says more than "Ryman… · 2025",
+				// and the pill's own mark says it is a show.
+				const night = n.days.find( ( d ) => fits( n.who + ' · ' + d ) );
+				const year = n.days.length ? ' · ' + n.days[ n.days.length - 1 ] : '';
+				// A short place keeps its year though that runs a little past the room: two summers at Town Park
+				// are two labels, not one twice.
+				const near = year && pad + wide( n.who + year, FONT.pill ) <= room + 28;
+				label = night ? n.who + ' · ' + night : ( near ? n.who + year :
+					( year && fits( K.clip( n.who, 10 ) + year ) && !fits( n.who ) ? shrink( n.who, year ) : shrink( n.who, '' ) ) );
+			} else {
+				// a show known by its band keeps its night and gives up some of its name; a record is cut as it is
+				label = n.day ? shrink( n.who, ' · ' + n.day ) : shrink( n.brief, '' );
 			}
-			// `bare`: where even that is wider than the room, a show says its night alone. Six letters of a name and
-			// a block height are 232 wide, on a line that may have 150 between two faces.
-			if ( bare && n.day && pad + wide( label, FONT.pill ) > room ) {
-				label = n.day;
+			// `bare`: where even that is wider than the room, a show says the least that is its own: its name or its
+			// place alone, or the night alone for one known by its band. Six letters of a name and a block height
+			// are 232 wide, on a line that may have 150 between two faces.
+			if ( bare && !fits( label ) && n.glyph === 'show' ) {
+				label = n.named || n.placed ? shrink( n.who, '' ) : ( n.day || label );
 			}
 			w = pad + wide( label, FONT.pill );
 		}
@@ -4738,7 +4764,7 @@ function hover( g ) {
 const TIP_NAMES = 6;
 function tipFor( g ) {
 	const it = live[ g.dataset.kind ].get( g.dataset.k ), d = it && !it.dead ? it.d : null;
-	let when = '', cast = [];
+	let when = '', where = '', cast = [];
 	if ( !d ) {
 		return null;
 	}
@@ -4747,14 +4773,20 @@ function tipFor( g ) {
 		when = ( entry && entry.recorded ) || ( d.cuts && d.cuts[ 0 ] ? K.when( d.cuts[ 0 ].date ) : '' );
 		cast = entry ? entry.pickers.map( ( x ) => x[ 0 ] ).filter( ( id ) => id >= 0 && P( id ) ) : [];
 	} else if ( ( d.stands === 'piece' || d.stands === 'loose' ) && !d.more && d.piece !== undefined && M( d.piece ) ) {
-		const pc = M( d.piece );
-		when = K.when( G.music[ pc.m ].date );
+		const pc = M( d.piece ), m = G.music[ pc.m ];
+		when = K.when( m.date );
+		// a show that says where it was: whose it was, at what or where, and the town, before its night (Justin,
+		// #connectome, 21 Nov 2026); its label may be cut to a few letters of this
+		if ( m.kind === 'show' && ( m.name || m.venue || m.city ) ) {
+			const n = K.naming( G, { m: pc.m, how: K.STAGE, songs: [] } );
+			where = [ n.band && n.who !== n.band ? n.band + ' at ' + n.who : n.who, n.place ].filter( Boolean ).join( ', ' );
+		}
 		cast = pc.cast || [];
 	} else {
 		return null;
 	}
 	const who = cast.slice( 0, TIP_NAMES ).map( first ).join( ', ' ) + ( cast.length > TIP_NAMES ? ` and ${ cast.length - TIP_NAMES } more` : '' );
-	return when || who ? { when, who } : null;
+	return when || who || where ? { when: [ where, when ].filter( Boolean ).join( ' · ' ), who } : null;
 }
 
 function click( g ) {

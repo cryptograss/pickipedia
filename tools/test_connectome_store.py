@@ -206,3 +206,25 @@ def test_an_arthel_show_is_its_bands_where_the_id_is_known(tmp_path):
     artist = {r["target"]["title"]: r["target"]["artist"] for r in S.from_arthel(str(tmp_path))}
     assert artist == {"Hello Decentralization": "Justin Holmes and the Immutable String Band",
                       "ETHPrague 2025 First Show": ""}                      # an id nobody has named: no band, no venue
+
+
+def test_a_show_keeps_where_it_was_as_its_source_says(tmp_path):
+    # Justin, #connectome, 21 Nov 2026: "if the name of the show (festival or if the show itself has a name), city
+    # and venue are available, display them in various relevant places."
+    (tmp_path / "shows").mkdir()
+    (tmp_path / "shows" / "0-11908068.yaml").write_text(
+        'title: "Hello Decentralization"\nvenue: "chiva lounge"\nlocality: "Barcelona"\nregion1: "Catalonia"\nregion2: "Spain"\n'
+        'ensemble:\n  "Justin Holmes": ["guitar"]\n  "Leify Green": ["fiddle"]\n')
+    (tmp_path / "shows" / "0-14628177.yaml").write_text('title: "No place said"\nensemble:\n  "Justin Holmes": ["guitar"]\n  "Leify Green": ["fiddle"]\n')
+    where = {r["target"]["title"]: (r["target"]["venue"], r["target"]["city"]) for r in S.from_arthel(str(tmp_path))}
+    assert where == {"Hello Decentralization": ("chiva lounge", "Barcelona, Catalonia"), "No place said": ("", "")}
+    tape = {"metadata": {"identifier": "EastNashGrass2026-07-16", "creator": "East Nash Grass", "date": "2026-07-16",
+                         "venue": " Grey Fox Bluegrass Festival, High Meadow stage ", "coverage": ["Oak Hill, NY"],
+                         "description": "Harry Clark - mandolin"}}
+    target = S.from_lma(tape, ["Harry Clark"])[0]["target"]
+    assert (target["venue"], target["city"]) == ("Grey Fox Bluegrass Festival, High Meadow stage", "Oak Hill, NY")
+    tape["metadata"].update(venue="Unknown", coverage=None)              # a taper's placeholder is not a place
+    target = S.from_lma(tape, ["Harry Clark"])[0]["target"]
+    assert (target["venue"], target["city"]) == ("", "")
+    db = S.to_sqlite(S.from_arthel(str(tmp_path)), str(tmp_path / "s.sqlite"))
+    assert db.execute("SELECT venue, city FROM targets WHERE title = 'Hello Decentralization'").fetchall() == [("chiva lounge", "Barcelona, Catalonia")]
