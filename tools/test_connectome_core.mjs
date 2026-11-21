@@ -508,6 +508,34 @@ test( 'one night is one piece, however many tapers taped it; a show with a name 
 	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1 · block 15,735,471', 'devcon VI night 1 · block 15,735,471', 'block 15,735,471' ] );   // no band said; its night
 } );
 
+test( 'a show leads with its own name, else its venue, else its band; the rest is the line under it', () => {
+	// Justin, #connectome, 21 Nov 2026: "if the name of the show (festival or if the show itself has a name), city and
+	// venue are available, display them in various relevant places. These are better at evoking memories and
+	// observations than just the dates."
+	const g = K.build( { people: [ [ 'A', 1, '' ], [ 'B', 1, '' ] ], music: [
+		[ 'arthel:show:0-11908068', 'show', 'The String Band', 'block 11908068', 'Hello Decentralization', 2, 'gh/a.yaml', '', '', [ 'Hello Decentralization', 'chiva lounge', 'Barcelona, Catalonia' ] ],
+		[ 'lma:eng2026-07-16', 'show', 'East Nash Grass', '2026-07-16', 'East Nash Grass Live at Grey Fox Bluegrass Festival on 2026-07-16', 2, 'https://archive.org/details/eng', '', '', [ '', 'Grey Fox Bluegrass Festival', 'Oak Hill, NY' ] ],
+		[ 'lma:eng2026-07-17', 'show', 'East Nash Grass', '2026-07-17', 'East Nash Grass Live at somewhere on 2026-07-17', 2, 'https://archive.org/details/eng2', '', '', [ '', '', 'Nashville, TN' ] ],
+		[ 'lma:eng2026-07-18', 'show', 'East Nash Grass', '2026-07-18', 'East Nash Grass Live on 2026-07-18', 2, 'https://archive.org/details/eng3', '' ] ],
+	cast: [ [ [ 0, '' ], [ 1, '' ] ], [ [ 0, '' ], [ 1, '' ] ], [ [ 0, '' ], [ 1, '' ] ], [ [ 0, '' ], [ 1, '' ] ] ],
+	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ], [ 2, 2, 1, [] ], [ 3, 2, 1, [] ] ] ] ] } );
+	const say = ( m ) => K.naming( g, g.adj[ 0 ].get( 1 ).ev.find( ( e ) => e.m === m ) );
+	const named = say( 0 ), venue = say( 1 ), town = say( 2 ), plain = say( 3 );
+	assert.deepEqual( [ named.who, named.named, named.short ], [ 'Hello Decentralization', true, 'Hello Decentralization · block 11,908,068' ] );
+	assert.equal( named.long, 'The String Band · chiva lounge, Barcelona, Catalonia · block 11,908,068' );
+	assert.deepEqual( [ venue.who, venue.named, venue.short ], [ 'Grey Fox Bluegrass Festival', false, 'Grey Fox Bluegrass Festival · 16 Jul 2026' ] );
+	assert.equal( venue.long, 'East Nash Grass Live at Grey Fox Bluegrass Festival on 2026-07-16 · Oak Hill, NY' );   // the tape's own sentence, and the town
+	g.music[ 1 ].venue = 'Grey Fox Bluegrass Festival, Oak Hill, NY';       // a taper's venue with the town in it: the town is said once
+	assert.equal( say( 1 ).place, '' );
+	g.music[ 1 ].venue = 'Grey Fox Bluegrass Festival';
+	assert.deepEqual( [ venue.placed, venue.days, named.placed, named.days, plain.placed ], [ true, [ '16 Jul 2026', 'Jul 2026', '2026' ], false, [ 'block 11,908,068' ], false ] );
+	assert.deepEqual( [ town.who, town.short, town.place ], [ 'East Nash Grass', 'East Nash Grass · 17 Jul 2026', 'Nashville, TN' ] );   // a town alone doesn't lead
+	assert.deepEqual( [ plain.who, plain.short, plain.long ], [ 'East Nash Grass', 'East Nash Grass · 18 Jul 2026', 'East Nash Grass Live on 2026-07-18' ] );   // nothing said of where: as before
+	assert.deepEqual( [ g.music[ 0 ].name, g.music[ 0 ].venue, g.music[ 0 ].city, g.music[ 3 ].venue ], [ 'Hello Decentralization', 'chiva lounge', 'Barcelona, Catalonia', '' ] );
+	const c = K.called( g, g.pieces[ K.pieceFor( g, g.adj[ 0 ].get( 1 ).ev.find( ( e ) => e.m === 0 ) ) ] );
+	assert.deepEqual( [ c.name, c.sub ], [ 'Hello Decentralization', 'live · The String Band · chiva lounge, Barcelona, Catalonia · block 11,908,068' ] );
+} );
+
 test( 'a line says a song or a show no other line here has said; with none left, nothing', () => {
 	// Justin, #connectome, 15 Nov 2026: not the same song on every line, and not the first by the alphabet
 	const t = tie( KYLE, JUSTIN );                                    // Silver 44 and Victory on 4masks, and a show

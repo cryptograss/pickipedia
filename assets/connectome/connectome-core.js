@@ -49,8 +49,10 @@ export const TIER_NAME = [ 'not known to be DRM-free', 'Full Release', 'Permanen
 
 export function build( g ) {
 	const people = g.people.map( ( [ name, page, inst, img ], id ) => ( { id, name, page: !!page, inst: inst || '', img: img || '' } ) );
-	const music = g.music.map( ( [ key, kind, artist, date, title, tier, source, page, art ], id ) =>
-		( { id, key, kind, artist, date, title, tier, source, page: page || '', art: art || '', cast: ( g.cast && g.cast[ id ] ) || [] } ) );
+	// A show's tenth item, where it has one: its own name, its venue and its town (tools/connectome_graph.py show_place).
+	const music = g.music.map( ( [ key, kind, artist, date, title, tier, source, page, art, place ], id ) =>
+		( { id, key, kind, artist, date, title, tier, source, page: page || '', art: art || '', cast: ( g.cast && g.cast[ id ] ) || [],
+			name: ( place && place[ 0 ] ) || '', venue: ( place && place[ 1 ] ) || '', city: ( place && place[ 2 ] ) || '' } ) );
 	const adj = people.map( () => new Map() );
 	for ( const [ a, b, evs ] of g.ties ) {
 		const tie = summarize( a, b, evs.map( ( [ m, how, w, songs ] ) => ( { m, how, w, songs: songs || [] } ) ), music );
@@ -895,6 +897,17 @@ export function when( date ) {
 	return s;
 }
 
+/**
+ * A night, said shorter and shorter: "16 Jul 2026", "Jul 2026", "2026". A label that leads with where a show was
+ * gives the place its letters and takes as much of the night as fits beside it; the whole night is in the note. A
+ * date that is not a day of the calendar (a block height) has only the one way to say it.
+ */
+export function nights( date ) {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( String( date || '' ).trim() );
+	const whole = when( date );
+	return m && +m[ 2 ] >= 1 && +m[ 2 ] <= 12 ? [ whole, `${ MONTHS[ +m[ 2 ] - 1 ] } ${ m[ 1 ] }`, m[ 1 ] ] : ( whole ? [ whole ] : [] );
+}
+
 export function plural( n, one, many ) {
 	return `${ n } ${ n === 1 ? one : ( many || one + 's' ) }`;
 }
@@ -943,13 +956,32 @@ export function naming( G, e ) {
 		// cryptograss's own shows (Justin, #connectome, 15 Nov 2026: by the band, not the show's title).
 		// Any other goes by its own name.
 		const tape = !!m.artist;
-		const who = tape ? m.artist : ( m.title || m.artist );
+		const band = m.artist || '';
+		// And by where it was, where its source says (Justin, #connectome, 21 Nov 2026: "if the name of the show
+		// (festival or if the show itself has a name), city and venue are available, display them in various
+		// relevant places. These are better at evoking memories and observations than just the dates."). A label
+		// leads with the show's own name, else its venue, else its band; the band, the town and the night are in
+		// `sub` and `long`, which go wherever there is room for a line.
+		// Its own name: what the build says is one, or, with no band said, its title, as before.
+		const own = ( m.name && m.name !== band ? m.name : '' ) || ( tape ? '' : m.title || '' );
+		const who = own || m.venue || band;
 		const day = when( m.date );
+		// the town once: a taper's venue often has it already ("Ryman Auditorium, Nashville, TN")
+		const town = ( m.city || '' ).split( ',' )[ 0 ].trim().toLowerCase();
+		const city = town && ( m.venue || '' ).toLowerCase().includes( town ) ? '' : m.city;
+		const place = [ m.venue !== who ? m.venue : '', city ].filter( Boolean ).join( ', ' );
 		// A show says its night wherever it is named, so it is never taken for a band or a picker (Justin,
-		// #connectome, 15 Nov 2026); `day` is kept apart, so a tight spot cuts the name and keeps the night.
+		// #connectome, 15 Nov 2026); `day` is kept apart, so a tight spot cuts the name and keeps the night. One
+		// with a name of its own gives up the night first (`named`): no other show has that name.
 		const dated = [ who, day ].filter( Boolean ).join( ' · ' );
-		return { glyph: 'show', short: dated, brief: dated, who, day,
-			long: tape ? ( m.title && m.title !== who ? m.title : who ) : [ m.artist !== who ? m.artist : '', day ].filter( Boolean ).join( ', ' ),
+		// `long`, the line under its name: the rest of it. A tape's is archive.org's own sentence ("X Live at Y on
+		// Z"), with the town; any other's is its band, where the name is not the band's, where it was, and its night.
+		// A show whose source says nothing of where it was keeps the line it had: its title, or its night.
+		const sentence = !own && / live at /i.test( m.title || '' );
+		const placeless = !m.name && !m.venue && !m.city;
+		return { glyph: 'show', short: dated, brief: dated, who, day, band, place, named: !!own, placed: !own && !!m.venue, days: nights( m.date ),
+			long: placeless ? ( tape ? ( m.title && m.title !== who ? m.title : who ) : day ) :
+				( sentence ? [ m.title, city ] : [ who !== band ? band : '', place, day ] ).filter( Boolean ).join( ' · ' ),
 			songs: e.songs };
 	}
 	const record = [ m.artist, m.title ].filter( Boolean ).join( ' – ' ) + ( m.date ? ` (${ when( m.date ) })` : '' );
@@ -1264,7 +1296,8 @@ export function called( G, piece ) {
 	}
 	if ( piece.kind === 'show' ) {
 		// A band and a night of theirs often have one name. A show always says it is one (Justin, #connectome, 15 Nov 2026).
-		return { glyph: 'show', name: n.who, sub: [ 'live', when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
+		// and whose it was and where, under its name, where the name is not the band's own
+		return { glyph: 'show', name: n.who, sub: [ 'live', n.who !== n.band ? n.band : '', n.place, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 	}
 	return { glyph: 'record', name: n.brief, sub: [ m.artist, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 }

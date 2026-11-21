@@ -159,3 +159,19 @@ def test_only_a_cryptograss_records_own_track_plays_in_rabbithole():
     plays = {'Silver 44': 'QmSilver', '01. Silver 44': 'QmTaped', 'Victory': 'QmVictory', 'Unasked': 'QmNo'}
     assert _export(pairs, plays=plays)['plays'] == {'Silver 44': 'QmSilver'}      # not the tape's take, nor another label's record
     assert _export(pairs)['plays'] == {}
+
+
+def test_a_show_says_its_own_name_and_where_it_was_and_a_record_says_neither():
+    # Justin, #connectome, 21 Nov 2026: a show's name, city and venue, where its source has them
+    assert cg.show_place('arthel:show:0-11908068', {'kind': 'show', 'title': 'Hello Decentralization', 'venue': 'chiva lounge',
+                                                    'city': 'Barcelona, Catalonia'}) == ['Hello Decentralization', 'chiva lounge', 'Barcelona, Catalonia']
+    # a tape's title is archive.org's sentence, not a name of its own; a title that is only the file's is none either
+    assert cg.show_place('lma:tape1', {'kind': 'show', 'title': 'SGP Live at Grassfire on 2025-07-05', 'venue': 'Grassfire', 'city': ''}) == ['', 'Grassfire', '']
+    assert cg.show_place('arthel:show:0-14628177', {'kind': 'show', 'title': '0-14628177', 'venue': '', 'city': ''}) is None
+    assert cg.show_place('lma:tape2', {'kind': 'show', 'title': 'SGP Live at Grassfire'}) is None           # a store built before shows kept places
+    assert cg.show_place('arthel:4masks', {'kind': 'record', 'title': '4masks', 'venue': 'x'}) is None
+    targets = dict(TARGETS, **{'lma:tape1': dict(TARGETS['lma:tape1'], venue='Grassfire', city='Boone, NC')})
+    pairs = [pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:tape1'), pair('Kyle Tuttle', 'Molly Tuttle', 'track', 'arthel:4masks', [('u', '', 'silver-44')])]
+    g = cg.export(pairs, targets, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-21')
+    rows = {m[0]: m for m in g['music']}
+    assert rows['lma:tape1'][9] == ['', 'Grassfire', 'Boone, NC'] and len(rows['arthel:4masks']) == 9
