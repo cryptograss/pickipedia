@@ -55,6 +55,7 @@ from datetime import date
 from html import escape
 
 import connectome_graph
+import set_stones
 from connectome_graph import icon_for
 
 FEATURED_PAGE = 'Cryptograss:Connectome/Featured'
@@ -1266,11 +1267,14 @@ def main(argv):
     ap.add_argument('--out', required=True)
     ap.add_argument('--only', help='one page title, for trying a card')
     ap.add_argument('--today', help="YYYY-MM-DD; the build's date")
+    ap.add_argument('--arthel', help="arthel's src/data: the shows whose set stones graph.json carries (set_stones.py)")
     a = ap.parse_args(argv)
     today = date.fromisoformat(a.today) if a.today else date.today()
     pairs, targets, groups = load_store(a.db, a.pairs)
     whole, credits = load_whole(a.db)
     result = build(pairs, targets, groups, Wiki(a.wiki), today, a.only, whole, credits)
+    if a.arthel and result.get('graph') is not None:
+        set_stones.into(result['graph'], a.arthel)
     write(result, a.out, {'db': os.path.basename(a.db), 'wiki': a.wiki, 'today': today.isoformat()})
     print(f"{len(result['cards'])} cards; "
           f"{len(result.get('song_cards', {}))} song cards; "

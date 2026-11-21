@@ -420,7 +420,7 @@ REQS
 
                         # The cards and the big graph's graph.json, from the store and the wiki as it is now; swapped in whole.
                         rm -rf "${CACHE}/cards.part"
-                        "${PY}" connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part"
+                        "${PY}" connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part" --arthel "${CACHE}/arthel/src/data"
                         cp "${STORE}/connectome.sqlite" "${OUT}/connectome.sqlite"
                         if [ -f "${CACHE}/walked.json" ]; then cp "${CACHE}/walked.json" "${OUT}/walked.json"; fi
                         cp "${CACHE}/cards.part/graph.json" "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"
