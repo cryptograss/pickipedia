@@ -1608,3 +1608,37 @@ test( 'a trunk in the rainbow: its pickers one over another, clear of each other
 	assert.equal( stub.pb, null );
 	assert.ok( stub.tM > K.fork( 1014, 668, 110, 110, 157, 157 ).tM );
 } );
+
+test( 'a show carries its set stones, and the other tapes of its night theirs; a record none', () => {
+	const g = {
+		people: [ [ 'A', 1, '' ], [ 'B', 1, '' ] ],
+		music: [ [ 'arthel:show:0-1', 'show', 'Band', 'block 1', 'Night' ], [ 'lma:x', 'show', 'Band', 'block 1', 'Tape' ],
+			[ 'arthel:rec', 'record', 'Band', '2024', 'Rec' ] ],
+		cast: [ [ [ 0, 'guitar' ] ], [ [ 1, 'bass' ] ], [] ],
+		ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 2, 1, 1, [] ] ] ] ],
+		stones: { 0: [ [ 4, 0, [ 23, 10, 34 ], 'Loved dancing with Z to this diddy.', 'From Bill to Brewster', '0.1', '0xa' ] ],
+			1: [ [ 9, 1, [ 1, 2, 3 ], '', '', '0.1', '0xb' ] ] },
+		stones_read: { chain: 'arbitrum', block: 526324550, total: 2 }
+	};
+	const G = K.build( g );
+	assert.deepEqual( K.stonesOf( G, 0 ).map( ( st ) => st.token ), [ 4, 9 ] );
+	assert.deepEqual( K.stonesOf( G, 2 ), [] );
+	assert.equal( K.stoneSays( K.stonesOf( G, 0 )[ 0 ] ), 'set 1 · favourite: From Bill to Brewster · “Loved dancing with Z to this diddy.” · 0.1 ETH' );
+	assert.equal( K.nes( 23 ), '#00B800' );
+	assert.equal( G.stonesRead.block, 526324550 );
+	assert.deepEqual( K.stonesOf( K.build( Object.assign( {}, g, { stones: undefined } ) ), 0 ), [] );
+} );
+
+test( 'a kept graph keeps its shows’ set stones, renumbered; one with none is kept as before', () => {
+	const g = {
+		v: 1, people: [ [ 'A', 1, '' ], [ 'B', 1, '' ], [ 'C', 1, '' ] ],
+		music: [ [ 'arthel:rec', 'record', 'X', '2024', 'Rec' ], [ 'arthel:show:0-1', 'show', 'Band', 'block 1', 'Night' ] ],
+		cast: [ [], [] ], ties: [ [ 0, 1, [ [ 0, 1, 1, [] ] ] ], [ 1, 2, [ [ 1, 2, 1, [] ] ] ] ],
+		stones: { 1: [ [ 4, 0, [ 1, 2, 3 ], '', '', '0.1', '0xa' ] ] }, stones_read: { block: 7 }
+	};
+	const kept = K.keep( g, [ 1, 2 ] );
+	assert.deepEqual( kept.stones, { 0: [ [ 4, 0, [ 1, 2, 3 ], '', '', '0.1', '0xa' ] ] } );
+	assert.deepEqual( kept.stones_read, { block: 7 } );
+	assert.deepEqual( K.stonesOf( K.build( kept ), 0 ).map( ( st ) => st.token ), [ 4 ] );
+	assert.equal( 'stones' in K.keep( g, [ 0, 1 ].filter( ( p ) => p === 0 ) ), false );
+} );

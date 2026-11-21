@@ -62,7 +62,50 @@ export function build( g ) {
 	const byName = new Map( people.map( ( p ) => [ p.name.toLowerCase(), p.id ] ) );
 	return Object.assign( { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
 		songcast: g.songcast || {}, plays: g.plays || {}, built: g.built || '',
-		pages: g.pages || {} }, makers( g, music, byName ), pieces( g, people, music ) );   // pages: a page's own graph's pickers, and no tie
+		pages: g.pages || {}, stones: stonesFrom( g ), stonesRead: g.stones_read || null },
+	makers( g, music, byName ), pieces( g, people, music ) );   // pages: a page's own graph's pickers, and no tie
+}
+
+/**
+ * The set stones beside each show (tools/set_stones.py): music id -> [{ token, set, color, message, favorite,
+ * paid, holder }]. A stone ties nobody to anybody; it is shown wherever its show is (Justin, #connectome, 21 Nov
+ * 2026, 19:41Z: "display them anywhere a show is displayed, including connecting lines").
+ */
+function stonesFrom( g ) {
+	const out = {};
+	for ( const [ m, list ] of Object.entries( g.stones || {} ) ) {
+		out[ m ] = list.map( ( [ token, set, color, message, favorite, paid, holder ] ) =>
+			( { token, set, color: color || [], message: message || '', favorite: favorite || '', paid: paid || '', holder: holder || '' } ) );
+	}
+	return out;
+}
+
+/** arthel's NES palette, in its order (src/build_logic/graphics/palettes.js): a stone's three colours index it. */
+export const NES = [ '#7C7C7C', '#0000FC', '#0000BC', '#4428BC', '#940084', '#A80020', '#A81000', '#881400', '#503000',
+	'#007800', '#006800', '#005800', '#004058', '#000000', '#BCBCBC', '#0078F8', '#0058F8', '#6844FC', '#D800CC', '#E40058',
+	'#F83800', '#E45C10', '#AC7C00', '#00B800', '#00A800', '#00A844', '#008888', '#F8F8F8', '#3CBCFC', '#6888FC', '#9878F8',
+	'#F878F8', '#F85898', '#F87858', '#FCA044', '#F8B800', '#B8F818', '#58D854', '#58F898', '#00E8D8', '#787878', '#FCFCFC',
+	'#A4E4FC', '#B8B8F8', '#D8B8F8', '#F8B8F8', '#F8A4C0', '#F0D0B0', '#FCE0A8', '#F8D878', '#D8F878', '#B8F8B8', '#B8F8D8',
+	'#00FCFC', '#F8D8F8' ];
+
+/** A stone's colour by its index; grey for one the palette hasn't got. */
+export function nes( i ) {
+	return NES[ i ] || NES[ 0 ];
+}
+
+/** The stones of a piece: a show's, and those of the other tapes of its night. A record or a track has none. */
+export function stonesOf( G, piece ) {
+	const pc = G.pieces && G.pieces[ piece ];
+	if ( !pc || pc.kind !== 'show' || !G.stones ) {
+		return [];
+	}
+	return [ pc.m, ...( pc.also || [] ) ].flatMap( ( m ) => G.stones[ m ] || [] );
+}
+
+/** What one stone says, in a line: its set, its favourite, its message, what was paid. */
+export function stoneSays( st ) {
+	return [ 'set ' + ( st.set + 1 ), st.favorite ? 'favourite: ' + st.favorite : '', st.message ? '“' + st.message + '”' : '',
+		st.paid ? st.paid + ' ETH' : '' ].filter( Boolean ).join( ' · ' );
 }
 
 /**
@@ -2275,8 +2318,15 @@ export function keep( g, pickers, musics = [], hubs = [] ) {
 			writers: ( c.writers || [] ).map( P ),
 			pickers: ( c.pickers || [] ).filter( ( p ) => pn.has( p[ 0 ] ) ).map( ( p ) => [ P( p[ 0 ] ), ...p.slice( 1 ) ] )
 		} ) ] ) ),
-		plays: pick( g.plays, ( [ , cid ] ) => cids.has( cid ) )
+		plays: pick( g.plays, ( [ , cid ] ) => cids.has( cid ) ),
+		// a kept show keeps its set stones, as read then; a graph with none is kept as it always was, so its ID stands
+		...stonesKept( g, mn )
 	};
+}
+
+function stonesKept( g, mn ) {
+	const kept = Object.entries( g.stones || {} ).filter( ( [ m ] ) => mn.has( +m ) ).map( ( [ m, list ] ) => [ mn.get( +m ), list ] );
+	return kept.length ? { stones: Object.fromEntries( kept ), stones_read: g.stones_read || null } : {};
 }
 
 /**
