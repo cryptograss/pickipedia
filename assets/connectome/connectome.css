@@ -1089,12 +1089,58 @@ body.mini #g { cursor: pointer; }
 	overflow: hidden;
 }
 #card[hidden] { display: none; }
-/* Beside a wide drawing (a desktop), a picture 30% bigger and room between the three lines (Justin, #connectome,
-   21 Nov 2026, 23:27Z: "The picker card can still be a little taller at least on desktop - picture 30% bigger,
-   and some padding between the three written items. Also, let's make the border around the card bolder and more
-   distinct."). cardRoom gives it the height. */
-#card.side img { width: 109px; height: 109px; }
+/* Beside a wide drawing (a desktop), room between the three lines (Justin, #connectome, 21 Nov 2026, 23:27Z: "some
+   padding between the three written items. Also, let's make the border around the card bolder and more distinct").
+   The picture went 30% bigger with it, and came back down (22 Nov, 00:55Z: "Now the picker card is big enough that
+   it's looking awkward ... Let's reduce the photo size back to where it was, but let the user click it to get a
+   photo in a modal box"): the picture opens #zoom. */
 #card.side .card-does { gap: 7px; }
+#card .card-face { grid-area: pic; align-self: start; display: block; padding: 0; border: 0; border-radius: 50%; background: none; cursor: zoom-in; }
+#card .card-face:focus-visible { outline: 2px solid var( --ink ); outline-offset: 2px; }
+#card .card-face img { display: block; }
+/* The card, closer: the picture big and everything the page's box says, uncut. Over the drawing, which stays as it
+   was under it; a click outside the box, its ×, or Escape puts it away. */
+#zoom {
+	position: absolute;
+	inset: 0;
+	z-index: 8;
+	display: grid;
+	place-items: center;
+	padding: 16px;
+	background: rgba( 20, 16, 22, .55 );
+}
+#zoom[ hidden ] { display: none; }
+#zoom .zoom-box {
+	position: relative;
+	display: grid;
+	grid-template: "pic name" auto "pic inst" auto "pic does" auto "pic page" minmax( 0, 1fr ) / auto minmax( 0, 1fr );
+	gap: 8px 22px;
+	box-sizing: border-box;
+	width: min( 820px, 100% );
+	max-height: 100%;
+	padding: 22px 26px;
+	overflow: auto;
+	border: 2px solid var( --ink2 );
+	border-radius: 10px;
+	background: var( --surface );
+	box-shadow: 0 8px 36px rgba( 0, 0, 0, .35 );
+	color: var( --ink2 );
+	font: 15px/1.5 var( --ui );
+}
+#zoom .zoom-box.nopic { grid-template: "name" auto "inst" auto "does" auto "page" minmax( 0, 1fr ) / minmax( 0, 1fr ); }
+#zoom img { grid-area: pic; align-self: start; width: min( 320px, 40vw ); height: auto; max-height: min( 420px, 70vh ); object-fit: cover; border-radius: 8px; }
+#zoom .zoom-name { grid-area: name; margin: 0; padding-right: 36px; color: var( --ink ); font: 700 26px/1.2 var( --name ); text-decoration: none; }
+#zoom a.zoom-name:hover { text-decoration: underline; }
+#zoom .zoom-inst { grid-area: inst; margin: 0; font-style: italic; }
+#zoom .zoom-does { grid-area: does; display: grid; align-content: start; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
+#zoom .zoom-page { grid-area: page; align-self: start; margin: 10px 0 0; font-size: 13.5px; }
+#zoom .x { position: absolute; top: 8px; right: 10px; width: 40px; height: 40px; border: 0; background: none; color: var( --ink ); font: 28px/1 var( --ui ); cursor: pointer; }
+/* A narrow drawing (a phone): the picture over the words. */
+@media ( max-width: 560px ) {
+	#zoom .zoom-box { grid-template: "pic" auto "name" auto "inst" auto "does" auto "page" auto / minmax( 0, 1fr ); padding: 18px 16px; }
+	#zoom img { justify-self: center; width: min( 260px, 70vw ); max-height: 40vh; }
+	#zoom .zoom-name { font-size: 22px; }
+}
 #card.side { grid-template: "pic name" auto "pic does" minmax( 0, 1fr ) / auto minmax( 0, 1fr ); gap: 4px 10px; }
 #card.tower { grid-template: "pic" auto "name" auto "does" minmax( 0, 1fr ) / minmax( 0, 1fr ); justify-items: center; }
 #card.tower .card-name { font-size: 15px; text-align: center; }
