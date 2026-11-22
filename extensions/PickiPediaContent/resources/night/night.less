@@ -384,6 +384,13 @@
 
 	/* A picture drawn in black on nothing (a diagram, an icon) is on a pale ground, not lost in the dark. */
 	.mw-parser-output img[src$=".svg"], .mw-parser-output img[src*=".svg/"] { background: #f1e9db; border-radius: 2px; }
+
+	/* The four instrument icons that are line and silhouette rather than photographs are turned over, so
+	   black art on a dark page becomes light art (Module:Instruments says which: lua/pickipedia/
+	   instruments.lua, MONO). The other seven carry their own colour and are left alone -- an inverted
+	   mandolin is blue. No pale ground here: the grounds themselves were made transparent on 22 Nov 2026,
+	   which is what took the white boxes off the icons by dark in the first place. */
+	.pp-instrument--mono img { filter: invert( 1 ); }
 }
 
 @media screen and ( prefers-color-scheme: dark ) {
