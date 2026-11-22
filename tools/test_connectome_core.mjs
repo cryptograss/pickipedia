@@ -264,11 +264,11 @@ test( 'a date is read only where its shape is certain', () => {
 test( 'music is named by what a reader would call it', () => {
 	const [ record, show ] = tie( KYLE, JUSTIN ).ev;               // a Permanent studio track comes before a Permanent show
 	assert.deepEqual( K.naming( G, record ), { glyph: 'track', short: 'Silver 44 +1', brief: 'Silver 44', long: '4masks', songs: [ 'Silver 44', 'Victory' ] } );
-	assert.equal( K.naming( G, show ).short, 'Hello Decentralization · block 11,908,068' );     // its title, and its night
+	assert.equal( K.naming( G, show ).short, 'Hello Decentralization · 2021' );     // its title, and its year (a block of March 2021)
 	const tape = K.naming( G, tie( KYLE, MOLLY ).ev[ 0 ] );
 	// a show says its night wherever it's named, so it is never taken for a band (Justin, #connectome, 15 Nov 2026)
 	assert.deepEqual( [ tape.glyph, tape.short, tape.brief, tape.who, tape.day ],
-		[ 'show', 'Sam Grisman Project · 5 Jul 2025', 'Sam Grisman Project · 5 Jul 2025', 'Sam Grisman Project', '5 Jul 2025' ] );
+		[ 'show', 'Sam Grisman Project · 2025', 'Sam Grisman Project · 2025', 'Sam Grisman Project', '5 Jul 2025' ] );
 	assert.equal( K.naming( G, tie( KYLE, CHOIR ).ev[ 0 ] ).glyph, 'record' );
 	assert.equal( K.naming( G, tie( KYLE, CHOIR ).ev[ 0 ] ).long, 'Alison Brown – Safe, Sensible And Sane (2025)' );
 	assert.equal( K.clip( 'Leftover Salmon', 9 ), 'Leftover…' );
@@ -505,7 +505,7 @@ test( 'one night is one piece, however many tapers taped it; a show with a name 
 	assert.equal( K.findPiece( g, 'lma:band2025-06-14.mv88' ), 0 );
 	assert.deepEqual( K.leads( g, 0 ).named.map( ( n ) => n.id ), [ 2 ] );    // the other tape of the night isn't somewhere else
 	const own = K.naming( g, g.adj[ 0 ].get( 2 ).ev[ 0 ] );
-	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1 · block 15,735,471', 'devcon VI night 1 · block 15,735,471', 'block 15,735,471' ] );   // no band said; its night
+	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1 · 2022', 'devcon VI night 1 · 2022', 'block 15,735,471' ] );   // no band said; its year, the block in its line
 } );
 
 test( 'a show leads with its own name, else its venue, else its band; the rest is the line under it', () => {
@@ -521,16 +521,16 @@ test( 'a show leads with its own name, else its venue, else its band; the rest i
 	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ], [ 2, 2, 1, [] ], [ 3, 2, 1, [] ] ] ] ] } );
 	const say = ( m ) => K.naming( g, g.adj[ 0 ].get( 1 ).ev.find( ( e ) => e.m === m ) );
 	const named = say( 0 ), venue = say( 1 ), town = say( 2 ), plain = say( 3 );
-	assert.deepEqual( [ named.who, named.named, named.short ], [ 'Hello Decentralization', true, 'Hello Decentralization · block 11,908,068' ] );
+	assert.deepEqual( [ named.who, named.named, named.short ], [ 'Hello Decentralization', true, 'The String Band · Hello Decentralization · 2021' ] );
 	assert.equal( named.long, 'The String Band · chiva lounge, Barcelona, Catalonia · block 11,908,068' );
-	assert.deepEqual( [ venue.who, venue.named, venue.short ], [ 'Grey Fox Bluegrass Festival', false, 'Grey Fox Bluegrass Festival · 16 Jul 2026' ] );
+	assert.deepEqual( [ venue.who, venue.named, venue.short ], [ 'Grey Fox Bluegrass Festival', false, 'East Nash Grass · Grey Fox Bluegrass Festival · 2026' ] );
 	assert.equal( venue.long, 'East Nash Grass Live at Grey Fox Bluegrass Festival on 2026-07-16 · Oak Hill, NY' );   // the tape's own sentence, and the town
 	g.music[ 1 ].venue = 'Grey Fox Bluegrass Festival, Oak Hill, NY';       // a taper's venue with the town in it: the town is said once
 	assert.equal( say( 1 ).place, '' );
 	g.music[ 1 ].venue = 'Grey Fox Bluegrass Festival';
 	assert.deepEqual( [ venue.placed, venue.days, named.placed, named.days, plain.placed ], [ true, [ '16 Jul 2026', 'Jul 2026', '2026' ], false, [ 'block 11,908,068' ], false ] );
-	assert.deepEqual( [ town.who, town.short, town.place ], [ 'East Nash Grass', 'East Nash Grass · 17 Jul 2026', 'Nashville, TN' ] );   // a town alone doesn't lead
-	assert.deepEqual( [ plain.who, plain.short, plain.long ], [ 'East Nash Grass', 'East Nash Grass · 18 Jul 2026', 'East Nash Grass Live on 2026-07-18' ] );   // nothing said of where: as before
+	assert.deepEqual( [ town.who, town.short, town.place ], [ 'East Nash Grass', 'East Nash Grass · 2026', 'Nashville, TN' ] );   // a town alone doesn't lead
+	assert.deepEqual( [ plain.who, plain.short, plain.long ], [ 'East Nash Grass', 'East Nash Grass · 2026', 'East Nash Grass Live on 2026-07-18' ] );   // nothing said of where: as before
 	assert.deepEqual( [ g.music[ 0 ].name, g.music[ 0 ].venue, g.music[ 0 ].city, g.music[ 3 ].venue ], [ 'Hello Decentralization', 'chiva lounge', 'Barcelona, Catalonia', '' ] );
 	const c = K.called( g, g.pieces[ K.pieceFor( g, g.adj[ 0 ].get( 1 ).ev.find( ( e ) => e.m === 0 ) ) ] );
 	assert.deepEqual( [ c.name, c.sub ], [ 'Hello Decentralization', 'live · The String Band · chiva lounge, Barcelona, Catalonia · block 11,908,068' ] );
@@ -646,8 +646,7 @@ test( 'a show whose source names the band goes by the band; a cut says whose it 
 	cast: [ [ [ 0, '' ], [ 1, '' ] ], [ [ 0, '' ], [ 1, '' ] ] ],
 	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 3, 1, [ 'Victory' ] ] ] ] ] } );
 	const show = K.naming( g, { m: 0, how: K.STAGE, songs: [] } );
-	assert.deepEqual( [ show.short, show.brief, show.long ], [ 'Justin Holmes and the Immutable String Band · block 15,735,471',
-		'Justin Holmes and the Immutable String Band · block 15,735,471', 'devcon VI night 1' ] );
+	assert.deepEqual( [ show.short, show.brief, show.long ], [ 'Justin Holmes · 2022', 'Justin Holmes · 2022', 'devcon VI night 1' ] );
 	const cut = K.called( g, g.pieces[ K.trackOn( g, 1, 'Victory' ) ] );
 	assert.deepEqual( [ cut.name, cut.sub, cut.on ], [ 'Victory', 'Justin Myles Holmes', '4masks by Justin Myles Holmes' ] );   // the record, and whose
 	assert.equal( g.music[ 1 ].art, 'Four-masks.png' );
@@ -1666,3 +1665,14 @@ test( 'set stones break a tie at one step of the order: the show they were bough
 function P( G, id ) {
 	return G.people[ id ].name;
 }
+
+test( 'a show\'s pill says the year, never the block, and its band by its leader', () => {
+	assert.equal( K.yearOf( 'block 20550008' ), '2024' );             // MOOS Space, August 2024
+	assert.equal( K.yearOf( 'block 23955770' ), '2025' );             // Pearl, November 2025
+	assert.equal( K.yearOf( 'block 12000000' ), '2021' );             // before the merge: near enough for a year
+	assert.equal( K.yearOf( '2012-12-31' ), '2012' );
+	assert.equal( K.yearOf( '' ), '' );
+	assert.equal( K.bandShort( 'Justin Holmes and the Immutable String Band' ), 'Justin Holmes' );
+	assert.equal( K.bandShort( 'Bill Monroe & His Blue Grass Boys' ), 'Bill Monroe' );
+	assert.equal( K.bandShort( 'The Travelin\' McCourys' ), 'The Travelin\' McCourys' );
+} );

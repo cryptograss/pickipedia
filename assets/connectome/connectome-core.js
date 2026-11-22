@@ -1029,6 +1029,37 @@ export function when( date ) {
  * gives the place its letters and takes as much of the night as fits beside it; the whole night is in the note. A
  * date that is not a day of the calendar (a block height) has only the one way to say it.
  */
+/**
+ * The year a night was, where a show's date says it: its own, or the year an Ethereum block height falls in (arthel
+ * dates its shows by block). After the merge a block is every twelve seconds from 15,537,394 (15 Sep 2022,
+ * 06:42:42Z); before it, the average from the genesis block, which is near enough for a year.
+ * Justin, #connectome, 22 Nov 2026, 21:55Z: "let's not say "block <n>" - in most cases, the year is enough!"
+ */
+export function yearOf( date ) {
+	const s = String( date || '' ).trim();
+	const y = /^(\d{4})(?:-|$)/.exec( s );
+	if ( y ) {
+		return y[ 1 ];
+	}
+	const b = /^block (\d+)$/.exec( s );
+	if ( !b ) {
+		return '';
+	}
+	const n = +b[ 1 ], MERGE = 15537394, AT = 1663224162, GENESIS = 1438269973;
+	const t = n >= MERGE ? AT + ( n - MERGE ) * 12 : GENESIS + n * ( AT - GENESIS ) / MERGE;
+	return String( new Date( t * 1000 ).getUTCFullYear() );
+}
+
+/**
+ * A band as a show's pill names it: its leader, where the name is "<leader> and the <band>" (Justin, #connectome,
+ * 22 Nov 2026, 21:55Z: "The band name is crucial ... mine can just be "Justin Holmes" instead of "Justin Holmes and
+ * The Immutable String Band", in order to fit better"). Any other band as it is.
+ */
+export function bandShort( band ) {
+	const b = String( band || '' ).trim();
+	return b.replace( /\s+(?:and|&)\s+(?:the|his|her|their)\s.*$/i, '' ).trim() || b;
+}
+
 export function nights( date ) {
 	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( String( date || '' ).trim() );
 	const whole = when( date );
@@ -1100,13 +1131,17 @@ export function naming( G, e ) {
 		// A show says its night wherever it is named, so it is never taken for a band or a picker (Justin,
 		// #connectome, 15 Nov 2026); `day` is kept apart, so a tight spot cuts the name and keeps the night. One
 		// with a name of its own gives up the night first (`named`): no other show has that name.
-		const dated = [ who, day ].filter( Boolean ).join( ' · ' );
+		// The pill's words: the band, short, where it isn't the name already; the name; the year (Justin, 22 Nov
+		// 2026, 21:55Z). The rest of the night, block and all, is in `long`.
+		const crew = bandShort( band ), y = yearOf( m.date ), year = y && !who.includes( y ) ? y : '';   // "Festival MY 2023" says its own year
+		const dated = [ crew && crew !== who && band !== who ? crew : '', who === band ? crew : who, year ].filter( Boolean ).join( ' · ' );
 		// `long`, the line under its name: the rest of it. A tape's is archive.org's own sentence ("X Live at Y on
 		// Z"), with the town; any other's is its band, where the name is not the band's, where it was, and its night.
 		// A show whose source says nothing of where it was keeps the line it had: its title, or its night.
 		const sentence = !own && / live at /i.test( m.title || '' );
 		const placeless = !m.name && !m.venue && !m.city;
-		return { glyph: 'show', short: dated, brief: dated, who, day, band, place, named: !!own, placed: !own && !!m.venue, days: nights( m.date ),
+		return { glyph: 'show', short: dated, brief: dated, who, day, year, band, crew: crew !== who && band !== who ? crew : '', place, named: !!own,
+			placed: !own && !!m.venue, days: nights( m.date ),
 			long: placeless ? ( tape ? ( m.title && m.title !== who ? m.title : who ) : day ) :
 				( sentence ? [ m.title, city ] : [ who !== band ? band : '', place, day ] ).filter( Boolean ).join( ' · ' ),
 			songs: e.songs };

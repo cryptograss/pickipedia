@@ -309,7 +309,11 @@ function parse( q ) {
 }
 
 /** A view with one thing in its middle that has a card: a picker's own, a song's cut. */
-const cardable = ( v ) => !!v && !v.walk && !v.way && v.pg === undefined && v.m === undefined && v.b === undefined && ( v.cut !== undefined || v.a !== undefined );
+// A show has a card too (Justin, #connectome, 22 Nov 2026, 21:55Z: "Let's have a card for the shows too, like we do
+// with pickers"): a record or a track in the middle has none.
+const showView = ( v ) => v.m !== undefined && !!M( v.m ) && M( v.m ).kind === 'show';
+const cardable = ( v ) => !!v && !v.walk && !v.way && v.pg === undefined && ( v.m === undefined || showView( v ) ) && v.b === undefined &&
+	( v.cut !== undefined || v.a !== undefined || v.m !== undefined );
 /** Is the middle's card out? Asked for; or the view is a soloist's, the music's own, and nobody put it away. */
 const cardOn = ( v ) => cardable( v ) && ( v.playing !== undefined ? v.card !== false : !!v.card );
 /** Out, or away again: a step of its own, so Back puts it as it was. */
@@ -541,10 +545,17 @@ function pillsFor( tie, room, most, prefer, entry, bare ) {
 		}
 		const n = K.naming( G, e );
 		const play = n.glyph === 'track' ? K.playOf( G, G.music[ e.m ], e.songs[ 0 ] ) : '';
-		const pad = 34 + ( play ? 38 : 0 );                           // the glyph and the ends; and the way into Rabbithole
-		let label = K.clip( n.short, 34 );
-		let w = pad + wide( label, FONT.pill );
-		if ( used + w > room && !shown.length ) {                     // the first one always goes in: briefer, then cut to fit
+		// A show's set stones ride inside its pill, at its right end (Justin, #connectome, 22 Nov 2026, 21:55Z: "Let's
+		// put the set stones _inside_ the show pill"): their room is the pill's too.
+		const stones = n.glyph === 'show' ? K.stonesOf( G, K.pieceFor( G, e ) ).length : 0;
+		// The words are fitted to the room as before; the stones make the pill that much longer, so a show with
+		// stones is never named shorter for having them.
+		const pad = 34 + ( play ? 38 : 0 ), gemW = stones ? gemsIn( stones ) + 4 : 0;   // the glyph and the ends; Rabbithole's way; the stones
+		// a show's year stays whole at the end of it, however much of the rest is cut
+		const yearEnd = n.glyph === 'show' && n.year ? ' · ' + n.year : '';
+		let label = yearEnd ? K.clip( n.short.slice( 0, -yearEnd.length ), 34 - yearEnd.length ) + yearEnd : K.clip( n.short, 34 );
+		let w = pad + gemW + wide( label, FONT.pill );
+		if ( used + w - gemW > room && !shown.length ) {                     // the first one always goes in: briefer, then cut to fit
 			label = n.brief;
 			const fits = ( text ) => pad + wide( text, FONT.pill ) <= room;
 			// cut a name to fit beside `tail`, never under six letters
@@ -557,6 +568,14 @@ function pillsFor( tie, room, most, prefer, entry, bare ) {
 			};
 			if ( fits( label ) ) {
 				// as it is
+			} else if ( n.glyph === 'show' && n.crew ) {
+				// A show with its band named keeps the band and the year, and gives up its own name or place first
+				// (Justin, 22 Nov 2026: "The band name is crucial"); where even the band won't go whole, the band is cut.
+				// Not past the point where two of a band's nights would read alike: with no room for eight letters of
+				// the night's own name beside the band, the name and the year, as before, and the band in its line.
+				const yr = n.year ? ' · ' + n.year : '';
+				label = fits( K.clip( n.crew + ' · ' + n.who, n.crew.length + 11 ) + yr ) ? shrink( n.crew + ' · ' + n.who, yr ) :
+					( fits( K.clip( n.who, 10 ) + yr ) ? shrink( n.who, yr ) : shrink( n.who, '' ) );
 			} else if ( n.named ) {
 				// a show with a name of its own gives up its night before any of its name (K.naming)
 				label = shrink( n.who, '' );
@@ -565,8 +584,8 @@ function pillsFor( tie, room, most, prefer, entry, bare ) {
 				// the month, the year (K.nights). Where not even the year fits beside the whole of it, the year stays
 				// only if ten letters of the place still fit with it: "Ryman Audito…" says more than "Ryman… · 2025",
 				// and the pill's own mark says it is a show.
-				const night = n.days.find( ( d ) => fits( n.who + ' · ' + d ) );
-				const year = n.days.length ? ' · ' + n.days[ n.days.length - 1 ] : '';
+				const night = n.year && fits( n.who + ' · ' + n.year ) ? n.year : '';
+				const year = n.year ? ' · ' + n.year : '';
 				// A short place keeps its year though that runs a little past the room: two summers at Town Park
 				// are two labels, not one twice.
 				const near = year && pad + wide( n.who + year, FONT.pill ) <= room + 28;
@@ -574,20 +593,20 @@ function pillsFor( tie, room, most, prefer, entry, bare ) {
 					( year && fits( K.clip( n.who, 10 ) + year ) && !fits( n.who ) ? shrink( n.who, year ) : shrink( n.who, '' ) ) );
 			} else {
 				// a show known by its band keeps its night and gives up some of its name; a record is cut as it is
-				label = n.day ? shrink( n.who, ' · ' + n.day ) : shrink( n.brief, '' );
+				label = n.year ? shrink( n.who, ' · ' + n.year ) : shrink( n.brief, '' );
 			}
 			// `bare`: where even that is wider than the room, a show says the least that is its own: its name or its
 			// place alone, or the night alone for one known by its band. Six letters of a name and a block height
 			// are 232 wide, on a line that may have 150 between two faces.
 			if ( bare && !fits( label ) && n.glyph === 'show' ) {
-				label = n.named || n.placed ? shrink( n.who, '' ) : ( n.day || label );
+				label = n.crew ? shrink( n.crew, '' ) : ( n.named || n.placed ? shrink( n.who, '' ) : ( n.year || label ) );
 			}
-			w = pad + wide( label, FONT.pill );
+			w = pad + gemW + wide( label, FONT.pill );
 		}
 		if ( used + w > room && shown.length ) {
 			break;
 		}
-		shown.push( { e, label, w, glyph: n.glyph, tier: G.music[ e.m ].tier, play, song: e.songs[ 0 ] } );
+		shown.push( { e, label, w, glyph: n.glyph, tier: G.music[ e.m ].tier, play, song: e.songs[ 0 ], stones } );
 		used += w + 8;
 	}
 	return { shown, more: tie.ev.length - shown.length, used: Math.max( 0, used - 8 ) };
@@ -2242,7 +2261,20 @@ function pieceScene( v ) {
 	const sc = newScene();
 	const me = M( v.m ), nm = K.called( G, me );
 	const L = K.leads( G, v.m, W > 700 && H > 520 ? 6 : ( W > 460 ? 5 : 4 ), v.hand || [], v.keep || [] );
-	const lay = K.ego( { W, H, named: L.named.length, dots: L.rest.length } );
+	const carded = cardOn( v );
+	const lay = ringFor( { W, H, named: L.named.length + ( carded ? 1 : 0 ), dots: L.rest.length }, carded );   // a show's card: its corner's place left empty
+	if ( carded && lay.named.length ) {
+		// and the ring set down clear below the card, as a picker's is (egoScene), so far as the frame has room under it:
+		// a name and the line under it are written over a seat
+		const corner = cardRoom( W ).box, top = Math.min( ...lay.named.map( ( p ) => p.y ) ), foot = Math.max( ...lay.named.map( ( p ) => p.y ) );
+		const lower = Math.round( Math.max( 0, Math.min( corner.y2 + 24 + tx( 30 ) - top, H - 44 - tx( 30 ) - foot ) ) );
+		if ( lower > 0 ) {
+			[ lay.C, ...lay.named, ...lay.dots ].forEach( ( p ) => {
+				p.y += lower;
+			} );
+			lay.dots = lay.dots.filter( ( p ) => p.y < H - 10 );
+		}
+	}
 	const n = lay.named.length;
 	const pan = slide( 'm' + v.m, lay.C );
 	const seats = K.seat( lay.named, L.named.slice( 0, n ).map( ( x ) => wanted( 'm' + x.id, pan ) ) );
@@ -2550,6 +2582,8 @@ function cover( g, file, R, again ) {
  * 22 Nov 2026, 20:12Z: "the set stones need to be much, much larger"): a gem 14px across is 34.
  */
 const GEM = 2.4;
+const PILL_GEM = 0.6;                                                         // inside a pill: 20px tall, in a pill of 24
+const gemsIn = ( n ) => gemsWide( n ) * GEM * PILL_GEM;                       // the room a pill's stones take
 const gemsWide = ( n ) => ( Math.min( 3, n ) * 13 + 1 + ( n > 3 ? 18 : 0 ) );     // the cluster's width at size 1
 function gems( piece, x, y, size = 1 ) {
 	const all = K.stonesOf( G, piece );
@@ -2860,8 +2894,9 @@ const draw = {
 		if ( d.play ) {                                              // a track that plays: the rabbit takes you there
 			g.appendChild( playChip( d.w / 2 - 37, 0, d.play, d.song ) );
 		}
-		// beside the pill's right end, as tall as the pills are apart
-		const pg = d.piece !== undefined ? gems( d.piece, d.w / 2 + 4 + gemsWide( K.stonesOf( G, d.piece ).length ) * GEM * 0.9 / 2, 0, 0.9 ) : null;
+		// inside the pill, at its right end, as tall as it is (pillsFor gave them the room)
+		const n = d.piece !== undefined ? K.stonesOf( G, d.piece ).length : 0;
+		const pg = n ? gems( d.piece, d.w / 2 - 6 - gemsIn( n ) / 2, 0, PILL_GEM ) : null;
 		if ( pg ) {
 			g.appendChild( pg );
 		}
@@ -4380,6 +4415,71 @@ function zoomOpen( id ) {
 		} );
 	}
 }
+/** Where a show's poster comes from: a small picture's own address (archive.org's IIIF), or a wiki file. */
+const posterOf = ( art, wide ) => ( /^https:\/\//.test( art ) ? art.replace( /!240,240/, '!' + wide + ',' + wide ) :
+	FACE + encodeURIComponent( art.replace( / /g, '_' ) ) + '&width=' + wide );
+
+/** What a show's card and its closer look say, line by line: whose, where, when, how many on stage, its stones. */
+function showLines( pc, all ) {
+	const m = G.music[ pc.m ], n = K.naming( G, { m: pc.m, how: K.STAGE, songs: [] } );
+	const day = K.when( m.date ), year = K.yearOf( m.date );
+	const night = /^block /.test( day ) ? ( year ? year + ' · ' : '' ) + day : day;   // the year first; the block for the record
+	const stones = K.stonesOf( G, pc.id );
+	return [ n.band && n.band !== n.who ? [ n.band ] : null, n.place ? [ n.place ] : null, night ? [ night ] : null,
+		[ K.plural( pc.cast.length, 'picker' ) + ' on stage, of those the sources name' ],
+		...( all ? stones : stones.slice( 0, 2 ) ).map( ( st ) => [ '◆ ' + K.stoneSays( st ) ] ),
+		!all && stones.length > 2 ? [ '◆ and ' + ( stones.length - 2 ) + ' more' ] : null ].filter( Boolean );
+}
+
+/** A show's card: its poster, its name, and showLines; the poster opens the closer look (showZoom). */
+function showCard( el ) {
+	const pc = M( view.m ), m = G.music[ pc.m ], c = K.called( G, pc );
+	const pic = m.art ? h( 'img', { src: posterOf( m.art, 240 ), alt: '' } ) : null;
+	const face = pic ? h( 'button', { type: 'button', class: 'card-face', title: 'A closer look at ' + c.name, 'aria-label': 'A closer look at ' + c.name,
+		onclick: () => showZoom( pc.id ) }, pic ) : null;
+	if ( pic ) {
+		pic.addEventListener( 'error', () => {
+			face.remove();
+			el.classList.add( 'nopic' );
+			cardFit( el );
+		} );
+	}
+	el.classList.toggle( 'nopic', !face );
+	const href = m.page ? wikiUrl( m.page ) : m.source;
+	const name = href ? h( 'a', { class: 'card-name', href, target: '_top' }, c.name ) : h( 'b', { class: 'card-name' }, c.name );
+	const does = h( 'ul', { class: 'card-does' }, ...showLines( pc, false ).map( ( line ) => h( 'li', null, ...line ) ) );
+	el.replaceChildren( ...[ face, name, does ].filter( Boolean ) );
+	requestAnimationFrame( () => cardFit( el ) );
+}
+
+/** A show, closer: its poster big, everything showLines says with every stone, and who played, each a way to them. */
+function showZoom( id ) {
+	const el = $( 'zoom' ), pc = M( id ), m = G.music[ pc.m ], c = K.called( G, pc );
+	zoomFor = 'm' + id;
+	const roles = new Map( ( m.cast || [] ).map( ( [ p, role ] ) => [ p, role ] ) );
+	const who = pc.cast.filter( ( p ) => P( p ) ).map( ( p ) => [ p, roles.get( p ) || '' ] );
+	const href = m.page ? wikiUrl( m.page ) : m.source;
+	const box = h( 'div', { class: 'zoom-box' + ( m.art ? '' : ' nopic' ) }, ...[
+		m.art ? h( 'img', { src: posterOf( m.art, 800 ), alt: c.name } ) : null,
+		h( href ? 'a' : 'b', href ? { class: 'zoom-name', href, target: '_top' } : { class: 'zoom-name' }, c.name ),
+		h( 'ul', { class: 'zoom-does' }, ...showLines( pc, true ).map( ( line ) => h( 'li', null, ...line ) ) ),
+		who.length ? h( 'p', { class: 'zoom-page' }, 'On stage: ', ...who.flatMap( ( [ p, role ], i ) => [ i ? ', ' : '',
+			h( 'a', { href: '#', onclick: ( ev ) => {
+				ev.preventDefault();
+				zoomClose();
+				go( { a: p } );
+			} }, P( p ).name ), role ? ' (' + role + ')' : '' ] ), '.' ) : null,
+		h( 'button', { type: 'button', class: 'x', 'aria-label': 'Close', title: 'Close', onclick: zoomClose }, '\u00d7' ) ].filter( Boolean ) );
+	el.replaceChildren( box );
+	el.onclick = ( ev ) => {
+		if ( ev.target === el ) {
+			zoomClose();
+		}
+	};
+	el.hidden = false;
+	box.querySelector( '.x' ).focus( { preventScroll: true } );
+}
+
 function zoomClose() {
 	const el = $( 'zoom' );
 	if ( el.hidden ) {
@@ -4412,6 +4512,10 @@ function cardSay() {
 		const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
 		el.classList.add( 'nopic' );
 		el.replaceChildren( h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) );
+		return;
+	}
+	if ( showView( view ) ) {
+		showCard( el );
 		return;
 	}
 	const p = P( view.a ), id = view.a;
@@ -4820,6 +4924,10 @@ function aPieceAmong( d ) {
 	if ( d.piece === view.m ) {
 		w.lines.push( K.plural( pc.cast.length, 'picker' ) + ' on it, of those the sources here name' );
 		w.hint = 'click a picker on a line: go to them';
+		if ( cardable( view ) ) {                                     // a show in the middle: its card, out and away
+			w.hint = ( cardOn( view ) ? 'click: put its card away' : 'click: its card' ) + ' · click a picker on a line: go to them';
+			w.acts.push( act( cardOn( view ) ? 'Put its card away' : 'Its card', cardTurn ) );
+		}
 	} else {
 		const web = webFrom( ( l ) => ( l.px === d.piece ? l.py : ( l.py === d.piece ? l.px : undefined ) ) );
 		w.lines.push( 'by way of ' + listNames( d.who ), web.length ? `shares pickers with ${ K.plural( web.length, 'other' ) } here` : '' );
