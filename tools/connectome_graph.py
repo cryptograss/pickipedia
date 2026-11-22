@@ -63,6 +63,9 @@ from collections import defaultdict
 
 
 PERMANENT = ('arthel:',)
+# A track of our own off the wiki (connectome_store.from_releases): there for the taking by torrent and IPFS, with no
+# DRM, so a Full Release at least. Nothing on the page says its licence, so not Permanent until one does.
+RELEASE = ('release:',)
 ETREE = 'archive.org collection: etree'
 HOW = {'track': 3, 'show': 2, 'record': 1}
 ON_STAGE = {'song', 'song?', 'show', 'stage', 'track', 'release'}   # a credit that puts the picker in the music
@@ -98,6 +101,8 @@ def tier(target_id, formats=()):
     """2 Permanent, 1 Full, 0 not known: see the module's notes."""
     if target_id.startswith(PERMANENT):
         return 2
+    if target_id.startswith(RELEASE):
+        return 1
     if target_id.startswith('lma:'):
         return 2 if ETREE in (formats or ()) else 1
     for f in formats or ():

@@ -44,6 +44,8 @@ import re
 import sqlite3
 import sys
 import time
+import urllib.parse
+import urllib.request
 from urllib.parse import quote
 
 import recording_credits as sideman
@@ -187,6 +189,82 @@ def tape_poster(item):
     return ""
 
 
+# A track whose /Metadata page says `state: production` belongs in the connectome (Justin, #connectome, 22 Nov
+# 2026, 00:58Z: "for now I think if something is `state:production` we want to treat that as something that
+# belongs in the connectome"). Its ensemble is who played it, its Release page's `title` what it is called. Read
+# off the wiki by `releases` into a file, so the store is built again when a track is tagged or its ensemble
+# changes (the file is in the stage's KEY). A track arthel already holds as a studio cut (August, Paint Exchange:
+# a song of that name in songs_and_tunes) is left to arthel, or the graph would have it twice.
+RELEASE_PAGE = "https://pickipedia.xyz/wiki/Release:"
+READY = "production"
+
+
+def fetch_releases(wiki, get=None):
+    """Every Release whose /Metadata says `state: production`: [{cid, title, ensemble}], by cid."""
+    import yaml
+    get = get or (lambda q: json.load(urllib.request.urlopen(urllib.request.Request(
+        wiki.rstrip("/") + "/api.php?" + urllib.parse.urlencode(dict(q, format="json", formatversion=2)),
+        headers={"User-Agent": "pickipedia-connectome/1.0"}), timeout=30)))
+    titles, cont = [], {}
+    while True:
+        r = get(dict({"action": "query", "list": "allpages", "apnamespace": 3004, "aplimit": 500}, **cont))
+        titles += [p["title"] for p in r["query"]["allpages"]]
+        if "continue" not in r:
+            break
+        cont = r["continue"]
+    texts = {}
+    for i in range(0, len(titles), 50):               # fifty a request: the most the API gives content for
+        r = get({"action": "query", "titles": "|".join(titles[i:i + 50]), "prop": "revisions", "rvprop": "content",
+                 "rvslots": "main"})
+        for p in r["query"]["pages"]:
+            if p.get("revisions"):
+                texts[p["title"]] = p["revisions"][0]["slots"]["main"]["content"]
+
+    def yml(text):
+        try:
+            d = yaml.safe_load(text or "")
+        except yaml.YAMLError:
+            return {}
+        return d if isinstance(d, dict) else {}
+    out = []
+    for t in sorted(texts):
+        if not t.endswith("/Metadata"):
+            continue
+        meta = yml(texts[t])
+        state = {str(k).lower(): v for k, v in meta.items()}.get("state")      # Justin wrote "State:" on one
+        if str(state or "").strip().lower() != READY:
+            continue
+        cid = t[len("Release:"):-len("/Metadata")]
+        ens = meta.get("ensemble") if isinstance(meta.get("ensemble"), dict) else {}
+        title = said(yml(texts.get("Release:" + cid)).get("title")) or said(meta.get("title"))
+        out.append({"cid": cid, "title": title if "/" not in title else "",
+                    "ensemble": {str(n): [str(x) for x in (r if isinstance(r, list) else [r]) if x]
+                                 for n, r in ens.items()}})
+    return out
+
+
+def from_releases(releases, arthel=None):
+    """The ready tracks' ensembles, each a credit on its track: a record of its own, `release:<cid>`."""
+    import yaml
+    held = set()
+    if arthel:
+        for fn in glob.glob(os.path.join(arthel, "songs_and_tunes", "*.yaml")):
+            with open(fn) as f:
+                data = yaml.safe_load(f) or {}
+            held.add(sideman.normalize_title(str(data.get("title") or os.path.basename(fn)[:-5])))
+    rows = []
+    for rel in releases:
+        title = rel.get("title") or ""
+        if not title or not rel.get("ensemble") or sideman.normalize_title(title) in held:
+            continue
+        target = {"kind": "record", "id": "release:" + rel["cid"], "title": title, "date": "", "artist": "",
+                  "group": "release:" + rel["cid"]}
+        for name, roles in rel["ensemble"].items():
+            rows.append(credit(name, roles, target, "track", [{"position": "", "title": title}],
+                               RELEASE_PAGE + rel["cid"] + "/Metadata", "pickipedia", "connectome_store.from_releases"))
+    return rows
+
+
 def from_lma(item, names):
     """One archive.org item, read by lma_lineup for each of names (the parser finds names it's given)."""
     m = item.get("metadata", {})
@@ -283,7 +361,7 @@ def fetch(raw, discogs=(), mb=(), lma=(), budget=None, clock=time.monotonic):
     return got, failed, waiting
 
 
-def build(raw, arthel=None, lma_names=()):
+def build(raw, arthel=None, lma_names=(), releases=()):
     rows = []
     for fn in sorted(glob.glob(os.path.join(raw, "discogs", "*.json"))):
         rows += from_discogs(json.load(open(fn)))
@@ -291,6 +369,7 @@ def build(raw, arthel=None, lma_names=()):
         rows += from_mb(json.load(open(fn)))
     if arthel:
         rows += from_arthel(arthel)
+    rows += from_releases(releases, arthel)
     if lma_names:
         for fn in sorted(glob.glob(os.path.join(raw, "lma", "*", "*.json"))):
             try:
@@ -404,6 +483,10 @@ def main(argv):
                    help="files, one name per line, for the LMA parser to look for (connectome_names.txt; walked_names.txt)")
     b.add_argument("--out", required=True)
     b.add_argument("--db")
+    b.add_argument("--releases", help="the ready tracks, as `releases` wrote them")
+    r = sub.add_parser("releases", help="read the wiki's ready tracks (state: production) into a file")
+    r.add_argument("--wiki", default="https://pickipedia.xyz/")
+    r.add_argument("--out", required=True)
     e = sub.add_parser("pairs", help="write every pair as JSON, for a viewer")
     e.add_argument("--credits", required=True)
     e.add_argument("--out", required=True)
@@ -424,7 +507,9 @@ def main(argv):
         names = []
         for path in args.lma_names:
             names += [n for n in read_names(path) if n not in names]
-        rows = build(args.raw, args.arthel, names)
+        text = open(args.releases).read() if args.releases and os.path.exists(args.releases) else ""
+        releases = json.loads(text) if text.strip() else []
+        rows = build(args.raw, args.arthel, names, releases)
         with open(args.out, "w") as out:
             for r in rows:
                 out.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
@@ -433,6 +518,12 @@ def main(argv):
         people = {r["person"] for r in rows}
         targets = {r["target"]["id"] for r in rows}
         print(f"{len(rows)} credits, {len(people)} names, {len(targets)} targets")
+    elif args.cmd == "releases":
+        rels = fetch_releases(args.wiki)
+        with open(args.out + ".part", "w") as out:
+            json.dump(rels, out, ensure_ascii=False, sort_keys=True, indent=1)
+        os.replace(args.out + ".part", args.out)
+        print(f"{len(rels)} tracks ready: " + "; ".join(r["title"] or r["cid"] for r in rels))
     elif args.cmd == "pairs":
         rows = [json.loads(l) for l in open(args.credits)]
         ps = pairs(rows)

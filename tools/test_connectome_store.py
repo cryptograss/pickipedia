@@ -246,3 +246,49 @@ def test_an_arthel_poster_is_the_wiki_file_named_for_its_show():
     assert S.arthel_poster("0-21940657", {"poster": "posters/SCHELLINGPOINTRC4.png"}) == "Show poster 0-21940657.png"
     assert S.arthel_poster("0-20277935", {"poster": "posters/regens-brussels-2024.jpeg"}) == "Show poster 0-20277935.jpeg"
     assert S.arthel_poster("0-1", {}) == ""
+
+
+def _wiki(pages):
+    """A wiki that answers the two questions fetch_releases asks, from {title: text}."""
+    def get(q):
+        if q.get("list") == "allpages":
+            return {"query": {"allpages": [{"title": t} for t in sorted(pages) if t.startswith("Release:")]}}
+        return {"query": {"pages": [{"title": t, "revisions": [{"slots": {"main": {"content": pages[t]}}}]}
+                                    for t in q["titles"].split("|") if t in pages]}}
+    return get
+
+
+def test_a_ready_track_is_read_with_its_ensemble_and_its_release_title():
+    pages = {
+        "Release:QmA": "title: Immutable Strings - Reuben's Train (from web3summit 2024)\n",
+        "Release:QmA/Metadata": "State: production\nensemble:\n  Kuba Hejhal: [fiddle]\n  Justin Holmes: [guitar, vocals]\n",
+        "Release:QmB/Metadata": "state: beta\nensemble:\n  Someone: [banjo]\n",            # not ready
+        "Release:QmC/Metadata": "ensemble:\n  Someone: [banjo]\n",                         # no state: alpha
+        "Release:QmD": "title: Paint Exchange\n",
+        "Release:QmD/Metadata": "state: production\ntitle: QmD/Metadata\nensemble:\n  Cory Walker: banjo\n",
+        "Release:QmE/Metadata": "state: production\ntitle: QmE/Metadata\nensemble:\n  Nobody Named: [bass]\n",
+    }
+    got = S.fetch_releases("https://wiki.example/", get=_wiki(pages))
+    assert [r["cid"] for r in got] == ["QmA", "QmD", "QmE"]
+    assert got[0]["title"] == "Immutable Strings - Reuben's Train (from web3summit 2024)"
+    assert got[0]["ensemble"] == {"Kuba Hejhal": ["fiddle"], "Justin Holmes": ["guitar", "vocals"]}
+    assert got[1] == {"cid": "QmD", "title": "Paint Exchange", "ensemble": {"Cory Walker": ["banjo"]}}
+    assert got[2]["title"] == ""                     # its only title is its own path: no name to give it
+
+
+def test_a_ready_track_is_a_record_of_its_own_unless_arthel_holds_the_cut(tmp_path):
+    songs = tmp_path / "songs_and_tunes"
+    songs.mkdir()
+    (songs / "paint-exchange.yaml").write_text("title: Paint Exchange\n")
+    rels = [{"cid": "QmA", "title": "Reuben's Train (live)", "ensemble": {"Kuba Hejhal": ["fiddle"], "Justin Holmes": ["guitar"]}},
+            {"cid": "QmD", "title": "Paint Exchange", "ensemble": {"Cory Walker": ["banjo"]}},
+            {"cid": "QmE", "title": "", "ensemble": {"Nobody Named": ["bass"]}}]
+    rows = S.from_releases(rels, str(tmp_path))
+    assert {r["person"] for r in rows} == {"Kuba Hejhal", "Justin Holmes"}
+    r = rows[0]
+    assert r["target"] == {"kind": "record", "id": "release:QmA", "title": "Reuben's Train (live)", "date": "", "artist": "",
+                           "group": "release:QmA"}
+    assert r["scope"] == "track" and r["tracks"] == [{"position": "", "title": "Reuben's Train (live)"}]
+    assert r["source"] == "https://pickipedia.xyz/wiki/Release:QmA/Metadata"
+    pair = S.pairs(rows)
+    assert len(pair) == 1 and pair[0]["kind"] == "track"
