@@ -621,7 +621,8 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
  * may be is what the ring leaves of the corner, which goes by the drawing's shape (each was swept for marks under it):
  *   `side`, a drawing 675px wide or more (Rabbithole's pane on a laptop, now that no list stands beside the
  *     graph): the picture beside everything, 300 to 430px wide (0.44 of the drawing) and 130 to 180 high (0.24 of
- *     it; since 21 Nov, 23:27Z, 166 to 236 high, 0.31 of it, with a 109px picture). It was 300 by 104 to 150, which
+ *     it; from 21 Nov, 23:27Z to 22 Nov, 00:55Z, 166 to 236 high with a 109px picture, which Justin found awkward:
+ *     the picture opens a closer look instead, zoomOpen). It was 300 by 104 to 150, which
  *     held some 40 characters of each line. Justin, #connectome, 21 Nov 2026,
  *     01:56Z: "The cards can be much longer now that you've made room - we can afford ~200 characters of the first
  *     three items instead of 40 or whatever we're doing now." At the pane's size (909 by 734) it is 400 by 176:
@@ -635,7 +636,7 @@ function placePills( sc, u, v, tie, x1, x2, y, most, o, delay, prefer, more, ent
  *     with a name 90px under the top and 150 from the side): the size it was, 150px by 80, a 44px picture, one line;
  *   `small`, anything else (a phone in Rabbithole; a low window): up to 200px by 126, laid as the second.
  */
-const SIDE = { w: 430, h: 236 }, MID_H = 200;       // the most a card beside a wide drawing takes, and the height of one on a middling drawing
+const SIDE = { w: 430, h: 180 }, MID_H = 200;       // the most a card beside a wide drawing takes, and the height of one on a middling drawing
 function cardRoom( W ) {
 	const wide = svg.clientWidth || W, tall = svg.clientHeight || 0, k = W / wide;
 	// A song's own card says its name and a line or two: the size it had, so the ring round a song keeps all its pickers.
@@ -645,7 +646,7 @@ function cardRoom( W ) {
 	const cw = Math.round( song ? Math.max( 150, Math.min( 236, wide * 0.3 ) ) : ( side ? Math.max( 300, Math.min( SIDE.w, wide * 0.44 ) ) : ( tower || compact ? 150 :
 		( small ? Math.max( 160, Math.min( 200, wide * 0.46 ) ) : Math.max( 208, Math.min( 269, wide * 0.4 ) ) ) ) ) );
 	const ch = Math.round( song ? ( wide < 520 ? 80 : 100 ) :
-		( side ? Math.max( 166, Math.min( SIDE.h, tall * 0.31 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : Math.max( 176, Math.min( MID_H, tall * 0.28 ) ) ) ) ) ) );
+		( side ? Math.max( 130, Math.min( SIDE.h, tall * 0.24 ) ) : ( tower ? 212 : ( compact ? 80 : ( small ? 126 : Math.max( 176, Math.min( MID_H, tall * 0.28 ) ) ) ) ) ) );
 	return { cw, ch, side, tower, compact, small, box: { x1: W - ( cw + 14 ) * k, y1: -1e5, x2: 1e5, y2: ( ch + 14 ) * k } };
 }
 
@@ -1293,7 +1294,7 @@ function egoScene( v ) {
 	// Rabbithole's traverse (Justin, #connectome, 18 Nov 2026: "I want the solos to traverse to the picker, but
 	// ensuring that the song still remains very visible; as big as the picker"): the one taking the solo in the
 	// middle, and the song in the ring's top seat, drawn as the song's own view draws it in its middle. Going from
-	// the song's view to here, the soloist moves into the middle and the song up to the top.
+	// the song's view to here, the soloist moves into the middle and the song to the seat they left (below).
 	const playing = v.playing !== undefined && G.songcast ? G.songcast[ v.playing ] : null;
 	// And the rest of the band round them the whole time (Justin, #connectome, 20 Nov 2026, 19:41Z: "whoever is next
 	// in order of solos is already shown. Otherwise, it jumps to someone who is, at the time the jump starts, off
@@ -1351,7 +1352,19 @@ function egoScene( v ) {
 		const under = ( p ) => !!corner && p.x + 62 > corner.x1 && p.y - 26 < corner.y2;       // its mark, and the way into Rabbithole beside it
 		const high = ( from ) => from.reduce( ( best, i ) => ( best < 0 || lay.named[ i ].y < lay.named[ best ].y ? i : best ), -1 );
 		const all = lay.named.map( ( _, i ) => i ), clear = all.filter( ( i ) => !under( lay.named[ i ] ) );
-		const top = high( clear.length ? clear : all );
+		// Not always the top seat (Justin, #connectome, 22 Nov 2026, 00:55Z: "now the song's node just always sits on
+		// top; it feels really awkward ... I think I retract that. Not sure if there's a middle ground"). The middle
+		// ground: the song and the first soloist trade places. Out of the song's own view, the song goes to the seat
+		// the soloist has left for the middle, and keeps that seat from one solo to the next, as the band keeps
+		// theirs. Only with nothing in sight to go by (a song come on with the graph) does it take the top seat.
+		// (The song was in the middle when it is nearer the middle than half the ring: the ring may have been set down
+		// lower under the card since, so not where the middle is now.)
+		const ringR = Math.min( ...lay.named.map( ( p ) => Math.hypot( p.x - lay.C.x, p.y - lay.C.y ) ) );
+		const from = was.get( 'song' ), mid = from && Math.hypot( from.x - lay.C.x, from.y - lay.C.y ) < ringR / 2;
+		const aim = from && !mid ? from : was.get( 'p' + a );
+		const free = clear.length ? clear : all;
+		const top = aim ? free.reduce( ( best, i ) => ( Math.hypot( lay.named[ i ].x - aim.x, lay.named[ i ].y - aim.y ) <
+			Math.hypot( lay.named[ best ].x - aim.x, lay.named[ best ].y - aim.y ) ? i : best ), free[ 0 ] ) : high( free );
 		songAt = lay.named[ top ];
 		lay.named = lay.named.filter( ( _, i ) => i !== top );
 		if ( lay.far ) {
@@ -1394,10 +1407,13 @@ function egoScene( v ) {
 		return { label: fit.label, dx: Math.round( lean ) + fit.dx };
 	};
 	const names = out ? out.names : mine.map( ( c, i ) => nameFor( first( c.id ), lay.named[ seats[ i ] ] ) );
-	const spots = out ? K.spread( out.open, ring.length - n ) : K.clearOf( lay.dots, names.map( ( nm, i ) => {
+	// No bead on the song's mark or under its name, now the song may sit in any seat: a bead's own name is written
+	// beside it, so the room kept is a name's width either side.
+	const offSong = ( p ) => !songAt || Math.abs( p.x - songAt.x ) > 78 || p.y < songAt.y - 52 - tx( 17 ) || p.y > songAt.y + 46;
+	const spots = ( out ? K.spread( out.open.filter( offSong ), ring.length - n ) : K.clearOf( lay.dots.filter( offSong ), names.map( ( nm, i ) => {
 		const pos = lay.named[ seats[ i ] ];
 		return nameBox( pos, nm.dx, wide( nm.label, FONT.named ) / 2, pos.below ? 18 : -18 - tx( 18 ), pos.below ? 18 + tx( 18 ) : -18 );
-	} ), 10 );
+	} ), 10 ) );
 	const shown = n + spots.length;
 	const beads = K.seat( spots, ring.slice( n, shown ).map( ( c ) => wantOf( 'p' + c.id ) ) );
 	// Where the line the reader came by says what it is: a little past halfway out, or further, until its band
@@ -4183,7 +4199,8 @@ function qrSay() {
  * ul.thinkingentity-verbs), in the wiki's own words and with its links, each to about 200 characters (DOES_LONG;
  * the longest of the cast's was 194 when this was written). Asked of the wiki once a picker, by the
  * explorer itself, so the card is the same in Rabbithole and out of it. A page with no such list, or no answer:
- * no lines. Each line is its parts in order: a string, or { t, href } for a link to a page that exists.
+ * no lines. Each line is its parts in order: a string, or { t, href } for a link to a page that exists. Every line
+ * is kept whole: the card takes the first DOES, cut, and the closer look (zoomOpen) all of them.
  */
 const DOES = 3, DOES_LONG = 200;
 const doesOf = new Map();
@@ -4229,7 +4246,7 @@ function doesFrom( html ) {
 		}
 		return out;
 	};
-	return list ? [ ...list.children ].filter( ( li ) => li.tagName === 'LI' ).slice( 0, DOES ).map( ( li ) => clipLine( parts( li, [] ), DOES_LONG ) )
+	return list ? [ ...list.children ].filter( ( li ) => li.tagName === 'LI' ).map( ( li ) => parts( li, [] ) )
 		.filter( ( line ) => line.some( ( x ) => ( typeof x === 'string' ? x : x.t ).trim() ) ) : [];
 }
 function cardDoes( name ) {
@@ -4288,6 +4305,59 @@ function cardFit( el ) {
  * no headline and Rabbithole no band under the graph.
  */
 let cardFor = null;              // whose lines the card is waiting on
+const faceOf = ( p, wide ) => FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=' + wide;
+const lineParts = ( line ) => line.map( ( x ) => ( typeof x === 'string' ? x : h( 'a', { href: HOME + x.href, target: '_top' }, x.t ) ) );
+
+/**
+ * The card, closer: the picture big; the name, to their page; what they play; every line their page's box says, whole;
+ * and who in the connectome they have played with most, each a way to them. Over the drawing, which stays as it is.
+ */
+let zoomFor = null;
+function zoomOpen( id ) {
+	const el = $( 'zoom' ), p = P( id );
+	zoomFor = id;
+	const does = h( 'ul', { class: 'zoom-does' } );
+	const most = K.company( G, id ).slice( 0, 6 );
+	const withThem = most.length ? h( 'p', { class: 'zoom-page' }, 'Played most with ', ...most.flatMap( ( c, i ) => [
+		i ? ( i === most.length - 1 ? ' and ' : ', ' ) : '',
+		h( 'a', { href: '#', onclick: ( ev ) => {
+			ev.preventDefault();
+			zoomClose();
+			go( { a: c.id } );
+		} }, P( c.id ).name ) ] ), K.company( G, id ).length > most.length ? ' (of ' + K.plural( K.company( G, id ).length, 'picker' ) + ')' : '', '.' ) : null;
+	const box = h( 'div', { class: 'zoom-box' + ( p.img ? '' : ' nopic' ) }, ...[
+		p.img ? h( 'img', { src: faceOf( p, 640 ), alt: p.name } ) : null,
+		h( p.page ? 'a' : 'b', p.page ? { class: 'zoom-name', href: pageUrl( p.name ), target: '_top', title: p.name + "'s page on PickiPedia" } : { class: 'zoom-name' }, p.name ),
+		p.inst ? h( 'p', { class: 'zoom-inst' }, p.inst ) : null,
+		does,
+		withThem,
+		h( 'button', { type: 'button', class: 'x', 'aria-label': 'Close', title: 'Close', onclick: zoomClose }, '\u00d7' ) ].filter( Boolean ) );
+	el.replaceChildren( box );
+	el.onclick = ( ev ) => {
+		if ( ev.target === el ) {
+			zoomClose();                                             // a press outside the box
+		}
+	};
+	el.hidden = false;
+	box.querySelector( '.x' ).focus( { preventScroll: true } );
+	if ( p.page ) {
+		cardDoes( p.name ).then( ( lines ) => {
+			if ( zoomFor === id && does.isConnected ) {
+				does.replaceChildren( ...lines.map( ( line ) => h( 'li', null, ...lineParts( line ) ) ) );
+			}
+		} );
+	}
+}
+function zoomClose() {
+	const el = $( 'zoom' );
+	if ( el.hidden ) {
+		return;
+	}
+	el.hidden = true;
+	el.replaceChildren();
+	zoomFor = null;
+}
+
 function cardSay() {
 	const el = $( 'card' ), on = !!view && cardOn( view );
 	el.hidden = !on;
@@ -4312,10 +4382,15 @@ function cardSay() {
 		el.replaceChildren( h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) );
 		return;
 	}
-	const p = P( view.a );
-	const face = p.img ? h( 'img', { src: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=180', alt: '' } ) : null;
+	const p = P( view.a ), id = view.a;
+	const pic = p.img ? h( 'img', { src: faceOf( p, 180 ), alt: '' } ) : null;
+	// The picture opens the card closer (Justin, #connectome, 22 Nov 2026, 00:55Z: "let the user click it to get a
+	// photo in a modal box of some kind, with the picker info extended - essentially zooming in on the card and
+	// giving more").
+	const face = pic ? h( 'button', { type: 'button', class: 'card-face', title: 'A closer look at ' + p.name, 'aria-label': 'A closer look at ' + p.name,
+		onclick: () => zoomOpen( id ) }, pic ) : null;
 	if ( face ) {                                                    // a picture that won't come: the name has its room
-		face.addEventListener( 'error', () => {
+		pic.addEventListener( 'error', () => {
 			face.remove();
 			el.classList.add( 'nopic' );
 			cardFit( el );
@@ -4334,8 +4409,7 @@ function cardSay() {
 		if ( cardFor !== who || !does.isConnected ) {
 			return;                                                  // the card is someone else's by now
 		}
-		does.replaceChildren( ...lines.map( ( line ) => h( 'li', null,
-			...line.map( ( x ) => ( typeof x === 'string' ? x : h( 'a', { href: HOME + x.href, target: '_top' }, x.t ) ) ) ) ) );
+		does.replaceChildren( ...lines.slice( 0, DOES ).map( ( line ) => h( 'li', null, ...lineParts( clipLine( line, DOES_LONG ) ) ) ) );
 		cardFit( el );
 	} );
 }
@@ -5120,7 +5194,9 @@ document.addEventListener( 'keydown', ( e ) => {
 	if ( e.key !== 'Escape' ) {
 		return;
 	}
-	if ( !$( 'faq' ).hidden ) {
+	if ( !$( 'zoom' ).hidden ) {
+		zoomClose();
+	} else if ( !$( 'faq' ).hidden ) {
 		closeFaq();
 	} else if ( held !== null ) {
 		closeSheet();
