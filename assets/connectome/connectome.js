@@ -2506,7 +2506,7 @@ const noCover = new Set();                                         // pictures t
 
 /**
  * A record's own art inside its ring, where its Record page names one (Justin, #connectome, 15 Nov 2026: "where
- * there is an image, let's use that"); the ring stays over it, so the colour still says how free it is. Returns
+ * there is an image, let's use that"), and a show's poster (22 Nov 2026); the ring stays over it, so the colour still says how free it is. Returns
  * false where there is none; a picture that won't load gives way, and `again` draws the mark without it.
  */
 function cover( g, file, R, again ) {
@@ -2514,7 +2514,9 @@ function cover( g, file, R, again ) {
 		return false;
 	}
 	const r = R - 2;
-	const img = s( 'image', { class: 'face', href: FACE + encodeURIComponent( file.replace( / /g, '_' ) ) + '&width=120', x: -r, y: -r,
+	// A show's poster from a tape is a small picture's own address (archive.org's IIIF); anything else is a wiki file.
+	const src = /^https:\/\//.test( file ) ? file : FACE + encodeURIComponent( file.replace( / /g, '_' ) ) + '&width=120';
+	const img = s( 'image', { class: 'face', href: src, x: -r, y: -r,
 		width: 2 * r, height: 2 * r, preserveAspectRatio: 'xMidYMid slice', 'clip-path': `circle(${ r }px at ${ r }px ${ r }px)`, 'aria-hidden': 'true' } );
 	img.addEventListener( 'error', () => {
 		noCover.add( file );

@@ -228,3 +228,21 @@ def test_a_show_keeps_where_it_was_as_its_source_says(tmp_path):
     assert (target["venue"], target["city"]) == ("", "")
     db = S.to_sqlite(S.from_arthel(str(tmp_path)), str(tmp_path / "s.sqlite"))
     assert db.execute("SELECT venue, city FROM targets WHERE title = 'Hello Decentralization'").fetchall() == [("chiva lounge", "Barcelona, Catalonia")]
+
+
+def test_a_tape_poster_is_a_file_named_poster_or_flyer_first_then_its_cover_and_never_a_mere_photo():
+    def item(*names):
+        return {"metadata": {"identifier": "ld2016-04-07"},
+                "files": [{"name": n, "source": "original"} for n in names] + [{"name": "x_thumb.jpg", "source": "derivative"}]}
+    url = S.tape_poster(item("IMG_2754.jpeg", "folder.jpg", "FlyerFromJim.jpg"))
+    assert url == "https://iiif.archive.org/image/iiif/3/ld2016-04-07%2FFlyerFromJim.jpg/full/!240,240/0/default.jpg"
+    assert S.tape_poster(item("IMG_2754.jpeg", "Folder.JPG")).endswith("%2FFolder.JPG/full/!240,240/0/default.jpg")
+    assert S.tape_poster(item("IMG_2754.jpeg", "__ia_thumb.jpg", "setlist.jpg")) == ""
+    assert S.tape_poster(item("poster.txt")) == ""
+    assert "%2Fart%2Fcover%20one.png/" in S.tape_poster(item("art/cover one.png"))
+
+
+def test_an_arthel_poster_is_the_wiki_file_named_for_its_show():
+    assert S.arthel_poster("0-21940657", {"poster": "posters/SCHELLINGPOINTRC4.png"}) == "Show poster 0-21940657.png"
+    assert S.arthel_poster("0-20277935", {"poster": "posters/regens-brussels-2024.jpeg"}) == "Show poster 0-20277935.jpeg"
+    assert S.arthel_poster("0-1", {}) == ""

@@ -44,6 +44,7 @@ import re
 import sqlite3
 import sys
 import time
+from urllib.parse import quote
 
 import recording_credits as sideman
 import homeplace
@@ -147,11 +148,43 @@ def from_arthel(data_dir):
         target = {"kind": "show", "id": "arthel:" + rec["id"], "title": rec["title"], "date": rec["date"],
                   "artist": ARTHEL_ARTISTS.get(stem.split("-")[0], ""), "group": "arthel:" + rec["id"],
                   "venue": said(data.get("venue")),
-                  "city": ", ".join(x for x in (said(data.get("locality")), said(data.get("region1"))) if x)}
+                  "city": ", ".join(x for x in (said(data.get("locality")), said(data.get("region1"))) if x),
+                  "poster": arthel_poster(stem, data)}
         for name, p in rec["people"].items():
             for scope in sorted(p["scopes"]):
                 rows.append(credit(name, p["roles"], target, scope, [], src, "arthel", "homeplace.arthel_show"))
     return rows
+
+
+# A show's poster (Justin, #connectome, 22 Nov 2026, 00:45Z: "Many of the shows (at least my shows) have posters on
+# arthel. Have we captured these as part of the dataset? It'd be nice to show them. I wonder if other show posters
+# are available as well, eg on archive.org?"; 00:46Z, posters and the tapers' cover art both). arthel's are put on
+# the wiki as File:Show poster <show id>.<its extension>, so the wiki makes the small ones; the build draws one only
+# where the wiki has it. A tape's is an image uploaded with it: one named a poster or a flyer first, else the cover
+# or folder art its taper chose; archive.org's IIIF service gives it small. Nothing else is taken for one: a photo
+# called IMG_2754 may be anything.
+POSTER_NAMES = (re.compile(r"poster|flyer|flier", re.I), re.compile(r"cover|folder", re.I))
+IMAGE = re.compile(r"\.(jpe?g|png|gif)$", re.I)
+IIIF = "https://iiif.archive.org/image/iiif/3/{ident}%2F{name}/full/!240,240/0/default.jpg"
+
+
+def arthel_poster(stem, data):
+    """The wiki file arthel's show poster goes by, where its YAML names one: '' where it names none."""
+    path = said(data.get("poster"))
+    ext = os.path.splitext(path)[1].lower()
+    return f"Show poster {stem}{ext}" if path and ext else ""
+
+
+def tape_poster(item):
+    """A small picture of the poster an archive.org item carries, or of its taper's cover art: '' for neither."""
+    ident = item.get("metadata", {}).get("identifier", "")
+    names = [f.get("name", "") for f in item.get("files") or [] if isinstance(f, dict) and f.get("source") == "original"
+             and IMAGE.search(f.get("name", "")) and not re.match(r"(__ia|thumb)", os.path.basename(f.get("name", "")), re.I)]
+    for want in POSTER_NAMES:
+        for name in sorted(names):
+            if want.search(os.path.basename(name)):
+                return IIIF.format(ident=quote(ident, safe=""), name=quote(name, safe=""))
+    return ""
 
 
 def from_lma(item, names):
@@ -168,7 +201,7 @@ def from_lma(item, names):
     target = {"kind": "show", "id": f"lma:{ident}", "title": m.get("title", ""), "date": m.get("date", ""),
               "artist": creator, "group": f"lma-show:{creator}|{m.get('date', '')}",
               "formats": [f"archive.org collection: {c}" for c in collections],
-              "venue": said(m.get("venue")), "city": said(m.get("coverage"))}
+              "venue": said(m.get("venue")), "city": said(m.get("coverage")), "poster": tape_poster(item)}
     rows = []
     for name, readings in lma_lineup.read_item(item, names).items():
         for where, shape, scope, detail in readings:
@@ -272,7 +305,8 @@ def build(raw, arthel=None, lma_names=()):
 SCHEMA = """
 CREATE TABLE targets (id TEXT PRIMARY KEY, kind TEXT, title TEXT, date TEXT, artist TEXT, grp TEXT,
                       formats TEXT,   -- what the source says a record came out on, "; " between
-                      venue TEXT, city TEXT);  -- where a show was, as its source says; '' for a record
+                      venue TEXT, city TEXT,   -- where a show was, as its source says; '' for a record
+                      poster TEXT);            -- a show's poster: a wiki file, or a small picture's address
 CREATE TABLE credits (n INTEGER PRIMARY KEY, person TEXT, mbid TEXT, roles TEXT, target TEXT REFERENCES targets(id),
                       scope TEXT, source TEXT, source_kind TEXT, read_by TEXT, excerpt TEXT);
 CREATE TABLE credit_tracks (credit INTEGER REFERENCES credits(n), position TEXT, title TEXT);
@@ -289,9 +323,9 @@ def to_sqlite(rows, path):
     db.executescript(SCHEMA)
     for i, r in enumerate(rows):
         t = r["target"]
-        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?,?,?)",
+        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (t["id"], t["kind"], t["title"], t["date"], t.get("artist", ""), t.get("group", t["id"]),
-                    "; ".join(t.get("formats") or []), t.get("venue", ""), t.get("city", "")))
+                    "; ".join(t.get("formats") or []), t.get("venue", ""), t.get("city", ""), t.get("poster", "")))
         db.execute("INSERT INTO credits VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (i, r["person"], r.get("mbid"), "; ".join(r["roles"]), t["id"], r["scope"], r["source"],
                     r["source_kind"], r["read_by"], r.get("excerpt")))
