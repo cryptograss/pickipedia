@@ -223,8 +223,10 @@ class Wiki:
                 text = revs[0]['slots']['main'].get('content', '') if revs else ''
                 cuts = studio_cuts_from(text)
                 writers = writers_from(text)
+                charts = chartifacts_from(text, cuts)
                 for c in cuts:
                     c['writers'] = writers
+                    c['charts'] = charts.get(c['cid'], [])
                 if cuts:
                     out[page['title']] = cuts
         return out
@@ -283,6 +285,24 @@ def studio_cuts_from(text):
         cuts.append({'record': fields.get('record', ''), 'number': fields.get('number', ''),
                      'cid': fields.get('cid', ''), 'recorded': fields.get('recorded', ''), 'cast': cast})
     return cuts
+
+
+def chartifacts_from(text, cuts=()):
+    """The {{Chartifact}} blocks of a song page, each given to its cut: the cid its `cut=` names, or, where it names
+    none, the page's only studio cut (Template:Chartifact's own rule). On a page of two cuts a chartifact naming
+    neither is no cut's, and is left out. -> {cid: [[section, kind, picker, instrument], ...]}, in page order."""
+    out = {}
+    cids = [c['cid'] for c in cuts if c.get('cid')]
+    for m in re.finditer(r'\{\{\s*Chartifact\b(.*?)\}\}', text, re.S):
+        f = {}
+        for part in m.group(1).split('|'):
+            k, _, v = part.partition('=')
+            if k.strip():
+                f[k.strip()] = re.sub(r'\s+', ' ', v).strip()
+        cid = f.get('cut') or (cids[0] if len(cids) == 1 else '')
+        if cid and f.get('picker'):
+            out.setdefault(cid, []).append([f.get('section', ''), f.get('kind', ''), f['picker'], f.get('instrument', '')])
+    return out
 
 
 def writers_from(text):
@@ -1123,7 +1143,8 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                 entry.append({'record': c['record'], 'number': c['number'], 'cid': c['cid'],
                               'recorded': c.get('recorded', ''), 'target': target,
                               'cast': {alias.get(n, n): r for n, r in c['cast'].items()},
-                              'writers': [alias.get(n, n) for n in c.get('writers', [])]})
+                              'writers': [alias.get(n, n) for n in c.get('writers', [])],
+                              'charts': [[sec, kind, alias.get(who, who), inst] for sec, kind, who, inst in c.get('charts', [])]})
             if entry:
                 cutmap[song_title] = entry
         # The recording artist of each cut: the record page's {{Record|artist=}} — the node a route home

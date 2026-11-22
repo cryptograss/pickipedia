@@ -721,3 +721,16 @@ def test_a_cuts_writer_comes_through_the_build_by_the_wikis_own_name():
     g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, song_whole(), [])['graph']
     names = [p[0] for p in g['people']]
     assert g['songcast']['QmCutOne']['writers'] == [names.index('Justin Myles Holmes')]
+
+
+def test_a_chartifact_belongs_to_the_cut_it_names_or_the_page_s_only_cut():
+    one = ("{{Studio cut\n|record=4masks\n|cid=QmA\n|Harry Clark=mandolin\n}}\n"
+           "{{Chartifact\n|section=third A part\n|picker= Harry Clark\n|kind= break\n|instrument= mandolin\n}}\n"
+           "{{Chartifact\n|section= second B part \n|kind=break\n|picker=Kyle Tuttle\n|instrument=5-string banjo\n|cut=QmB\n}}\n"
+           "{{Chartifact\n|section=tag\n|instrument=fiddle\n}}\n")
+    cuts = cc.studio_cuts_from(one)
+    assert cc.chartifacts_from(one, cuts) == {"QmA": [["third A part", "break", "Harry Clark", "mandolin"]],
+                                               "QmB": [["second B part", "break", "Kyle Tuttle", "5-string banjo"]]}
+    two = one.replace("{{Chartifact", "{{Studio cut\n|record=Other\n|cid=QmC\n}}\n{{Chartifact", 1)
+    # two cuts on the page: one naming no cut is no cut's
+    assert cc.chartifacts_from(two, cc.studio_cuts_from(two)) == {"QmB": [["second B part", "break", "Kyle Tuttle", "5-string banjo"]]}

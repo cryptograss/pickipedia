@@ -52,6 +52,7 @@ export function build( g ) {
 	// A show's tenth item, where it has one: its own name, its venue and its town (tools/connectome_graph.py show_place).
 	const music = g.music.map( ( [ key, kind, artist, date, title, tier, source, page, art, place ], id ) =>
 		( { id, key, kind, artist, date, title, tier, source, page: page || '', art: art || '', cast: ( g.cast && g.cast[ id ] ) || [],
+			stones: ( ( g.stones && g.stones[ id ] ) || [] ).length,       // how many set stones were bought at it (byProminence, loudness)
 			name: ( place && place[ 0 ] ) || '', venue: ( place && place[ 1 ] ) || '', city: ( place && place[ 2 ] ) || '' } ) );
 	const adj = people.map( () => new Map() );
 	for ( const [ a, b, evs ] of g.ties ) {
@@ -248,8 +249,14 @@ export function pieceStanding( G, piece ) {
 	return piece.kind === 'record' ? 0.2 * m.tier : standing( m, piece.kind === 'show' ? STAGE : TRACK );
 }
 
+/*
+ * Set stones break ties (Justin, #connectome, 22 Nov 2026, 20:12Z: "Set Stones need to be a tie-break in
+ * Cryptograss:Bacon graphs/Priority"): of two things at the same step of the order, the one more set stones were
+ * bought at comes first; of two ties at the same step, the one whose shows carry more stones. Then as before.
+ */
 function byProminence( music ) {
 	return ( x, y ) => ( standing( music[ y.m ], y.how ) - standing( music[ x.m ], x.how ) ) ||
+		( ( music[ y.m ].stones || 0 ) - ( music[ x.m ].stones || 0 ) ) ||
 		( music[ y.m ].tier - music[ x.m ].tier ) ||
 		( roughly( music[ y.m ].date ) - roughly( music[ x.m ].date ) || 0 ) ||
 		( x.m - y.m );
@@ -259,7 +266,7 @@ function byProminence( music ) {
 export function summarize( a, b, ev, music ) {
 	ev.sort( byProminence( music ) );
 	const t = { a, b, ev, w: 0, loose: 0, eff: 0, times: 0, shows: 0, records: 0, tracks: 0, looseRecords: 0, tier: UNKNOWN,
-		rank: 0, played: false };
+		rank: 0, played: false, stones: 0 };
 	let bestLoose = UNKNOWN;
 	for ( const e of ev ) {
 		const m = music[ e.m ];
@@ -275,6 +282,7 @@ export function summarize( a, b, ev, music ) {
 			}
 			t.tier = Math.max( t.tier, m.tier );
 			t.rank = Math.max( t.rank, standing( m, e.how ) );
+			t.stones += m.stones || 0;
 		} else {
 			t.loose += e.w;
 			t.eff += LOOSE * e.w * BOOST[ m.tier ];
@@ -293,10 +301,11 @@ export function summarize( a, b, ev, music ) {
  * How loud a tie is, wherever it's decided who gets named. Playing together comes before only sharing a record;
  * then the best standing of anything the two share (see standing: a Permanent studio track, a Permanent show, a
  * Full studio track, another show, in that order: Justin, #connectome, 15 Nov 2026), however much there is of
- * the rest; then how much of it, by eff. Two who only share a record: the freest such record first.
+ * the rest; then the set stones bought where they played together (the tie-break, byProminence); then how much
+ * of it, by eff. Two who only share a record: the freest such record first.
  */
 export function loudness( tie ) {
-	return tie.rank * 1e6 + ( tie.played ? 0 : tie.tier * 1e5 ) + Math.min( tie.eff, 9e4 );
+	return tie.rank * 1e6 + ( tie.played ? 0 : tie.tier * 1e5 ) + Math.min( tie.stones || 0, 9 ) * 1e4 + Math.min( tie.eff, 9e3 );
 }
 
 export function find( G, name ) {

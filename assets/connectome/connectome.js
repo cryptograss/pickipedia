@@ -2544,17 +2544,21 @@ function cover( g, file, R, again ) {
 }
 
 /**
- * A show's set stones, as a cluster of small gems with its top-left at x, y: each a diamond in its stone's three
- * colours, outside in, as arthel draws them. Three at most, then "+n". Each says what it is to a pointer resting
- * on it; the show's note and sheet say the rest. Nothing for a piece with none.
+ * A show's set stones, as a cluster of gems centred on x, y: each a diamond in its stone's three colours, outside
+ * in, as arthel draws them. Three at most, then "+n". Each says what it is to a pointer resting on it; the show's
+ * note and sheet say the rest. Nothing for a piece with none. GEM times the size they were (Justin, #connectome,
+ * 22 Nov 2026, 20:12Z: "the set stones need to be much, much larger"): a gem 14px across is 34.
  */
+const GEM = 2.4;
+const gemsWide = ( n ) => ( Math.min( 3, n ) * 13 + 1 + ( n > 3 ? 18 : 0 ) );     // the cluster's width at size 1
 function gems( piece, x, y, size = 1 ) {
 	const all = K.stonesOf( G, piece );
 	if ( !all.length ) {
 		return null;
 	}
 	const read = G.stonesRead && G.stonesRead.block ? ` Read at Arbitrum block ${ G.stonesRead.block.toLocaleString( 'en-US' ) }.` : '';
-	const g = s( 'g', { class: 'gems', transform: `translate(${ x.toFixed( 1 ) } ${ y.toFixed( 1 ) }) scale(${ size })`,
+	const k = size * GEM, left = x - gemsWide( all.length ) * k / 2;
+	const g = s( 'g', { class: 'gems', transform: `translate(${ left.toFixed( 1 ) } ${ y.toFixed( 1 ) }) scale(${ k.toFixed( 2 ) })`,
 		'aria-label': K.plural( all.length, 'set stone' ) } );
 	all.slice( 0, 3 ).forEach( ( st, i ) => {
 		const at = 7 + i * 13, gem = s( 'g', { class: 'gem', transform: `translate(${ at } 0)` },
@@ -2569,6 +2573,27 @@ function gems( piece, x, y, size = 1 ) {
 	return g;
 }
 
+/**
+ * A cut's chartifacts, as a mark on its circle's upper left (Justin, #connectome, 22 Nov 2026, 20:12Z, of "a small
+ * mark on the song's own circle wherever `Chartifact of cut` names that cut": "that seems like a reasonable starting
+ * place"): a leaf of staff paper with how many. It says each pass to a pointer resting on it, and goes to the song
+ * page's Chartifacts. Nothing for a cut with none.
+ */
+function chartMark( cut, song ) {
+	const charts = cut && G.songcast[ cut ] && G.songcast[ cut ].charts;
+	if ( !charts || !charts.length ) {
+		return null;
+	}
+	const says = charts.map( ( [ section, kind, picker, inst ] ) => [ section, kind ].filter( Boolean ).join( ', ' ) + ': ' + picker + ( inst ? ' (' + inst + ')' : '' ) );
+	const mark = s( 'g', { class: 'charts', transform: 'translate(-36 -30) scale(1.2)' },
+		s( 'title', null, K.plural( charts.length, 'chartifact' ) + ' of this cut:\n' + says.join( '\n' ) ),
+		s( 'rect', { class: 'leaf', x: -10, y: -12, width: 20, height: 24, rx: 2 } ),
+		s( 'path', { class: 'staff', d: 'M-6 -6h12M-6 -3h12M-6 0h12M-6 3h12M-6 6h12' } ),
+		s( 'circle', { class: 'count-bg', cx: 9, cy: 10, r: 7.5 } ),
+		s( 'text', { class: 'count', x: 9, y: 13, 'text-anchor': 'middle' }, String( charts.length ) ) );
+	return G.songs[ song ] ? s( 'a', { href: pageUrl( 'Song:' + song ) + '#Chartifacts', target: '_top', 'aria-label': K.plural( charts.length, 'chartifact' ) + ' of ' + song }, mark ) : mark;
+}
+
 /** A circle that is a piece of music: a ring as free as the piece is, and inside it what kind of piece. */
 function drawPiece( g, d ) {
 	const pc = M( d.piece ), c = K.called( G, pc );
@@ -2579,7 +2604,7 @@ function drawPiece( g, d ) {
 	if ( d.kind === 'dot' ) {
 		g.appendChild( s( 'circle', { class: 'halo', r: coarse ? 15 : Math.max( 12, d.r + 7 ) } ) );
 		g.appendChild( s( 'circle', { class: 'bead', r: d.r } ) );
-		const bg = gems( d.piece, d.r - 2, -d.r - 4, 0.75 );
+		const bg = gems( d.piece, 0, -d.r - 14, 0.6 );                // over the bead
 		if ( bg ) {
 			g.appendChild( bg );
 		}
@@ -2593,7 +2618,7 @@ function drawPiece( g, d ) {
 	if ( !cover( g, G.music[ pc.m ].art, R, () => drawPiece( g, d ) ) ) {
 		g.appendChild( gl );
 	}
-	const cg = gems( d.piece, R * 0.5, -R * 0.92, d.kind === 'subject' ? 1.25 : 1 );
+	const cg = gems( d.piece, R * 0.75, -R - 6, d.kind === 'subject' ? 1 : 0.75 );   // on the circle's upper right
 	if ( cg ) {
 		g.appendChild( cg );
 	}
@@ -2685,6 +2710,10 @@ const draw = {
 				'aria-label': 'About ' + d.title }, s( 'text', { x: d.dx || 0, y: d.above ? -40 : 46 + down( 17 ), 'text-anchor': 'middle' }, d.label || K.clip( d.title, 30 ) ) ) );
 			if ( to ) {
 				g.appendChild( playChip( 28, 0, to, d.title ) );
+			}
+			const ch = chartMark( d.cut, d.title );
+			if ( ch ) {
+				g.appendChild( ch );
 			}
 			return;
 		}
@@ -2831,7 +2860,8 @@ const draw = {
 		if ( d.play ) {                                              // a track that plays: the rabbit takes you there
 			g.appendChild( playChip( d.w / 2 - 37, 0, d.play, d.song ) );
 		}
-		const pg = d.piece !== undefined ? gems( d.piece, d.w / 2 - 22, -12, 1 ) : null;
+		// beside the pill's right end, as tall as the pills are apart
+		const pg = d.piece !== undefined ? gems( d.piece, d.w / 2 + 4 + gemsWide( K.stonesOf( G, d.piece ).length ) * GEM * 0.9 / 2, 0, 0.9 ) : null;
 		if ( pg ) {
 			g.appendChild( pg );
 		}
@@ -3913,12 +3943,12 @@ function stepEl( st, i ) {
 
 /** A show's gems in a line of text (the path's steps): the same marks, in an svg of their own; null for none. */
 function gemsInline( piece ) {
-	const n = Math.min( 3, K.stonesOf( G, piece ).length ), g = n ? gems( piece, 0, 0, 0.85 ) : null;
+	const all = K.stonesOf( G, piece ).length, k = 0.5 * GEM, w = gemsWide( all ) * k + 1, h = 15 * k;
+	const g = all ? gems( piece, w / 2, 0, 0.5 ) : null;
 	if ( !g ) {
 		return null;
 	}
-	const w = ( n * 13 + 2 + ( K.stonesOf( G, piece ).length > 3 ? 18 : 0 ) ) * 0.85;
-	return s( 'svg', { class: 'gems-inline', width: w.toFixed( 1 ), height: 14, viewBox: `0 -7 ${ w.toFixed( 1 ) } 14` }, g );
+	return s( 'svg', { class: 'gems-inline', width: w.toFixed( 1 ), height: h.toFixed( 1 ), viewBox: `0 ${ ( -h / 2 ).toFixed( 1 ) } ${ w.toFixed( 1 ) } ${ h.toFixed( 1 ) }` }, g );
 }
 
 function pathSay() {

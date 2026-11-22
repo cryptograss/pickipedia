@@ -275,6 +275,10 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                              # end of the way home, after the recording artist (Justin, #connectome, 15 Nov 2026)
                              'writers': [pid[w] for w in c.get('writers', []) if w in c['cast'] and w in pid],
                              'pickers': pickers}
+            # Its chartifacts, as the song page writes them (Template:Chartifact): [section, kind, picker, instrument]
+            # each. The graph marks the cut's circle where it has any (Justin, #connectome, 22 Nov 2026, 20:12Z).
+            if c.get('charts'):
+                songcast[key]['charts'] = c['charts']
 
     sources, cast = defaultdict(set), defaultdict(dict)
     for person, roles, target, scope, source in credits:

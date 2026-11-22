@@ -1642,3 +1642,27 @@ test( 'a kept graph keeps its shows’ set stones, renumbered; one with none is 
 	assert.deepEqual( K.stonesOf( K.build( kept ), 0 ).map( ( st ) => st.token ), [ 4 ] );
 	assert.equal( 'stones' in K.keep( g, [ 0, 1 ].filter( ( p ) => p === 0 ) ), false );
 } );
+
+test( 'set stones break a tie at one step of the order: the show they were bought at, and the picker who played it, first', () => {
+	// A played one show with B and one with C, alike in every way but that set stones were bought at C's.
+	const g = {
+		people: [ [ 'A', 1, '' ], [ 'B', 1, '' ], [ 'C', 1, '' ], [ 'D', 1, '' ] ],
+		music: [ [ 'lma:one', 'show', 'Band', '2024-01-01', 'One', 1 ], [ 'lma:two', 'show', 'Band', '2024-01-01', 'Two', 1 ],
+			[ 'arthel:rec', 'record', 'Band', '2024', 'Rec', 2 ] ],
+		ties: [ [ 0, 1, [ [ 0, 2, 1, [] ] ] ], [ 0, 2, [ [ 1, 2, 1, [] ] ] ], [ 0, 3, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ] ],
+		stones: { 1: [ [ 4, 0, [ 23, 10, 34 ], '', 'Song', '0.1', '0xa' ] ] }
+	};
+	const G = K.build( g );
+	assert.deepEqual( K.company( G, 0 ).filter( ( c ) => c.id !== 3 ).map( ( c ) => P( G, c.id ) ), [ 'C', 'B' ] );
+	assert.equal( G.adj[ 0 ].get( 3 ).ev[ 0 ].m, 1 );                // of two shows alike, the stoned one is said first
+	// No stones: the order is the one it was (by name, the last tie-break).
+	const none = K.build( Object.assign( {}, g, { stones: undefined } ) );
+	assert.deepEqual( K.company( none, 0 ).filter( ( c ) => c.id !== 3 ).map( ( c ) => P( none, c.id ) ), [ 'B', 'C' ] );
+	// A step above outranks any number of stones: B on a Permanent studio track with A comes before C's stoned show.
+	const perm = K.build( Object.assign( {}, g, { ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 2, 3, 1, [ 'Song' ] ] ] ], g.ties[ 1 ] ] } ) );
+	assert.deepEqual( K.company( perm, 0 ).map( ( c ) => P( perm, c.id ) ), [ 'B', 'C' ] );
+} );
+
+function P( G, id ) {
+	return G.people[ id ].name;
+}
