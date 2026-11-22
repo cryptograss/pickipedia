@@ -1075,9 +1075,11 @@ def load_whole(db_path):
     cols = [c[1] for c in db.execute('PRAGMA table_info(targets)')]
     formats = 'formats' if 'formats' in cols else "''"      # a store built before records kept their formats
     venue, city = ('venue', 'city') if 'venue' in cols else ("''", "''")     # or before shows kept where they were
+    poster = 'poster' if 'poster' in cols else "''"                           # or their posters
     whole = {r[0]: {'kind': r[1], 'title': r[2], 'date': r[3], 'artist': r[4], 'grp': r[5],
-                    'formats': [f for f in (r[6] or '').split('; ') if f], 'venue': r[7] or '', 'city': r[8] or ''}
-             for r in db.execute(f'SELECT id, kind, title, date, artist, grp, {formats}, {venue}, {city} FROM targets')}
+                    'formats': [f for f in (r[6] or '').split('; ') if f], 'venue': r[7] or '', 'city': r[8] or '',
+                    'poster': r[9] or ''}
+             for r in db.execute(f'SELECT id, kind, title, date, artist, grp, {formats}, {venue}, {city}, {poster} FROM targets')}
     credits = db.execute('SELECT person, roles, target, scope, source FROM credits').fetchall()
     return whole, credits
 
@@ -1154,6 +1156,16 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                     d['artist'] = alias.get(who[d['title']], who[d['title']])
                 if art.get(d.get('title')):
                     d['art'] = art[d['title']]
+        # A show's poster, in its circle as a record's art is (connectome_store.py, arthel_poster and tape_poster):
+        # a small picture's address as it stands; a wiki file only where the wiki has it, so a poster not yet put
+        # there draws nothing rather than a broken picture.
+        files = sorted({'File:' + d['poster'] for d in whole.values() if d.get('kind') == 'show' and d.get('poster')
+                        and not d['poster'].startswith('https://')})
+        there = {n[len('File:'):] for n, (_, ok) in (wiki.resolve(files) if files else {}).items() if ok}
+        for d in whole.values():
+            p = d.get('poster') if d.get('kind') == 'show' else ''
+            if p and (p.startswith('https://') or p in there):
+                d['art'] = p
         # Who made each record, by the wiki's own names: the recording artist stands first at the end of a
         # song's line (Justin, #connectome, 15 Nov 2026, 07:29Z), and a credit writes "Bronwyn Keith-Hynes"
         # where her page is Bronwyn.

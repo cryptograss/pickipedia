@@ -44,6 +44,9 @@ import re
 import sqlite3
 import sys
 import time
+import urllib.parse
+import urllib.request
+from urllib.parse import quote
 
 import recording_credits as sideman
 import homeplace
@@ -147,10 +150,118 @@ def from_arthel(data_dir):
         target = {"kind": "show", "id": "arthel:" + rec["id"], "title": rec["title"], "date": rec["date"],
                   "artist": ARTHEL_ARTISTS.get(stem.split("-")[0], ""), "group": "arthel:" + rec["id"],
                   "venue": said(data.get("venue")),
-                  "city": ", ".join(x for x in (said(data.get("locality")), said(data.get("region1"))) if x)}
+                  "city": ", ".join(x for x in (said(data.get("locality")), said(data.get("region1"))) if x),
+                  "poster": arthel_poster(stem, data)}
         for name, p in rec["people"].items():
             for scope in sorted(p["scopes"]):
                 rows.append(credit(name, p["roles"], target, scope, [], src, "arthel", "homeplace.arthel_show"))
+    return rows
+
+
+# A show's poster (Justin, #connectome, 22 Nov 2026, 00:45Z: "Many of the shows (at least my shows) have posters on
+# arthel. Have we captured these as part of the dataset? It'd be nice to show them. I wonder if other show posters
+# are available as well, eg on archive.org?"; 00:46Z, posters and the tapers' cover art both). arthel's are put on
+# the wiki as File:Show poster <show id>.<its extension>, so the wiki makes the small ones; the build draws one only
+# where the wiki has it. A tape's is an image uploaded with it: one named a poster or a flyer first, else the cover
+# or folder art its taper chose; archive.org's IIIF service gives it small. Nothing else is taken for one: a photo
+# called IMG_2754 may be anything.
+POSTER_NAMES = (re.compile(r"poster|flyer|flier", re.I), re.compile(r"cover|folder", re.I))
+IMAGE = re.compile(r"\.(jpe?g|png|gif)$", re.I)
+IIIF = "https://iiif.archive.org/image/iiif/3/{ident}%2F{name}/full/!240,240/0/default.jpg"
+
+
+def arthel_poster(stem, data):
+    """The wiki file arthel's show poster goes by, where its YAML names one: '' where it names none."""
+    path = said(data.get("poster"))
+    ext = os.path.splitext(path)[1].lower()
+    return f"Show poster {stem}{ext}" if path and ext else ""
+
+
+def tape_poster(item):
+    """A small picture of the poster an archive.org item carries, or of its taper's cover art: '' for neither."""
+    ident = item.get("metadata", {}).get("identifier", "")
+    names = [f.get("name", "") for f in item.get("files") or [] if isinstance(f, dict) and f.get("source") == "original"
+             and IMAGE.search(f.get("name", "")) and not re.match(r"(__ia|thumb)", os.path.basename(f.get("name", "")), re.I)]
+    for want in POSTER_NAMES:
+        for name in sorted(names):
+            if want.search(os.path.basename(name)):
+                return IIIF.format(ident=quote(ident, safe=""), name=quote(name, safe=""))
+    return ""
+
+
+# A track whose /Metadata page says `state: production` belongs in the connectome (Justin, #connectome, 22 Nov
+# 2026, 00:58Z: "for now I think if something is `state:production` we want to treat that as something that
+# belongs in the connectome"). Its ensemble is who played it, its Release page's `title` what it is called. Read
+# off the wiki by `releases` into a file, so the store is built again when a track is tagged or its ensemble
+# changes (the file is in the stage's KEY). A track arthel already holds as a studio cut (August, Paint Exchange:
+# a song of that name in songs_and_tunes) is left to arthel, or the graph would have it twice.
+RELEASE_PAGE = "https://pickipedia.xyz/wiki/Release:"
+READY = "production"
+
+
+def fetch_releases(wiki, get=None):
+    """Every Release whose /Metadata says `state: production`: [{cid, title, ensemble}], by cid."""
+    import yaml
+    get = get or (lambda q: json.load(urllib.request.urlopen(urllib.request.Request(
+        wiki.rstrip("/") + "/api.php?" + urllib.parse.urlencode(dict(q, format="json", formatversion=2)),
+        headers={"User-Agent": "pickipedia-connectome/1.0"}), timeout=30)))
+    titles, cont = [], {}
+    while True:
+        r = get(dict({"action": "query", "list": "allpages", "apnamespace": 3004, "aplimit": 500}, **cont))
+        titles += [p["title"] for p in r["query"]["allpages"]]
+        if "continue" not in r:
+            break
+        cont = r["continue"]
+    texts = {}
+    for i in range(0, len(titles), 50):               # fifty a request: the most the API gives content for
+        r = get({"action": "query", "titles": "|".join(titles[i:i + 50]), "prop": "revisions", "rvprop": "content",
+                 "rvslots": "main"})
+        for p in r["query"]["pages"]:
+            if p.get("revisions"):
+                texts[p["title"]] = p["revisions"][0]["slots"]["main"]["content"]
+
+    def yml(text):
+        try:
+            d = yaml.safe_load(text or "")
+        except yaml.YAMLError:
+            return {}
+        return d if isinstance(d, dict) else {}
+    out = []
+    for t in sorted(texts):
+        if not t.endswith("/Metadata"):
+            continue
+        meta = yml(texts[t])
+        state = {str(k).lower(): v for k, v in meta.items()}.get("state")      # Justin wrote "State:" on one
+        if str(state or "").strip().lower() != READY:
+            continue
+        cid = t[len("Release:"):-len("/Metadata")]
+        ens = meta.get("ensemble") if isinstance(meta.get("ensemble"), dict) else {}
+        title = said(yml(texts.get("Release:" + cid)).get("title")) or said(meta.get("title"))
+        out.append({"cid": cid, "title": title if "/" not in title else "",
+                    "ensemble": {str(n): [str(x) for x in (r if isinstance(r, list) else [r]) if x]
+                                 for n, r in ens.items()}})
+    return out
+
+
+def from_releases(releases, arthel=None):
+    """The ready tracks' ensembles, each a credit on its track: a record of its own, `release:<cid>`."""
+    import yaml
+    held = set()
+    if arthel:
+        for fn in glob.glob(os.path.join(arthel, "songs_and_tunes", "*.yaml")):
+            with open(fn) as f:
+                data = yaml.safe_load(f) or {}
+            held.add(sideman.normalize_title(str(data.get("title") or os.path.basename(fn)[:-5])))
+    rows = []
+    for rel in releases:
+        title = rel.get("title") or ""
+        if not title or not rel.get("ensemble") or sideman.normalize_title(title) in held:
+            continue
+        target = {"kind": "record", "id": "release:" + rel["cid"], "title": title, "date": "", "artist": "",
+                  "group": "release:" + rel["cid"]}
+        for name, roles in rel["ensemble"].items():
+            rows.append(credit(name, roles, target, "track", [{"position": "", "title": title}],
+                               RELEASE_PAGE + rel["cid"] + "/Metadata", "pickipedia", "connectome_store.from_releases"))
     return rows
 
 
@@ -168,7 +279,7 @@ def from_lma(item, names):
     target = {"kind": "show", "id": f"lma:{ident}", "title": m.get("title", ""), "date": m.get("date", ""),
               "artist": creator, "group": f"lma-show:{creator}|{m.get('date', '')}",
               "formats": [f"archive.org collection: {c}" for c in collections],
-              "venue": said(m.get("venue")), "city": said(m.get("coverage"))}
+              "venue": said(m.get("venue")), "city": said(m.get("coverage")), "poster": tape_poster(item)}
     rows = []
     for name, readings in lma_lineup.read_item(item, names).items():
         for where, shape, scope, detail in readings:
@@ -250,7 +361,7 @@ def fetch(raw, discogs=(), mb=(), lma=(), budget=None, clock=time.monotonic):
     return got, failed, waiting
 
 
-def build(raw, arthel=None, lma_names=()):
+def build(raw, arthel=None, lma_names=(), releases=()):
     rows = []
     for fn in sorted(glob.glob(os.path.join(raw, "discogs", "*.json"))):
         rows += from_discogs(json.load(open(fn)))
@@ -258,6 +369,7 @@ def build(raw, arthel=None, lma_names=()):
         rows += from_mb(json.load(open(fn)))
     if arthel:
         rows += from_arthel(arthel)
+    rows += from_releases(releases, arthel)
     if lma_names:
         for fn in sorted(glob.glob(os.path.join(raw, "lma", "*", "*.json"))):
             try:
@@ -272,7 +384,8 @@ def build(raw, arthel=None, lma_names=()):
 SCHEMA = """
 CREATE TABLE targets (id TEXT PRIMARY KEY, kind TEXT, title TEXT, date TEXT, artist TEXT, grp TEXT,
                       formats TEXT,   -- what the source says a record came out on, "; " between
-                      venue TEXT, city TEXT);  -- where a show was, as its source says; '' for a record
+                      venue TEXT, city TEXT,   -- where a show was, as its source says; '' for a record
+                      poster TEXT);            -- a show's poster: a wiki file, or a small picture's address
 CREATE TABLE credits (n INTEGER PRIMARY KEY, person TEXT, mbid TEXT, roles TEXT, target TEXT REFERENCES targets(id),
                       scope TEXT, source TEXT, source_kind TEXT, read_by TEXT, excerpt TEXT);
 CREATE TABLE credit_tracks (credit INTEGER REFERENCES credits(n), position TEXT, title TEXT);
@@ -289,9 +402,9 @@ def to_sqlite(rows, path):
     db.executescript(SCHEMA)
     for i, r in enumerate(rows):
         t = r["target"]
-        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?,?,?)",
+        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (t["id"], t["kind"], t["title"], t["date"], t.get("artist", ""), t.get("group", t["id"]),
-                    "; ".join(t.get("formats") or []), t.get("venue", ""), t.get("city", "")))
+                    "; ".join(t.get("formats") or []), t.get("venue", ""), t.get("city", ""), t.get("poster", "")))
         db.execute("INSERT INTO credits VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (i, r["person"], r.get("mbid"), "; ".join(r["roles"]), t["id"], r["scope"], r["source"],
                     r["source_kind"], r["read_by"], r.get("excerpt")))
@@ -370,6 +483,10 @@ def main(argv):
                    help="files, one name per line, for the LMA parser to look for (connectome_names.txt; walked_names.txt)")
     b.add_argument("--out", required=True)
     b.add_argument("--db")
+    b.add_argument("--releases", help="the ready tracks, as `releases` wrote them")
+    r = sub.add_parser("releases", help="read the wiki's ready tracks (state: production) into a file")
+    r.add_argument("--wiki", default="https://pickipedia.xyz/")
+    r.add_argument("--out", required=True)
     e = sub.add_parser("pairs", help="write every pair as JSON, for a viewer")
     e.add_argument("--credits", required=True)
     e.add_argument("--out", required=True)
@@ -390,7 +507,9 @@ def main(argv):
         names = []
         for path in args.lma_names:
             names += [n for n in read_names(path) if n not in names]
-        rows = build(args.raw, args.arthel, names)
+        text = open(args.releases).read() if args.releases and os.path.exists(args.releases) else ""
+        releases = json.loads(text) if text.strip() else []
+        rows = build(args.raw, args.arthel, names, releases)
         with open(args.out, "w") as out:
             for r in rows:
                 out.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
@@ -399,6 +518,12 @@ def main(argv):
         people = {r["person"] for r in rows}
         targets = {r["target"]["id"] for r in rows}
         print(f"{len(rows)} credits, {len(people)} names, {len(targets)} targets")
+    elif args.cmd == "releases":
+        rels = fetch_releases(args.wiki)
+        with open(args.out + ".part", "w") as out:
+            json.dump(rels, out, ensure_ascii=False, sort_keys=True, indent=1)
+        os.replace(args.out + ".part", args.out)
+        print(f"{len(rels)} tracks ready: " + "; ".join(r["title"] or r["cid"] for r in rels))
     elif args.cmd == "pairs":
         rows = [json.loads(l) for l in open(args.credits)]
         ps = pairs(rows)

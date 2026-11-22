@@ -15,6 +15,7 @@ def test_an_etree_tape_or_a_cryptograss_record_is_permanent():
     assert cg.tier('lma:SGP2025-07-05', ['archive.org collection: etree']) == 2
     assert cg.tier('lma:x', ['archive.org collection: stringcheeseincident', 'archive.org collection: etree']) == 2
     assert cg.tier('arthel:4masks', []) == 2
+    assert cg.tier('release:QmNogiUdf4xR98WZ3beGCUHJJ9RK9gkd91dsBKereUNVBd', []) == 1
 
 
 def test_a_tape_outside_etree_is_full():
