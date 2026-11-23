@@ -264,11 +264,11 @@ test( 'a date is read only where its shape is certain', () => {
 test( 'music is named by what a reader would call it', () => {
 	const [ record, show ] = tie( KYLE, JUSTIN ).ev;               // a Permanent studio track comes before a Permanent show
 	assert.deepEqual( K.naming( G, record ), { glyph: 'track', short: 'Silver 44 +1', brief: 'Silver 44', long: '4masks', songs: [ 'Silver 44', 'Victory' ] } );
-	assert.equal( K.naming( G, show ).short, 'Hello Decentralization · block 11,908,068' );     // its title, and its night
+	assert.equal( K.naming( G, show ).short, 'Hello Decentralization · 2021' );     // its title, and its year (a block of March 2021)
 	const tape = K.naming( G, tie( KYLE, MOLLY ).ev[ 0 ] );
 	// a show says its night wherever it's named, so it is never taken for a band (Justin, #connectome, 15 Nov 2026)
 	assert.deepEqual( [ tape.glyph, tape.short, tape.brief, tape.who, tape.day ],
-		[ 'show', 'Sam Grisman Project · 5 Jul 2025', 'Sam Grisman Project · 5 Jul 2025', 'Sam Grisman Project', '5 Jul 2025' ] );
+		[ 'show', 'Sam Grisman Project · 2025', 'Sam Grisman Project · 2025', 'Sam Grisman Project', '5 Jul 2025' ] );
 	assert.equal( K.naming( G, tie( KYLE, CHOIR ).ev[ 0 ] ).glyph, 'record' );
 	assert.equal( K.naming( G, tie( KYLE, CHOIR ).ev[ 0 ] ).long, 'Alison Brown – Safe, Sensible And Sane (2025)' );
 	assert.equal( K.clip( 'Leftover Salmon', 9 ), 'Leftover…' );
@@ -458,7 +458,7 @@ test( 'a piece is called what a reader would call it', () => {
 	// no artist said for the record: the record under the cut's name
 	assert.deepEqual( K.called( G, G.pieces[ SILVER ] ), { glyph: 'track', name: 'Silver 44', sub: '4masks', on: '4masks', long: '4masks' } );
 	assert.deepEqual( [ K.called( G, G.pieces[ 1 ] ).name, K.called( G, G.pieces[ 1 ] ).sub ], [ 'Sam Grisman Project', 'live · 5 Jul 2025' ] );    // a show always says it is one
-	assert.deepEqual( [ K.called( G, G.pieces[ 5 ] ).name, K.called( G, G.pieces[ 5 ] ).sub ], [ 'Hello Decentralization', 'live · block 11,908,068' ] );
+	assert.deepEqual( [ K.called( G, G.pieces[ 5 ] ).name, K.called( G, G.pieces[ 5 ] ).sub ], [ 'Hello Decentralization', 'live · 2021' ] );   // a block is said as its year
 	assert.deepEqual( [ K.called( G, G.pieces[ 2 ] ).name, K.called( G, G.pieces[ 2 ] ).sub ], [ 'Safe, Sensible And Sane', 'Alison Brown · 2025' ] );
 } );
 
@@ -505,7 +505,7 @@ test( 'one night is one piece, however many tapers taped it; a show with a name 
 	assert.equal( K.findPiece( g, 'lma:band2025-06-14.mv88' ), 0 );
 	assert.deepEqual( K.leads( g, 0 ).named.map( ( n ) => n.id ), [ 2 ] );    // the other tape of the night isn't somewhere else
 	const own = K.naming( g, g.adj[ 0 ].get( 2 ).ev[ 0 ] );
-	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1 · block 15,735,471', 'devcon VI night 1 · block 15,735,471', 'block 15,735,471' ] );   // no band said; its night
+	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1 · 2022', 'devcon VI night 1 · 2022', 'block 15,735,471' ] );   // no band said; its year, the block in its line
 } );
 
 test( 'a show leads with its own name, else its venue, else its band; the rest is the line under it', () => {
@@ -521,19 +521,19 @@ test( 'a show leads with its own name, else its venue, else its band; the rest i
 	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ], [ 2, 2, 1, [] ], [ 3, 2, 1, [] ] ] ] ] } );
 	const say = ( m ) => K.naming( g, g.adj[ 0 ].get( 1 ).ev.find( ( e ) => e.m === m ) );
 	const named = say( 0 ), venue = say( 1 ), town = say( 2 ), plain = say( 3 );
-	assert.deepEqual( [ named.who, named.named, named.short ], [ 'Hello Decentralization', true, 'Hello Decentralization · block 11,908,068' ] );
+	assert.deepEqual( [ named.who, named.named, named.short ], [ 'Hello Decentralization', true, 'The String Band · Hello Decentralization · 2021' ] );
 	assert.equal( named.long, 'The String Band · chiva lounge, Barcelona, Catalonia · block 11,908,068' );
-	assert.deepEqual( [ venue.who, venue.named, venue.short ], [ 'Grey Fox Bluegrass Festival', false, 'Grey Fox Bluegrass Festival · 16 Jul 2026' ] );
+	assert.deepEqual( [ venue.who, venue.named, venue.short ], [ 'Grey Fox Bluegrass Festival', false, 'East Nash Grass · Grey Fox Bluegrass Festival · 2026' ] );
 	assert.equal( venue.long, 'East Nash Grass Live at Grey Fox Bluegrass Festival on 2026-07-16 · Oak Hill, NY' );   // the tape's own sentence, and the town
 	g.music[ 1 ].venue = 'Grey Fox Bluegrass Festival, Oak Hill, NY';       // a taper's venue with the town in it: the town is said once
 	assert.equal( say( 1 ).place, '' );
 	g.music[ 1 ].venue = 'Grey Fox Bluegrass Festival';
 	assert.deepEqual( [ venue.placed, venue.days, named.placed, named.days, plain.placed ], [ true, [ '16 Jul 2026', 'Jul 2026', '2026' ], false, [ 'block 11,908,068' ], false ] );
-	assert.deepEqual( [ town.who, town.short, town.place ], [ 'East Nash Grass', 'East Nash Grass · 17 Jul 2026', 'Nashville, TN' ] );   // a town alone doesn't lead
-	assert.deepEqual( [ plain.who, plain.short, plain.long ], [ 'East Nash Grass', 'East Nash Grass · 18 Jul 2026', 'East Nash Grass Live on 2026-07-18' ] );   // nothing said of where: as before
+	assert.deepEqual( [ town.who, town.short, town.place ], [ 'East Nash Grass', 'East Nash Grass · 2026', 'Nashville, TN' ] );   // a town alone doesn't lead
+	assert.deepEqual( [ plain.who, plain.short, plain.long ], [ 'East Nash Grass', 'East Nash Grass · 2026', 'East Nash Grass Live on 2026-07-18' ] );   // nothing said of where: as before
 	assert.deepEqual( [ g.music[ 0 ].name, g.music[ 0 ].venue, g.music[ 0 ].city, g.music[ 3 ].venue ], [ 'Hello Decentralization', 'chiva lounge', 'Barcelona, Catalonia', '' ] );
 	const c = K.called( g, g.pieces[ K.pieceFor( g, g.adj[ 0 ].get( 1 ).ev.find( ( e ) => e.m === 0 ) ) ] );
-	assert.deepEqual( [ c.name, c.sub ], [ 'Hello Decentralization', 'live · The String Band · chiva lounge, Barcelona, Catalonia · block 11,908,068' ] );
+	assert.deepEqual( [ c.name, c.sub ], [ 'Hello Decentralization', 'live · The String Band · chiva lounge, Barcelona, Catalonia · 2021' ] );
 } );
 
 test( 'a line says a song or a show no other line here has said; with none left, nothing', () => {
@@ -646,8 +646,7 @@ test( 'a show whose source names the band goes by the band; a cut says whose it 
 	cast: [ [ [ 0, '' ], [ 1, '' ] ], [ [ 0, '' ], [ 1, '' ] ] ],
 	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 3, 1, [ 'Victory' ] ] ] ] ] } );
 	const show = K.naming( g, { m: 0, how: K.STAGE, songs: [] } );
-	assert.deepEqual( [ show.short, show.brief, show.long ], [ 'Justin Holmes and the Immutable String Band · block 15,735,471',
-		'Justin Holmes and the Immutable String Band · block 15,735,471', 'devcon VI night 1' ] );
+	assert.deepEqual( [ show.short, show.brief, show.long ], [ 'Justin Holmes · 2022', 'Justin Holmes · 2022', 'devcon VI night 1' ] );
 	const cut = K.called( g, g.pieces[ K.trackOn( g, 1, 'Victory' ) ] );
 	assert.deepEqual( [ cut.name, cut.sub, cut.on ], [ 'Victory', 'Justin Myles Holmes', '4masks by Justin Myles Holmes' ] );   // the record, and whose
 	assert.equal( g.music[ 1 ].art, 'Four-masks.png' );
@@ -1284,7 +1283,7 @@ test( 'the boxes find anything: a picker by name; a cut, a show, a record or a t
 	assert.equal( new Set( all.map( ( x ) => x.label.toLowerCase() ) ).size, all.length );
 	NAMES.forEach( ( n, id ) => assert.deepEqual( by.get( n ), { a: id } ) );
 	assert.deepEqual( by.get( 'Sam Grisman Project · live · 5 Jul 2025' ), { m: 1 } );             // never taken for the band of that name
-	assert.deepEqual( by.get( 'Hello Decentralization · live · block 11,908,068' ), { m: 5 } );
+	assert.deepEqual( by.get( 'Hello Decentralization · live · 2021' ), { m: 5 } );                // a block is said as its year
 	assert.deepEqual( by.get( 'Safe, Sensible And Sane · record, Alison Brown · 2025' ), { m: 2 } );
 	assert.deepEqual( by.get( 'Silver 44 · track on 4masks' ), { m: SILVER } );
 	assert.ok( all.every( ( x ) => x.view.a !== undefined || / · (song|live|record|track)/.test( x.label ) ) );
@@ -1292,6 +1291,11 @@ test( 'the boxes find anything: a picker by name; a cut, a show, a record or a t
 	const cuts = K.catalogue( K.build( Object.assign( {}, GRAPH, { songcast: { QmCut: { song: 'Silver 44', on: [ 0 ] } } } ) ) );
 	assert.deepEqual( cuts.find( ( x ) => x.label === 'Silver 44 · song on 4masks' ).view, { s: 'Silver 44', cut: 'QmCut' } );
 	assert.ok( !cuts.some( ( x ) => x.label === 'Silver 44 · track on 4masks' ) && cuts.some( ( x ) => x.label === 'Victory · track on 4masks' ) );
+	// Two nights of one name in one year, dated by block: both are found, the second by its block as well.
+	const TWICE = K.build( { v: 1, people: [ [ 'A', 1, '' ], [ 'B', 1, '' ] ], cast: [ [], [] ], ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ] ],
+		music: [ [ 'arthel:show:0-20550008', 'show', 'Band', 'block 20550008', 'The Room', 2, '', '' ], [ 'arthel:show:0-20557208', 'show', 'Band', 'block 20557208', 'The Room', 2, '', '' ] ] } );
+	assert.deepEqual( K.catalogue( TWICE ).filter( ( x ) => x.view.m !== undefined ).map( ( x ) => x.label ),
+		[ 'Band · live · 2024', 'Band · live · 2024 · block 20,557,208' ] );
 	// Two tapes of one night are one piece, found once.
 	const NIGHT = K.build( { v: 1, people: [ [ 'A', 1, '' ], [ 'B', 1, '' ] ], cast: [ [], [] ], ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ] ],
 		music: [ [ 'lma:t1', 'show', 'Band', '2025-06-14', 'Band Live', 2, '', '' ], [ 'lma:t2', 'show', 'Band', '2025-06-14', 'Band Live (another taper)', 2, '', '' ] ] } );
@@ -1624,6 +1628,19 @@ test( 'a show carries its set stones, and the other tapes of its night theirs; a
 	assert.deepEqual( K.stonesOf( G, 0 ).map( ( st ) => st.token ), [ 4, 9 ] );
 	assert.deepEqual( K.stonesOf( G, 2 ), [] );
 	assert.equal( K.stoneSays( K.stonesOf( G, 0 )[ 0 ] ), 'set 1 · favourite: From Bill to Brewster · “Loved dancing with Z to this diddy.” · 0.1 ETH' );
+	// A show's card says both its stones before it counts the pickers (a card cuts its last lines off first), and
+	// the year before the block.
+	const says = K.showSays( G, G.pieces[ 0 ], false );
+	assert.deepEqual( says.slice( -4 ), [ '2015 · block 1', '◆ ' + K.stoneSays( K.stonesOf( G, 0 )[ 0 ] ), '◆ set 2 · 0.1 ETH', '2 pickers on stage, of those the sources name' ] );
+	assert.deepEqual( K.showSays( G, G.pieces[ 0 ], true ), says );  // two stones: the closer look says no more
+	// More than two: one stone and how many more on the card, two lines as before; every one in the closer look.
+	const many = K.build( Object.assign( {}, g, { stones: { 0: [ g.stones[ 0 ][ 0 ], [ 5, 1, [ 1, 2, 3 ], '', '', '0.2', '0xc' ], [ 6, 0, [ 1, 2, 3 ], '', '', '0.3', '0xd' ] ], 1: g.stones[ 1 ] } } ) );
+	const few = K.showSays( many, many.pieces[ 0 ], false ), every = K.showSays( many, many.pieces[ 0 ], true );
+	assert.deepEqual( few.filter( ( l ) => l[ 0 ] === '◆' ), [ '◆ ' + K.stoneSays( K.stonesOf( many, 0 )[ 0 ] ), '◆ and 3 more' ] );
+	assert.equal( every.filter( ( l ) => l[ 0 ] === '◆' ).length, 4 );
+	assert.equal( few[ few.length - 1 ], every[ every.length - 1 ] );
+	// No stones: whose, where and when, and the count.
+	assert.ok( K.showSays( K.build( Object.assign( {}, g, { stones: undefined } ) ), G.pieces[ 0 ], false ).every( ( l ) => l[ 0 ] !== '◆' ) );
 	assert.equal( K.nes( 23 ), '#00B800' );
 	assert.equal( G.stonesRead.block, 526324550 );
 	assert.deepEqual( K.stonesOf( K.build( Object.assign( {}, g, { stones: undefined } ) ), 0 ), [] );
@@ -1641,4 +1658,46 @@ test( 'a kept graph keeps its shows’ set stones, renumbered; one with none is 
 	assert.deepEqual( kept.stones_read, { block: 7 } );
 	assert.deepEqual( K.stonesOf( K.build( kept ), 0 ).map( ( st ) => st.token ), [ 4 ] );
 	assert.equal( 'stones' in K.keep( g, [ 0, 1 ].filter( ( p ) => p === 0 ) ), false );
+} );
+
+test( 'set stones break a tie at one step of the order: the show they were bought at, and the picker who played it, first', () => {
+	// A played one show with B and one with C, alike in every way but that set stones were bought at C's.
+	const g = {
+		people: [ [ 'A', 1, '' ], [ 'B', 1, '' ], [ 'C', 1, '' ], [ 'D', 1, '' ] ],
+		music: [ [ 'lma:one', 'show', 'Band', '2024-01-01', 'One', 1 ], [ 'lma:two', 'show', 'Band', '2024-01-01', 'Two', 1 ],
+			[ 'arthel:rec', 'record', 'Band', '2024', 'Rec', 2 ] ],
+		ties: [ [ 0, 1, [ [ 0, 2, 1, [] ] ] ], [ 0, 2, [ [ 1, 2, 1, [] ] ] ], [ 0, 3, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ] ] ] ],
+		stones: { 1: [ [ 4, 0, [ 23, 10, 34 ], '', 'Song', '0.1', '0xa' ] ] }
+	};
+	const G = K.build( g );
+	assert.deepEqual( K.company( G, 0 ).filter( ( c ) => c.id !== 3 ).map( ( c ) => P( G, c.id ) ), [ 'C', 'B' ] );
+	assert.equal( G.adj[ 0 ].get( 3 ).ev[ 0 ].m, 1 );                // of two shows alike, the stoned one is said first
+	// No stones: the order is the one it was (by name, the last tie-break).
+	const none = K.build( Object.assign( {}, g, { stones: undefined } ) );
+	assert.deepEqual( K.company( none, 0 ).filter( ( c ) => c.id !== 3 ).map( ( c ) => P( none, c.id ) ), [ 'B', 'C' ] );
+	// A step above outranks any number of stones: B on a Permanent studio track with A comes before C's stoned show.
+	const perm = K.build( Object.assign( {}, g, { ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 2, 3, 1, [ 'Song' ] ] ] ], g.ties[ 1 ] ] } ) );
+	assert.deepEqual( K.company( perm, 0 ).map( ( c ) => P( perm, c.id ) ), [ 'B', 'C' ] );
+} );
+
+function P( G, id ) {
+	return G.people[ id ].name;
+}
+
+test( 'a show\'s pill says the year, never the block, and its band by its leader', () => {
+	assert.equal( K.yearOf( 'block 20550008' ), '2024' );             // MOOS Space, August 2024
+	assert.equal( K.yearOf( 'block 23955770' ), '2025' );             // Pearl, November 2025
+	assert.equal( K.yearOf( 'block 12000000' ), '2021' );             // before the merge: near enough for a year
+	assert.equal( K.yearOf( '2012-12-31' ), '2012' );
+	assert.equal( K.yearOf( '' ), '' );
+	// and so does its heading; its card says the block too, after the year, for the record
+	assert.equal( K.night( 'block 20550008' ), '2024' );
+	assert.equal( K.night( 'block 20550008', true ), '2024 · block 20,550,008' );
+	assert.equal( K.night( '2025-07-05' ), '5 Jul 2025' );           // a day of the calendar is said as it was
+	assert.equal( K.night( '2025-07-05', true ), '5 Jul 2025' );
+	assert.equal( K.night( '1973' ), '1973' );
+	assert.equal( K.night( '' ), '' );
+	assert.equal( K.bandShort( 'Justin Holmes and the Immutable String Band' ), 'Justin Holmes' );
+	assert.equal( K.bandShort( 'Bill Monroe & His Blue Grass Boys' ), 'Bill Monroe' );
+	assert.equal( K.bandShort( 'The Travelin\' McCourys' ), 'The Travelin\' McCourys' );
 } );

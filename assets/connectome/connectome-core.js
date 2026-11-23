@@ -52,6 +52,7 @@ export function build( g ) {
 	// A show's tenth item, where it has one: its own name, its venue and its town (tools/connectome_graph.py show_place).
 	const music = g.music.map( ( [ key, kind, artist, date, title, tier, source, page, art, place ], id ) =>
 		( { id, key, kind, artist, date, title, tier, source, page: page || '', art: art || '', cast: ( g.cast && g.cast[ id ] ) || [],
+			stones: ( ( g.stones && g.stones[ id ] ) || [] ).length,       // how many set stones were bought at it (byProminence, loudness)
 			name: ( place && place[ 0 ] ) || '', venue: ( place && place[ 1 ] ) || '', city: ( place && place[ 2 ] ) || '' } ) );
 	const adj = people.map( () => new Map() );
 	for ( const [ a, b, evs ] of g.ties ) {
@@ -248,8 +249,14 @@ export function pieceStanding( G, piece ) {
 	return piece.kind === 'record' ? 0.2 * m.tier : standing( m, piece.kind === 'show' ? STAGE : TRACK );
 }
 
+/*
+ * Set stones break ties (Justin, #connectome, 22 Nov 2026, 20:12Z: "Set Stones need to be a tie-break in
+ * Cryptograss:Bacon graphs/Priority"): of two things at the same step of the order, the one more set stones were
+ * bought at comes first; of two ties at the same step, the one whose shows carry more stones. Then as before.
+ */
 function byProminence( music ) {
 	return ( x, y ) => ( standing( music[ y.m ], y.how ) - standing( music[ x.m ], x.how ) ) ||
+		( ( music[ y.m ].stones || 0 ) - ( music[ x.m ].stones || 0 ) ) ||
 		( music[ y.m ].tier - music[ x.m ].tier ) ||
 		( roughly( music[ y.m ].date ) - roughly( music[ x.m ].date ) || 0 ) ||
 		( x.m - y.m );
@@ -259,7 +266,7 @@ function byProminence( music ) {
 export function summarize( a, b, ev, music ) {
 	ev.sort( byProminence( music ) );
 	const t = { a, b, ev, w: 0, loose: 0, eff: 0, times: 0, shows: 0, records: 0, tracks: 0, looseRecords: 0, tier: UNKNOWN,
-		rank: 0, played: false };
+		rank: 0, played: false, stones: 0 };
 	let bestLoose = UNKNOWN;
 	for ( const e of ev ) {
 		const m = music[ e.m ];
@@ -275,6 +282,7 @@ export function summarize( a, b, ev, music ) {
 			}
 			t.tier = Math.max( t.tier, m.tier );
 			t.rank = Math.max( t.rank, standing( m, e.how ) );
+			t.stones += m.stones || 0;
 		} else {
 			t.loose += e.w;
 			t.eff += LOOSE * e.w * BOOST[ m.tier ];
@@ -293,10 +301,11 @@ export function summarize( a, b, ev, music ) {
  * How loud a tie is, wherever it's decided who gets named. Playing together comes before only sharing a record;
  * then the best standing of anything the two share (see standing: a Permanent studio track, a Permanent show, a
  * Full studio track, another show, in that order: Justin, #connectome, 15 Nov 2026), however much there is of
- * the rest; then how much of it, by eff. Two who only share a record: the freest such record first.
+ * the rest; then the set stones bought where they played together (the tie-break, byProminence); then how much
+ * of it, by eff. Two who only share a record: the freest such record first.
  */
 export function loudness( tie ) {
-	return tie.rank * 1e6 + ( tie.played ? 0 : tie.tier * 1e5 ) + Math.min( tie.eff, 9e4 );
+	return tie.rank * 1e6 + ( tie.played ? 0 : tie.tier * 1e5 ) + Math.min( tie.stones || 0, 9 ) * 1e4 + Math.min( tie.eff, 9e3 );
 }
 
 export function find( G, name ) {
@@ -1020,6 +1029,62 @@ export function when( date ) {
  * gives the place its letters and takes as much of the night as fits beside it; the whole night is in the note. A
  * date that is not a day of the calendar (a block height) has only the one way to say it.
  */
+/**
+ * The year a night was, where a show's date says it: its own, or the year an Ethereum block height falls in (arthel
+ * dates its shows by block). After the merge a block is every twelve seconds from 15,537,394 (15 Sep 2022,
+ * 06:42:42Z); before it, the average from the genesis block, which is near enough for a year.
+ * Justin, #connectome, 22 Nov 2026, 21:55Z: "let's not say "block <n>" - in most cases, the year is enough!"
+ */
+export function yearOf( date ) {
+	const s = String( date || '' ).trim();
+	const y = /^(\d{4})(?:-|$)/.exec( s );
+	if ( y ) {
+		return y[ 1 ];
+	}
+	const b = /^block (\d+)$/.exec( s );
+	if ( !b ) {
+		return '';
+	}
+	const n = +b[ 1 ], MERGE = 15537394, AT = 1663224162, GENESIS = 1438269973;
+	const t = n >= MERGE ? AT + ( n - MERGE ) * 12 : GENESIS + n * ( AT - GENESIS ) / MERGE;
+	return String( new Date( t * 1000 ).getUTCFullYear() );
+}
+
+/**
+ * A show's night as a line says it: the day, where its date is a day of the calendar; the year, where arthel dates
+ * it by block (yearOf), in a heading as in a pill (magent, #merch, 23 Nov 2026: "The biggest type on the page still
+ * says block"). `full` says the block after the year, for the record: a show's card and its closer look do.
+ */
+export function night( date, full ) {
+	const day = when( date ), year = /^block /.test( day ) ? yearOf( date ) : '';
+	return year ? ( full ? year + ' · ' + day : year ) : day;
+}
+
+/**
+ * What a show's card and its closer look say, line by line: whose, where, when, its set stones, how many on stage.
+ * The stones come before the count, which the ring says too: a card has room for only so many lines, and it cut a
+ * show's second stone off while the graph drew both gems beside it (magent, #merch, 23 Nov 2026). The card says two
+ * lines of stones at most, the second "and n more" where there are more than two; `all`, the closer look, every one.
+ */
+export function showSays( G, piece, all ) {
+	const m = G.music[ piece.m ], n = naming( G, { m: piece.m, how: STAGE, songs: [] } );
+	const stones = stonesOf( G, piece.id ), said = all || stones.length <= 2 ? stones : stones.slice( 0, 1 );
+	return [ n.band && n.band !== n.who ? n.band : '', n.place, night( m.date, true ),
+		...said.map( ( st ) => '◆ ' + stoneSays( st ) ),
+		said.length < stones.length ? '◆ and ' + ( stones.length - said.length ) + ' more' : '',
+		plural( piece.cast.length, 'picker' ) + ' on stage, of those the sources name' ].filter( Boolean );
+}
+
+/**
+ * A band as a show's pill names it: its leader, where the name is "<leader> and the <band>" (Justin, #connectome,
+ * 22 Nov 2026, 21:55Z: "The band name is crucial ... mine can just be "Justin Holmes" instead of "Justin Holmes and
+ * The Immutable String Band", in order to fit better"). Any other band as it is.
+ */
+export function bandShort( band ) {
+	const b = String( band || '' ).trim();
+	return b.replace( /\s+(?:and|&)\s+(?:the|his|her|their)\s.*$/i, '' ).trim() || b;
+}
+
 export function nights( date ) {
 	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( String( date || '' ).trim() );
 	const whole = when( date );
@@ -1091,13 +1156,17 @@ export function naming( G, e ) {
 		// A show says its night wherever it is named, so it is never taken for a band or a picker (Justin,
 		// #connectome, 15 Nov 2026); `day` is kept apart, so a tight spot cuts the name and keeps the night. One
 		// with a name of its own gives up the night first (`named`): no other show has that name.
-		const dated = [ who, day ].filter( Boolean ).join( ' · ' );
+		// The pill's words: the band, short, where it isn't the name already; the name; the year (Justin, 22 Nov
+		// 2026, 21:55Z). The rest of the night, block and all, is in `long`.
+		const crew = bandShort( band ), y = yearOf( m.date ), year = y && !who.includes( y ) ? y : '';   // "Festival MY 2023" says its own year
+		const dated = [ crew && crew !== who && band !== who ? crew : '', who === band ? crew : who, year ].filter( Boolean ).join( ' · ' );
 		// `long`, the line under its name: the rest of it. A tape's is archive.org's own sentence ("X Live at Y on
 		// Z"), with the town; any other's is its band, where the name is not the band's, where it was, and its night.
 		// A show whose source says nothing of where it was keeps the line it had: its title, or its night.
 		const sentence = !own && / live at /i.test( m.title || '' );
 		const placeless = !m.name && !m.venue && !m.city;
-		return { glyph: 'show', short: dated, brief: dated, who, day, band, place, named: !!own, placed: !own && !!m.venue, days: nights( m.date ),
+		return { glyph: 'show', short: dated, brief: dated, who, day, year, band, crew: crew !== who && band !== who ? crew : '', place, named: !!own,
+			placed: !own && !!m.venue, days: nights( m.date ),
 			long: placeless ? ( tape ? ( m.title && m.title !== who ? m.title : who ) : day ) :
 				( sentence ? [ m.title, city ] : [ who !== band ? band : '', place, day ] ).filter( Boolean ).join( ' · ' ),
 			songs: e.songs };
@@ -1415,7 +1484,7 @@ export function called( G, piece ) {
 	if ( piece.kind === 'show' ) {
 		// A band and a night of theirs often have one name. A show always says it is one (Justin, #connectome, 15 Nov 2026).
 		// and whose it was and where, under its name, where the name is not the band's own
-		return { glyph: 'show', name: n.who, sub: [ 'live', n.who !== n.band ? n.band : '', n.place, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
+		return { glyph: 'show', name: n.who, sub: [ 'live', n.who !== n.band ? n.band : '', n.place, night( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 	}
 	return { glyph: 'record', name: n.brief, sub: [ m.artist, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 }
@@ -1464,16 +1533,19 @@ export function recordBy( m ) {
  * Everything the boxes up top can find (Justin, #connectome, 15 Nov 2026: not only pickers): every picker by
  * name; every cut of a song the pages state; and every show, record and track that has pickers on it. A name
  * here says what kind of thing it is unless it is a picker, since a band, its record and a night of theirs can
- * all be called the same. A track with a cut of its own is found as the cut. The first to take a name keeps it.
+ * all be called the same. A track with a cut of its own is found as the cut. The first to take a name keeps it;
+ * a show dated by block that finds its name taken says its block as well.
  * Returns [{ label, view }]: view, what go() takes ({ a }, { s, cut } or { m }).
  */
 export function catalogue( G ) {
 	const out = [], taken = new Set();
 	const put = ( label, view ) => {
-		if ( label && !taken.has( label.toLowerCase() ) ) {
-			taken.add( label.toLowerCase() );
-			out.push( { label, view } );
+		if ( !label || taken.has( label.toLowerCase() ) ) {
+			return false;
 		}
+		taken.add( label.toLowerCase() );
+		out.push( { label, view } );
+		return true;
 	};
 	G.people.forEach( ( p ) => put( p.name, { a: p.id } ) );
 	const cut = new Set();
@@ -1487,8 +1559,16 @@ export function catalogue( G ) {
 		if ( !pc.cast.length || ( pc.kind === 'track' && cut.has( pc.song ) ) ) {
 			continue;                                        // folded into another tape of its night; or found as its cut
 		}
-		put( pc.kind === 'show' ? [ c.name, c.sub ].filter( Boolean ).join( ' · ' ) :
-			( pc.kind === 'track' ? c.name + ' · track on ' + c.on : c.name + ' · record' + ( c.sub ? ', ' + c.sub : '' ) ), { m: pc.id } );
+		if ( pc.kind === 'show' ) {
+			// A show dated by block is said by its year (night). Two of one name in one year would be one name here,
+			// and the second never found: it says its block too.
+			const label = [ c.name, c.sub ].filter( Boolean ).join( ' · ' ), day = when( G.music[ pc.m ].date );
+			if ( !put( label, { m: pc.id } ) && /^block /.test( day ) ) {
+				put( label + ' · ' + day, { m: pc.id } );
+			}
+			continue;
+		}
+		put( pc.kind === 'track' ? c.name + ' · track on ' + c.on : c.name + ' · record' + ( c.sub ? ', ' + c.sub : '' ), { m: pc.id } );
 	}
 	return out;
 }

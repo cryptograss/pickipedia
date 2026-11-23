@@ -1676,6 +1676,12 @@ body.intro #game { display: none; }
 
 /* A show's set stones: small gems in each stone's three colours, wherever the show is (tools/set_stones.py) */
 .gems .gem path { stroke: none; }
+/* A cut's chartifacts (chartMark): a leaf of staff paper on the song's circle, with how many. */
+#g .pk .charts .leaf { fill: #fffdf4; stroke: #1b1b1b; stroke-width: 1.3px; }
+#g .pk .charts .staff { fill: none; stroke: #1b1b1b; stroke-width: 1px; }
+#g .pk .charts circle.count-bg { fill: var( --link ); stroke: #fff; stroke-width: 1.5px; }
+#g .pk .charts text.count { fill: #fff; stroke: none; font: 700 10px/1 var( --ui ); }
+#g .pk .charts:hover .leaf { stroke-width: 2px; }
 .gems .gem path.cut { stroke: #1b1b1b; stroke-width: 0.9px; stroke-linejoin: round; }
 .gems .gem:hover path.cut { stroke-width: 1.6px; }
 .gems text.n { font-size: 10px; font-weight: 600; fill: #1b1b1b; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
