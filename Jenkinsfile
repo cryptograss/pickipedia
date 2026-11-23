@@ -100,6 +100,9 @@ pipeline {
                     # series, the rail, their videos' shapes, and what is kept of magenta's word on a tiding.
                     php tests/check-posts.php
                     php tests/check-night.php
+                    # A pale ground written in a stylesheet of ours is answered by night, or named in the
+                    # list there of what is not yet answered.
+                    php tests/check-night-grounds.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter
                     # but MediaWiki is not downloaded yet at this stage, so a
