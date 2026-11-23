@@ -79,6 +79,7 @@ Run from this directory; neither needs a wiki.
 
 ```
 php tests/check-classes.php        # Lua and CSS agree on class names
+php tests/check-night-grounds.php  # a pale ground in a stylesheet of ours is answered by night
 lua  tests/check-instruments.lua   # instrument name -> icon family
 lua  tests/check-ensemble.lua      # a named lineup
 lua  tests/check-studio.lua        # cuts, appearances, and the pages reading them
