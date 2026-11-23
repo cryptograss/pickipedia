@@ -185,6 +185,24 @@ function nameAt( name, pos, W, font ) {
 	return { label: fit.label, dx: Math.round( lean ) + fit.dx };
 }
 
+/**
+ * A picker's name with what they play, in brackets: "Harry Clark (mandolin)". `role` as a cut's page says it ("guitar;
+ * six-whistle"): all of it where that fits by their place, the first where only that does, else the name alone.
+ * { label, dx, inst }: label the whole of what is written, inst the bracket's words ('' for none).
+ */
+function playsAs( name, role, pos, W, font ) {
+	const all = String( role || '' ).split( ';' ).map( ( r ) => r.trim() ).filter( Boolean );
+	for ( const inst of all.length ? [ all.join( ', ' ), all[ 0 ] ] : [] ) {
+		// whole or not at all: a name is cut at 26 letters, a name and its bracket at 44 and the frame's width
+		const whole = name + ' (' + inst + ')', half = wide( whole, font ) / 2;
+		if ( whole.length <= 44 && 2 * half <= W - 8 ) {
+			const lean = ( pos.lean || 0 ) * ( half + 3 );
+			return { label: whole, dx: Math.round( lean ) + Math.round( K.nudge( pos.x + lean, half, 4, W - 4 ) ), inst };
+		}
+	}
+	return Object.assign( nameAt( name, pos, W, font ), { inst: '' } );
+}
+
 /** Where a name is, in the frame: `half` its width either side of its middle, from `top` to `bottom` off its place. */
 function nameBox( pos, dx, half, top, bottom ) {
 	return { x1: pos.x + dx - half, x2: pos.x + dx + half, y1: pos.y + top, y2: pos.y + bottom };
@@ -553,7 +571,9 @@ function pillsFor( tie, room, most, prefer, entry, bare ) {
 		const pad = 34 + ( play ? 38 : 0 ), gemW = stones ? gemsIn( stones ) + 4 : 0;   // the glyph and the ends; Rabbithole's way; the stones
 		// a show's year stays whole at the end of it, however much of the rest is cut
 		const yearEnd = n.glyph === 'show' && n.year ? ' · ' + n.year : '';
-		let label = yearEnd ? K.clip( n.short.slice( 0, -yearEnd.length ), 34 - yearEnd.length ) + yearEnd : K.clip( n.short, 34 );
+		// a song's "+n" stays whole at the end of it too: a name and its author too long for a pill give up the author
+		let label = yearEnd ? K.clip( n.short.slice( 0, -yearEnd.length ), 34 - yearEnd.length ) + yearEnd :
+			( n.glyph === 'track' && n.short.length > 34 ? K.clip( n.song, 34 - n.plus.length ) + n.plus : K.clip( n.short, 34 ) );
 		let w = pad + gemW + wide( label, FONT.pill );
 		if ( used + w - gemW > room && !shown.length ) {                     // the first one always goes in: briefer, then cut to fit
 			label = n.brief;
@@ -566,7 +586,7 @@ function pillsFor( tie, room, most, prefer, entry, bare ) {
 				}
 				return text;
 			};
-			if ( fits( label ) ) {
+			if ( fits( label ) && !( n.glyph === 'track' && n.sur ) ) {
 				// as it is
 			} else if ( n.glyph === 'show' && n.crew ) {
 				// A show with its band named keeps the band and the year, and gives up its own name or place first
@@ -576,6 +596,11 @@ function pillsFor( tie, room, most, prefer, entry, bare ) {
 				const yr = n.year ? ' · ' + n.year : '';
 				label = fits( K.clip( n.crew + ' · ' + n.who, n.crew.length + 11 ) + yr ) ? shrink( n.crew + ' · ' + n.who, yr ) :
 					( fits( K.clip( n.who, 10 ) + yr ) ? shrink( n.who, yr ) : shrink( n.who, '' ) );
+			} else if ( n.glyph === 'track' ) {
+				// a song gives up its author's first names, then its author (that is `brief`), then letters of its
+				// name, never its "+n"
+				const sur = n.sur ? n.song + ' · ' + n.sur + n.plus : '';
+				label = sur && fits( sur ) ? sur : ( fits( n.brief ) ? n.brief : shrink( n.song, n.plus ) );
 			} else if ( n.named ) {
 				// a show with a name of its own gives up its night before any of its name (K.naming)
 				label = shrink( n.who, '' );
@@ -602,6 +627,11 @@ function pillsFor( tie, room, most, prefer, entry, bare ) {
 				label = n.crew ? shrink( n.crew, '' ) : ( n.named || n.placed ? shrink( n.who, '' ) : ( n.year || label ) );
 			}
 			w = pad + gemW + wide( label, FONT.pill );
+		}
+		if ( used + w > room && shown.length && n.glyph === 'track' && n.by ) {     // a song after the first: its author's surname, then none, before not at all
+			const sur = n.song + ' · ' + n.sur + n.plus;
+			label = sur.length <= 34 && used + pad + wide( sur, FONT.pill ) <= room ? sur : K.clip( n.song, 34 - n.plus.length ) + n.plus;
+			w = pad + wide( label, FONT.pill );
 		}
 		if ( used + w > room && shown.length ) {
 			break;
@@ -2066,6 +2096,48 @@ function stepFromShell( d ) {
  * list's own colour and beat for a flourish, a spotlight or the whole band's flash. Paused with the song.
  */
 let FX = null;
+/*
+ * Two flashes on a picker's mark, each once (Justin, #connectome, 23 Nov 2026, 18:30Z): pink on everybody of a song's
+ * band when the song starts, traverse or not ("If you're looking at a bacon graph when a song starts, let's always
+ * give a nice pink flash to everybody in the ensemble of that song"), and orange on one who comes in ("whenever
+ * someone goes from 'out' to 'in'"). A mark drawn a moment later, when the graph has moved to the song, still gets
+ * the song's flash: it holds for START_MS, and a mark (an element) has each flash once.
+ */
+const START_MS = 2500, ENTER_MS = 1500;
+const flashes = { start: { at: -Infinity, ids: new Set(), on: new WeakSet() }, enter: new Map(), track: null };
+let fxWas = new Map();                                              // what the band was at the last word: id -> { scene, enter }
+function flash( el, kind ) {
+	const main = el.querySelector( 'image.face, circle.dot, circle.ring' );
+	const r = main ? ( parseFloat( main.getAttribute( 'r' ) ) || parseFloat( main.getAttribute( 'width' ) ) / 2 || 8 ) : 8;
+	const ring = s( 'circle', { class: 'fxs fxs-' + kind, r: r + ( r < 7 ? 4 : 6 ) } );
+	ring.addEventListener( 'animationend', () => ring.remove() );
+	setTimeout( () => ring.remove(), 3000 );                            // a hidden frame runs no animation to its end
+	el.insertBefore( ring, el.firstChild );
+}
+
+/** What the band says a picker plays now, in the brackets after their name; where the band says nothing, what the view drew. */
+function sayInst( el, d, inst ) {
+	const text = el.querySelector( ':scope > a > text' );
+	if ( !text ) {
+		return;
+	}
+	let span = text.querySelector( 'tspan.inst' );
+	const want = inst ? ' (' + inst + ')' : ( d.inst ? ' (' + d.inst + ')' : '' );
+	if ( !want ) {
+		if ( span ) {
+			span.remove();
+		}
+		return;
+	}
+	if ( !span ) {
+		span = s( 'tspan', { class: 'inst' } );
+		text.appendChild( span );
+	}
+	if ( span.textContent !== want ) {
+		span.textContent = want;
+	}
+}
+
 function fxApply() {
 	if ( !G ) {
 		return;
@@ -2079,10 +2151,26 @@ function fxApply() {
 		}
 	}
 	svg.classList.toggle( 'fx-paused', !FX || !FX.playing );
+	const now = performance.now();
 	for ( const [ , it ] of live.node ) {
 		const d = it.d, el = it.el;
 		const b = !it.dead && d.stands === 'picker' ? band.get( d.id ) : null;
 		const light = b && b.light ? b.light : null;
+		if ( !it.dead && d.stands === 'picker' && d.kind !== 'dot' ) {
+			// in brackets, what they have in hand on the song on now, as the list has it (Justin, 23 Nov 2026: "A song
+			// is currently playing in rabbithole for which we have ensemble metadata (and in this case, it makes sense
+			// to also change instruments consistent with the rabbithole display)")
+			sayInst( el, d, b && b.instrument ? String( b.instrument ) : '' );
+			if ( b && now - flashes.start.at < START_MS && flashes.start.ids.has( d.id ) && !flashes.start.on.has( el ) ) {
+				flashes.start.on.add( el );
+				flash( el, 'start' );
+			}
+			const came = b ? flashes.enter.get( d.id ) : undefined;
+			if ( came !== undefined && now - came < ENTER_MS ) {
+				flashes.enter.delete( d.id );
+				flash( el, 'enter' );
+			}
+		}
 		const on = {
 			'fx-lead': !!b && b.scene === 'lead', 'fx-pickup': !!b && b.scene === 'pickup', 'fx-enter': !!b && !!b.enter,
 			'fx-flourish': !!light && light.kind === 'flourish', 'fx-glow': !!light && light.kind === 'spotlight', 'fx-band': !!light && light.kind === 'bandFlash',
@@ -2114,6 +2202,41 @@ function fxApply() {
 	}
 }
 
+/**
+ * What changed in the band since its last word: a song begun (a track not flashed yet, playing), or somebody coming
+ * in (the list's `enter`, or a scene of 'out' that is no longer). Each is flashed by fxApply on the marks in sight.
+ */
+function fxHeard( fx ) {
+	const band = Array.isArray( fx.band ) ? fx.band : [];
+	const idOf = ( b ) => {
+		const byTitle = b.title ? K.find( G, b.title ) : null;
+		return byTitle !== null ? byTitle : K.find( G, b.name );
+	};
+	const now = performance.now(), is = new Map();
+	for ( const b of band ) {
+		const id = G ? idOf( b ) : null;
+		if ( id !== null ) {
+			is.set( id, { scene: b.scene || null, enter: !!b.enter } );
+		}
+	}
+	// the song: its track, as Rabbithole says it; from a Rabbithole that doesn't say, who is in its band
+	const track = fx.track || ( band.length ? 'band:' + band.map( ( b ) => b.name ).sort().join( '|' ) : null );
+	if ( fx.playing && track && track !== flashes.track && is.size ) {
+		flashes.track = track;
+		flashes.start = { at: now, ids: new Set( is.keys() ), on: new WeakSet() };
+	}
+	if ( track === flashes.track && !( now - flashes.start.at < START_MS ) ) {
+		// coming in, once the song is under way: at its start everybody is coming in, and the pink says so
+		for ( const [ id, b ] of is ) {
+			const was = fxWas.get( id );
+			if ( was && ( ( b.enter && !was.enter ) || ( was.scene === 'out' && b.scene !== 'out' ) ) ) {
+				flashes.enter.set( id, now );
+			}
+		}
+	}
+	fxWas = is;
+}
+
 window.addEventListener( 'message', ( ev ) => {
 	if ( !HOST || ev.origin !== location.origin || ev.source !== window.parent || !ev.data ) {
 		return;
@@ -2128,6 +2251,7 @@ window.addEventListener( 'message', ( ev ) => {
 	}
 	if ( ev.data.rabbithole === 'fx' ) {
 		FX = ev.data;                                                // what the ensemble list is showing now
+		fxHeard( FX );
 		fxApply();
 		return;
 	}
@@ -2485,16 +2609,19 @@ function songScene( v ) {
 	}
 	sc.nodes.set( 'song', { stands: 'song', is: 'song', x: lay.C.x, y: lay.C.y, kind: 'song', o: 1, title: scd.song, tier,
 		cuts: [ cuts[ 0 ] ].filter( Boolean ), cut: v.cut } );
+	// Each of the cast with what they play on it, in brackets (Justin, #connectome, 23 Nov 2026, 18:30Z: "show
+	// instruments in parenthesis along with pickers ... You're centered on a song for which we have ensemble
+	// metadata"): all the cut's page gives them where that fits, the first where only that does, else the name alone.
+	const castName = ( id ) => playsAs( first( id ), ( rolesOf.get( id ) || { role: '' } ).role, seatOf.get( id ), W, FONT.named );
 	mine.forEach( ( id ) => {
-		const nm = nameAt( first( id ), seatOf.get( id ), W, FONT.named );
-		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { cutOf: rolesOf.get( id ) || { role: '', icon: '' }, song: scd.song, delay: 180 }, nm ) );
+		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { cutOf: rolesOf.get( id ) || { role: '', icon: '' }, song: scd.song, delay: 180 }, castName( id ) ) );
 	} );
 	if ( outer.length ) {
 		const seated = outer.slice( 0, lay.dots.length );
 		// The far names go only where no name sits: the ecosystem reads by shape first, and the sweep keeps
 		// the rule that no two names touch. A far node without room is a bead; the sheet still says who.
 		const taken = mine.map( ( id ) => {
-			const pos = seatOf.get( id ), nm = nameAt( first( id ), pos, W, FONT.named );
+			const pos = seatOf.get( id ), nm = castName( id );
 			return { x: pos.x + nm.dx, y: pos.y + ( pos.below ? 24 : -32 ), w: wide( nm.label, FONT.named ) / 2 + 3 };
 		} );
 		const clash = ( b, d ) => Math.abs( b.x - d.x ) < b.w + d.w && Math.abs( b.y - d.y ) < tx( 22 );
@@ -2812,7 +2939,13 @@ const draw = {
 					// the middle's name tucked in tight, its top just over the circle's rim, clear of the pills on the
 					// lines out of it (Justin, #connectome, 15 Nov 2026)
 					{ x: d.dx || 0, y: d.below ? R + ( big ? 10 + down( 17 ) : 18 + down( 14 ) ) : -R - 8, 'text-anchor': 'middle' };
-		g.appendChild( s( 'a', { href: address( { a: d.id } ), 'aria-label': 'Go to ' + p.name }, s( 'text', at, label ) ) );
+		// what they play, in brackets, a tspan of its own: the song on now may change it (fxApply)
+		const bracket = d.inst && label.endsWith( ' (' + d.inst + ')' ) ? ' (' + d.inst + ')' : '';
+		const text = s( 'text', at, bracket ? label.slice( 0, -bracket.length ) : label );
+		if ( bracket ) {
+			text.appendChild( s( 'tspan', { class: 'inst' }, bracket ) );
+		}
+		g.appendChild( s( 'a', { href: address( { a: d.id } ), 'aria-label': 'Go to ' + p.name }, text ) );
 	},
 	line( g, d ) {
 		if ( d.stands === 'thread' ) {                               // pickers, between two pieces: ink, thicker the more of them
@@ -2887,7 +3020,7 @@ const draw = {
 		const t = s( 'text', { x: -d.w / 2 + 25, y: tx( 4.3 ) }, plus ? plus[ 1 ] + ' ' : d.label );
 		if ( plus ) {
 			const n = s( 'tspan', { class: 'plus' }, plus[ 2 ] );
-			n.appendChild( s( 'title', null, `All ${ d.e.songs.length } tracks ${ first( d.u ) } and ${ first( d.v ) } share on it, spread out between them` ) );
+			n.appendChild( s( 'title', null, `All ${ d.e.songs.length } tracks ${ first( d.u ) } and ${ first( d.v ) } share on it` ) );
 			t.appendChild( n );
 		}
 		g.appendChild( t );
@@ -2902,6 +3035,62 @@ const draw = {
 		}
 	}
 };
+
+/*
+ * A pill's "+n", opened: the tracks two pickers share on that record, listed right under it, the graph staying where
+ * it is (Justin, #connectome, 23 Nov 2026, 18:30Z: "The behavior of "+<n>" in song pills is counter-intuitive - I think
+ * it makes more sense for the graph to stay put and just drop down the list of items right there. If there are more
+ * than a certain number ... then have a "more..." which will go to the rainbow chart (ie, the current behavior)").
+ * Each track goes to it, as its pill would; as many as the room under the pill holds, eight at most, and past that
+ * "more…" to the rainbow. Escape, a click outside it, or the graph moving puts it away.
+ */
+const DROP_MOST = 8, DROP_ROW = 34;
+function openDrop( d, pill ) {
+	const el = $( 'drop' ), stage = $( 'stage' ).getBoundingClientRect(), at = pill.getBoundingClientRect();
+	const below = stage.bottom - at.bottom - 12, above = at.top - stage.top - 12, down = below >= Math.min( above, 4 * DROP_ROW ) || below >= above;
+	const fits = Math.max( 3, Math.floor( ( ( down ? below : above ) - 16 ) / DROP_ROW ) );
+	const songs = d.e.songs, most = Math.min( DROP_MOST, fits );
+	const shown = songs.length > most ? songs.slice( 0, most - 1 ) : songs;
+	const m = G.music[ d.e.m ];
+	const row = ( song ) => {
+		const piece = K.pieceFor( G, Object.assign( {}, d.e, { songs: [ song, ...songs.filter( ( x ) => x !== song ) ] } ) );
+		const by = K.authorsOf( G, song ), who = by === null ? '' : ( by === K.TRAD ? 'trad.' : by.join( ' & ' ) );
+		const b = h( 'button', { type: 'button', role: 'menuitem', class: 'drop-song', title: 'Go to ' + song,
+			onclick: () => {
+				closeDrop();
+				go( { m: piece, hand: [ d.u, d.v ] } );
+			} }, h( 'span', { class: 'drop-name' }, song ), who ? h( 'i', { class: 'drop-by' }, who ) : null );
+		const to = K.playOf( G, m, song );
+		return h( 'li', { role: 'none' }, b, to ? h( 'a', { class: 'drop-play', href: HOME + to, target: '_top', title: 'Play ' + song + ' in Rabbithole',
+			'aria-label': 'Play ' + song + ' in Rabbithole' }, '▶' ) : null );
+	};
+	const items = shown.map( row );
+	if ( shown.length < songs.length ) {
+		items.push( h( 'li', { role: 'none' }, h( 'button', { type: 'button', role: 'menuitem', class: 'drop-more',
+			title: `All ${ songs.length } tracks ${ first( d.u ) } and ${ first( d.v ) } share on it, spread out between them`,
+			onclick: () => {
+				closeDrop();
+				spreadOut( d );
+			} }, `more… (all ${ songs.length })` ) ) );
+	}
+	el.replaceChildren( h( 'p', { class: 'drop-head' }, K.plural( songs.length, 'track' ) + ' on ' + K.clip( m.title || m.key, 40 ) ), h( 'ul', null, ...items ) );
+	el.hidden = false;
+	const w = el.offsetWidth, x = Math.max( 4, Math.min( stage.width - w - 4, at.left + at.width / 2 - stage.left - w / 2 ) );
+	el.style.left = x + 'px';
+	el.style.top = down ? ( at.bottom - stage.top + 6 ) + 'px' : '';
+	el.style.bottom = down ? '' : ( stage.bottom - at.top + 6 ) + 'px';
+	const go1 = el.querySelector( 'button' );
+	if ( go1 && !fingers ) {
+		go1.focus( { preventScroll: true } );
+	}
+}
+function closeDrop() {
+	const el = $( 'drop' );
+	if ( !el.hidden ) {
+		el.hidden = true;
+		el.replaceChildren();
+	}
+}
 
 /** Does this pill's "+n" lead anywhere: several tracks of one record, between two pickers who are both known, not already spread out. */
 function spreads( d ) {
@@ -3567,6 +3756,7 @@ function show( quick, again ) {
 	document.title = K.pageTitle( { challenge: !!GAME, a: view.way || view.walk || view.a === undefined || view.a === null ? '' : first( view.a ),
 		b: view.way || view.walk || view.b === undefined ? '' : first( view.b ), of: label( view ) } );
 	closeSheet();
+	closeDrop();
 	hush();
 }
 
@@ -4499,7 +4689,18 @@ function cardSay() {
 	if ( view.cut !== undefined && view.playing === undefined ) {
 		const more = scene.sub.map( ( x ) => ( typeof x === 'string' ? x : x.cloneNode( true ) ) );
 		el.classList.add( 'nopic' );
-		el.replaceChildren( h( 'b', { class: 'card-name' }, G.songcast[ view.cut ].song ), h( 'span', { class: 'card-more' }, ...more ) );
+		// its second line, in italics, who wrote it (Justin, #connectome, 23 Nov 2026, 18:30Z: "say 'by <author(s)>' or
+		// 'traditional'"), where its page says; a song whose page says neither has no line for it
+		const song = G.songcast[ view.cut ].song, by = K.bySays( G, song );
+		const rest = h( 'span', { class: 'card-more' }, ...more );
+		el.replaceChildren( ...[ h( 'b', { class: 'card-name' }, song ), by ? h( 'i', { class: 'card-by' }, by ) : null, rest ].filter( Boolean ) );
+		// as many whole lines of the rest as the card has room for under them, none cut through
+		rest.style.setProperty( '-webkit-line-clamp', '2' );
+		const lh = parseFloat( getComputedStyle( rest ).lineHeight ) || 17;
+		const lines = Math.max( 1, Math.floor( ( rest.clientHeight + 0.5 ) / lh ) );
+		rest.style.setProperty( '-webkit-line-clamp', String( lines ) );
+		rest.style.setProperty( 'line-clamp', String( lines ) );
+		rest.style.maxHeight = lines * lh + 'px';
 		return;
 	}
 	if ( showView( view ) ) {
@@ -4886,7 +5087,7 @@ function aPiece( d ) {
 			stonesLine( d.piece ), K.TIER_NAME[ m.tier ] + ' · ' + sourceName( m.source ) ], hint: "click: go to it · who's on it, and where they lead",
 		acts: [ act( 'Go to ' + K.clip( K.called( G, pc ).name, 30 ), () => go( { m: d.piece, hand: [ d.u, d.v ] } ) ) ] };
 	if ( spreads( d ) ) {
-		w.hint = `click: go to it · click +${ d.e.songs.length - 1 }: all ${ d.e.songs.length } tracks, between the two`;
+		w.hint = `click: go to it · click +${ d.e.songs.length - 1 }: the list of all ${ d.e.songs.length } tracks`;
 		w.acts.push( act( `All ${ d.e.songs.length } tracks ${ first( d.u ) } & ${ first( d.v ) } share on it`, () => spreadOut( d ) ) );
 	}
 	for ( const song of d.e.songs.slice( 0, 3 ) ) {
@@ -5276,10 +5477,14 @@ svg.addEventListener( 'click', ( e ) => {
 		e.preventDefault();                                          // a name goes where its mark goes: to them, here
 	}
 	const plus = plusAt( e ), pg = plus && plus.closest( 'g[data-kind]' ), pit = pg && live[ pg.dataset.kind ].get( pg.dataset.k );
-	if ( pit && !pit.dead && spreads( pit.d ) ) {                    // a pill's "+n": the rest of that record, spread out between the two
+	if ( pit && !pit.dead && spreads( pit.d ) ) {                    // a pill's "+n": the tracks, listed under it, the graph where it is
 		closeSheet();
 		hush();
-		spreadOut( pit.d );
+		openDrop( pit.d, pg );
+		return;
+	}
+	if ( !$( 'drop' ).hidden ) {                                     // a click anywhere else puts the list away, and does nothing more
+		closeDrop();
 		return;
 	}
 	const g = pick( e );
@@ -5322,7 +5527,9 @@ document.addEventListener( 'keydown', ( e ) => {
 	if ( e.key !== 'Escape' ) {
 		return;
 	}
-	if ( !$( 'zoom' ).hidden ) {
+	if ( !$( 'drop' ).hidden ) {
+		closeDrop();
+	} else if ( !$( 'zoom' ).hidden ) {
 		zoomClose();
 	} else if ( !$( 'faq' ).hidden ) {
 		closeFaq();

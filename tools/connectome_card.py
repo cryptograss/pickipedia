@@ -231,6 +231,29 @@ class Wiki:
                     out[page['title']] = cuts
         return out
 
+    def song_authors(self):
+        """Who wrote each song, as its page's {{Song}} says: title (without "Song:") -> its composers as written,
+        or 'traditional' where the page says the tradition carries it (Template:Song: composer=, traditional=yes).
+        A page that says neither is left out: nobody is guessed."""
+        titles, cont = [], {}
+        while True:
+            q = self.api(action='query', list='embeddedin', eititle='Template:Song', eilimit=500,
+                         eifilterredir='nonredirects', **cont)
+            titles += [p['title'] for p in q['query']['embeddedin']]
+            if 'continue' not in q:
+                break
+            cont = {'eicontinue': q['continue']['eicontinue']}
+        out = {}
+        for i in range(0, len(titles), 50):
+            q = self.api(action='query', titles='|'.join(titles[i:i + 50]), prop='revisions', rvprop='content',
+                         rvslots='main', formatversion=2)['query']
+            for page in q.get('pages', []):
+                revs = page.get('revisions') or []
+                said = authors_from(revs[0]['slots']['main'].get('content', '') if revs else '')
+                if said:
+                    out[page['title'][len('Song:'):] if page['title'].startswith('Song:') else page['title']] = said
+        return out
+
     def record_artists(self, titles):
         """Who a record page's {{Record}} names as the artist: title -> name. The recording artist of a
         cut's track is the node a route home points at (Justin, #connectome, 15 Nov 2026)."""
@@ -313,6 +336,23 @@ def writers_from(text):
         return []
     said = re.sub(r'\[\[([^\]|]*)(?:\|[^\]]*)?\]\]', r'\1', m.group(1))             # a link: the page it names
     return [n.strip() for n in re.split(r'\s*(?:,|;|&|/|\band\b)\s*', said) if n.strip()]
+
+
+def song_key(name):
+    """A song's name as two spellings of it agree: lower case, no accents, letters and digits only ("Barlows Jig" and
+    "Barlow's Jig" are one song)."""
+    plain = ''.join(c for c in unicodedata.normalize('NFKD', (name or '').lower()) if not unicodedata.combining(c))
+    return re.sub(r'[\W_]+', '', plain)
+
+
+def authors_from(text):
+    """Who a song page says wrote it: its composers as written (writers_from), else 'traditional' where its {{Song}}
+    says traditional=yes, else None. The composer is the one the template shows where a page says both."""
+    by = writers_from(text)
+    if by:
+        return by
+    m = re.search(r'\{\{\s*Song\b[^{}]*?\|\s*traditional\s*=\s*(?:yes|true|1)\s*(?:\||\}\})', text, re.I)
+    return 'traditional' if m else None
 
 
 def featured_from(wikitext, today):
@@ -1197,6 +1237,14 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
             has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons,
             pics=pics)
+        # Who wrote each song, where its page says (Justin, #connectome, 23 Nov 2026, 18:30Z: a song's card says
+        # "by <author(s)>" or "traditional", and its pills the authors "in most situations"): song -> [names], or
+        # 'traditional'. Only songs the graph names: a track's songs, and the cuts'.
+        named = {s for _, _, ev in graph['ties'] for e in ev for s in e[3]} | {c['song'] for c in graph['songcast'].values()}
+        heard_by = wiki.song_authors() if hasattr(wiki, 'song_authors') else {}
+        # keyed by the graph's own name for the song: a store's slug may say "Barlows Jig" for "Barlow's Jig"
+        by_key = {song_key(s): said for s, said in heard_by.items()}
+        graph['authors'] = {s: by_key[song_key(s)] for s in sorted(named) if song_key(s) in by_key}
         # Song cards: one graph per cut, the page's file carrying each of its cuts in the page's own order
         # (Justin, #connectome, 15 Nov 2026, 01:58Z: each cut displays its own graph).
         songcast = graph.get('songcast') or {}

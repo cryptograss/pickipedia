@@ -511,6 +511,20 @@ a.play:focus {
 
 #sheet[ hidden ] { display: none; }
 
+/* a pill's "+n", opened under it: the tracks, the graph where it is (openDrop) */
+#drop { position: absolute; z-index: 7; min-width: 180px; max-width: min( 360px, calc( 100% - 8px ) ); padding: 6px 0 4px; border: 1px solid var( --axis );
+	border-radius: 10px; background: var( --surface ); box-shadow: 0 6px 24px var( --lift ); color: var( --ink2 ); font-size: 14px; }
+#drop[ hidden ] { display: none; }
+#drop .drop-head { margin: 0 12px 4px; font-size: 12px; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#drop ul { margin: 0; padding: 0; list-style: none; }
+#drop li { display: flex; align-items: center; }
+#drop button { flex: 1; min-width: 0; min-height: 34px; padding: 4px 12px; border: 0; background: none; color: var( --ink ); font: inherit; text-align: left; cursor: pointer;
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#drop button:hover, #drop button:focus-visible { background: var( --lift ); outline: none; }
+#drop .drop-by { margin-left: .5em; opacity: .7; }
+#drop .drop-more { color: var( --link ); }
+#drop .drop-play { padding: 4px 12px; color: var( --play ); text-decoration: none; }
+
 #sheet.up {
 	top: 8px;
 	bottom: auto;
@@ -1048,7 +1062,7 @@ body.mini #g { cursor: pointer; }
 }
 #g g.fx-pickup circle.fxr { opacity: .7; stroke-dasharray: 3 4; }
 #g g.fx-lead circle.fxr { opacity: .9; animation: fx-breathe 2.4s ease-in-out infinite; }
-#g g.fx-enter circle.fxr { opacity: .9; animation: fx-enter .9s ease-out 1; }
+#g g.fx-enter circle.fxr { opacity: .9; stroke: rgb( 255 140 0 ); animation: fx-enter .9s ease-out 1; }
 #g g.fx-band circle.fxr,
 #g g.fx-flourish circle.fxr,
 #g g.fx-glow circle.fxr {
@@ -1060,6 +1074,12 @@ body.mini #g { cursor: pointer; }
 }
 #g g.fx-band circle.fxr { stroke-width: 3.5; }
 #g.fx-paused circle.fxr { animation-play-state: paused; }
+/* A song begins: pink on its whole band in sight; somebody comes in: orange on them (Justin, #connectome, 23 Nov 2026, 18:30Z) */
+#g circle.fxs { fill: none; pointer-events: none; transform-box: fill-box; transform-origin: center; opacity: 0; }
+#g circle.fxs-start { stroke: rgb( 255 64 160 ); stroke-width: 5; filter: drop-shadow( 0 0 9px rgb( 255 64 160 ) ); animation: fxs-flash 1.6s ease-out 1; }
+#g circle.fxs-enter { stroke: rgb( 255 140 0 ); stroke-width: 5; filter: drop-shadow( 0 0 9px rgb( 255 140 0 ) ); animation: fxs-flash 1.2s ease-out 1; }
+@keyframes fxs-flash { 0% { opacity: 0; transform: scale( .8 ); } 15% { opacity: 1; transform: scale( 1.25 ); } 45% { opacity: .9; transform: scale( 1 ); } 100% { opacity: 0; transform: scale( 1.5 ); } }
+#g text tspan.inst { font-weight: 400; opacity: .78; }
 @keyframes fx-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 @keyframes fx-pulse { 0%, 100% { opacity: .45; transform: scale( 1 ); } 50% { opacity: 1; transform: scale( 1.16 ); } }
 @keyframes fx-enter { 0% { opacity: 0; transform: scale( 1.9 ); } 100% { opacity: .9; transform: scale( 1 ); } }
@@ -1146,6 +1166,9 @@ body.mini #g { cursor: pointer; }
 #card.tower .card-name { font-size: 15px; text-align: center; }
 #card.tower .card-does { justify-self: stretch; }
 #card.nopic { grid-template: "name" auto "does" minmax( 0, 1fr ) / minmax( 0, 1fr ); }
+/* a song's second line: who wrote it, or "traditional" (Justin, #connectome, 23 Nov 2026, 18:30Z) */
+#card.nopic:has( .card-by ) { grid-template: "name" auto "by" auto "does" minmax( 0, 1fr ) / minmax( 0, 1fr ); }
+#card .card-by { grid-area: by; font-style: italic; color: var( --ink ); opacity: .85; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #card img { grid-area: pic; align-self: start; width: 84px; height: 84px; border-radius: 50%; object-fit: cover; }
 /* The name whole, on two lines where one won't hold it (a long single word breaks). */
 #card .card-name { grid-area: name; align-self: center; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; color: var( --link ); font: 600 16px/1.2 var( --name ); text-decoration: none; }
