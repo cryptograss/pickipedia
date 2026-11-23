@@ -1079,7 +1079,7 @@ body.mini #g { cursor: pointer; }
 #g circle.fxs-start { stroke: rgb( 255 64 160 ); stroke-width: 5; filter: drop-shadow( 0 0 9px rgb( 255 64 160 ) ); animation: fxs-flash 1.6s ease-out 1; }
 #g circle.fxs-enter { stroke: rgb( 255 140 0 ); stroke-width: 5; filter: drop-shadow( 0 0 9px rgb( 255 140 0 ) ); animation: fxs-flash 1.2s ease-out 1; }
 @keyframes fxs-flash { 0% { opacity: 0; transform: scale( .8 ); } 15% { opacity: 1; transform: scale( 1.25 ); } 45% { opacity: .9; transform: scale( 1 ); } 100% { opacity: 0; transform: scale( 1.5 ); } }
-#g text tspan.inst { font-weight: 400; opacity: .78; }
+#g text tspan.inst { font-weight: 400; font-size: .86em; opacity: .78; }
 @keyframes fx-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 @keyframes fx-pulse { 0%, 100% { opacity: .45; transform: scale( 1 ); } 50% { opacity: 1; transform: scale( 1.16 ); } }
 @keyframes fx-enter { 0% { opacity: 0; transform: scale( 1.9 ); } 100% { opacity: .9; transform: scale( 1 ); } }
