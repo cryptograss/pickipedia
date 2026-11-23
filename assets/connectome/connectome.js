@@ -56,7 +56,7 @@ let T = 1;
 const SERIF = 'Georgia, "Times New Roman", serif', SANS = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 const KINDS = { named: [ '700', 14, SERIF ], subject: [ '700', 17, SERIF ], far: [ '400', 13, SERIF ], bead: [ '400', 11, SERIF ],
 	pill: [ '600', 12.5, SANS ], tag: [ '700', 12.5, SERIF ], piece: [ '600', 13, SANS ], own: [ '600', 17, SANS ], sub: [ '400', 11.5, SANS ],
-	road: [ 'italic 400', 12, SERIF ] };
+	road: [ 'italic 400', 12, SERIF ], inst: [ '400', 12, SERIF ] };
 const FONT = {};
 Object.keys( KINDS ).forEach( ( k ) => Object.defineProperty( FONT, k, { get: () => `${ KINDS[ k ][ 0 ] } ${ +( KINDS[ k ][ 1 ] * T ).toFixed( 3 ) }px ${ KINDS[ k ][ 2 ] }` } ) );
 const tx = ( n ) => Math.round( n * T * 10 ) / 10;
@@ -186,21 +186,46 @@ function nameAt( name, pos, W, font ) {
 }
 
 /**
- * A picker's name with what they play, in brackets: "Harry Clark (mandolin)". `role` as a cut's page says it ("guitar;
- * six-whistle"): all of it where that fits by their place, the first where only that does, else the name alone.
- * { label, dx, inst }: label the whole of what is written, inst the bracket's words ('' for none).
+ * A picker's name, with what they play on a line of its own under it (Justin, #connectome, 23 Nov 2026, 19:02Z: "let's
+ * put their instrument underneath (ie, have a line-break)"). `role` as a cut's page says it ("guitar; six-whistle"):
+ * all of it where that fits the frame, the first where only that does, else nothing. { label, dx, inst }: the name as
+ * nameAt has it, placed so the wider of the two lines stays in the frame; inst the second line's words ('' for none).
  */
 function playsAs( name, role, pos, W, font ) {
+	const nm = nameAt( name, pos, W, font );
 	const all = String( role || '' ).split( ';' ).map( ( r ) => r.trim() ).filter( Boolean );
 	for ( const inst of all.length ? [ all.join( ', ' ), all[ 0 ] ] : [] ) {
-		// whole or not at all: a name is cut at 26 letters, a name and its bracket at 44 and the frame's width
-		const whole = name + ' (' + inst + ')', half = wide( whole, font ) / 2;
-		if ( whole.length <= 44 && 2 * half <= W - 8 ) {
+		const half = Math.max( wide( nm.label, font ), wide( inst, FONT.inst ) ) / 2;
+		if ( inst.length <= 40 && 2 * half <= W - 8 ) {
 			const lean = ( pos.lean || 0 ) * ( half + 3 );
-			return { label: whole, dx: Math.round( lean ) + Math.round( K.nudge( pos.x + lean, half, 4, W - 4 ) ), inst };
+			return { label: nm.label, dx: Math.round( lean ) + Math.round( K.nudge( pos.x + lean, half, 4, W - 4 ) ), inst };
 		}
 	}
-	return Object.assign( nameAt( name, pos, W, font ), { inst: '' } );
+	return Object.assign( nm, { inst: '' } );
+}
+
+/** A name's second line, what they play: set, changed or taken away, the name moved to keep both clear of its mark. */
+const INST_LH = 15;
+function instLine( text, inst ) {
+	let span = text.querySelector( 'tspan.inst' );
+	const y = parseFloat( text.dataset.y ) || 0, up = parseFloat( text.dataset.up ) || 0;
+	if ( !inst ) {
+		if ( span ) {
+			span.remove();
+		}
+		text.setAttribute( 'y', y );
+		return;
+	}
+	if ( !span ) {
+		span = s( 'tspan', { class: 'inst' } );
+		text.appendChild( span );
+	}
+	span.setAttribute( 'x', text.getAttribute( 'x' ) || 0 );
+	span.setAttribute( 'dy', tx( INST_LH ) );
+	if ( span.textContent !== inst ) {
+		span.textContent = inst;
+	}
+	text.setAttribute( 'y', y - tx( up ) );
 }
 
 /** Where a name is, in the frame: `half` its width either side of its middle, from `top` to `bottom` off its place. */
@@ -2115,26 +2140,14 @@ function flash( el, kind ) {
 	el.insertBefore( ring, el.firstChild );
 }
 
-/** What the band says a picker plays now, in the brackets after their name; where the band says nothing, what the view drew. */
+/**
+ * What the band says a picker plays now, on the line under their name; where the band says nothing, what the view
+ * drew. A name over its mark moves up a line to make room, one beside it half a line (instLine).
+ */
 function sayInst( el, d, inst ) {
 	const text = el.querySelector( ':scope > a > text' );
-	if ( !text ) {
-		return;
-	}
-	let span = text.querySelector( 'tspan.inst' );
-	const want = inst ? ' (' + inst + ')' : ( d.inst ? ' (' + d.inst + ')' : '' );
-	if ( !want ) {
-		if ( span ) {
-			span.remove();
-		}
-		return;
-	}
-	if ( !span ) {
-		span = s( 'tspan', { class: 'inst' } );
-		text.appendChild( span );
-	}
-	if ( span.textContent !== want ) {
-		span.textContent = want;
+	if ( text ) {
+		instLine( text, inst || d.inst || '' );
 	}
 }
 
@@ -2620,9 +2633,11 @@ function songScene( v ) {
 		const seated = outer.slice( 0, lay.dots.length );
 		// The far names go only where no name sits: the ecosystem reads by shape first, and the sweep keeps
 		// the rule that no two names touch. A far node without room is a bead; the sheet still says who.
-		const taken = mine.map( ( id ) => {
-			const pos = seatOf.get( id ), nm = castName( id );
-			return { x: pos.x + nm.dx, y: pos.y + ( pos.below ? 24 : -32 ), w: wide( nm.label, FONT.named ) / 2 + 3 };
+		// a name, and the line under it of what they play, each a box a far name must keep clear of
+		const taken = mine.flatMap( ( id ) => {
+			const pos = seatOf.get( id ), nm = castName( id ), y = pos.y + ( pos.below ? 24 : -32 - ( nm.inst ? tx( INST_LH ) : 0 ) );
+			return [ { x: pos.x + nm.dx, y, w: wide( nm.label, FONT.named ) / 2 + 3 } ].concat( nm.inst ?
+				[ { x: pos.x + nm.dx, y: y + tx( INST_LH ), w: wide( nm.inst, FONT.inst ) / 2 + 3 } ] : [] );
 		} );
 		const clash = ( b, d ) => Math.abs( b.x - d.x ) < b.w + d.w && Math.abs( b.y - d.y ) < tx( 22 );
 		const oseats = K.seat( lay.dots, seated.map( ( c ) => wanted( 'c' + v.cut + '·o' + c.id, pan ) ) );
@@ -2939,12 +2954,12 @@ const draw = {
 					// the middle's name tucked in tight, its top just over the circle's rim, clear of the pills on the
 					// lines out of it (Justin, #connectome, 15 Nov 2026)
 					{ x: d.dx || 0, y: d.below ? R + ( big ? 10 + down( 17 ) : 18 + down( 14 ) ) : -R - 8, 'text-anchor': 'middle' };
-		// what they play, in brackets, a tspan of its own: the song on now may change it (fxApply)
-		const bracket = d.inst && label.endsWith( ' (' + d.inst + ')' ) ? ' (' + d.inst + ')' : '';
-		const text = s( 'text', at, bracket ? label.slice( 0, -bracket.length ) : label );
-		if ( bracket ) {
-			text.appendChild( s( 'tspan', { class: 'inst' }, bracket ) );
-		}
+		const text = s( 'text', at, label );
+		// what they play, on a line under the name: the song on now may change it (fxApply). A name over its mark goes up a
+		// line for it, one beside its mark half a line, one under it stays.
+		text.dataset.y = at.y;
+		text.dataset.up = d.at || d.below ? 0 : ( d.side ? INST_LH / 2 : INST_LH );
+		instLine( text, d.inst || '' );
 		g.appendChild( s( 'a', { href: address( { a: d.id } ), 'aria-label': 'Go to ' + p.name }, text ) );
 	},
 	line( g, d ) {
