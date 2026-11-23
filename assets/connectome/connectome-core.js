@@ -1051,6 +1051,31 @@ export function yearOf( date ) {
 }
 
 /**
+ * A show's night as a line says it: the day, where its date is a day of the calendar; the year, where arthel dates
+ * it by block (yearOf), in a heading as in a pill (magent, #merch, 23 Nov 2026: "The biggest type on the page still
+ * says block"). `full` says the block after the year, for the record: a show's card and its closer look do.
+ */
+export function night( date, full ) {
+	const day = when( date ), year = /^block /.test( day ) ? yearOf( date ) : '';
+	return year ? ( full ? year + ' · ' + day : year ) : day;
+}
+
+/**
+ * What a show's card and its closer look say, line by line: whose, where, when, its set stones, how many on stage.
+ * The stones come before the count, which the ring says too: a card has room for only so many lines, and it cut a
+ * show's second stone off while the graph drew both gems beside it (magent, #merch, 23 Nov 2026). The card says two
+ * lines of stones at most, the second "and n more" where there are more than two; `all`, the closer look, every one.
+ */
+export function showSays( G, piece, all ) {
+	const m = G.music[ piece.m ], n = naming( G, { m: piece.m, how: STAGE, songs: [] } );
+	const stones = stonesOf( G, piece.id ), said = all || stones.length <= 2 ? stones : stones.slice( 0, 1 );
+	return [ n.band && n.band !== n.who ? n.band : '', n.place, night( m.date, true ),
+		...said.map( ( st ) => '◆ ' + stoneSays( st ) ),
+		said.length < stones.length ? '◆ and ' + ( stones.length - said.length ) + ' more' : '',
+		plural( piece.cast.length, 'picker' ) + ' on stage, of those the sources name' ].filter( Boolean );
+}
+
+/**
  * A band as a show's pill names it: its leader, where the name is "<leader> and the <band>" (Justin, #connectome,
  * 22 Nov 2026, 21:55Z: "The band name is crucial ... mine can just be "Justin Holmes" instead of "Justin Holmes and
  * The Immutable String Band", in order to fit better"). Any other band as it is.
@@ -1459,7 +1484,7 @@ export function called( G, piece ) {
 	if ( piece.kind === 'show' ) {
 		// A band and a night of theirs often have one name. A show always says it is one (Justin, #connectome, 15 Nov 2026).
 		// and whose it was and where, under its name, where the name is not the band's own
-		return { glyph: 'show', name: n.who, sub: [ 'live', n.who !== n.band ? n.band : '', n.place, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
+		return { glyph: 'show', name: n.who, sub: [ 'live', n.who !== n.band ? n.band : '', n.place, night( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 	}
 	return { glyph: 'record', name: n.brief, sub: [ m.artist, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 }
@@ -1508,16 +1533,19 @@ export function recordBy( m ) {
  * Everything the boxes up top can find (Justin, #connectome, 15 Nov 2026: not only pickers): every picker by
  * name; every cut of a song the pages state; and every show, record and track that has pickers on it. A name
  * here says what kind of thing it is unless it is a picker, since a band, its record and a night of theirs can
- * all be called the same. A track with a cut of its own is found as the cut. The first to take a name keeps it.
+ * all be called the same. A track with a cut of its own is found as the cut. The first to take a name keeps it;
+ * a show dated by block that finds its name taken says its block as well.
  * Returns [{ label, view }]: view, what go() takes ({ a }, { s, cut } or { m }).
  */
 export function catalogue( G ) {
 	const out = [], taken = new Set();
 	const put = ( label, view ) => {
-		if ( label && !taken.has( label.toLowerCase() ) ) {
-			taken.add( label.toLowerCase() );
-			out.push( { label, view } );
+		if ( !label || taken.has( label.toLowerCase() ) ) {
+			return false;
 		}
+		taken.add( label.toLowerCase() );
+		out.push( { label, view } );
+		return true;
 	};
 	G.people.forEach( ( p ) => put( p.name, { a: p.id } ) );
 	const cut = new Set();
@@ -1531,8 +1559,16 @@ export function catalogue( G ) {
 		if ( !pc.cast.length || ( pc.kind === 'track' && cut.has( pc.song ) ) ) {
 			continue;                                        // folded into another tape of its night; or found as its cut
 		}
-		put( pc.kind === 'show' ? [ c.name, c.sub ].filter( Boolean ).join( ' · ' ) :
-			( pc.kind === 'track' ? c.name + ' · track on ' + c.on : c.name + ' · record' + ( c.sub ? ', ' + c.sub : '' ) ), { m: pc.id } );
+		if ( pc.kind === 'show' ) {
+			// A show dated by block is said by its year (night). Two of one name in one year would be one name here,
+			// and the second never found: it says its block too.
+			const label = [ c.name, c.sub ].filter( Boolean ).join( ' · ' ), day = when( G.music[ pc.m ].date );
+			if ( !put( label, { m: pc.id } ) && /^block /.test( day ) ) {
+				put( label + ' · ' + day, { m: pc.id } );
+			}
+			continue;
+		}
+		put( pc.kind === 'track' ? c.name + ' · track on ' + c.on : c.name + ' · record' + ( c.sub ? ', ' + c.sub : '' ), { m: pc.id } );
 	}
 	return out;
 }

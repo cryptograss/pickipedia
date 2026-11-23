@@ -4419,19 +4419,7 @@ function zoomOpen( id ) {
 const posterOf = ( art, wide ) => ( /^https:\/\//.test( art ) ? art.replace( /!240,240/, '!' + wide + ',' + wide ) :
 	FACE + encodeURIComponent( art.replace( / /g, '_' ) ) + '&width=' + wide );
 
-/** What a show's card and its closer look say, line by line: whose, where, when, how many on stage, its stones. */
-function showLines( pc, all ) {
-	const m = G.music[ pc.m ], n = K.naming( G, { m: pc.m, how: K.STAGE, songs: [] } );
-	const day = K.when( m.date ), year = K.yearOf( m.date );
-	const night = /^block /.test( day ) ? ( year ? year + ' · ' : '' ) + day : day;   // the year first; the block for the record
-	const stones = K.stonesOf( G, pc.id );
-	return [ n.band && n.band !== n.who ? [ n.band ] : null, n.place ? [ n.place ] : null, night ? [ night ] : null,
-		[ K.plural( pc.cast.length, 'picker' ) + ' on stage, of those the sources name' ],
-		...( all ? stones : stones.slice( 0, 2 ) ).map( ( st ) => [ '◆ ' + K.stoneSays( st ) ] ),
-		!all && stones.length > 2 ? [ '◆ and ' + ( stones.length - 2 ) + ' more' ] : null ].filter( Boolean );
-}
-
-/** A show's card: its poster, its name, and showLines; the poster opens the closer look (showZoom). */
+/** A show's card: its poster, its name, and what K.showSays says of it; the poster opens the closer look (showZoom). */
 function showCard( el ) {
 	const pc = M( view.m ), m = G.music[ pc.m ], c = K.called( G, pc );
 	const pic = m.art ? h( 'img', { src: posterOf( m.art, 240 ), alt: '' } ) : null;
@@ -4447,12 +4435,12 @@ function showCard( el ) {
 	el.classList.toggle( 'nopic', !face );
 	const href = m.page ? wikiUrl( m.page ) : m.source;
 	const name = href ? h( 'a', { class: 'card-name', href, target: '_top' }, c.name ) : h( 'b', { class: 'card-name' }, c.name );
-	const does = h( 'ul', { class: 'card-does' }, ...showLines( pc, false ).map( ( line ) => h( 'li', null, ...line ) ) );
+	const does = h( 'ul', { class: 'card-does' }, ...K.showSays( G, pc, false ).map( ( line ) => h( 'li', null, line ) ) );
 	el.replaceChildren( ...[ face, name, does ].filter( Boolean ) );
 	requestAnimationFrame( () => cardFit( el ) );
 }
 
-/** A show, closer: its poster big, everything showLines says with every stone, and who played, each a way to them. */
+/** A show, closer: its poster big, everything K.showSays says with every stone, and who played, each a way to them. */
 function showZoom( id ) {
 	const el = $( 'zoom' ), pc = M( id ), m = G.music[ pc.m ], c = K.called( G, pc );
 	zoomFor = 'm' + id;
@@ -4462,7 +4450,7 @@ function showZoom( id ) {
 	const box = h( 'div', { class: 'zoom-box' + ( m.art ? '' : ' nopic' ) }, ...[
 		m.art ? h( 'img', { src: posterOf( m.art, 800 ), alt: c.name } ) : null,
 		h( href ? 'a' : 'b', href ? { class: 'zoom-name', href, target: '_top' } : { class: 'zoom-name' }, c.name ),
-		h( 'ul', { class: 'zoom-does' }, ...showLines( pc, true ).map( ( line ) => h( 'li', null, ...line ) ) ),
+		h( 'ul', { class: 'zoom-does' }, ...K.showSays( G, pc, true ).map( ( line ) => h( 'li', null, line ) ) ),
 		who.length ? h( 'p', { class: 'zoom-page' }, 'On stage: ', ...who.flatMap( ( [ p, role ], i ) => [ i ? ', ' : '',
 			h( 'a', { href: '#', onclick: ( ev ) => {
 				ev.preventDefault();
