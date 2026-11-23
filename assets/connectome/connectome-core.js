@@ -63,7 +63,7 @@ export function build( g ) {
 	const byName = new Map( people.map( ( p ) => [ p.name.toLowerCase(), p.id ] ) );
 	return Object.assign( { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
 		songcast: g.songcast || {}, plays: g.plays || {}, built: g.built || '',
-		pages: g.pages || {}, stones: stonesFrom( g ), stonesRead: g.stones_read || null },
+		pages: g.pages || {}, stones: stonesFrom( g ), stonesRead: g.stones_read || null, authors: g.authors || {} },
 	makers( g, music, byName ), pieces( g, people, music ) );   // pages: a page's own graph's pickers, and no tie
 }
 
@@ -1173,10 +1173,44 @@ export function naming( G, e ) {
 	}
 	const record = [ m.artist, m.title ].filter( Boolean ).join( ' – ' ) + ( m.date ? ` (${ when( m.date ) })` : '' );
 	if ( e.how === TRACK && e.songs.length ) {
-		const more = e.songs.length - 1;
-		return { glyph: 'track', short: e.songs[ 0 ] + ( more ? ` +${ more }` : '' ), brief: e.songs[ 0 ], long: record, songs: e.songs };
+		// A song's pill says who wrote it, where its page says, between its name and its "+n" (Justin, #connectome, 23
+		// Nov 2026, 18:30Z: "Let's show the authors' name in song pills in most situations"); `brief` is the song and
+		// its "+n" alone, for a pill with no room for them.
+		const more = e.songs.length - 1, plus = more ? ` +${ more }` : '', by = authorsOf( G, e.songs[ 0 ] );
+		const who = by === null ? '' : ( by === TRAD ? 'trad.' : by.join( ' & ' ) );
+		// and, where the whole name won't go, the surname: "August · Holmes +7"
+		const sur = by === null ? '' : ( by === TRAD ? 'trad.' : by.map( ( n ) => n.trim().split( /\s+/ ).pop() ).join( ' & ' ) );
+		return { glyph: 'track', short: e.songs[ 0 ] + ( who ? ' · ' + who : '' ) + plus, brief: e.songs[ 0 ] + plus, song: e.songs[ 0 ], plus, by: who, sur,
+			long: record, songs: e.songs };
 	}
 	return { glyph: 'record', short: m.title || m.key, brief: m.title || m.key, long: record, songs: e.songs };
+}
+
+/** What the wiki says of a song that the tradition carries (graph.json `authors`). */
+export const TRAD = 'traditional';
+
+/**
+ * Who wrote a song, as its Song page says (graph.json `authors`, tools/connectome_card.py song_authors): their names
+ * as written, TRAD where the page says it is traditional, or null where the page says neither or there is no page.
+ * The graph's own spelling first, then any spelling that agrees (songKey).
+ */
+export function authorsOf( G, song ) {
+	const all = ( G && G.authors ) || {};
+	let said = Object.prototype.hasOwnProperty.call( all, song ) ? all[ song ] : undefined;
+	if ( said === undefined && song ) {
+		const k = songKey( song ), other = Object.keys( all ).find( ( s ) => songKey( s ) === k );
+		said = other === undefined ? undefined : all[ other ];
+	}
+	if ( said === TRAD ) {
+		return TRAD;
+	}
+	return Array.isArray( said ) && said.length ? said.map( String ) : null;
+}
+
+/** A song's line under its name on a card (Justin, 23 Nov 2026, 18:30Z): "by <author(s)>", or "traditional"; '' where nobody says. */
+export function bySays( G, song ) {
+	const by = authorsOf( G, song );
+	return by === null ? '' : ( by === TRAD ? 'traditional' : 'by ' + ( by.length > 2 ? by.slice( 0, -1 ).join( ', ' ) + ' & ' + by[ by.length - 1 ] : by.join( ' & ' ) ) );
 }
 
 /**

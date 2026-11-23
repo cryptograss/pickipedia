@@ -734,3 +734,39 @@ def test_a_chartifact_belongs_to_the_cut_it_names_or_the_page_s_only_cut():
     two = one.replace("{{Chartifact", "{{Studio cut\n|record=Other\n|cid=QmC\n}}\n{{Chartifact", 1)
     # two cuts on the page: one naming no cut is no cut's
     assert cc.chartifacts_from(two, cc.studio_cuts_from(two)) == {"QmB": [["second B part", "break", "Kyle Tuttle", "5-string banjo"]]}
+
+
+# ---- who wrote a song: its card says "by" them or "traditional" (Justin, #connectome, 23 Nov 2026, 18:30Z) ----
+
+def test_a_songs_authors_are_its_composer_or_the_tradition():
+    assert cc.authors_from('{{Song\n|composer=Justin Holmes\n}}') == ['Justin Holmes']
+    assert cc.authors_from('{{Song\n|status=proposed\n|traditional=yes\n}}') == 'traditional'
+    assert cc.authors_from('{{Song|traditional = Yes}}') == 'traditional'
+    assert cc.authors_from('{{Song\n|composer=Justin Holmes\n|traditional=yes\n}}') == ['Justin Holmes']   # as the template shows it
+    assert cc.authors_from('{{Song\n|status=proposed\n}}') is None                                         # nobody guessed
+    assert cc.authors_from('{{Song\n|traditional=\n}}') is None
+    assert cc.authors_from('Traditional, says the prose. {{Song}}') is None
+
+
+def test_song_authors_are_read_off_every_page_with_a_song_block():
+    class Api(cc.Wiki):
+        def api(self, **q):
+            if q.get('list') == 'embeddedin':
+                assert q['eititle'] == 'Template:Song'
+                return {'query': {'embeddedin': [{'title': 'Song:August'}, {'title': 'Song:Drowsy Maggie'}, {'title': 'Song:Victory'}]}}
+            text = {'Song:August': '{{Song\n|composer=Justin Holmes\n}}', 'Song:Drowsy Maggie': '{{Song\n|traditional=yes\n}}',
+                    'Song:Victory': '{{Song\n|status=proposed\n}}'}
+            return {'query': {'pages': [{'title': t, 'revisions': [{'slots': {'main': {'content': x}}}]} for t, x in text.items()]}}
+
+    assert Api('https://example.test/').song_authors() == {'August': ['Justin Holmes'], 'Drowsy Maggie': 'traditional'}
+
+
+def test_the_graph_carries_the_authors_of_the_songs_it_names():
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:4masks', [('u', '', 'august'), ('u', '', 'barlows-jig')])]
+    whole = {'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []}}
+    wiki = FakeWiki(pages={'Kyle Tuttle', '4masks'}, musicians=['Kyle Tuttle'])
+    wiki.song_authors = lambda: {'August': ['Justin Holmes'], "Barlow's Jig": ['Justin Holmes'], 'Elsewhere': 'traditional'}
+    g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 13), None, whole, [])['graph']
+    named = {s for _, _, ev in g['ties'] for e in ev for s in e[3]}
+    assert named == {'August', 'Barlows Jig'}
+    assert g['authors'] == {'August': ['Justin Holmes'], 'Barlows Jig': ['Justin Holmes']}   # by the graph's own spelling; Elsewhere isn't in it

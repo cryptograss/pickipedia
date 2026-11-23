@@ -263,7 +263,8 @@ test( 'a date is read only where its shape is certain', () => {
 
 test( 'music is named by what a reader would call it', () => {
 	const [ record, show ] = tie( KYLE, JUSTIN ).ev;               // a Permanent studio track comes before a Permanent show
-	assert.deepEqual( K.naming( G, record ), { glyph: 'track', short: 'Silver 44 +1', brief: 'Silver 44', long: '4masks', songs: [ 'Silver 44', 'Victory' ] } );
+	assert.deepEqual( K.naming( G, record ), { glyph: 'track', short: 'Silver 44 +1', brief: 'Silver 44 +1', song: 'Silver 44', plus: ' +1', by: '', sur: '',
+		long: '4masks', songs: [ 'Silver 44', 'Victory' ] } );
 	assert.equal( K.naming( G, show ).short, 'Hello Decentralization · 2021' );     // its title, and its year (a block of March 2021)
 	const tape = K.naming( G, tie( KYLE, MOLLY ).ev[ 0 ] );
 	// a show says its night wherever it's named, so it is never taken for a band (Justin, #connectome, 15 Nov 2026)
@@ -1700,4 +1701,23 @@ test( 'a show\'s pill says the year, never the block, and its band by its leader
 	assert.equal( K.bandShort( 'Justin Holmes and the Immutable String Band' ), 'Justin Holmes' );
 	assert.equal( K.bandShort( 'Bill Monroe & His Blue Grass Boys' ), 'Bill Monroe' );
 	assert.equal( K.bandShort( 'The Travelin\' McCourys' ), 'The Travelin\' McCourys' );
+} );
+
+test( "a song says who wrote it, where its page says: on its pill, and under its name on a card", () => {
+	const G = { authors: { August: [ 'Justin Holmes' ], "Reuben's Train": 'traditional', Both: [ 'A', 'B', 'C' ] } };
+	assert.deepEqual( K.authorsOf( G, 'August' ), [ 'Justin Holmes' ] );
+	assert.equal( K.authorsOf( G, 'Reubens Train' ), K.TRAD );                       // a spelling that agrees
+	assert.equal( K.authorsOf( G, 'Victory' ), null );                               // nobody guessed
+	assert.equal( K.authorsOf( {}, 'August' ), null );
+	assert.equal( K.bySays( G, 'August' ), 'by Justin Holmes' );
+	assert.equal( K.bySays( G, "Reuben's Train" ), 'traditional' );
+	assert.equal( K.bySays( G, 'Both' ), 'by A, B & C' );
+	assert.equal( K.bySays( G, 'Victory' ), '' );
+	const g = K.build( { people: [ [ 'Kyle', 1, '' ], [ 'Maddie', 1, '' ] ], music: [ [ 'arthel:4masks', 'record', '', '', '4masks', 2, '', '', '' ] ],
+		made: [ [] ], cast: [ [] ], ties: [ [ 0, 1, [ [ 0, 3, 1, [ 'August', 'Victory' ] ] ] ] ], authors: G.authors } );
+	const n = K.naming( g, { m: 0, how: K.TRACK, songs: [ 'August', 'Victory' ] } );
+	assert.equal( n.short, 'August · Justin Holmes +1' );
+	assert.equal( n.brief, 'August +1' );
+	assert.equal( K.naming( g, { m: 0, how: K.TRACK, songs: [ "Reuben's Train" ] } ).short, "Reuben's Train · trad." );
+	assert.equal( K.naming( g, { m: 0, how: K.TRACK, songs: [ 'Victory' ] } ).short, 'Victory' );
 } );
