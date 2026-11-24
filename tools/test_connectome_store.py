@@ -248,14 +248,86 @@ def test_an_arthel_poster_is_the_wiki_file_named_for_its_show():
     assert S.arthel_poster("0-1", {}) == ""
 
 
-def _wiki(pages):
-    """A wiki that answers the two questions fetch_releases asks, from {title: text}."""
+def _wiki(pages, people=(), redirects=None):
+    """A wiki that answers the questions fetch_releases asks, from {title: text}: the Release pages, the pages that use
+    {{Show}}, and which names have a person's page (people; redirects: a name -> the page it goes to)."""
+    redirects = redirects or {}
+
     def get(q):
         if q.get("list") == "allpages":
             return {"query": {"allpages": [{"title": t} for t in sorted(pages) if t.startswith("Release:")]}}
+        if q.get("list") == "embeddedin":
+            return {"query": {"embeddedin": [{"title": t} for t in sorted(pages) if "{{Show" in pages[t]]}}
+        if q.get("redirects"):
+            asked = q["titles"].split("|")
+            return {"query": {"redirects": [{"from": n, "to": redirects[n]} for n in asked if n in redirects],
+                              "pages": [{"title": redirects.get(n, n), "ns": 0} if redirects.get(n, n) in people else
+                                        {"title": n, "ns": 0, "missing": True} for n in asked]}}
         return {"query": {"pages": [{"title": t, "revisions": [{"slots": {"main": {"content": pages[t]}}}]}
                                     for t in q["titles"].split("|") if t in pages]}}
     return get
+
+
+# ---- videos and show pages: the wiki's own word on who played together (Justin, #connectome, 24 Nov 2026) ----
+
+def test_a_video_is_read_with_whoever_in_it_has_a_page():
+    pages = {
+        "Release:QmV": "release_type: video\ntitle: Station Inn sit in with\nvenue: Station Inn 12_8_23\nblockheight: 18773279\n"
+                       "performers:\n- Justin Holmes\n- Luke Monday\n- Tristan Scroggins\n",
+        "Release:QmM": "release_type: video\ntitle: A joke\nperformers:\n- Justin Holmes\n- Your mom\n",          # one real name
+        "Release:QmS": "release_type: video\ntitle: Alone\nperformers:\n- Skyler Golden\n",
+        "Release:QmT": "release_type: audio\ntitle: A track\nperformers:\n- Skyler Golden\n- Tristan Scroggins\n",  # not a video
+    }
+    got = S.fetch_releases("https://wiki.example/", get=_wiki(pages, people={"Justin Myles Holmes", "Tristan Scroggins", "Skyler Golden"},
+                                                              redirects={"Justin Holmes": "Justin Myles Holmes"}))
+    assert got == [{"video": "QmV", "title": "Station Inn sit in with", "performers": ["Justin Myles Holmes", "Tristan Scroggins"],
+                    "venue": "Station Inn 12_8_23", "block": "18773279"}]
+
+
+def test_a_show_page_is_read_with_its_ensemble_however_it_is_written():
+    text = """{{Show
+|artists=[[Kyle Tuttle]]
+|venue=[[Dee's Country Cocktail Lounge]]
+|blockheight=26,482,267
+|ensemble=Ann One; Bob Two
+}}
+{{Ensemble
+|Cat Three:fiddle
+|title=Band
+}}
+== Ensemble ==
+* [[Kyle Tuttle]]
+* [[Geoff Saunders|Geoff]]: bass
+* {{Bot_proposes|[[Mary Mair]]: mandolin|by=Magent}}
+
+== When ==
+* [[Not A Picker]]
+"""
+    got = S.show_page("Show:KyleTuttle-26482267", text)
+    assert got == {"show": "Show:KyleTuttle-26482267", "artist": "Kyle Tuttle", "venue": "Dee's Country Cocktail Lounge",
+                   "block": "26482267", "ensemble": {"Ann One": [], "Bob Two": [], "Cat Three": ["fiddle"], "Kyle Tuttle": [],
+                                                     "Geoff Saunders": ["bass"]}}
+    assert S.show_page("Show:Nobody-1", "{{Show|artists=X|venue=Y|blockheight=1}}") is None     # nobody on stage
+    pages = {"Show:KyleTuttle-26482267": text, "User:Someone/Sandbox": "{{Show|artists=Z}}\n{{Ensemble|Zed}}"}
+    got = S.fetch_releases("https://wiki.example/", get=_wiki(pages))
+    assert [r["show"] for r in got] == ["Show:KyleTuttle-26482267"]        # only pages called Show:
+
+
+def test_videos_and_show_pages_put_their_people_on_stage_together():
+    rows = S.from_releases([
+        {"video": "QmV", "title": "Station Inn sit in with", "performers": ["Justin Myles Holmes", "Tristan Scroggins"],
+         "venue": "Station Inn 12_8_23", "block": "18773279"},
+        {"show": "Show:KyleTuttle-26482267", "artist": "Kyle Tuttle", "venue": "Dee's", "block": "26482267",
+         "ensemble": {"Kyle Tuttle": [], "Geoff Saunders": ["bass"]}}])
+    v = [r for r in rows if r["target"]["id"] == "video:QmV"]
+    assert {r["person"] for r in v} == {"Justin Myles Holmes", "Tristan Scroggins"}
+    assert v[0]["target"]["kind"] == "show" and v[0]["target"]["date"] == "block 18773279" and v[0]["scope"] == "show"
+    assert v[0]["source"] == "https://pickipedia.xyz/wiki/Release:QmV"
+    s = [r for r in rows if r["target"]["id"] == "wiki:Show:KyleTuttle-26482267"]
+    assert {r["person"]: r["roles"] for r in s} == {"Kyle Tuttle": [], "Geoff Saunders": ["bass"]}
+    assert s[0]["target"]["artist"] == "Kyle Tuttle" and s[0]["source"] == "https://pickipedia.xyz/wiki/Show:KyleTuttle-26482267"
+    kinds = {(p["a"], p["b"]): p["kind"] for p in S.pairs(rows)}
+    assert kinds == {("Justin Myles Holmes", "Tristan Scroggins"): "show", ("Geoff Saunders", "Kyle Tuttle"): "show"}
 
 
 def test_a_ready_track_is_read_with_its_ensemble_and_its_release_title():
