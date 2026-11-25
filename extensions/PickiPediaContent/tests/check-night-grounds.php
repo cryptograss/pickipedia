@@ -12,6 +12,10 @@
  * before it (15 Nov), and there was no reason to think the next one would be
  * found any sooner.
  *
+ * A stylesheet is not the only place one hides: Special:CreateInvite and its kin write theirs into
+ * an inline <style> from PHP (OutputPage::addInlineStyle), and that was found the same way (Justin,
+ * 25 Nov 2026). Those blocks are read here too.
+ *
  * So: every class given a pale ground by a stylesheet of ours has to be named
  * in night.less, or be on the list below. The list is what was already unanswered
  * when this check was written -- a to-do, not an exemption. Take a name off it
@@ -65,21 +69,35 @@ function lightness( string $hex ): float {
 	return ( 0.2126 * $r + 0.7152 * $g + 0.0722 * $b ) / 255;
 }
 
-/** Every .css under an extension's resources, except night's own and Broadside's. */
+/**
+ * Every bit of CSS of ours: each .css under an extension's resources, and each block of CSS a PHP
+ * file writes into the page itself. Night's own and Broadside's are left out.
+ *
+ * @return array<string,string> what to call it => the CSS
+ */
 function sheets( string $extensions ): array {
 	$found = [];
 	$dir = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $extensions ) );
 	foreach ( $dir as $file ) {
 		$path = $file->getPathname();
-		if ( substr( $path, -4 ) !== '.css' || !str_contains( $path, '/resources/' ) ) {
-			continue;
-		}
 		if ( str_contains( $path, '/night/' ) || str_contains( $path, '/skins.broadside/' ) ) {
 			continue;
 		}
-		$found[] = $path;
+		if ( substr( $path, -4 ) === '.css' && str_contains( $path, '/resources/' ) ) {
+			$found[ basename( $path ) ] = file_get_contents( $path );
+			continue;
+		}
+		if ( substr( $path, -4 ) !== '.php' ) {
+			continue;
+		}
+		// addInlineStyle( '...' ): CSS written straight into the page, held in no stylesheet.
+		$php = file_get_contents( $path );
+		if ( !preg_match_all( "/addInlineStyle\(\s*'([^']*)'/s", $php, $blocks ) ) {
+			continue;
+		}
+		$found[ basename( $path ) . ' (inline)' ] = implode( "\n", $blocks[1] );
 	}
-	sort( $found );
+	ksort( $found );
 	return $found;
 }
 
@@ -87,8 +105,8 @@ $night = preg_replace( '#/\*.*?\*/#s', '', file_get_contents( "$root/resources/n
 
 $failures = [];
 $pale = 0;
-foreach ( sheets( $extensions ) as $path ) {
-	$css = preg_replace( '#/\*.*?\*/#s', '', file_get_contents( $path ) );
+foreach ( sheets( $extensions ) as $name => $source ) {
+	$css = preg_replace( '#/\*.*?\*/#s', '', $source );
 	if ( !preg_match_all( '/([^{}]+)\{([^}]*)\}/', $css, $rules, PREG_SET_ORDER ) ) {
 		continue;
 	}
@@ -116,7 +134,6 @@ foreach ( sheets( $extensions ) as $path ) {
 			if ( in_array( $classes[1][0], $known, true ) ) {
 				continue;
 			}
-			$name = basename( $path );
 			$failures[] = "  $name: $selector is {$hex[0]} by day, and night says nothing about it";
 		}
 	}
