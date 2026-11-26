@@ -135,7 +135,24 @@
 		color: var( --night-ink );
 	}
 	.toctitle, .toctogglespan, .tocnumber { color: var( --night-soft ); }
-	.suggestions-result-current { background: var( --night-wash ); color: var( --night-ink ); }
+	/* What the search box offers as you type (MonoBook's sidebar, and anywhere else the box is). The
+	   list below it went dark with the boxes above, but every word in it is core's black, said in two
+	   places: each line (jquery.suggestions.less) and the link inside it, four times over
+	   (mediawiki.searchSuggest). Black on night's panel, about 1.2:1 (Justin, 26 Nov 2026). */
+	.suggestions-result,
+	.suggestions .special-query,
+	.suggestions a.mw-searchSuggest-link,
+	.suggestions a.mw-searchSuggest-link:hover,
+	.suggestions a.mw-searchSuggest-link:active,
+	.suggestions a.mw-searchSuggest-link:focus { color: var( --night-ink ); }
+	.suggestions .special-label { color: var( --night-muted ); }
+	/* The line under the pointer or the arrow keys. Day's deep blue is dark enough that night's ink
+	   would be read on it, but it sits oddly on the dark; night's own line does the same work. */
+	.suggestions-result-current { background: var( --night-line ); color: var( --night-ink ); }
+	.suggestions-result-current a.mw-searchSuggest-link,
+	.suggestions-result-current .special-label,
+	.suggestions-result-current .special-query { color: var( --night-ink ); }
+	.suggestions .special-hover { background-color: var( --night-wash ); }
 
 	table.wikitable,
 	table.wikitable > * > tr > td,
