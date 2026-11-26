@@ -67,6 +67,12 @@ jobs:
             count=$((count + 1))
           done < <(find . -name '*.js' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*')
           echo "$count JavaScript files OK"
+      - name: Run the JavaScript tests
+        # tools/test_connectome_core.mjs has been in the repository since the
+        # big graph was written and had never been run by anything here: a
+        # suite nothing runs is a suite that rots. Every tools/test_*.mjs runs
+        # now, so adding one is enough to have it checked on every push.
+        run: node --test tools/test_*.mjs
       - name: Check every JSON file parses
         # extension.json decides whether an extension loads at all; a stray
         # comma there takes the wiki down rather than degrading it.
