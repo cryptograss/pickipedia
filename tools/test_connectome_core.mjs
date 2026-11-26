@@ -1721,3 +1721,17 @@ test( "a song says who wrote it, where its page says: on its pill, and under its
 	assert.equal( K.naming( g, { m: 0, how: K.TRACK, songs: [ "Reuben's Train" ] } ).short, "Reuben's Train · trad." );
 	assert.equal( K.naming( g, { m: 0, how: K.TRACK, songs: [ 'Victory' ] } ).short, 'Victory' );
 } );
+
+test( "a show's acts: the main one first, each with its pickers and its leader where its name names one", () => {
+	const G = K.build( { people: [ [ 'Kyle Tuttle', 1, '' ], [ 'Sam Leslie', 1, '' ], [ 'Alexa Toro', 1, '' ] ],
+		music: [ [ 'wiki:Show:K', 'show', 'Kyle Tuttle', 'block 26482267', 'Show:K', 0, '', '', '' ] ], made: [ [] ], cast: [ [ [ 0, '' ], [ 1, 'bass' ] ] ],
+		ties: [ [ 0, 1, [ [ 0, 2, 1, [] ] ] ] ], acts: { 0: [ [ 'Kyle Tuttle', [ 0, 1 ], 0 ], [ 'Light the Wire', [ 2 ], -1 ] ] },
+		wikipages: { "Dee's Country Cocktail Lounge": "/wiki/Dee%27s_Country_Cocktail_Lounge" } } );
+	assert.deepEqual( K.actsOf( G, 0 ), [ { title: 'Kyle Tuttle', members: [ 0, 1 ], lead: 0, main: true },
+		{ title: 'Light the Wire', members: [ 2 ], lead: null, main: false } ] );
+	assert.deepEqual( K.actsOf( G, 5 ), [] );
+	assert.equal( G.wikipages[ "Dee's Country Cocktail Lounge" ], '/wiki/Dee%27s_Country_Cocktail_Lounge' );
+	assert.equal( K.actRest( 'Justin Holmes and the Immutable String Band', 'Justin Myles Holmes' ), 'and the Immutable String Band' );
+	assert.equal( K.actRest( 'Kyle Tuttle', 'Kyle Tuttle' ), '' );
+	assert.equal( K.actRest( 'BKH & JC', '' ), '' );
+} );
