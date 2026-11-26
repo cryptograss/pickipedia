@@ -35,8 +35,6 @@ $known = [
 	'btn-revert',
 	'btn-toggle-mode',
 	'btn-undo',
-	'cc-bar',
-	'cc-full',
 	'current-time-display',
 	'editor-panel',
 	'keyboard-help',

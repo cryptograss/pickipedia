@@ -480,7 +480,8 @@ def test_build_builds_a_song_card_for_a_song_page_and_names_it_like_the_wiki_doe
     assert 'August' in card
     # the CID goes in the links (data-cut, the explore href, the paper, the centre's link, the play chip), not the text
     assert card.count('QmSongCid') == 5 and card.count('href="/rabbithole/?track=QmSongCid"') == 1
-    assert '?cut=QmSongCid' in card                                          # the explore link opens this cut's graph
+    assert '"/bacon?s=August&amp;cut=QmSongCid"' in card                      # the explore link opens this cut's graph,
+    assert '?cut=' not in card                                               # written as /bacon's own address writes it
     assert 'Justin Myles Holmes' in card and 'guitar; vocals' in card
     cc.write(result, str(tmp_path), {})
     want = hashlib.md5('Song:August'.encode()).hexdigest() + '.html'

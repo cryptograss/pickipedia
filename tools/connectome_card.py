@@ -721,10 +721,10 @@ def card(center, store, has_page, inst, named=None, made=None, wrote=None):
         return ev[0]['text'] + more
 
     def focus(n):
-        """Click: the big graph, lit on this connection, or on the path when it's two hops."""
-        if n in nb:
-            return attr(viewer(a=center, b=n))
-        return attr(viewer(**{'from': center, 'to': n}))
+        """Click: the big graph, lit on this connection, or on the path when it's two hops. Written as /bacon writes
+        it in the address bar once it is there (?a=&b=, which it reads ?from=&to= as too), so a card's way in is the
+        same address as the graph's own (Justin, #connectome, 26 Nov 2026, 02:15Z: "Same URLs too")."""
+        return attr(viewer(a=center, b=n))
 
     def dot(n, r):
         x, y = pos[n]
@@ -883,7 +883,9 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
     o(f'<svg xmlns="http://www.w3.org/2000/svg" class="cc" viewBox="{x0:.0f} {y0:.0f} {x1 - x0:.0f} {y1 - y0:.0f}" '
       f'width="100%" font-family="Georgia, serif" font-size="{FS:g}" role="img" '
       f'aria-label="{attr("Who played " + title)}">')
-    whole = viewer(cut=cut["key"]) if cut.get("key") else viewer(s=title)
+    # the cut's graph, as /bacon writes it in the address bar: its song, then its cut (?s=&cut=), not the cut alone,
+    # which the graph would rewrite (Justin, #connectome, 26 Nov 2026, 02:15Z: "Same URLs too")
+    whole = viewer(s=title, cut=cut["key"]) if cut.get("key") else viewer(s=title)
     o(f'<a class="cc-bg" href="{attr(whole)}" aria-label="{attr("Explore " + title + " in the connectome")}">'    # the paper is a way in, too
       f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/></a>')
     for _, _, html, _, _ in edges:
@@ -904,7 +906,7 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
           f'text-anchor="middle" fill="{INK}" font-weight="bold">{escape(n)}</text>'
           + (f'<text class="cc-lab" x="{x_lab:.1f}" y="{ry:.1f}" text-anchor="middle" fill="{INK2}" '
              f'font-size="0.62em">{escape(roles[n])}</text>' if roles[n] else '') + '</a>')
-    o(f'<a href="{attr(viewer(cut=cut["key"]) if cut.get("key") else viewer(s=title))}"><g transform="translate({C[0]:.0f} {C[1]:.0f})">{NOTE}</g>'
+    o(f'<a href="{attr(whole)}"><g transform="translate({C[0]:.0f} {C[1]:.0f})">{NOTE}</g>'
       f'<text class="cc-lab" x="{C[0]:.0f}" y="266" text-anchor="middle" fill="{INK}" font-weight="bold" '
       f'font-size="1.25em" stroke-width="5px">{escape(title)}</text></a>')
     if play:
@@ -937,7 +939,7 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
     took = ', recorded ' + escape(cut['recorded']) if cut.get('recorded') else ''
     playnote = ' The ▶ opens it in Rabbithole.' if play else ''
     return (f'<div class="connectome-card" data-song="{attr(title)}" data-cut="{attr(cut.get("key", ""))}">'
-            f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(viewer(cut=cut["key"]) if cut.get("key") else viewer(s=title))}">⤢ explore</a></div>'
+            f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(whole)}">⤢ explore</a></div>'
             + ''.join(out) + legend +
             f'<div class="cc-foot">On {record}{which}{took}.{playnote}</div></div>')
 
