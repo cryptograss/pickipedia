@@ -305,9 +305,10 @@ def test_a_show_page_is_read_with_its_ensemble_however_it_is_written():
 """
     got = S.show_page("Show:KyleTuttle-26482267", text)
     assert got == {"show": "Show:KyleTuttle-26482267", "artist": "Kyle Tuttle", "venue": "Dee's Country Cocktail Lounge",
-                   "block": "26482267", "ensemble": {"Ann One": [], "Bob Two": [], "Cat Three": ["fiddle"], "Kyle Tuttle": [],
+                   "block": "26482267", "poster": "", "ensemble": {"Ann One": [], "Bob Two": [], "Cat Three": ["fiddle"], "Kyle Tuttle": [],
                                                      "Geoff Saunders": ["bass"]}}
     assert S.show_page("Show:Nobody-1", "{{Show|artists=X|venue=Y|blockheight=1}}") is None     # nobody on stage
+    assert S.show_page("Show:A-1", "{{Show|artists=X|official_poster=File:Dees.jpg}}\n{{Ensemble|Ann}}")["poster"] == "Dees.jpg"
     pages = {"Show:KyleTuttle-26482267": text, "User:Someone/Sandbox": "{{Show|artists=Z}}\n{{Ensemble|Zed}}"}
     got = S.fetch_releases("https://wiki.example/", get=_wiki(pages))
     assert [r["show"] for r in got] == ["Show:KyleTuttle-26482267"]        # only pages called Show:

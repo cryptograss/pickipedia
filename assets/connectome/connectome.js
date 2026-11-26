@@ -289,7 +289,7 @@ function tellAt( step ) {
 
 function rawAddress( v ) {
 	// the middle's card: asked for by a click on the middle; a soloist's view (playing) has it unless it was put away
-	const card = v.way || v.walk ? '' : ( v.playing !== undefined ? ( v.card === false ? '&card=0' : '' ) : ( v.card ? '&card=1' : '' ) );
+	const card = v.way || v.walk ? '' : ( cardFirst( v ) ? ( v.card === false ? '&card=0' : '' ) : ( v.card ? '&card=1' : '' ) );
 	return rawAddress0( v ) + card;
 }
 
@@ -345,7 +345,7 @@ function parse( q ) {
 	const v = parse0( q );
 	if ( v && q.get( 'card' ) === '1' && cardable( v ) ) {
 		v.card = true;
-	} else if ( v && q.get( 'card' ) === '0' && v.playing !== undefined ) {
+	} else if ( v && q.get( 'card' ) === '0' && cardFirst( v ) ) {
 		v.card = false;
 	}
 	return v;
@@ -358,9 +358,12 @@ const showView = ( v ) => v.m !== undefined && !!M( v.m ) && M( v.m ).kind === '
 const cardable = ( v ) => !!v && !v.walk && !v.way && v.pg === undefined && ( v.m === undefined || showView( v ) ) && v.b === undefined &&
 	( v.cut !== undefined || v.a !== undefined || v.m !== undefined );
 /** Is the middle's card out? Asked for; or the view is a soloist's, the music's own, and nobody put it away. */
-const cardOn = ( v ) => cardable( v ) && ( v.playing !== undefined ? v.card !== false : !!v.card );
+// Out from the start: the soloist's, while the music steers; and a show's that has a picture of its own, so the picture is
+// seen (Justin, #connectome, 26 Nov 2026: "if there's a photo of the show, it makes sense to show that").
+const cardFirst = ( v ) => v.playing !== undefined || ( showView( v ) && !!G.music[ M( v.m ).m ].art );
+const cardOn = ( v ) => cardable( v ) && ( cardFirst( v ) ? v.card !== false : !!v.card );
 /** Out, or away again: a step of its own, so Back puts it as it was. */
-const cardTurn = () => go( Object.assign( {}, view, { card: cardOn( view ) ? ( view.playing !== undefined ? false : undefined ) : true } ) );
+const cardTurn = () => go( Object.assign( {}, view, { card: cardOn( view ) ? ( cardFirst( view ) ? false : undefined ) : true } ) );
 
 function parse0( q ) {
 	if ( q.has( 'walk' ) ) {
@@ -2394,7 +2397,73 @@ function pieceLabel( id, pos, W, own ) {
 	return { label: name.label, dx: name.dx, sub: sub ? sub.label : '', sdx: sub ? sub.dx : 0, play };
 }
 
+/**
+ * Who a show is billed to, of those on its stage: its band's leader, or its artist (Justin, #connectome, 26 Nov 2026:
+ * "A show usually has the central performer - either a band, a solo artist, an artist with a rotating/pickup band, an
+ * artist with a regular band"). The cast member the billing names, whole ("Kyle Tuttle"), else by first and last name
+ * ("Justin Holmes and The Immutable String Band" is Justin Myles Holmes). null where the billing names none of them.
+ */
+function headliner( m, cast ) {
+	const bill = String( m.artist || '' ).toLowerCase(), lead = K.bandShort( m.artist || '' ).toLowerCase();
+	if ( !bill ) {
+		return null;
+	}
+	const ends = ( n ) => {
+		const w = n.toLowerCase().split( /\s+/ );
+		return w[ 0 ] + ' ' + w[ w.length - 1 ];
+	};
+	return cast.find( ( id ) => P( id ).name.toLowerCase() === lead ) ?? cast.find( ( id ) => bill.includes( P( id ).name.toLowerCase() ) ) ??
+		cast.find( ( id ) => ends( P( id ).name ) === ends( lead ) ) ?? null;
+}
+
+/*
+ * A show in the middle (Justin, #connectome, 26 Nov 2026, 01:46Z): the show, with who it is billed to inside it; its
+ * photo where it has one; and round it only who was on its stage, each with what they played where the source says,
+ * "and not other connections (because it can be deceiving at first blush, as it looks like the 2-hop people played at
+ * the show)". A picker round it goes to them, as anywhere.
+ */
+/** Under the one a show is billed to: the night's own name or its place, and its year, without their name again. */
+function showUnder( mi, who ) {
+	const n = K.naming( G, { m: mi, how: K.STAGE, songs: [] } );
+	return K.clip( [ n.who !== who && n.who !== n.band ? n.who : '', n.year ].filter( Boolean ).join( ' · ' ), 48 );
+}
+
+function showScene( v ) {
+	const { W, H } = frame();
+	const sc = newScene();
+	const me = M( v.m ), nm = K.called( G, me ), m = G.music[ me.m ];
+	const roles = new Map( ( m.cast || [] ).map( ( c ) => [ c[ 0 ], c[ 1 ] || '' ] ) );
+	const cast = me.cast.filter( ( id ) => id >= 0 && id < G.people.length );
+	const host = headliner( m, cast );
+	const ring = cast.filter( ( id ) => id !== host ).sort( ( a, b ) => first( a ).localeCompare( first( b ) ) );
+	const carded = cardOn( v );
+	const lay = ringFor( { W, H, named: Math.min( ring.length, 12 ) + ( carded && ring.length > 1 ? 1 : 0 ), dots: 0 }, carded );
+	const mine = ring.slice( 0, lay.named.length );
+	const pan = slide( 'm' + v.m, lay.C );
+	const seats = K.seat( lay.named, mine.map( ( id ) => wanted( 'm' + v.m + '·' + id, pan ) ) );
+	const seatOf = new Map( mine.map( ( id, i ) => [ id, lay.named[ seats[ i ] ] ] ) );
+	const own = pieceLabel( v.m, { x: lay.C.x, y: lay.C.y }, W, true );
+	const who = host !== null ? first( host ) : '';
+	addPiece( sc, v.m, lay.C, 'subject', Object.assign( { below: true, host, big: true }, own,
+		who ? { label: nameAt( who, lay.C, W, FONT.own ).label, sub: showUnder( me.m, who ) } : {} ) );
+	for ( const id of mine ) {
+		sc.lines.set( 'sp' + id, { a: 'q' + v.m, b: 'p' + id, u: -1, v: id, tie: { played: true, tier: m.tier, w: 0.35 },
+			stands: 'tie', w: lineWidth( { w: 0.35 } ), o: 0.95, role: 'spoke', c: id, quiet: true, delay: 120 } );
+		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { delay: 180 },
+			playsAs( first( id ), roles.get( id ) || '', seatOf.get( id ), W, FONT.named ) ) );
+	}
+	sc.web = false;
+	const band = nm.name + ( nm.sub ? ' · ' + nm.sub : '' );
+	sc.head = [ h( 'span', { class: 'kind' }, glyphBox( nm.glyph ) ), band ];
+	sc.sub = [ 'A show · ', h( 'b', null, K.plural( cast.length, 'picker' ) ), ' on its stage',
+		host !== null ? [ ', billed to ', h( 'b', null, first( host ) ) ] : '', ring.length > mine.length ? ` (${ mine.length } of them drawn)` : '' ].flat();
+	return sc;
+}
+
 function pieceScene( v ) {
+	if ( showView( v ) ) {
+		return showScene( v );
+	}
 	const { W, H } = frame();
 	const sc = newScene();
 	const me = M( v.m ), nm = K.called( G, me );
@@ -2754,6 +2823,23 @@ function watchClose() {
 
 const noCover = new Set();                                         // pictures that wouldn't load: not asked for again
 
+/** A picker's face in a circle of radius r at (x, y), with its own rim; false where they have none. */
+function faceIn( g, p, x, y, r, again ) {
+	if ( !p.img ) {
+		return false;
+	}
+	const img = s( 'image', { class: 'face', href: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=' + Math.round( 4 * r ),
+		x: x - r, y: y - r, width: 2 * r, height: 2 * r, preserveAspectRatio: 'xMidYMid slice', 'clip-path': `circle(${ r }px at ${ r }px ${ r }px)`, 'aria-hidden': 'true' } );
+	img.addEventListener( 'error', () => {
+		p.img = '';
+		again();
+	} );
+	g.appendChild( s( 'circle', { class: 'ring', cx: x, cy: y, r } ) );
+	g.appendChild( img );
+	g.appendChild( s( 'circle', { class: 'ring rim', cx: x, cy: y, r } ) );
+	return true;
+}
+
 /**
  * A record's own art inside its ring, where its Record page names one (Justin, #connectome, 15 Nov 2026: "where
  * there is an image, let's use that"), and a show's poster (22 Nov 2026); the ring stays over it, so the colour still says how free it is. Returns
@@ -2846,13 +2932,24 @@ function drawPiece( g, d ) {
 		}
 		return;
 	}
-	const R = d.kind === 'subject' ? 24 : 15;
+	const R = d.big ? 44 : ( d.kind === 'subject' ? 24 : 15 );
 	const gl = glyph( c.glyph );
 	gl.setAttribute( 'transform', `scale(${ d.kind === 'subject' ? 1.9 : 1.25 })` );
 	g.appendChild( s( 'circle', { class: 'halo', r: R + 8 } ) );
 	g.appendChild( s( 'circle', { class: 'ring', r: R } ) );
-	if ( !cover( g, G.music[ pc.m ].art, R, () => drawPiece( g, d ) ) ) {
+	// A show in the middle holds who it is billed to (showScene): their face filling it, or, where the show has its own
+	// picture, the picture, and their face set into its rim.
+	const hostP = d.host !== undefined && d.host !== null ? P( d.host ) : null;
+	const art = G.music[ pc.m ].art && !noCover.has( G.music[ pc.m ].art );
+	if ( hostP && !art ) {
+		if ( !faceIn( g, hostP, 0, 0, R, () => drawPiece( g, d ) ) ) {
+			g.appendChild( gl );
+		}
+	} else if ( !cover( g, G.music[ pc.m ].art, R, () => drawPiece( g, d ) ) ) {
 		g.appendChild( gl );
+	}
+	if ( hostP && art ) {
+		faceIn( g, hostP, R * 0.72, R * 0.72, R * 0.42, () => drawPiece( g, d ) );
 	}
 	const cg = gems( d.piece, R * 0.75, -R - 6, d.kind === 'subject' ? 1 : 0.75 );   // on the circle's upper right
 	if ( cg ) {
@@ -2866,7 +2963,8 @@ function drawPiece( g, d ) {
 		return;
 	}
 	const y = d.below ? R + 17 + down( d.kind === 'subject' ? 17 : 13 ) : ( d.sub ? -R - 7 - tx( 14 ) : -R - 8 );
-	const name = s( 'a', { href: address( { m: d.piece } ), 'aria-label': 'Go to ' + c.name }, s( 'text', { x: d.dx || 0, y, 'text-anchor': 'middle' }, d.label ) );
+	const name = s( 'a', hostP ? { href: address( { a: d.host } ), 'aria-label': 'Go to ' + hostP.name } : { href: address( { m: d.piece } ), 'aria-label': 'Go to ' + c.name },
+		s( 'text', { x: d.dx || 0, y, 'text-anchor': 'middle' }, d.label ) );
 	if ( d.sub ) {
 		name.appendChild( s( 'text', { class: 'sub', x: d.sdx || 0, y: y + tx( 14 ), 'text-anchor': 'middle' }, d.sub ) );
 	}

@@ -343,6 +343,8 @@ def show_page(title, text):
     block = re.sub(r"[^\d]", "", params.get("blockheight", ""))
     return {"show": title, "artist": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("artists", "")),
             "venue": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("venue", "")), "block": block,
+            # its picture, a file on the wiki (Template:Show: official_poster, or the older image)
+            "poster": re.sub(r"^(?:File|Image):", "", params.get("official_poster") or params.get("image") or "").strip(),
             "ensemble": ens}
 
 
@@ -370,7 +372,8 @@ def from_releases(releases, arthel=None):
             # a show page: the night it names, `wiki:<page>`, its ensemble on stage
             target = {"kind": "show", "id": "wiki:" + rel["show"], "title": rel["show"],
                       "date": "block " + rel["block"] if rel.get("block") else "", "artist": rel.get("artist") or "",
-                      "group": "wiki:" + rel["show"], "venue": rel.get("venue") or "", "city": ""}
+                      "group": "wiki:" + rel["show"], "venue": rel.get("venue") or "", "city": "",
+                      "poster": rel.get("poster") or ""}
             for name, roles in rel["ensemble"].items():
                 rows.append(credit(name, roles, target, "show", [], WIKI_PAGE + rel["show"].replace(" ", "_"),
                                    "pickipedia", "connectome_store.from_releases"))
