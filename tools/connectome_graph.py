@@ -65,7 +65,9 @@ from collections import defaultdict
 PERMANENT = ('arthel:',)
 # A track of our own off the wiki (connectome_store.from_releases): there for the taking by torrent and IPFS, with no
 # DRM, so a Full Release at least. Nothing on the page says its licence, so not Permanent until one does.
-RELEASE = ('release:',)
+# A video off the wiki is the same (Justin, #connectome, 24 Nov 2026, 19:27Z: "videos can be a source just like audio
+# recordings"): its Release is there by torrent and IPFS.
+RELEASE = ('release:', 'video:')
 ETREE = 'archive.org collection: etree'
 HOW = {'track': 3, 'show': 2, 'record': 1}
 ON_STAGE = {'song', 'song?', 'show', 'stage', 'track', 'release'}   # a credit that puts the picker in the music
@@ -133,7 +135,8 @@ def show_place(target_id, d):
     if d.get('kind') != 'show':
         return None
     title = (d.get('title') or '').strip()
-    own = title and not target_id.startswith('lma:') and title != target_id.rsplit(':', 1)[-1]
+    # a show page's title is the page's ("Show:KyleTuttle-26482267"), no more its own name than a tape's sentence
+    own = title and not target_id.startswith(('lma:', 'wiki:')) and title != target_id.rsplit(':', 1)[-1]
     place = [title if own else '', d.get('venue') or '', d.get('city') or '']
     return place if any(place) else None
 

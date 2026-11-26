@@ -196,11 +196,14 @@ def tape_poster(item):
 # changes (the file is in the stage's KEY). A track arthel already holds as a studio cut (August, Paint Exchange:
 # a song of that name in songs_and_tunes) is left to arthel, or the graph would have it twice.
 RELEASE_PAGE = "https://pickipedia.xyz/wiki/Release:"
+WIKI_PAGE = "https://pickipedia.xyz/wiki/"
 READY = "production"
 
 
 def fetch_releases(wiki, get=None):
-    """Every Release whose /Metadata says `state: production`: [{cid, title, ensemble}], by cid."""
+    """What the wiki itself says was played, for the store: every Release whose /Metadata says `state: production`
+    ({cid, title, ensemble}); every video Release that names two or more performers ({video: cid, title, performers,
+    venue, block}); and every Show: page ({show: title, artist, venue, block, ensemble}). By cid, then by title."""
     import yaml
     get = get or (lambda q: json.load(urllib.request.urlopen(urllib.request.Request(
         wiki.rstrip("/") + "/api.php?" + urllib.parse.urlencode(dict(q, format="json", formatversion=2)),
@@ -240,7 +243,109 @@ def fetch_releases(wiki, get=None):
         out.append({"cid": cid, "title": title if "/" not in title else "",
                     "ensemble": {str(n): [str(x) for x in (r if isinstance(r, list) else [r]) if x]
                                  for n, r in ens.items()}})
+    # A video is a source like a recording (Justin, #connectome, 24 Nov 2026, 19:27Z: "videos can be a source just
+    # like audio recordings. They aren't a specific _type_ of source ... the video is either (or both) evidence that
+    # such a thing occurred, or its intended outcome"). Its Release says who is in it (`performers`, as uploaded);
+    # one with fewer than two ties nobody to anybody.
+    for t in sorted(texts):
+        if "/" in t:
+            continue
+        rel = yml(texts[t])
+        who = rel.get("performers") if isinstance(rel.get("performers"), list) else []
+        who = list(dict.fromkeys(said(n) for n in who if said(n)))
+        if str(rel.get("release_type") or "").lower() != "video" or len(who) < 2:
+            continue
+        block = str(rel.get("blockheight") or "").strip()
+        out.append({"video": t[len("Release:"):], "title": said(rel.get("title")), "performers": who,
+                    "venue": said(rel.get("venue")), "block": block if block.isdigit() else ""})
+    # Who's in a video is typed in at upload ("Your mom", "skylergolden.eth"): a name stands only where the wiki has a
+    # page for it, and as the page is called ("Justin Holmes" is Justin Myles Holmes). Two or more, or none.
+    pages = person_pages(get, {n for v in out if v.get("video") for n in v["performers"]})
+    for v in [v for v in out if v.get("video")]:
+        v["performers"] = list(dict.fromkeys(pages[n] for n in v["performers"] if n in pages))
+    out = [v for v in out if not v.get("video") or len(v["performers"]) >= 2]
+    out += fetch_show_pages(get)
     return out
+
+
+def person_pages(get, names):
+    """name -> the wiki page it is, redirects followed, for the names that have one."""
+    names, found = sorted(n for n in names if n and not re.search(r"[\[\]{}|#<>]", n)), {}
+    for i in range(0, len(names), 50):
+        r = get({"action": "query", "titles": "|".join(names[i:i + 50]), "redirects": 1})
+        q = r.get("query", {})
+        to = {x["from"]: x["to"] for x in q.get("normalized", [])}
+        hop = {x["from"]: x["to"] for x in q.get("redirects", [])}
+        real = {p["title"] for p in q.get("pages", []) if not p.get("missing") and not p.get("invalid") and p.get("ns", 0) == 0}
+        for n in names[i:i + 50]:
+            t = to.get(n, n)
+            t = hop.get(t, t)
+            if t in real:
+                found[n] = t
+    return found
+
+
+def fetch_show_pages(get):
+    """The wiki's own show pages, {{Show}} on a page called "Show:...": who was on stage, as its {{Show|ensemble=}},
+    its {{Ensemble}} or its "== Ensemble ==" list of links say (Justin, #connectome, 24 Nov 2026, 19:27Z: "Last night
+    at Dee's was Kyle Tuttle, Geoff Saunders, Dominick Leslie, and Sam Leslie. We need a show page for that")."""
+    titles, cont = [], {}
+    while True:
+        r = get(dict({"action": "query", "list": "embeddedin", "eititle": "Template:Show", "eilimit": 500,
+                      "eifilterredir": "nonredirects"}, **cont))
+        titles += [p["title"] for p in r["query"]["embeddedin"] if re.match(r"Show:\s*\S", p["title"])]
+        if "continue" not in r:
+            break
+        cont = r["continue"]
+    out = []
+    for i in range(0, len(titles), 50):
+        r = get({"action": "query", "titles": "|".join(titles[i:i + 50]), "prop": "revisions", "rvprop": "content",
+                 "rvslots": "main"})
+        for p in r["query"]["pages"]:
+            if p.get("revisions"):
+                show = show_page(p["title"], p["revisions"][0]["slots"]["main"]["content"])
+                if show:
+                    out.append(show)
+    return sorted(out, key=lambda s: s["show"])
+
+
+def show_page(title, text):
+    """One Show: page's {show, artist, venue, block, ensemble: {name: [instruments]}}; None with nobody on stage."""
+    m = re.search(r"\{\{\s*Show\s*\|(.*?)\}\}", text, re.S)
+    params = {}
+    for part in (m.group(1).split("|") if m else []):
+        k, eq, v = part.partition("=")
+        if eq:
+            params[k.strip().lower()] = v.strip()
+    ens = {}
+
+    def add(entry):
+        entry = re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", entry).strip()
+        name, _, inst = entry.partition(":")
+        name = name.strip()
+        if name and not re.search(r"[{}<>=]", name):
+            ens.setdefault(name, [])
+            if inst.strip() and inst.strip() not in ens[name]:
+                ens[name].append(inst.strip())
+    for entry in (params.get("ensemble") or "").split(";"):
+        add(entry)
+    for e in re.finditer(r"\{\{\s*Ensemble\s*((?:\|[^{}]*)*)\}\}", text):
+        for entry in e.group(1).split("|"):
+            if "=" not in entry:
+                add(entry)
+    sec = re.search(r"^==\s*Ensemble\s*==\s*$(.*?)(?=^==|\Z)", text, re.M | re.S)
+    for line in (sec.group(1).splitlines() if sec else []):
+        link = re.match(r"\*\s*\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]\s*(?:[(:–-]\s*([^)\n]*))?", line.strip())
+        if link:
+            add(link.group(1) + (":" + link.group(2) if link.group(2) else ""))
+    if not ens:
+        return None
+    block = re.sub(r"[^\d]", "", params.get("blockheight", ""))
+    return {"show": title, "artist": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("artists", "")),
+            "venue": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("venue", "")), "block": block,
+            # its picture, a file on the wiki (Template:Show: official_poster, or the older image)
+            "poster": re.sub(r"^(?:File|Image):", "", params.get("official_poster") or params.get("image") or "").strip(),
+            "ensemble": ens}
 
 
 def from_releases(releases, arthel=None):
@@ -254,6 +359,25 @@ def from_releases(releases, arthel=None):
             held.add(sideman.normalize_title(str(data.get("title") or os.path.basename(fn)[:-5])))
     rows = []
     for rel in releases:
+        if rel.get("video"):
+            # a video: a night of its own on the graph, `video:<cid>`, everyone in it on stage together
+            target = {"kind": "show", "id": "video:" + rel["video"], "title": rel.get("title") or "a video",
+                      "date": "block " + rel["block"] if rel.get("block") else "", "artist": "",
+                      "group": "video:" + rel["video"], "venue": rel.get("venue") or "", "city": ""}
+            for name in rel["performers"]:
+                rows.append(credit(name, [], target, "show", [], RELEASE_PAGE + rel["video"], "pickipedia",
+                                   "connectome_store.from_releases"))
+            continue
+        if rel.get("show"):
+            # a show page: the night it names, `wiki:<page>`, its ensemble on stage
+            target = {"kind": "show", "id": "wiki:" + rel["show"], "title": rel["show"],
+                      "date": "block " + rel["block"] if rel.get("block") else "", "artist": rel.get("artist") or "",
+                      "group": "wiki:" + rel["show"], "venue": rel.get("venue") or "", "city": "",
+                      "poster": rel.get("poster") or ""}
+            for name, roles in rel["ensemble"].items():
+                rows.append(credit(name, roles, target, "show", [], WIKI_PAGE + rel["show"].replace(" ", "_"),
+                                   "pickipedia", "connectome_store.from_releases"))
+            continue
         title = rel.get("title") or ""
         if not title or not rel.get("ensemble") or sideman.normalize_title(title) in held:
             continue
@@ -523,7 +647,12 @@ def main(argv):
         with open(args.out + ".part", "w") as out:
             json.dump(rels, out, ensure_ascii=False, sort_keys=True, indent=1)
         os.replace(args.out + ".part", args.out)
-        print(f"{len(rels)} tracks ready: " + "; ".join(r["title"] or r["cid"] for r in rels))
+        tracks = [r for r in rels if r.get("cid")]
+        videos = [r for r in rels if r.get("video")]
+        shows = [r for r in rels if r.get("show")]
+        print(f"{len(tracks)} tracks ready: " + "; ".join(r["title"] or r["cid"] for r in tracks))
+        print(f"{len(videos)} videos of two or more: " + "; ".join(r["title"] or r["video"] for r in videos))
+        print(f"{len(shows)} show pages: " + "; ".join(r["show"] for r in shows))
     elif args.cmd == "pairs":
         rows = [json.loads(l) for l in open(args.credits)]
         ps = pairs(rows)
