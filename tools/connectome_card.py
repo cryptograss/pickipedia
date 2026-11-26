@@ -1136,10 +1136,12 @@ def load_whole(db_path):
     formats = 'formats' if 'formats' in cols else "''"      # a store built before records kept their formats
     venue, city = ('venue', 'city') if 'venue' in cols else ("''", "''")     # or before shows kept where they were
     poster = 'poster' if 'poster' in cols else "''"                           # or their posters
+    bands = 'bands' if 'bands' in cols else "''"                              # or a show page's bands
     whole = {r[0]: {'kind': r[1], 'title': r[2], 'date': r[3], 'artist': r[4], 'grp': r[5],
                     'formats': [f for f in (r[6] or '').split('; ') if f], 'venue': r[7] or '', 'city': r[8] or '',
-                    'poster': r[9] or ''}
-             for r in db.execute(f'SELECT id, kind, title, date, artist, grp, {formats}, {venue}, {city}, {poster} FROM targets')}
+                    'poster': r[9] or '', 'bands': json.loads(r[10]) if r[10] else []}
+             for r in db.execute(f'SELECT id, kind, title, date, artist, grp, {formats}, {venue}, {city}, {poster}, {bands} '
+                                 'FROM targets')}
     credits = db.execute('SELECT person, roles, target, scope, source FROM credits').fetchall()
     return whole, credits
 
@@ -1233,6 +1235,9 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         for t, d in whole.items():
             if d.get('kind') == 'record':
                 d['makers'] = [alias.get(n, n) for n in connectome_graph.credited(d.get('artist', ''))]
+            if d.get('bands'):                                      # a show page's bands, by the wiki's names
+                d['bands'] = [{'title': b.get('title', ''), 'members': [alias.get(n, n) for n in b.get('members', [])]}
+                              for b in d['bands']]
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
             has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons,
@@ -1245,6 +1250,13 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         # keyed by the graph's own name for the song: a store's slug may say "Barlows Jig" for "Barlow's Jig"
         by_key = {song_key(s): said for s, said in heard_by.items()}
         graph['authors'] = {s: by_key[song_key(s)] for s in sorted(named) if song_key(s) in by_key}
+        # The places and the acts of the shows, where the wiki has a page for them (Justin, #connectome, 26 Nov 2026,
+        # 02:15Z: "The venue also makes sense to have a bacon vector, at least if it has a pickipedia page"): name ->
+        # its page. A venue or an act with no page is drawn all the same, and goes nowhere.
+        places = {m[9][1] for m in graph['music'] if len(m) > 9 and m[9][1]} | \
+                 {a[0] for acts in graph.get('acts', {}).values() for a in acts if a[0]}
+        placed = wiki.resolve(sorted(n for n in places if not re.search(r'[\[\]{}|#<>]', n))) if places and hasattr(wiki, 'resolve') else {}
+        graph['wikipages'] = {n: page_url(tt) for n, (tt, ok) in sorted(placed.items()) if ok}
         # Song cards: one graph per cut, the page's file carrying each of its cuts in the page's own order
         # (Justin, #connectome, 15 Nov 2026, 01:58Z: each cut displays its own graph).
         songcast = graph.get('songcast') or {}

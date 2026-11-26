@@ -125,6 +125,63 @@ def source_url(target_id, sources=()):
     return sorted(sources)[0] if sources else ''
 
 
+def band_short(band):
+    """A band's leader, where its name says one: "Justin Holmes and the Immutable String Band" -> "Justin Holmes"
+    (connectome-core.js bandShort)."""
+    b = (band or '').strip()
+    return re.sub(r'\s+(?:and|&)\s+(?:the|his|her|their)\s.*$', '', b, flags=re.I).strip() or b
+
+
+def lead_of(title, people):
+    """The one of `people` an act's name is: the name itself, its leader's ("... and the X Band"), a name inside it,
+    or the same first and last name ("Justin Holmes" is Justin Myles Holmes). None where it names none of them."""
+    t, short = (title or '').strip().lower(), band_short(title).lower()
+    if not t:
+        return None
+    ends = lambda n: (lambda w: (w[0], w[-1]) if w else ())(n.lower().split())
+    for test in (lambda n: n.lower() == t, lambda n: n.lower() == short,
+                 lambda n: re.search(r'(?<!\w)' + re.escape(n.lower()) + r'(?!\w)', t),
+                 lambda n: ends(n) == ends(short)):
+        hit = [n for n in people if test(n)]
+        if len(hit) == 1:
+            return hit[0]
+    return None
+
+
+def acts_of(targets, used, mid, cast, pid):
+    """Who each show is billed to (Justin, #connectome, 26 Nov 2026, 02:15Z: a show's graph has "the show itself and
+    the two bands, with the main act more prominent"): music index -> [[the act's name, [its pickers], its leader or
+    -1], ...], the main act first. A show page's acts are its {{Ensemble}} blocks, in its order; any other show's is
+    its artist, everyone on stage in it. The main act is the one the billing names, else the first. A show billed
+    to nobody (a video) has none."""
+    out = {}
+    for t in used:
+        d = targets.get(t, {})
+        if d.get('kind') != 'show':
+            continue
+        on = cast.get(t, {})
+        artist = (d.get('artist') or '').strip()
+        bands = [(b.get('title') or (artist if i == 0 else ''), [n for n in b.get('members', []) if n in on and n in pid])
+                 for i, b in enumerate(d.get('bands') or [])]
+        if not bands and artist:
+            bands = [(artist, sorted(n for n in on if n in pid))]
+        bands = [b for b in bands if b[1]]
+        if not bands:
+            continue
+        lead = [lead_of(title, members) for title, members in bands]
+        # the main act: the one the billing calls by its name, else the one with the most of those the billing names
+        # ("Bronwyn Keith-Hynes and Jason Carter" are both in "BKH & JC"), else the first
+        parts = [p for p in credited(artist)[1:] or credited(artist)]
+        billed = lambda n: any(lead_of(p, [n]) for p in parts)
+        main = next((i for i, (title, _) in enumerate(bands) if title.lower() == artist.lower()), None)
+        if main is None:
+            score = [sum(1 for n in ms if billed(n)) for _, ms in bands]
+            main = score.index(max(score)) if max(score) else 0
+        order = [main] + [i for i in range(len(bands)) if i != main]
+        out[str(mid[t])] = [[bands[i][0], [pid[n] for n in bands[i][1]], pid[lead[i]] if lead[i] else -1] for i in order]
+    return dict(sorted(out.items(), key=lambda kv: int(kv[0])))
+
+
 def show_place(target_id, d):
     """A show's own name, its venue and its town, as [name, venue, city]; None for a record, or a show with none.
 
@@ -339,6 +396,7 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         'songs': dict(sorted(songs.items())),
         'songcast': dict(sorted(songcast.items())),
         'plays': dict(sorted(played.items())),
+        'acts': acts_of(targets, used, mid, cast, pid),
     }
 
 

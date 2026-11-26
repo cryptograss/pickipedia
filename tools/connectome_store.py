@@ -310,16 +310,19 @@ def fetch_show_pages(get):
 
 
 def show_page(title, text):
-    """One Show: page's {show, artist, venue, block, ensemble: {name: [instruments]}}; None with nobody on stage."""
+    """One Show: page's {show, artist, venue, block, poster, ensemble: {name: [instruments]}, bands: [{title, members}]};
+    None with nobody on stage. Each {{Ensemble}} block is a band of the night, in the page's order, under its title= (one
+    per band: headliner, openers, sit-ins, as Template:Show says); names given otherwise (|ensemble=, an "== Ensemble =="
+    list) not in a band already are one more, untitled."""
     m = re.search(r"\{\{\s*Show\s*\|(.*?)\}\}", text, re.S)
     params = {}
     for part in (m.group(1).split("|") if m else []):
         k, eq, v = part.partition("=")
         if eq:
             params[k.strip().lower()] = v.strip()
-    ens = {}
+    ens, bands, loose = {}, [], []
 
-    def add(entry):
+    def add(entry, into=None):
         entry = re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", entry).strip()
         name, _, inst = entry.partition(":")
         name = name.strip()
@@ -327,25 +330,36 @@ def show_page(title, text):
             ens.setdefault(name, [])
             if inst.strip() and inst.strip() not in ens[name]:
                 ens[name].append(inst.strip())
+            if into is not None and name not in into:
+                into.append(name)
     for entry in (params.get("ensemble") or "").split(";"):
-        add(entry)
+        add(entry, loose)
     for e in re.finditer(r"\{\{\s*Ensemble\s*((?:\|[^{}]*)*)\}\}", text):
+        band = {"title": "", "members": []}
         for entry in e.group(1).split("|"):
-            if "=" not in entry:
-                add(entry)
+            k, eq, v = entry.partition("=")
+            if eq and k.strip().lower() == "title":
+                band["title"] = re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", v).strip()
+            elif not eq:
+                add(entry, band["members"])
+        if band["members"]:
+            bands.append(band)
     sec = re.search(r"^==\s*Ensemble\s*==\s*$(.*?)(?=^==|\Z)", text, re.M | re.S)
     for line in (sec.group(1).splitlines() if sec else []):
         link = re.match(r"\*\s*\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]\s*(?:[(:–-]\s*([^)\n]*))?", line.strip())
         if link:
-            add(link.group(1) + (":" + link.group(2) if link.group(2) else ""))
+            add(link.group(1) + (":" + link.group(2) if link.group(2) else ""), loose)
     if not ens:
         return None
+    banded = {n for b in bands for n in b["members"]}
+    if [n for n in loose if n not in banded]:
+        bands.append({"title": "", "members": [n for n in loose if n not in banded]})
     block = re.sub(r"[^\d]", "", params.get("blockheight", ""))
     return {"show": title, "artist": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("artists", "")),
             "venue": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("venue", "")), "block": block,
             # its picture, a file on the wiki (Template:Show: official_poster, or the older image)
             "poster": re.sub(r"^(?:File|Image):", "", params.get("official_poster") or params.get("image") or "").strip(),
-            "ensemble": ens}
+            "ensemble": ens, "bands": bands}
 
 
 def from_releases(releases, arthel=None):
@@ -373,7 +387,7 @@ def from_releases(releases, arthel=None):
             target = {"kind": "show", "id": "wiki:" + rel["show"], "title": rel["show"],
                       "date": "block " + rel["block"] if rel.get("block") else "", "artist": rel.get("artist") or "",
                       "group": "wiki:" + rel["show"], "venue": rel.get("venue") or "", "city": "",
-                      "poster": rel.get("poster") or ""}
+                      "poster": rel.get("poster") or "", "bands": rel.get("bands") or []}
             for name, roles in rel["ensemble"].items():
                 rows.append(credit(name, roles, target, "show", [], WIKI_PAGE + rel["show"].replace(" ", "_"),
                                    "pickipedia", "connectome_store.from_releases"))
@@ -509,7 +523,8 @@ SCHEMA = """
 CREATE TABLE targets (id TEXT PRIMARY KEY, kind TEXT, title TEXT, date TEXT, artist TEXT, grp TEXT,
                       formats TEXT,   -- what the source says a record came out on, "; " between
                       venue TEXT, city TEXT,   -- where a show was, as its source says; '' for a record
-                      poster TEXT);            -- a show's poster: a wiki file, or a small picture's address
+                      poster TEXT,             -- a show's poster: a wiki file, or a small picture's address
+                      bands TEXT);             -- a show page's bands, as JSON: [{title, members}], in its order
 CREATE TABLE credits (n INTEGER PRIMARY KEY, person TEXT, mbid TEXT, roles TEXT, target TEXT REFERENCES targets(id),
                       scope TEXT, source TEXT, source_kind TEXT, read_by TEXT, excerpt TEXT);
 CREATE TABLE credit_tracks (credit INTEGER REFERENCES credits(n), position TEXT, title TEXT);
@@ -526,9 +541,10 @@ def to_sqlite(rows, path):
     db.executescript(SCHEMA)
     for i, r in enumerate(rows):
         t = r["target"]
-        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?,?,?,?)",
+        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                    (t["id"], t["kind"], t["title"], t["date"], t.get("artist", ""), t.get("group", t["id"]),
-                    "; ".join(t.get("formats") or []), t.get("venue", ""), t.get("city", ""), t.get("poster", "")))
+                    "; ".join(t.get("formats") or []), t.get("venue", ""), t.get("city", ""), t.get("poster", ""),
+                    json.dumps(t["bands"], ensure_ascii=False) if t.get("bands") else ""))
         db.execute("INSERT INTO credits VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (i, r["person"], r.get("mbid"), "; ".join(r["roles"]), t["id"], r["scope"], r["source"],
                     r["source_kind"], r["read_by"], r.get("excerpt")))
