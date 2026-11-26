@@ -51,7 +51,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime, timezone
 from html import escape
 
 import connectome_graph
@@ -1118,6 +1118,404 @@ def page_card(title, members, store, has_page, inst, home=HOME):
             + ''.join(out) + legend +
             f'<div class="cc-foot">{escape(count)}. A name opens their bacon graph.</div></div>')
 
+
+# ---------------------------------------------------------------------------
+# A show page's own card (Justin, #connectome, 26 Nov 2026, 02:15Z: "The show page itself needs to have the bacon
+# graph SVG embedded and clickable"), drawn as the big graph's show view draws a show (connectome.js showScene):
+# the show in the middle, its picture where the wiki has one; who it is billed to beside it, the main act first and
+# bigger (an act led by a picker is that picker: Kyle Tuttle at Dee's; an act led by nobody one picker, like "BKH &
+# JC", is the band's own mark, with its name); the venue under it; everyone else on its stage round them, each on a
+# spoke from their act, with what they played where the page says; a line between two of them where they have
+# played together anywhere else; and nobody who wasn't on its stage ("only show the ensemblists of the show, and
+# not other connections (because it can be deceiving at first blush, as it looks like the 2-hop people played at
+# the show?)").
+# ---------------------------------------------------------------------------
+
+SHOW_DX, SHOW_DY = 165.0, 125.0          # the acts beside the show, the venue under it (showScene's dx and dy)
+SHOW_RX, SHOW_RY = 315.0, 215.0          # the ring the rest of the stage stands on, round them
+SHOW_RING = 16                           # the most a show's card names round it; the rest are small dots
+SHOW_R, ACT_R, ACT_R2, VENUE_R = 38.0, 31.0, 24.0, 16.0
+FACE = '/index.php?title=Special:Redirect/file/{}&width={}'
+MERGE_BLOCK, MERGE_TIME, GENESIS_TIME = 15537394, 1663224162, 1438269988
+
+
+def year_of(date_said):
+    """The year a show's date says: its own, or the year an Ethereum block height falls in (connectome-core.js yearOf):
+    after the merge a block every twelve seconds from 15,537,394; before it, the average from the genesis block."""
+    s = str(date_said or '').strip()
+    b = re.match(r'^block (\d+)$', s)
+    if b:
+        n = int(b.group(1))
+        t = MERGE_TIME + (n - MERGE_BLOCK) * 12 if n >= MERGE_BLOCK else \
+            GENESIS_TIME + n * (MERGE_TIME - GENESIS_TIME) / MERGE_BLOCK
+        return str(datetime.fromtimestamp(t, timezone.utc).year)
+    y = re.search(r'\b(1[89]\d\d|20\d\d)\b', s)
+    return y.group(1) if y else ''
+
+
+def picture(file, wide):
+    """A wiki file as a picture's address, or a picture's own address as it is."""
+    if not file:
+        return ''
+    return file if file.startswith('https://') else FACE.format(urllib.parse.quote(file.replace(' ', '_')), wide)
+
+
+def act_rest(title, name):
+    """The rest of an act's name past its leader's ("and the Immutable String Band"), or '' (connectome-core.js actRest)."""
+    t, short = (title or '').strip(), connectome_graph.band_short(title)
+    if not t or t.lower() == (name or '').lower() or short == t:
+        return ''
+    return t[len(short):].strip()
+
+
+def seat_angles(wants, step, lo, span):
+    """Seats on the ring for those who want to be at the given angles (degrees), in their order round it, no two nearer
+    than `step`, all inside [lo, lo + span): each as near as that allows to where they want to be."""
+    if not wants:
+        return []
+    order = sorted(range(len(wants)), key=lambda i: (((wants[i] - lo) % 360), i))
+    at = [((wants[i] - lo) % 360) + lo for i in order]
+    first, last = lo + step / 2, lo + span - step / 2
+    for k in range(len(at)):                              # out of each other's way, forward
+        at[k] = max(at[k], first if k == 0 else at[k - 1] + step)
+    if at[-1] > last:                                     # past the end: back, as little as fits
+        at[-1] = last
+        for k in range(len(at) - 2, -1, -1):
+            at[k] = min(at[k], at[k + 1] - step)
+    out = [0.0] * len(wants)
+    for k, i in enumerate(order):
+        out[i] = at[k]
+    return out
+
+
+def show_card(title, mi, graph, store, has_page, icons=()):
+    """The card for one Show: page: the show at graph.json's music index mi (its key wiki:<title>). None when nobody
+    is on its stage."""
+    people, music = graph.get('people') or [], graph.get('music') or []
+    if mi is None or mi >= len(music):
+        return None
+    m = music[mi]
+    key, tier, art = m[0], m[5], (m[8] if len(m) > 8 else '')
+    place = m[9] if len(m) > 9 and m[9] else ['', '', '']
+    own, venue, city = place[0], place[1], place[2]
+    cast = [(pid, roles or '') for pid, roles in (graph.get('cast') or [])[mi] if 0 <= pid < len(people)]
+    if not cast:
+        return None
+    name = {pid: people[pid][0] for pid, _ in cast}
+    roles = {pid: r for pid, r in cast}
+    pages = graph.get('wikipages') or {}
+    acts = []
+    for a in (graph.get('acts') or {}).get(str(mi), []):
+        members = [p for p in a[1] if p in name]
+        if members:
+            acts.append({'title': a[0], 'members': members, 'lead': a[2] if a[2] in name else None})
+    acts = acts[:4]                                        # four beside it at most; the rest of their pickers on the ring
+    if acts:                                               # anyone on stage in no act stands with the main one
+        banded = {p for a in acts for p in a['members']}
+        acts[0]['members'] += [p for p, _ in cast if p not in banded]
+    leaders = {a['lead'] for a in acts if a['lead'] is not None}
+    act_of = {}
+    for i, a in enumerate(acts):
+        for p in a['members']:
+            act_of.setdefault(p, i)
+    ring = sorted((p for p, _ in cast if p not in leaders), key=lambda p: (act_of.get(p, 99), name[p]))
+    cx, cy = C
+    act_at = [(cx - SHOW_DX, cy - SHOW_DY * 0.12), (cx + SHOW_DX, cy - SHOW_DY * 0.12),
+              (cx - SHOW_DX * 0.62, cy - SHOW_DY * 0.95), (cx + SHOW_DX * 0.62, cy - SHOW_DY * 0.95)]
+    venue_at = (cx, cy + SHOW_DY)
+
+    # The ring: each as near their act's side as it allows, the bottom left to the venue's name where there is one.
+    named_ring = ring[:SHOW_RING]
+    step = min(40.0, (320.0 if venue else 360.0) / max(1, len(named_ring)))
+    lo, span = (110.0, 320.0) if venue else (90.0, 360.0)
+    wants, by_act = [], defaultdict(list)
+    for p in named_ring:
+        by_act[act_of.get(p)].append(p)
+    for i, members in by_act.items():
+        ax, ay = act_at[i] if i is not None else (cx, cy - 1)
+        toward = math.degrees(math.atan2(ay - cy, ax - cx))
+        for j, p in enumerate(members):
+            wants.append((p, toward + (j - (len(members) - 1) / 2) * step))
+    angles = seat_angles([w for _, w in wants], step, lo, span)
+    pos = {p: (cx + SHOW_RX * math.cos(math.radians(a)), cy + SHOW_RY * math.sin(math.radians(a)))
+           for (p, _), a in zip(wants, angles)}
+
+    # Names: the ring's over or under each mark, as the song card's; the middle's laid first, so a ring's name gives way.
+    def two_lines(x, y, top, line1, line2, bold1=True):
+        w = max(tw(line1, bold=bold1), tw(line2) * 0.62 if line2 else 0)
+        h = FS * (1.55 if line2 else 1.0)
+        return (x - w / 2, top, x + w / 2, top + h)
+
+    sub = FS * 0.62 * 1.05 + 3                            # from a name's baseline to the baseline of the line under it
+    boxes = []
+    act_lab = []
+    for i, a in enumerate(acts):
+        x, y = act_at[i]
+        r = ACT_R if i == 0 else ACT_R2
+        if a['lead'] is not None:
+            line1, line2 = name[a['lead']], act_rest(a['title'], name[a['lead']]) or \
+                ', '.join(x.strip() for x in roles.get(a['lead'], '').split(';') if x.strip())
+        else:
+            line1, line2 = a['title'] or 'the band', f"{len(a['members'])} on stage"
+        line1, line2 = clip(line1, 30), clip(line2, 40)
+        nb = y - r - 10                                    # the name's baseline over the mark; its second line under it
+        if line2:
+            nb -= sub
+        box = two_lines(x, y, nb - FS * 0.8, line1, line2)
+        act_lab.append((x, nb, line1, line2, r))
+        boxes.append(box)
+    show_line = clip(own, 28) if own else year_of(m[3])
+    show_sub = year_of(m[3]) if own else ''
+    sy = cy + SHOW_R + FS * 0.95
+    if show_line:
+        boxes.append(two_lines(cx, cy, sy - FS * 0.8, show_line, show_sub))
+    if venue:
+        vy = venue_at[1] + VENUE_R + FS * 0.95
+        boxes.append(two_lines(venue_at[0], venue_at[1], vy - FS * 0.8, clip(venue, 34), clip(city, 40), bold1=False))
+
+    def label(p, below=None):
+        """Where a picker on the ring is named: [x, the name's baseline, under the mark?, its box, the instrument's
+        baseline]. What they played is always under their name (Justin, #connectome, 23 Nov 2026, 19:02Z: "let's put
+        their instrument underneath"): a name over its mark goes up a line for it."""
+        x, y = pos[p]
+        if below is None:
+            below = y > cy + 1
+        n, r = name[p], roles[p]
+        w = max(tw(n, bold=True), tw(r) * 0.62 if r else 0)
+        if below:
+            ny = y + 17 + FS * 0.8
+            rl = ny + sub if r else None
+        else:
+            rl = y - 19 if r else None
+            ny = rl - sub if r else y - 17
+        bottom = (rl + 4) if r else ny + 5
+        return [x, ny, below, (x - w / 2, ny - FS * 0.8, x + w / 2, bottom), rl]
+
+    labels = {}
+    for p in named_ring:
+        lb = label(p)
+        if any(hits(lb[3], b) for b in boxes + [L[3] for L in labels.values()]):
+            lb = label(p, below=not lb[2])
+        labels[p] = lb
+
+    # Where each of the stage is drawn: the ring's, or a leader's act.
+    where = dict(pos)
+    for i, a in enumerate(acts):
+        if a['lead'] is not None:
+            where[a['lead']] = act_at[i]
+
+    def others(x, y):
+        """What two of the show share besides this show: the store's evidence, this night left out."""
+        ev = store.evidence(name[x], name[y]) or {'list': []}
+        group = store.groups.get(key, key)
+        return [e for e in ev['list'] if e['target'] != key and store.groups.get(e['target'], e['target']) != group]
+
+    def bow(a, b):
+        """A line between two on the ring, bowed out from the middle so it doesn't run over the show."""
+        mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+        vx, vy = mx - cx, my - cy
+        d = math.hypot(vx, vy)
+        if d < 1:
+            vx, vy, d = -(b[1] - a[1]), b[0] - a[0], math.hypot(b[0] - a[0], b[1] - a[1]) or 1
+        k = 0.28 * math.dist(a, b) / d
+        return (mx + vx * k, my + vy * k)
+
+    def styled(e, spoke=False):
+        if e['tier'] == 0:
+            return {'stroke': SHUT, 'stroke-width': 1.4 if spoke else 1.2, 'stroke-dasharray': '1 5', 'stroke-linecap': 'round'}
+        return {'stroke': GOLD if e['tier'] == 2 else INK2, 'stroke-width': (2.2 if spoke else 1.4) if e['kind'] != 'record' else 1.2,
+                'stroke-linecap': 'round'}
+
+    def path_svg(a, b, ctrl, st):
+        attrs = ' '.join(f'{k}="{attr(v)}"' for k, v in st.items())
+        return f'<path d="M{a[0]:.1f} {a[1]:.1f} Q{ctrl[0]:.1f} {ctrl[1]:.1f} {b[0]:.1f} {b[1]:.1f}" fill="none" {attrs}/>'
+
+    lines, notes = [], []
+    # the acts, from the show: who it was billed to
+    for i, a in enumerate(acts):
+        s, t = trim_svg((cx, cy), act_at[i], SHOW_R + 3, (ACT_R if i == 0 else ACT_R2) + 3)
+        lines.append(line_svg(s, t, stroke=INK2, stroke_width=3.4 if i == 0 else 2.4, stroke_linecap='round'))
+    if venue:                                             # under the show's own name, to the venue
+        top = sy + (sub if show_sub else 0) + 8 if show_line else cy + SHOW_R + 4
+        lines.append(line_svg((cx, top), (venue_at[0], venue_at[1] - VENUE_R - 3), stroke=SHUT, stroke_width=1.2,
+                              stroke_linecap='round'))
+    # the spokes: each from their act (from the show, where they are in none); where they and their act's leader
+    # have played together anywhere else, the spoke says so, drawn as that is
+    spoke_from = {}
+    for p in named_ring:
+        i = act_of.get(p)
+        frm = act_at[i] if i is not None and i < len(act_at) else (cx, cy)
+        r0 = (ACT_R if i == 0 else ACT_R2) if i is not None else SHOW_R
+        s, t = trim_svg(frm, pos[p], r0 + 3, 13)
+        lead = acts[i]['lead'] if i is not None else None
+        also = others(lead, p) if lead is not None else []
+        spoke_from[p] = (lead, also)
+        if also:
+            lines.append(line_svg(s, t, **{k.replace('-', '_'): v for k, v in styled(also[0], spoke=True).items()}))
+        else:
+            lines.append(strokes_svg(s, t, tier, False, False))
+    # between the rest of them, wherever they have played together anywhere else
+    stage = named_ring + [a['lead'] for a in acts if a['lead'] is not None]
+    for i, x in enumerate(stage):
+        for y in stage[i + 1:]:
+            if (spoke_from.get(y, (None,))[0] == x) or (spoke_from.get(x, (None,))[0] == y):
+                continue                                   # their spoke says it already
+            also = others(x, y)
+            if not also:
+                continue
+            a, b = where[x], where[y]
+            s, t = trim_svg(a, b, 15, 15)
+            lines.append(path_svg(s, t, bow(s, t), styled(also[0])))
+            mx, my = bow(s, t)
+            tail = f' (+{len(also) - 1} more)' if len(also) > 1 else ''
+            hit = path_svg(s, t, (mx, my), {'class': 'cc-hit'})
+            notes.append(([f'{name[x]} & {name[y]}', 'also: ' + also[0]['text'] + tail], mx, my, hit))
+
+    xs = [cx - SHOW_R, cx + SHOW_R] + [p[0] for p in pos.values()] + [b[0] for b in boxes] + [b[2] for b in boxes] + \
+         [L[3][0] for L in labels.values()] + [L[3][2] for L in labels.values()]
+    ys = [cy - SHOW_R, cy + SHOW_R] + [p[1] for p in pos.values()] + [b[1] for b in boxes] + [b[3] for b in boxes] + \
+         [L[3][1] for L in labels.values()] + [L[3][3] for L in labels.values()]
+    x0, y0, x1, y1 = min(xs) - 14, min(ys) - 14, max(xs) + 14, max(ys) + 14
+    if x1 - x0 < PAGE_WIDE:
+        x0, x1 = x0 - (PAGE_WIDE - (x1 - x0)) / 2, x1 + (PAGE_WIDE - (x1 - x0)) / 2
+
+    def tip(lns, x, y):
+        return tip_box(lns, x, y, (x0, y0, x1, y1))
+
+    here = attr(viewer(m=key))
+    billed = [a['title'] or (name[a['lead']] if a['lead'] is not None else '') for a in acts]
+    billed = [b for b in billed if b]
+    out = []
+    o = out.append
+    o(f'<svg xmlns="http://www.w3.org/2000/svg" class="cc cc-show" viewBox="{x0:.0f} {y0:.0f} {x1 - x0:.0f} {y1 - y0:.0f}" '
+      f'width="100%" font-family="Georgia, serif" font-size="{FS:g}" role="img" '
+      f'aria-label="{attr("Who was on stage" + (" with " + " and ".join(billed) if billed else "") + ", and who of them played together elsewhere")}">')
+    o(f'<a class="cc-bg" href="{here}" aria-label="{attr("Explore this show on the big graph")}">'
+      f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/></a>')
+    out.extend(lines)
+
+    def mark(p, x, y, r):
+        """A picker's mark: their face where the graph has their picture, else what they play, else a dot."""
+        pic = people[p][3] if len(people[p]) > 3 else ''
+        if pic:
+            return (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{PAPER}" stroke="{INK}" stroke-width="2"/>'
+                    f'<image href="{attr(picture(pic, int(4 * r)))}" x="{x - r:.1f}" y="{y - r:.1f}" width="{2 * r:.1f}" '
+                    f'height="{2 * r:.1f}" preserveAspectRatio="xMidYMid slice" clip-path="circle({r:.1f}px at {r:.1f}px {r:.1f}px)"></image>'
+                    f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="none" stroke="{INK}" stroke-width="2"/>')
+        icon = icon_for(roles.get(p, ''), icons)
+        if icon:
+            k = r / 14
+            return (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{PAPER}" stroke="{INK}" stroke-width="2"/>'
+                    f'<image href="{attr(ICON.format(urllib.parse.quote(icon)))}" x="{x - 10 * k:.1f}" y="{y - 10 * k:.1f}" '
+                    f'width="{20 * k:.1f}" height="{20 * k:.1f}"></image>')
+        return (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{min(r, 10 if r <= 14 else r * 0.7):.1f}" '
+                f'fill="{INK if people[p][1] else PAPER}" stroke="{INK}" stroke-width="1.5"/>')
+
+    # the ring
+    for p in named_ring:
+        x, y = pos[p]
+        x_lab, ny, below, _, rl = labels[p]
+        o(f'<a href="{attr(viewer(p=name[p]))}">{mark(p, x, y, 14)}<text class="cc-lab" x="{x_lab:.1f}" y="{ny:.1f}" '
+          f'text-anchor="middle" fill="{INK}" font-weight="bold">{escape(name[p])}</text>'
+          + (f'<text class="cc-lab" x="{x_lab:.1f}" y="{rl:.1f}" text-anchor="middle" '
+             f'fill="{INK2}" font-size="0.62em">{escape(roles[p])}</text>' if roles[p] else '') + '</a>')
+    # the acts
+    for i, a in enumerate(acts):
+        x, y = act_at[i]
+        lx, nb, line1, line2, r = act_lab[i]
+        texts = (f'<text class="cc-lab" x="{lx:.1f}" y="{nb:.1f}" text-anchor="middle" fill="{INK}" font-weight="bold"'
+                 + (' font-size="1.08em"' if i == 0 else '') + f'>{escape(line1)}</text>'
+                 + (f'<text class="cc-lab" x="{lx:.1f}" y="{nb + sub:.1f}" text-anchor="middle" fill="{INK2}" '
+                    f'font-size="0.62em">{escape(line2)}</text>' if line2 else ''))
+        if a['lead'] is not None:
+            o(f'<a href="{attr(viewer(p=name[a["lead"]]))}">{mark(a["lead"], x, y, r)}{texts}</a>')
+        else:
+            band = (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{PAPER}" stroke="{INK}" stroke-width="2"/>'
+                    f'<g transform="translate({x:.1f} {y:.1f}) scale({r / 24:.3f})">{BAND}</g>')
+            page = pages.get(a['title'])
+            o(f'<a href="{attr(page)}">{band}{texts}</a>' if page else f'<g>{band}{texts}</g>')
+    # the show
+    pic = picture(art, 2 * int(4 * SHOW_R)) if art else ''
+    middle = ((f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{SHOW_R:.1f}" fill="{PAPER}" stroke="{INK}" stroke-width="2.5"/>'
+               f'<image href="{attr(pic)}" x="{cx - SHOW_R:.1f}" y="{cy - SHOW_R:.1f}" width="{2 * SHOW_R:.1f}" height="{2 * SHOW_R:.1f}" '
+               f'preserveAspectRatio="xMidYMid slice" clip-path="circle({SHOW_R:.1f}px at {SHOW_R:.1f}px {SHOW_R:.1f}px)"></image>'
+               f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{SHOW_R:.1f}" fill="none" stroke="{INK}" stroke-width="2.5"/>') if pic else
+              f'<g transform="translate({cx:.1f} {cy:.1f}) scale({SHOW_R / 21:.3f})">{TICKET}</g>')
+    o(f'<a href="{here}">{middle}' + (f'<text class="cc-lab" x="{cx:.1f}" y="{sy:.1f}" text-anchor="middle" fill="{INK}" '
+                                      f'font-weight="bold">{escape(show_line)}</text>' if show_line else '')
+      + (f'<text class="cc-lab" x="{cx:.1f}" y="{sy + sub:.1f}" text-anchor="middle" fill="{INK2}" '
+         f'font-size="0.62em">{escape(show_sub)}</text>' if show_sub else '') + '</a>')
+    # the venue
+    if venue:
+        vx_, vy_ = venue_at
+        vmark = (f'<circle cx="{vx_:.1f}" cy="{vy_:.1f}" r="{VENUE_R:.1f}" fill="{PAPER}" stroke="{INK}" stroke-width="1.6"/>'
+                 f'<g transform="translate({vx_:.1f} {vy_:.1f}) scale({VENUE_R / 21:.3f})">{VENUE}</g>'
+                 f'<text class="cc-lab" x="{vx_:.1f}" y="{vy:.1f}" text-anchor="middle" fill="{INK}" font-style="italic">{escape(clip(venue, 34))}</text>'
+                 + (f'<text class="cc-lab" x="{vx_:.1f}" y="{vy + sub:.1f}" text-anchor="middle" fill="{INK2}" '
+                    f'font-size="0.62em">{escape(clip(city, 40))}</text>' if city else ''))
+        page = pages.get(venue)
+        o(f'<a href="{attr(page)}">{vmark}</a>' if page else f'<g>{vmark}</g>')
+    # the notes, over everything: the lines', then each picker's
+    for lns, x, y, hit in notes:
+        o(f'<g class="cc-h">{hit}{tip(lns, x, y)}</g>')
+    for p in named_ring:
+        x, y = pos[p]
+        lead, also = spoke_from.get(p, (None, []))
+        lns = [name[p] + (f' · {roles[p]}' if roles[p] else '')]
+        i = act_of.get(p)
+        if i is not None and acts[i]['title']:
+            lns.append('with ' + acts[i]['title'])
+        if also:
+            lns.append(f'and with {name[lead]} elsewhere: ' + also[0]['text'] + (f' (+{len(also) - 1} more)' if len(also) > 1 else ''))
+        box = labels[p][3]
+        o(f'<g class="cc-h"><a href="{attr(viewer(p=name[p]))}"><circle cx="{x:.1f}" cy="{y:.1f}" r="15" fill="transparent"/>'
+          f'<rect x="{box[0]:.1f}" y="{box[1]:.1f}" width="{box[2] - box[0]:.1f}" height="{box[3] - box[1]:.1f}" fill="transparent"/>'
+          f'</a>{tip(lns, x, y)}</g>')
+    for i, a in enumerate(acts):
+        x, y = act_at[i]
+        r = act_lab[i][4]
+        who = [name[p] for p in a['members'] if p != a['lead']]
+        lns = [a['title'] or 'the band', ('led by ' + name[a['lead']] + ', with ' if a['lead'] is not None else 'with ')
+               + ', '.join(who[:3]) + (f' and {len(who) - 3} more' if len(who) > 3 else '') if who else 'on stage alone']
+        if i == 0 and len(acts) > 1:
+            lns.append('the main act')
+        go = viewer(p=name[a['lead']]) if a['lead'] is not None else pages.get(a['title'], '')
+        hit = f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r + 2:.1f}" fill="transparent"/>'
+        o(f'<g class="cc-h">' + (f'<a href="{attr(go)}">{hit}</a>' if go else hit) + f'{tip(lns, x, y)}</g>')
+    o('</svg>')
+
+    legend = ('<div class="cc-legend">'
+              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
+              "an etree tape or Creative Commons<br>"
+              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
+              '<span class="cc-key cc-rest"></span> the rest<br>'
+              'a spoke: on its stage with their act · a line between two: they have played together elsewhere'
+              '</div>')
+    on_stage = len(cast)
+    foot = f'{on_stage} on its stage' + (', billed to ' + ', then '.join(billed) if billed else '') + \
+        (f' ({len(ring) - len(named_ring)} more not named)' if len(ring) > len(named_ring) else '') + '. A name opens their bacon graph.'
+    return (f'<div class="connectome-card cc-show-card" data-show="{attr(title)}">'
+            f'<div class="cc-head">Connectome <a class="cc-explore" href="{here}">⤢ explore</a></div>'
+            + ''.join(out) + legend + f'<div class="cc-foot">{escape(foot)}</div></div>')
+
+
+def clip(s, n):
+    """A line cut to n letters, with an ellipsis where it was cut."""
+    s = str(s or '')
+    return s if len(s) <= n else s[:n - 1].rstrip() + '…'
+
+
+# A show, a band, a venue, as the card marks them (each drawn for a circle of radius 21).
+TICKET = ('<circle r="21" fill="%s" stroke="%s" stroke-width="1.5"/>' % (PAPER, INK) +
+          '<path d="M-11 -7 h22 v4 a3 3 0 0 0 0 6 v4 h-22 v-4 a3 3 0 0 0 0 -6 z" fill="none" stroke="%s" stroke-width="1.8" '
+          'stroke-linejoin="round"/>' % INK +
+          '<path d="M-3 -7 v14" stroke="%s" stroke-width="1.2" stroke-dasharray="2 2"/>' % INK)
+BAND = ('<g fill="%s">' % INK +
+        '<circle cx="-8" cy="-5" r="4"/><circle cx="8" cy="-5" r="4"/><circle cx="0" cy="-8" r="4.4"/>'
+        '<path d="M-14 9 q6 -11 12 0 z"/><path d="M2 9 q6 -11 12 0 z"/><path d="M-7 10 q7 -13 14 0 z"/></g>')
+VENUE = ('<g fill="none" stroke="%s" stroke-width="2" stroke-linejoin="round">' % INK +
+         '<path d="M-11 0 L0 -10 L11 0"/><path d="M-8 -2 v11 h16 v-11"/><path d="M-2 9 v-6 h4 v6"/></g>')
+
 # ---------------------------------------------------------------------------
 
 def load_store(db_path, pairs_path):
@@ -1311,8 +1709,21 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                     idx = {row[0]: i for i, row in enumerate(graph.get('people') or [])}
                     ranked, _ = page_order(t, [seen.get(x, (x, False))[0] for x in linked.get(t, [])], store)
                     graph.setdefault('pages', {})[t] = [idx[n] for n in ranked if n in idx]
+    # The wiki's own show pages, each with its show's graph (Justin, #connectome, 26 Nov 2026, 02:15Z: "The show page
+    # itself needs to have the bacon graph SVG embedded and clickable"): Template:Show puts it there by {{#connectome:}}.
+    show_cards = {}
+    if graph is not None and not (only and not only.startswith('Show:')):
+        for mi, row in enumerate(graph.get('music') or []):
+            if not row[0].startswith('wiki:'):
+                continue
+            t = row[0][len('wiki:'):]
+            if only and only != t:
+                continue
+            html = show_card(t, mi, graph, store, has_page, icons)
+            if html:
+                show_cards[t] = html
     return {'month': month, 'featured': featured, 'cards': cards, 'skipped': sorted(skipped), 'graph': graph,
-            'song_cards': song_cards, 'cut_cards': cut_cards, 'page_cards': page_cards,
+            'song_cards': song_cards, 'cut_cards': cut_cards, 'page_cards': page_cards, 'show_cards': show_cards,
             'pairs': store.pairs, 'names': {k: sorted(v) for k, v in sorted(store.raw.items())}}
 
 
@@ -1325,6 +1736,9 @@ def write(result, out_dir, built_from):
         with open(os.path.join(out_dir, 'cards', card_file(title)), 'w') as f:
             f.write(html)
     for title, html in result.get('page_cards', {}).items():
+        with open(os.path.join(out_dir, 'cards', card_file(title)), 'w') as f:
+            f.write(html)
+    for title, html in result.get('show_cards', {}).items():
         with open(os.path.join(out_dir, 'cards', card_file(title)), 'w') as f:
             f.write(html)
     # Each cut its own file, named as Connectome::cutFileFor names it: the page's title and the cut's own
@@ -1347,6 +1761,7 @@ def write(result, out_dir, built_from):
                    'cards': {t: card_file(t) for t in sorted(result['cards'])},
                    'song_cards': {t: card_file(t) for t in sorted(result.get('song_cards', {}))},
                    'page_cards': {t: card_file(t) for t in sorted(result.get('page_cards', {}))},
+                   'show_cards': {t: card_file(t) for t in sorted(result.get('show_cards', {}))},
                    'cut_cards': {t: {k: card_file(t + '|' + k) for k in sorted(ks)}
                                  for t, ks in sorted(result.get('cut_cards', {}).items())},
                    'no_card': result['skipped'], 'built_from': built_from}, f, indent=1)
@@ -1372,6 +1787,7 @@ def main(argv):
     print(f"{len(result['cards'])} cards; "
           f"{len(result.get('song_cards', {}))} song cards; "
           f"{len(result.get('page_cards', {}))} page cards; "
+          f"{len(result.get('show_cards', {}))} show cards; "
           f"no card for {len(result['skipped'])} pages", file=sys.stderr)
 
 
