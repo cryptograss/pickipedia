@@ -394,6 +394,40 @@
 	.release-metadata td { background: transparent; }
 	.release-validation-error { border-color: #a5483f; background: var( --night-del ); color: #f2938a; }
 
+	/* ---- Invites and attestations ----
+	 *
+	 * Special:CreateInvite and its kin (ManageInvites, CreateAttestation, BulkDeleteUsers) carry no
+	 * stylesheet: each writes its day palette into an inline <style> from PHP
+	 * (OutputPage::addInlineStyle), so neither the rule that answers a template's inline ground by its
+	 * hex nor check-night-grounds.php -- which read only .css files until now -- ever saw them. By
+	 * night "Invite Created!" and the link under it were night's pale ink on day's pale green, about
+	 * 1.3:1 (Justin, 25 Nov 2026). The three grounds become night's own, as a message box's do.
+	 */
+	.mw-createinvite-success, .mw-manageinvites-success, .mw-createattestation-success {
+		border-color: #3f7a52;
+		background: var( --night-add );
+		color: #8fd2a6;
+	}
+	.mw-createinvite-error, .mw-manageinvites-error, .mw-createattestation-error {
+		border-color: #a5483f;
+		background: var( --night-del );
+		color: #f2938a;
+	}
+	/* The invite's link: a <code>, so night's code rule reached its ground, but the sheet's class
+	   outranked it. */
+	.mw-createinvite-invite-link {
+		border: 1px solid var( --night-line );
+		background: var( --night-wash );
+		color: var( --night-ink );
+	}
+	.mw-createinvite-help, .mw-createattestation-help,
+	.mw-manageinvites-status-pending { color: var( --night-muted ); }
+	.mw-manageinvites-status-used { color: var( --night-green ); }
+	/* Day's #800 for an expired invite is 1.5:1 on the dark. */
+	.mw-manageinvites-status-expired { color: #f2938a; }
+	/* A user with an attestation is a pale green row on Special:BulkDeleteUsers. */
+	.mw-bulkdeleteusers-attested { background: var( --night-add ); color: var( --night-ink ); }
+
 	.hls-video-player button, .hls-quality-bar button, .hls-playback-bar button {
 		border: 1px solid var( --night-line ) !important;
 		background: var( --night-wash ) !important;

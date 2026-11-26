@@ -285,6 +285,12 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 			'onclick' => 'return confirm("Delete selected users? This cannot be undone!");'
 		] ) );
 
+		// The one ground this page paints: a user who has an attestation. Named, so night can answer it
+		// (resources/night/night.less in PickiPediaContent) rather than leave a pale row in the dark.
+		$out->addInlineStyle( '
+			.mw-bulkdeleteusers-attested { background: #efe; }
+		' );
+
 		$out->addHTML( Html::openElement( 'table', [ 'class' => 'wikitable sortable' ] ) );
 		$out->addHTML( Html::rawElement( 'tr', [],
 			Html::element( 'th', [], '' ) .
@@ -302,9 +308,9 @@ class SpecialBulkDeleteUsers extends SpecialPage {
 			$attestedDisplay = $row->has_attestation ? '✓' : '';
 
 			// Green if attested (safe)
-			$rowStyle = $row->has_attestation ? 'background: #efe;' : '';
+			$rowClass = $row->has_attestation ? 'mw-bulkdeleteusers-attested' : '';
 
-			$out->addHTML( Html::rawElement( 'tr', [ 'style' => $rowStyle ],
+			$out->addHTML( Html::rawElement( 'tr', [ 'class' => $rowClass ],
 				Html::rawElement( 'td', [],
 					Html::check( 'users[]', false, [ 'value' => $row->user_name ] )
 				) .
