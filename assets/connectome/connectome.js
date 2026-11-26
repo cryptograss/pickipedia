@@ -2397,66 +2397,135 @@ function pieceLabel( id, pos, W, own ) {
 	return { label: name.label, dx: name.dx, sub: sub ? sub.label : '', sdx: sub ? sub.dx : 0, play };
 }
 
-/**
- * Who a show is billed to, of those on its stage: its band's leader, or its artist (Justin, #connectome, 26 Nov 2026:
- * "A show usually has the central performer - either a band, a solo artist, an artist with a rotating/pickup band, an
- * artist with a regular band"). The cast member the billing names, whole ("Kyle Tuttle"), else by first and last name
- * ("Justin Holmes and The Immutable String Band" is Justin Myles Holmes). null where the billing names none of them.
- */
-function headliner( m, cast ) {
-	const bill = String( m.artist || '' ).toLowerCase(), lead = K.bandShort( m.artist || '' ).toLowerCase();
-	if ( !bill ) {
-		return null;
-	}
-	const ends = ( n ) => {
-		const w = n.toLowerCase().split( /\s+/ );
-		return w[ 0 ] + ' ' + w[ w.length - 1 ];
-	};
-	return cast.find( ( id ) => P( id ).name.toLowerCase() === lead ) ?? cast.find( ( id ) => bill.includes( P( id ).name.toLowerCase() ) ) ??
-		cast.find( ( id ) => ends( P( id ).name ) === ends( lead ) ) ?? null;
-}
-
 /*
- * A show in the middle (Justin, #connectome, 26 Nov 2026, 01:46Z): the show, with who it is billed to inside it; its
- * photo where it has one; and round it only who was on its stage, each with what they played where the source says,
- * "and not other connections (because it can be deceiving at first blush, as it looks like the 2-hop people played at
- * the show)". A picker round it goes to them, as anywhere.
+ * A show in the middle (Justin, #connectome, 26 Nov 2026, 01:46Z and 02:15Z): the show, and beside it whoever it is
+ * billed to, each act its own mark, the main act the biggest ("the three central nodes: the show itself and the two
+ * bands, with the main act more prominent. Maybe four actually if we include the venue"); the venue under it; the
+ * show's picture where it has one (its card, out from the start). Round them only who was on its stage, each on a
+ * spoke from their act, with what they played where the source says; and lines between those of them who have
+ * played together anywhere else ("Let's still show links _between the people in the ensemble_ ... Just no two-hop
+ * edges"). An act led by a picker is that picker's own mark (Kyle Tuttle at Dee's); one with no leader (BKH & JC,
+ * Yonder Mountain String Band) is a mark of its own, with its name.
  */
-/** Under the one a show is billed to: the night's own name or its place, and its year, without their name again. */
-function showUnder( mi, who ) {
-	const n = K.naming( G, { m: mi, how: K.STAGE, songs: [] } );
-	return K.clip( [ n.who !== who && n.who !== n.band ? n.who : '', n.year ].filter( Boolean ).join( ' · ' ), 48 );
-}
-
+const SHOW_RING = 16;            // pickers round a show, named; past that, beads
 function showScene( v ) {
 	const { W, H } = frame();
 	const sc = newScene();
 	const me = M( v.m ), nm = K.called( G, me ), m = G.music[ me.m ];
 	const roles = new Map( ( m.cast || [] ).map( ( c ) => [ c[ 0 ], c[ 1 ] || '' ] ) );
 	const cast = me.cast.filter( ( id ) => id >= 0 && id < G.people.length );
-	const host = headliner( m, cast );
-	const ring = cast.filter( ( id ) => id !== host ).sort( ( a, b ) => first( a ).localeCompare( first( b ) ) );
+	const onStage = new Set( cast );
+	const acts = K.actsOf( G, me.m ).map( ( a ) => Object.assign( {}, a, { members: a.members.filter( ( id ) => onStage.has( id ) ) } ) )
+		.filter( ( a ) => a.members.length );
+	// a merged night's other tape may put somebody on stage in no act: they join the main act
+	const banded = new Set( acts.flatMap( ( a ) => a.members ) );
+	if ( acts.length ) {
+		acts[ 0 ].members = acts[ 0 ].members.concat( cast.filter( ( id ) => !banded.has( id ) ) );
+	}
+	const leaders = new Set( acts.map( ( a ) => a.lead ).filter( ( id ) => id !== null && onStage.has( id ) ) );
+	const actOf = new Map();                                      // a picker -> the index of their act
+	acts.forEach( ( a, i ) => a.members.forEach( ( id ) => actOf.has( id ) || actOf.set( id, i ) ) );
+	const ring = cast.filter( ( id ) => !leaders.has( id ) );
 	const carded = cardOn( v );
-	const lay = ringFor( { W, H, named: Math.min( ring.length, 12 ) + ( carded && ring.length > 1 ? 1 : 0 ), dots: 0 }, carded );
+	const shown = Math.min( ring.length, SHOW_RING );
+	const lay = ringFor( { W, H, named: shown + ( carded && shown > 1 ? 1 : 0 ), dots: Math.max( 0, ring.length - shown ) }, carded );
+	const C = lay.C;
+	// The middle's own room: the acts beside the show and the venue under it, each with its name, clear of one another;
+	// the ring is then set out past them, as far as the frame allows
+	const narrowFrame = W < 520;
+	const dx = narrowFrame ? Math.max( 78, Math.min( 105, W * 0.24 ) ) : Math.max( 110, Math.min( 150, W * 0.12 ) );
+	const dy = narrowFrame ? 92 : Math.max( 96, Math.min( 120, H * 0.15 ) );
+	const rxMin = dx + ( narrowFrame ? 64 : 120 ), ryMin = dy + ( narrowFrame ? 70 : 64 );
+	for ( const p of lay.named.concat( lay.dots ) ) {
+		const vx = p.x - C.x, vy = p.y - C.y, e = Math.hypot( vx / rxMin, vy / ryMin );
+		if ( e > 0 && e < 1 ) {
+			p.x = Math.round( Math.max( 50, Math.min( W - 50, C.x + vx / e ) ) );
+			p.y = Math.round( Math.max( 40, Math.min( H - 40, C.y + vy / e ) ) );
+		}
+	}
+	const rx = Math.max( rxMin, ...lay.named.map( ( p ) => Math.abs( p.x - C.x ) ) );
+	const ry = Math.max( ryMin, ...lay.named.map( ( p ) => Math.abs( p.y - C.y ) ) );
+	const actAt = [ { x: C.x - dx, y: C.y - dy * 0.12 }, { x: C.x + dx, y: C.y - dy * 0.12 }, { x: C.x - dx * 0.62, y: C.y - dy * 0.95 },
+		{ x: C.x + dx * 0.62, y: C.y - dy * 0.95 } ];
+	const venueAt = { x: C.x, y: C.y + dy };
+	// The show
+	const named = K.naming( G, { m: me.m, how: K.STAGE, songs: [] } ), night = K.night( m.date );
+	addPiece( sc, v.m, C, 'subject', { below: true, big: true, label: K.clip( named.named ? named.who : ( night || 'a show' ), 28 ),
+		sub: K.clip( named.named ? night : '', 28 ), dx: 0, sdx: 0, delay: 0 } );
+	// The acts: a leader's own mark, or the act's
+	const actKey = [];
+	acts.slice( 0, actAt.length ).forEach( ( a, i ) => {
+		const at = actAt[ i ];
+		if ( a.lead !== null && onStage.has( a.lead ) ) {
+			actKey[ i ] = 'p' + a.lead;
+			const rest = K.actRest( a.title, first( a.lead ) );
+			// under their name, the rest of the act's name ("and the Immutable String Band"), else what they played
+			const plays = String( roles.get( a.lead ) || '' ).split( ';' ).map( ( r ) => r.trim() ).filter( Boolean ).join( ', ' );
+			// named over the mark: under it is the show's own name's row
+			addNode( sc, a.lead, at, a.main ? 'subject' : 'named', { below: false, act: a.title, lead: true,
+				inst: K.clip( rest || plays, 34 ), label: K.clip( first( a.lead ), 26 ), delay: 60 } );
+		} else {
+			actKey[ i ] = 'act' + i;
+			sc.nodes.set( 'act' + i, { stands: 'act', is: 'act' + i, x: at.x, y: at.y, kind: a.main ? 'subject' : 'named', o: 1, delay: 60, above: true,
+				title: a.title || 'the band', members: a.members, main: a.main, page: G.wikipages[ a.title ] || '' } );
+		}
+		sc.lines.set( 'sa' + i, { a: 'q' + v.m, b: actKey[ i ], u: -1, v: -1, tie: { played: true, tier: m.tier, w: 1 }, stands: 'tie',
+			w: a.main ? 3.2 : 2.2, o: 0.95, role: 'spoke', quiet: true, delay: 80 } );
+	} );
+	// The venue, where the source says one
+	if ( m.venue ) {
+		sc.nodes.set( 'venue', { stands: 'venue', is: 'venue', x: venueAt.x, y: venueAt.y, kind: 'named', o: 1, delay: 90,
+			title: m.venue, city: m.city || '', page: G.wikipages[ m.venue ] || '' } );
+		sc.lines.set( 'sv', { a: 'q' + v.m, b: 'venue', u: -1, v: -1, tie: { played: true, tier: m.tier, w: 0.5 }, stands: 'tie',
+			w: 1.4, o: 0.8, role: 'spoke', quiet: true, delay: 90 } );
+	}
+	// Who else was on stage, round them, each as near their act's side as the ring allows
+	const pan = slide( 'm' + v.m, C );
+	const toward = ( id ) => {
+		const i = actOf.get( id ), at = i !== undefined && i < actAt.length ? actAt[ i ] : C;
+		const ax = at.x - C.x, ay = at.y - C.y, len = Math.hypot( ax, ay ) || 1;
+		return i === undefined ? wanted( 'm' + v.m + '·' + id, pan ) : { x: C.x + ( ax / len ) * rx, y: C.y + ( ay / len ) * ry };
+	};
 	const mine = ring.slice( 0, lay.named.length );
-	const pan = slide( 'm' + v.m, lay.C );
-	const seats = K.seat( lay.named, mine.map( ( id ) => wanted( 'm' + v.m + '·' + id, pan ) ) );
+	const seats = K.seat( lay.named, mine.map( toward ) );
 	const seatOf = new Map( mine.map( ( id, i ) => [ id, lay.named[ seats[ i ] ] ] ) );
-	const own = pieceLabel( v.m, { x: lay.C.x, y: lay.C.y }, W, true );
-	const who = host !== null ? first( host ) : '';
-	addPiece( sc, v.m, lay.C, 'subject', Object.assign( { below: true, host, big: true }, own,
-		who ? { label: nameAt( who, lay.C, W, FONT.own ).label, sub: showUnder( me.m, who ) } : {} ) );
 	for ( const id of mine ) {
-		sc.lines.set( 'sp' + id, { a: 'q' + v.m, b: 'p' + id, u: -1, v: id, tie: { played: true, tier: m.tier, w: 0.35 },
-			stands: 'tie', w: lineWidth( { w: 0.35 } ), o: 0.95, role: 'spoke', c: id, quiet: true, delay: 120 } );
-		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { delay: 180 },
+		const i = actOf.get( id ), from = i !== undefined && actKey[ i ] ? actKey[ i ] : 'q' + v.m;
+		sc.lines.set( 'sp' + id, { a: from, b: 'p' + id, u: -1, v: id, tie: { played: true, tier: m.tier, w: 0.35 }, stands: 'tie',
+			w: lineWidth( { w: 0.35 } ), o: 0.9, role: 'spoke', c: id, quiet: true, delay: 120 } );
+		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { delay: 180, act: i !== undefined ? acts[ i ].title : '' },
 			playsAs( first( id ), roles.get( id ) || '', seatOf.get( id ), W, FONT.named ) ) );
 	}
+	ring.slice( mine.length ).forEach( ( id, k ) => {
+		if ( lay.dots[ k ] ) {
+			addNode( sc, id, lay.dots[ k ], 'dot', { r: 4, delay: 300 } );
+		}
+	} );
+	// Lines between those of the show who have played together anywhere else: never anyone who wasn't on its stage
+	const drawn = new Set( [ ...mine, ...leaders ] );
+	const posOf = ( id ) => seatOf.get( id ) || ( sc.nodes.get( 'p' + id ) ) || C;
+	for ( const t of K.among( G, [ ...drawn ], false ) ) {
+		if ( !t.tie.ev.some( ( e ) => e.m !== me.m && !( G.music[ e.m ].kind === 'show' && K.pieceFor( G, e ) === v.m ) ) ) {
+			continue;                                                 // this show is all they share
+		}
+		const pa = posOf( t.u ), pb = posOf( t.v );
+		const spoke = ( x, y ) => leaders.has( x ) && actKey[ actOf.get( y ) ] === 'p' + x;
+		if ( spoke( t.u, t.v ) || spoke( t.v, t.u ) ) {
+			const who = leaders.has( t.u ) ? t.v : t.u, sp = sc.lines.get( 'sp' + who );
+			if ( sp ) {                                               // the spoke from their leader says it: what else they share
+				Object.assign( sp, { tie: t.tie, quiet: false, u: t.u, v: t.v, role: 'shared', w: Math.max( sp.w, lineWidth( t.tie ) * 0.7 ), o: 1 } );
+			}
+			continue;
+		}
+		const bow = seatOf.has( t.u ) && seatOf.has( t.v ) ? K.arc( lay, pa, pb ) : 0;
+		sc.lines.set( lineKey( t.u, t.v ), { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, stands: 'tie', role: 'shared', fine: true,
+			w: Math.max( 1, lineWidth( t.tie ) * 0.6 ), o: 0.75, bow, delay: 300 } );
+	}
 	sc.web = false;
-	const band = nm.name + ( nm.sub ? ' · ' + nm.sub : '' );
-	sc.head = [ h( 'span', { class: 'kind' }, glyphBox( nm.glyph ) ), band ];
+	sc.head = [ h( 'span', { class: 'kind' }, glyphBox( nm.glyph ) ), nm.name + ( nm.sub ? ' · ' + nm.sub : '' ) ];
+	const billed = acts.length ? acts.map( ( a ) => a.title || ( a.lead !== null ? first( a.lead ) : '' ) ).filter( Boolean ) : [];
 	sc.sub = [ 'A show · ', h( 'b', null, K.plural( cast.length, 'picker' ) ), ' on its stage',
-		host !== null ? [ ', billed to ', h( 'b', null, first( host ) ) ] : '', ring.length > mine.length ? ` (${ mine.length } of them drawn)` : '' ].flat();
+		billed.length ? [ ' · ', billed.join( ', then ' ) ] : '', ring.length > mine.length ? ` (${ mine.length } of them named)` : '' ].flat();
 	return sc;
 }
 
@@ -2823,22 +2892,32 @@ function watchClose() {
 
 const noCover = new Set();                                         // pictures that wouldn't load: not asked for again
 
-/** A picker's face in a circle of radius r at (x, y), with its own rim; false where they have none. */
-function faceIn( g, p, x, y, r, again ) {
-	if ( !p.img ) {
-		return false;
+/**
+ * A show's band with no one leader (a mark of heads), or the place it was (a roof): its name under it, the way to its
+ * page where the wiki has one. The main act's mark is the bigger.
+ */
+function drawShowMark( g, d ) {
+	const band = d.stands === 'act', R = band ? ( d.main ? 24 : 17 ) : ( d.page ? 17 : 13 );
+	g.textContent = '';
+	g.setAttribute( 'class', 'pk mark ' + d.stands + ( d.main ? ' main' : '' ) + ( d.page ? '' : ' nopage' ) + ( d.lit ? ' lit' : '' ) );
+	g.setAttribute( 'aria-label', d.title + ( band ? ', the band' : ', where it was' ) );
+	layers.nodes.appendChild( g );
+	g.appendChild( s( 'circle', { class: 'halo', r: R + 8 } ) );
+	g.appendChild( s( 'circle', { class: 'ring', r: R } ) );
+	const k = R / 17;
+	g.appendChild( band ?
+		s( 'g', { class: 'heads', transform: `scale(${ k.toFixed( 2 ) })` },
+			s( 'circle', { cx: -6.5, cy: -3, r: 3.2 } ), s( 'circle', { cx: 6.5, cy: -3, r: 3.2 } ), s( 'circle', { cx: 0, cy: -5.5, r: 3.6 } ),
+			s( 'path', { d: 'M-12 8c0-5 3-7 5.5-7s5.5 2 5.5 7M1 8c0-5 3-7 5.5-7s5.5 2 5.5 7M-6 8c0-6 3-8.5 6-8.5s6 2.5 6 8.5z' } ) ) :
+		s( 'path', { class: 'roof', transform: `scale(${ k.toFixed( 2 ) })`, d: 'M-9 1L0-8l9 9M-6.5-1.5V8h13v-9.5M-2 8V3h4v5' } ) );
+	const y = d.above ? -R - 9 : R + 17 + down( band && d.main ? 17 : 13 );
+	const words = s( 'text', { x: 0, y, 'text-anchor': 'middle' }, K.clip( d.title, 30 ) );
+	if ( !band && d.city ) {
+		words.appendChild( s( 'tspan', { class: 'inst', x: 0, dy: tx( 15 ) }, K.clip( d.city, 30 ) ) );
 	}
-	const img = s( 'image', { class: 'face', href: FACE + encodeURIComponent( p.img.replace( / /g, '_' ) ) + '&width=' + Math.round( 4 * r ),
-		x: x - r, y: y - r, width: 2 * r, height: 2 * r, preserveAspectRatio: 'xMidYMid slice', 'clip-path': `circle(${ r }px at ${ r }px ${ r }px)`, 'aria-hidden': 'true' } );
-	img.addEventListener( 'error', () => {
-		p.img = '';
-		again();
-	} );
-	g.appendChild( s( 'circle', { class: 'ring', cx: x, cy: y, r } ) );
-	g.appendChild( img );
-	g.appendChild( s( 'circle', { class: 'ring rim', cx: x, cy: y, r } ) );
-	return true;
+	g.appendChild( d.page ? s( 'a', { href: wikiUrl( d.page ), target: '_top', 'aria-label': d.title + ': its page on PickiPedia' }, words ) : words );
 }
+
 
 /**
  * A record's own art inside its ring, where its Record page names one (Justin, #connectome, 15 Nov 2026: "where
@@ -2932,24 +3011,13 @@ function drawPiece( g, d ) {
 		}
 		return;
 	}
-	const R = d.big ? 44 : ( d.kind === 'subject' ? 24 : 15 );
+	const R = d.big ? 30 : ( d.kind === 'subject' ? 24 : 15 );
 	const gl = glyph( c.glyph );
 	gl.setAttribute( 'transform', `scale(${ d.kind === 'subject' ? 1.9 : 1.25 })` );
 	g.appendChild( s( 'circle', { class: 'halo', r: R + 8 } ) );
 	g.appendChild( s( 'circle', { class: 'ring', r: R } ) );
-	// A show in the middle holds who it is billed to (showScene): their face filling it, or, where the show has its own
-	// picture, the picture, and their face set into its rim.
-	const hostP = d.host !== undefined && d.host !== null ? P( d.host ) : null;
-	const art = G.music[ pc.m ].art && !noCover.has( G.music[ pc.m ].art );
-	if ( hostP && !art ) {
-		if ( !faceIn( g, hostP, 0, 0, R, () => drawPiece( g, d ) ) ) {
-			g.appendChild( gl );
-		}
-	} else if ( !cover( g, G.music[ pc.m ].art, R, () => drawPiece( g, d ) ) ) {
+	if ( !cover( g, G.music[ pc.m ].art, R, () => drawPiece( g, d ) ) ) {
 		g.appendChild( gl );
-	}
-	if ( hostP && art ) {
-		faceIn( g, hostP, R * 0.72, R * 0.72, R * 0.42, () => drawPiece( g, d ) );
 	}
 	const cg = gems( d.piece, R * 0.75, -R - 6, d.kind === 'subject' ? 1 : 0.75 );   // on the circle's upper right
 	if ( cg ) {
@@ -2963,8 +3031,7 @@ function drawPiece( g, d ) {
 		return;
 	}
 	const y = d.below ? R + 17 + down( d.kind === 'subject' ? 17 : 13 ) : ( d.sub ? -R - 7 - tx( 14 ) : -R - 8 );
-	const name = s( 'a', hostP ? { href: address( { a: d.host } ), 'aria-label': 'Go to ' + hostP.name } : { href: address( { m: d.piece } ), 'aria-label': 'Go to ' + c.name },
-		s( 'text', { x: d.dx || 0, y, 'text-anchor': 'middle' }, d.label ) );
+	const name = s( 'a', { href: address( { m: d.piece } ), 'aria-label': 'Go to ' + c.name }, s( 'text', { x: d.dx || 0, y, 'text-anchor': 'middle' }, d.label ) );
 	if ( d.sub ) {
 		name.appendChild( s( 'text', { class: 'sub', x: d.sdx || 0, y: y + tx( 14 ), 'text-anchor': 'middle' }, d.sub ) );
 	}
@@ -3010,6 +3077,10 @@ const draw = {
 			gl.setAttribute( 'transform', 'scale(1.25)' );
 			g.appendChild( gl );
 			stepLabel( g, d, 15, '/rabbithole/?track=' + encodeURIComponent( d.cid ), d.label );
+			return;
+		}
+		if ( d.stands === 'act' || d.stands === 'venue' ) {          // a show's band with no one leader, or where it was (showScene)
+			drawShowMark( g, d );
 			return;
 		}
 		if ( d.stands === 'page' ) {                                 // a page's own graph: the page in the middle, its name a way to it
@@ -5226,6 +5297,37 @@ function aPicker( d ) {
 	return w;
 }
 
+/** One who was on the stage of the show in the middle: whose act they were in, what they played, who else here they've played with. */
+function aShowPicker( d ) {
+	const id = d.id, name = first( id ), plays = d.inst && !d.lead ? ' · ' + d.inst : instOf( id );
+	const also = [ ...scene.lines.values() ].filter( ( l ) => l.role === 'shared' && ( l.u === id || l.v === id ) ).map( ( l ) => ( l.u === id ? l.v : l.u ) );
+	const w = { kind: ( d.lead ? 'whose show it was · ' : 'on its stage · ' ) + 'a picker' + plays, title: name, tipTitle: name + plays,
+		lines: [ d.act ? ( d.lead ? d.act : 'with ' + d.act ) : '', also.length ? 'has played elsewhere with ' + listNames( also ) + ', here too' : '' ],
+		hint: 'click: go to ' + name, acts: [ act( 'Go to ' + name, () => go( { a: id } ) ) ] };
+	w.acts.push( pageAct( id ) );
+	return w;
+}
+
+/** A line between two of a show's stage: everything else they share; it opens the two of them. */
+function aShowTie( d ) {
+	const t = d.tie, top = K.naming( G, t.ev[ 0 ] );
+	return { kind: 'two pickers of this show', title: `${ first( d.u ) } & ${ first( d.v ) }`,
+		lines: [ K.together( t ), K.clip( top.short, 44 ) + ( t.ev.length > 1 ? `, and ${ t.ev.length - 1 } more` : '' ) ], hint: 'click: open these two',
+		acts: [ act( 'Open these two', () => go( { a: d.u, b: d.v } ) ) ] };
+}
+
+/** A show's band with no one leader, or where it was: its name, and its page where the wiki has one. */
+function aShowMark( d ) {
+	const band = d.stands === 'act';
+	const w = { kind: band ? ( d.main ? 'the main act' : 'an act' ) : 'where it was', title: d.title,
+		lines: band ? [ K.plural( d.members.length, 'picker' ) + ': ' + listNames( d.members.slice( 0, 8 ) ) + ( d.members.length > 8 ? ', …' : '' ) ] : [ d.city || '' ],
+		hint: d.page ? 'click: its page on PickiPedia' : '', acts: [] };
+	if ( d.page ) {
+		w.acts.push( link( 'Its page on PickiPedia ↗', wikiUrl( d.page ), 'page' ) );
+	}
+	return w;
+}
+
 /** A picker who is a line: on a tag, or the line itself, between the piece in the middle and another. */
 function aPickerBetween( d ) {
 	const id = d.who[ 0 ], name = first( id );
@@ -5356,6 +5458,17 @@ function what( g ) {
 		return null;
 	}
 	const d = it.d, out = view.m !== undefined;                      // out: the graph is inside out
+	if ( showView( view ) && !d.step ) {                                // a show in the middle: its own marks (showScene)
+		if ( d.stands === 'picker' && !d.tag ) {
+			return aShowPicker( d );
+		}
+		if ( d.stands === 'act' || d.stands === 'venue' ) {
+			return aShowMark( d );
+		}
+		if ( d.stands === 'tie' ) {
+			return d.quiet ? null : aShowTie( d );
+		}
+	}
 	switch ( d.stands ) {
 		case 'picker':
 			return d.step !== undefined ? aVia( d ) : ( out ? aPickerBetween( d ) : aPicker( d ) );

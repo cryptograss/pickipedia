@@ -63,8 +63,36 @@ export function build( g ) {
 	const byName = new Map( people.map( ( p ) => [ p.name.toLowerCase(), p.id ] ) );
 	return Object.assign( { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
 		songcast: g.songcast || {}, plays: g.plays || {}, built: g.built || '',
-		pages: g.pages || {}, stones: stonesFrom( g ), stonesRead: g.stones_read || null, authors: g.authors || {} },
+		pages: g.pages || {}, stones: stonesFrom( g ), stonesRead: g.stones_read || null, authors: g.authors || {},
+		acts: actsFrom( g ), wikipages: g.wikipages || {} },
 	makers( g, music, byName ), pieces( g, people, music ) );   // pages: a page's own graph's pickers, and no tie
+}
+
+/**
+ * Who each show is billed to (graph.json acts; tools/connectome_graph.py acts_of): music id -> [{ title, members, lead,
+ * main }], the main act first. `lead`: the picker the act's name names (Kyle Tuttle is Kyle Tuttle's act; "Justin Holmes
+ * and the Immutable String Band" is Justin Myles Holmes's), or null (BKH & JC, Yonder Mountain String Band).
+ */
+function actsFrom( g ) {
+	return new Map( Object.entries( g.acts || {} ).map( ( [ k, acts ] ) => [ Number( k ), acts.map( ( [ title, members, lead ], i ) =>
+		( { title: String( title || '' ), members: members.slice(), lead: lead >= 0 ? lead : null, main: i === 0 } ) ) ] ) );
+}
+
+/** A show's acts, the main one first; [] for a show billed to nobody, or no show. */
+export function actsOf( G, m ) {
+	return ( G.acts && G.acts.get( m ) ) || [];
+}
+
+/**
+ * An act's name past its leader's, for the line under their name: "Justin Holmes and the Immutable String Band", led by
+ * Justin Myles Holmes, says "and the Immutable String Band"; an act that is its leader's own name says ''.
+ */
+export function actRest( title, leader ) {
+	const t = String( title || '' ).trim(), lead = bandShort( t );
+	if ( !t || t.toLowerCase() === String( leader || '' ).toLowerCase() || lead === t ) {
+		return '';
+	}
+	return t.slice( lead.length ).trim();
 }
 
 /**

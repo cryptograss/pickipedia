@@ -176,3 +176,36 @@ def test_a_show_says_its_own_name_and_where_it_was_and_a_record_says_neither():
     g = cg.export(pairs, targets, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-21')
     rows = {m[0]: m for m in g['music']}
     assert rows['lma:tape1'][9] == ['', 'Grassfire', 'Boone, NC'] and len(rows['arthel:4masks']) == 9
+
+
+# ---- who a show is billed to: its acts, the main one first (Justin, #connectome, 26 Nov 2026, 02:15Z) ----
+
+def test_an_act_is_led_by_the_one_its_name_names():
+    people = ['Kyle Tuttle', 'Justin Myles Holmes', 'Bronwyn Keith-Hynes', 'Jason Carter']
+    assert cg.lead_of('Kyle Tuttle', people) == 'Kyle Tuttle'
+    assert cg.lead_of('Justin Holmes and the Immutable String Band', people) == 'Justin Myles Holmes'   # first and last name
+    assert cg.lead_of('Justin Myles Holmes and The Immutable String Band', people) == 'Justin Myles Holmes'
+    assert cg.lead_of('Bronwyn Keith-Hynes and Jason Carter', people) is None                       # two: no one leader
+    assert cg.lead_of('BKH & JC', people) is None
+    assert cg.lead_of('Yonder Mountain String Band', people) is None
+    assert cg.band_short('Justin Holmes & his Band') == 'Justin Holmes'
+
+
+def test_a_shows_acts_are_its_bands_the_main_one_first():
+    targets = {'wiki:Show:B': {'kind': 'show', 'artist': 'Bronwyn Keith-Hynes and Jason Carter',
+                               'bands': [{'title': 'Light the Wire', 'members': ['Alexa Toro']},
+                                         {'title': 'BKH & JC', 'members': ['Bronwyn Keith-Hynes', 'Jason Carter', 'Nobody Here']}]},
+               'lma:t': {'kind': 'show', 'artist': 'Kyle Tuttle', 'bands': []},
+               'video:Q': {'kind': 'show', 'artist': '', 'bands': []},
+               'discogs:1': {'kind': 'record', 'artist': 'Kyle Tuttle'}}
+    cast = {'wiki:Show:B': {'Alexa Toro': [], 'Bronwyn Keith-Hynes': [], 'Jason Carter': []},
+            'lma:t': {'Kyle Tuttle': [], 'Sam Leslie': []}, 'video:Q': {'Sam Leslie': [], 'Kyle Tuttle': []},
+            'discogs:1': {'Kyle Tuttle': []}}
+    pid = {n: i for i, n in enumerate(['Alexa Toro', 'Bronwyn Keith-Hynes', 'Jason Carter', 'Kyle Tuttle', 'Sam Leslie'])}
+    used = ['discogs:1', 'lma:t', 'video:Q', 'wiki:Show:B']
+    mid = {t: i for i, t in enumerate(used)}
+    acts = cg.acts_of(targets, used, mid, cast, pid)
+    # the act whose members the billing names comes first, though the page has it second; who isn't on stage isn't in it
+    assert acts['3'] == [['BKH & JC', [1, 2], -1], ['Light the Wire', [0], -1]]
+    assert acts['1'] == [['Kyle Tuttle', [3, 4], 3]]                  # a taper's tape: its artist, everyone on it
+    assert '2' not in acts and '0' not in acts                         # a video is billed to nobody; a record isn't a show

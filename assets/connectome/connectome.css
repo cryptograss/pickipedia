@@ -307,6 +307,14 @@ main {
 .pk.page .leaf { fill: var( --surface ); stroke: var( --ink ); stroke-width: 1.4; stroke-linejoin: round; }
 .pk.page .writ { fill: none; stroke: var( --ink ); stroke-width: 1.1; }
 
+/* A show's band with no one leader, and where the show was (showScene): marks of their own, named under them. */
+.pk.mark.main text { stroke-width: 6px; font-size: calc( 17px * var( --t, 1 ) ); }
+.pk.mark .heads circle,
+.pk.mark .heads path { fill: var( --ink ); stroke: none; }
+.pk.mark .roof { fill: none; stroke: var( --ink ); stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; }
+.pk.mark.venue .ring { stroke-dasharray: 3 2.5; }
+.pk.mark.nopage text { fill: var( --ink2 ); }
+
 /* What kind of thing a headline names, when it isn't a picker. */
 #say .kind svg { vertical-align: -2px; margin-right: 6px; }
 

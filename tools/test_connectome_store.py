@@ -305,10 +305,30 @@ def test_a_show_page_is_read_with_its_ensemble_however_it_is_written():
 """
     got = S.show_page("Show:KyleTuttle-26482267", text)
     assert got == {"show": "Show:KyleTuttle-26482267", "artist": "Kyle Tuttle", "venue": "Dee's Country Cocktail Lounge",
-                   "block": "26482267", "poster": "", "ensemble": {"Ann One": [], "Bob Two": [], "Cat Three": ["fiddle"], "Kyle Tuttle": [],
+                   "block": "26482267", "poster": "", "bands": got["bands"], "ensemble": {"Ann One": [], "Bob Two": [], "Cat Three": ["fiddle"], "Kyle Tuttle": [],
                                                      "Geoff Saunders": ["bass"]}}
     assert S.show_page("Show:Nobody-1", "{{Show|artists=X|venue=Y|blockheight=1}}") is None     # nobody on stage
     assert S.show_page("Show:A-1", "{{Show|artists=X|official_poster=File:Dees.jpg}}\n{{Ensemble|Ann}}")["poster"] == "Dees.jpg"
+    two = S.show_page("Show: BronwynAndJason-24401908", """{{Show
+|artists=[[Bronwyn Keith-Hynes]] and [[Jason Carter]]
+|venue=Bayboro Brewing
+|image=Whole thing.jpg
+}}
+{{Ensemble
+|Bronwyn Keith-Hynes
+|Jason Carter
+|title=BKH & JC
+}}
+{{Ensemble
+|Alexa Toro
+|Dani Jaye
+|title=Light the Wire
+}}""")
+    assert two["bands"] == [{"title": "BKH & JC", "members": ["Bronwyn Keith-Hynes", "Jason Carter"]},
+                            {"title": "Light the Wire", "members": ["Alexa Toro", "Dani Jaye"]}]      # each block a band, in order
+    assert two["poster"] == "Whole thing.jpg"
+    assert got["bands"] == [{"title": "Band", "members": ["Cat Three"]},
+                            {"title": "", "members": ["Ann One", "Bob Two", "Kyle Tuttle", "Geoff Saunders"]}]
     pages = {"Show:KyleTuttle-26482267": text, "User:Someone/Sandbox": "{{Show|artists=Z}}\n{{Ensemble|Zed}}"}
     got = S.fetch_releases("https://wiki.example/", get=_wiki(pages))
     assert [r["show"] for r in got] == ["Show:KyleTuttle-26482267"]        # only pages called Show:

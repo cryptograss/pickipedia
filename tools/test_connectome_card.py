@@ -771,3 +771,17 @@ def test_the_graph_carries_the_authors_of_the_songs_it_names():
     named = {s for _, _, ev in g['ties'] for e in ev for s in e[3]}
     assert named == {'August', 'Barlows Jig'}
     assert g['authors'] == {'August': ['Justin Holmes'], 'Barlows Jig': ['Justin Holmes']}   # by the graph's own spelling; Elsewhere isn't in it
+
+
+def test_the_graph_says_which_venues_and_acts_have_a_page():
+    pairs = [pair('Kyle Tuttle', 'Sam Leslie', 'show', 'wiki:Show:K')]
+    whole = {'wiki:Show:K': {'kind': 'show', 'title': 'Show:K', 'date': 'block 1', 'artist': 'Kyle Tuttle', 'grp': 'wiki:Show:K',
+                             'formats': [], 'venue': "Dee's Country Cocktail Lounge", 'city': '', 'poster': '',
+                             'bands': [{'title': '', 'members': ['Kyle Tuttle', 'Sam Leslie']}]}}
+    wiki = FakeWiki(pages={'Kyle Tuttle', 'Sam Leslie', "Dee's Country Cocktail Lounge"}, musicians=['Kyle Tuttle'])
+    credits = [('Kyle Tuttle', '', 'wiki:Show:K', 'show', 'u'), ('Sam Leslie', 'bass', 'wiki:Show:K', 'show', 'u')]
+    g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 26), None, whole, credits)['graph']
+    names = [p[0] for p in g['people']]
+    k = [i for i, m in enumerate(g['music']) if m[0] == 'wiki:Show:K'][0]
+    assert g['acts'][str(k)] == [['Kyle Tuttle', [names.index('Kyle Tuttle'), names.index('Sam Leslie')], names.index('Kyle Tuttle')]]
+    assert "Dee's Country Cocktail Lounge" in g['wikipages'] and 'Kyle Tuttle' in g['wikipages']
