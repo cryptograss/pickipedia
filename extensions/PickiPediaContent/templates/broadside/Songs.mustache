@@ -1,0 +1,13 @@
+{{!
+  The writer's songs that Rabbithole charts, each a way in to hear it
+  (PostData::songs). skin.mustache has this twice, and frame.css shows one
+  of the two: beside the post where there is a side column, after it
+  where there isn't.
+}}
+{{#songs}}
+<section class="bs-shelf bs-songs">
+	<h2>{{heading}}</h2>
+	<ul>{{#array-items}}<li><a class="bs-play" href="{{listen}}" title="{{msg-pickipediacontent-posts-listen}}"><span class="bs-play-mark" aria-hidden="true">▶</span><span class="bs-play-title">{{title}}</span></a><a class="bs-songpage" href="{{url}}" title="{{msg-pickipediacontent-posts-songpage}}" aria-label="{{msg-pickipediacontent-posts-songpage}}: {{title}}">♪</a></li>{{/array-items}}</ul>
+	<p class="bs-shelf-note">{{msg-pickipediacontent-posts-songs-note}}</p>
+</section>
+{{/songs}}

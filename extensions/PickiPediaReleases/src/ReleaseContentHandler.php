@@ -13,7 +13,9 @@ use MediaWiki\Content\ContentHandler;
 use MediaWiki\Content\Renderer\ContentParseParams;
 use MediaWiki\Content\ValidationParams;
 use MediaWiki\Html\Html;
+use MediaWiki\MediaWikiServices;
 use MediaWiki\Parser\ParserOutput;
+use MediaWiki\Title\Title;
 use StatusValue;
 
 class ReleaseContentHandler extends ContentHandler {
@@ -46,6 +48,22 @@ class ReleaseContentHandler extends ContentHandler {
 	 */
 	public function unserializeContent( $text, $format = null ): ReleaseContent {
 		return new ReleaseContent( $text );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function supportsRedirects(): bool {
+		return true;
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function makeRedirectContent( Title $destination, $text = '' ) {
+		return new ReleaseContent(
+			ReleaseContent::formatRedirectYaml( $destination->getPrefixedText() )
+		);
 	}
 
 	/**
@@ -86,6 +104,22 @@ YAML;
 	): void {
 		if ( !$content instanceof ReleaseContent ) {
 			$output->setRawText( '<p>Invalid content type</p>' );
+			return;
+		}
+
+		$redir = $content->getRedirectTarget();
+		if ( $redir ) {
+			$output->addLink( $redir );
+			if ( $cpoParams->getGenerateHtml() ) {
+				$services = MediaWikiServices::getInstance();
+				$output->setRedirectHeader(
+					$services->getLinkRenderer()->makeRedirectHeader(
+						$services->getContentLanguage(), $redir, false
+					)
+				);
+				$output->addModuleStyles( [ 'mediawiki.action.view.redirectPage' ] );
+			}
+			$output->setRawText( '' );
 			return;
 		}
 
@@ -150,20 +184,17 @@ YAML;
 			) . $reasonHtml );
 		}
 
-		// Determine if this release is a video:
-		// 1. Explicit file_type in YAML
-		// 2. Inferred from backlinks (pages using HLSVideo template link here)
-		// file_type is a MIME type ("video/mp4") for most releases, but
-		// delivery-kid writes the bare word "video" for Blue Railroad
-		// submissions; those got no player at all.
+		// A release is a video when its own YAML says so: file_type
+		// ("video/mp4" for most; delivery-kid writes the bare word "video"
+		// for Blue Railroad submissions) or release_type: video. It used to
+		// be inferred from backlinks too (any page that linked here and
+		// used Template:HLSVideo), which put a video player, and its
+		// "Could not load this video" box, on the 4masks record: the 4masks
+		// page links the record and embeds a different video, the melodica
+		// overdubs (Justin, #rabbithole, 12 Nov 2026).
 		$fileType = (string)( $data['file_type'] ?? '' );
-		$isVideo = $fileType === 'video' || str_starts_with( $fileType, 'video/' );
-		if ( !$isVideo && ( $data['release_type'] ?? '' ) === 'video' ) {
-			$isVideo = true;
-		}
-		if ( !$isVideo && $pageRef ) {
-			$isVideo = $this->hasHLSVideoBacklink( $pageRef );
-		}
+		$isVideo = $fileType === 'video' || str_starts_with( $fileType, 'video/' )
+			|| ( $data['release_type'] ?? '' ) === 'video';
 
 		// The release's own name as the page's heading and the tab's title:
 		// "Cory Walkers Birthday Banjo Cake", not "Release:QmUQwn…". The CID
@@ -192,12 +223,17 @@ YAML;
 		$output->setExtensionData( self::CARD_KEY,
 			$this->card( $cid, $data, $releaseTitle, $isVideo ) );
 
-		// "Play in Rabbithole" button for track-type releases that have an
-		// OGG encoding available. Opens the rabbithole demo (player +
-		// timeline editor + ensemble visualization) for this track.
-		$isTrack = ( $data['release_type'] ?? '' ) === 'track';
-		$hasOgg = !empty( $data['encodings']['ogg'] );
-		if ( $cid && $isTrack && $hasOgg ) {
+		// "Play in Rabbithole" button for every release Rabbithole can play:
+		// an album track (it has encodings) or a song uploaded on its own
+		// (its file_type is audio). Opens the player and timeline editor
+		// for it. It was album tracks only, so Reuben's Train from Web3
+		// Summit 2024, uploaded to be charted, had no way into Rabbithole
+		// short of asking someone for the link (Justin, 11 Nov 2026).
+		// A record, which lists its tracks, gets theirs instead.
+		$hasEncoding = !empty( $data['encodings']['ogg'] ) || !empty( $data['encodings']['flac'] );
+		$isAudio = str_starts_with( (string)( $data['file_type'] ?? '' ), 'audio/' );
+		$isRecord = !empty( $data['tracks'] );
+		if ( $cid && !$isRecord && ( $hasEncoding || $isAudio ) ) {
 			$html .= Html::rawElement( 'div',
 				[ 'class' => 'release-rabbithole-link',
 				  'style' => 'margin: 1em 0; padding: 0.75em;'
@@ -734,39 +770,6 @@ YAML;
 		$html .= Html::closeElement( 'div' );
 
 		return $html;
-	}
-
-	/**
-	 * Check if any page linking to this release uses the HLSVideo template.
-	 *
-	 * Joins pagelinks → page → templatelinks → linktarget to find pages
-	 * that both link to this Release page and transclude Template:HLSVideo.
-	 *
-	 * @param mixed $pageRef
-	 * @return bool
-	 */
-	private function hasHLSVideoBacklink( $pageRef ): bool {
-		$services = \MediaWiki\MediaWikiServices::getInstance();
-		$dbr = $services->getDBLoadBalancer()->getConnection( DB_REPLICA );
-
-		// Find pages that link to this Release AND use Template:HLSVideo
-		$result = $dbr->newSelectQueryBuilder()
-			->select( '1' )
-			->from( 'pagelinks' )
-			->join( 'linktarget', 'lt_release', 'pl_target_id = lt_release.lt_id' )
-			->join( 'templatelinks', null, 'pl_from = tl_from' )
-			->join( 'linktarget', 'lt_template', 'tl_target_id = lt_template.lt_id' )
-			->where( [
-				'lt_release.lt_namespace' => $pageRef->getNamespace(),
-				'lt_release.lt_title' => $pageRef->getDBkey(),
-				'lt_template.lt_namespace' => NS_TEMPLATE,
-				'lt_template.lt_title' => 'HLSVideo',
-			] )
-			->limit( 1 )
-			->caller( __METHOD__ )
-			->fetchResultSet();
-
-		return $result->numRows() > 0;
 	}
 
 	/**

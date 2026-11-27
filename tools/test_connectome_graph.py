@@ -1,0 +1,211 @@
+"""Tests for connectome_graph.py: the big graph's one file, and the release tier read from a record's source."""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(__file__))
+import connectome_card as cc  # noqa: E402
+import connectome_graph as cg  # noqa: E402
+
+
+def pair(a, b, kind, target, tracks=()):
+    return {'a': a, 'b': b, 'kind': kind, 'target': target, 'tracks': [list(t) for t in tracks]}
+
+
+def test_an_etree_tape_or_a_cryptograss_record_is_permanent():
+    assert cg.tier('lma:SGP2025-07-05', ['archive.org collection: etree']) == 2
+    assert cg.tier('lma:x', ['archive.org collection: stringcheeseincident', 'archive.org collection: etree']) == 2
+    assert cg.tier('arthel:4masks', []) == 2
+    assert cg.tier('release:QmNogiUdf4xR98WZ3beGCUHJJ9RK9gkd91dsBKereUNVBd', []) == 1
+
+
+def test_a_tape_outside_etree_is_full():
+    # Justin, #connectome, 15 Nov 2026: Frank Evans's and Luke Munday's tapes, full but not permanent
+    assert cg.tier('lma:slocanramblers-2025-06-22', ['archive.org collection: taperssection']) == 1
+    assert cg.tier('lma:ENG2018-03-05.kel.MP3', ['archive.org collection: opensource_audio']) == 1
+    assert cg.tier('lma:x', []) == 1                                         # no collection said: not etree
+    assert cg.tier('lma:x') == 1
+
+
+def test_a_record_is_full_only_when_its_source_lists_a_carrier_with_no_drm():
+    assert cg.tier('discogs:1', ['CD (Album)']) == 1
+    assert cg.tier('discogs:1', ['Vinyl (LP, Album, Limited Edition)']) == 1
+    assert cg.tier('mb:x', ['12" Vinyl']) == 1
+    assert cg.tier('discogs:1', ['File (FLAC)', 'CDr (EP)']) == 1          # one open carrier is enough
+
+
+def test_what_the_source_does_not_say_is_not_guessed():
+    assert cg.tier('discogs:1', []) == 0                                    # no format listed
+    assert cg.tier('discogs:1') == 0
+    assert cg.tier('discogs:1', ['File (FLAC)']) == 0                       # a file, of a kind nobody says
+    assert cg.tier('mb:x', ['Digital Media']) == 0
+    assert cg.tier('discogs:1', ['CD (Album, Copy Protected)']) == 0
+    assert cg.tier('discogs:1', ['SACD (Album)', 'DVD']) == 0
+
+
+def test_a_duet_weighs_more_than_a_seat_in_a_choir():
+    duet = pair('A', 'B', 'track', 'discogs:1', [('u', '1', 'Duet')])
+    choir = [pair(x, y, 'track', 'discogs:1', [('u', '2', 'Choir')])
+             for i, x in enumerate('CDEFG') for y in 'CDEFG'[i + 1:]]
+    track, stage, record = cg.casts([duet] + choir)
+    assert cg.weight(duet, track, stage, record) == 1.0
+    assert cg.weight(choir[0], track, stage, record) == 0.25               # five were there: 1 / (5 - 1)
+
+
+def test_a_show_counts_once_however_many_songs_they_share_and_a_record_by_its_tracks():
+    p = pair('A', 'B', 'track', 'lma:x', [('u', '', '01 One'), ('u', '', '02 Two'), ('u', '', '03 Three')])
+    crowd = [pair('A', 'C', 'track', 'lma:x', [('u', '', '02 Two')]), pair('B', 'C', 'track', 'lma:x', [('u', '', '02 Two')])]
+    track, stage, record = cg.casts([p] + crowd)
+    assert cg.weight(p, track, stage, record, show=True) == 1.0             # a show: the closest they got there, a duet
+    assert cg.weight(p, track, stage, record) == 2.5                        # a record: two duets and a trio, each cut
+    show = [pair('A', 'B', 'show', 'lma:y'), pair('A', 'C', 'show', 'lma:y'), pair('B', 'C', 'show', 'lma:y')]
+    track, stage, record = cg.casts(show)
+    assert cg.weight(show[0], track, stage, record) == 0.5
+
+
+TARGETS = {
+    'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []},
+    'lma:tape1': {'kind': 'show', 'title': 'SGP Live at Grassfire on 2025-07-05', 'date': '2025-07-05',
+                  'artist': 'Sam Grisman Project', 'grp': 'lma-show:SGP|2025-07-05', 'formats': ['archive.org collection: etree']},
+    'lma:tape2': {'kind': 'show', 'title': 'SGP Live at Grassfire on 2025-07-05 (aud)', 'date': '2025-07-05',
+                  'artist': 'Sam Grisman Project', 'grp': 'lma-show:SGP|2025-07-05', 'formats': ['archive.org collection: etree']},
+    'discogs:7': {'kind': 'record', 'title': 'Safe, Sensible And Sane', 'date': '2025', 'artist': 'Alison Brown',
+                  'grp': 'discogs-master:9', 'formats': ['CD (Album)']},
+    'discogs:8': {'kind': 'record', 'title': 'Streamed Only', 'date': '2024', 'artist': 'X', 'grp': 'discogs:8',
+                  'formats': ['File (AAC)']},
+}
+
+
+def _export(pairs, credits=(), featured=('Kyle Tuttle',), pages=None, plays=None):
+    return cg.export(pairs, TARGETS, list(credits), lambda n: n in ('Kyle Tuttle', 'Molly Tuttle'), {'Kyle Tuttle': 'banjo'},
+                     list(featured), '2026-11', cc.song, pages or {}, '2026-11-13', plays)
+
+
+def test_export_keeps_one_entry_a_show_the_closest_way_they_are_together():
+    pairs = [pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:tape1'),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'track', 'lma:tape2', [('u', '', '01. My Mountain so High')]),
+             pair('Kyle Tuttle', 'Sam Bush', 'apart', 'lma:tape1')]             # one bill, not one stage: no tie
+    g = _export(pairs)
+    names = [p[0] for p in g['people']]
+    assert names == ['Kyle Tuttle', 'Molly Tuttle']                             # Sam Bush has no tie, so no place
+    assert g['people'][0] == ['Kyle Tuttle', 1, 'banjo'] and g['featured'] == [0]
+    assert len(g['ties']) == 1
+    a, b, ev = g['ties'][0]
+    assert (a, b) == (0, 1) and len(ev) == 1                                    # two tapes of one show: one time
+    m, how, w, songs = ev[0]
+    assert g['music'][m][0] == 'lma:tape2' and how == 3 and w == 1.0 and songs == ['01. My Mountain so High']
+    two = _export([pair('Kyle Tuttle', 'Justin Myles Holmes', 'track', 'arthel:4masks', [('u', '', 'silver-44'), ('u', '', 'victory-ff7')])])
+    assert two['ties'][0][2][0][2] == 2.0                                       # a record: each track they share counts
+    assert g['music'][m][5] == 2 and g['music'][m][6] == 'https://archive.org/details/tape2'
+
+
+def test_an_artist_credit_names_itself_and_each_name_in_it():
+    assert cg.credited('Alison Brown') == ['Alison Brown']
+    assert cg.credited('Jerry Garcia, David Grisman') == ['Jerry Garcia, David Grisman', 'Jerry Garcia', 'David Grisman']
+    assert cg.credited('David Grisman, Emory Gordy, Jr.') == ['David Grisman, Emory Gordy, Jr.', 'David Grisman', 'Emory Gordy, Jr.']
+    assert cg.credited('Johnny Campbell & The Bluegrass Drifters')[1:] == ['Johnny Campbell', 'The Bluegrass Drifters']
+    assert cg.credited('') == [] and cg.credited(None) == []
+
+
+def test_export_says_who_made_each_record_and_nobody_made_a_show():
+    # Justin, #connectome, 15 Nov 2026, 07:29Z: at the other end of a song's line, the recording artist who made it first
+    pairs = [pair('Kyle Tuttle', 'Alison Brown', 'track', 'discogs:7', [('u', '1', 'Tune')]),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:tape1')]
+    g = _export(pairs)
+    people = [p[0] for p in g['people']]
+    made = {m[0]: [people[i] for i in ids] for m, ids in zip(g['music'], g['made'])}
+    assert made == {'discogs:7': ['Alison Brown'], 'lma:tape1': []}
+    # a band's night named for a picker is still nobody's record
+    named = dict(TARGETS, **{'lma:tape1': dict(TARGETS['lma:tape1'], artist='Molly Tuttle')})
+    g = cg.export(pairs, named, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15')
+    assert g['made'][[m[0] for m in g['music']].index('lma:tape1')] == []
+    # the build's makers, by the wiki's own names, over the credit as written
+    targets = dict(TARGETS, **{'discogs:7': dict(TARGETS['discogs:7'], artist='Alison Brown & Friends', makers=['Kyle Tuttle'])})
+    g = cg.export(pairs, targets, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-15')
+    assert [g['people'][i][0] for i in g['made'][[m[0] for m in g['music']].index('discogs:7')]] == ['Kyle Tuttle']
+
+
+def test_export_says_each_records_tier_and_where_to_check_it():
+    pairs = [pair('Molly Tuttle', 'Vickie Vaughn', 'track', 'discogs:7', [('u', '9', "Girl, Have Money When You're Old")]),
+             pair('Molly Tuttle', 'Vickie Vaughn', 'record', 'discogs:8'),
+             pair('Kyle Tuttle', 'Justin Myles Holmes', 'track', 'arthel:4masks', [('gh/silver-44.yaml', '', 'silver-44')])]
+    credits = [('Kyle Tuttle', '5-string banjo', 'arthel:4masks', 'track', 'gh/silver-44.yaml'),
+               ('Justin Myles Holmes', 'guitar; Guitar; vocals', 'arthel:4masks', 'track', 'gh/silver-44.yaml'),
+               ('Molly Tuttle', 'Vocals', 'discogs:7', 'track', 'https://www.discogs.com/release/7'),
+               ('Somebody Else', 'Bass', 'discogs:7', 'release', 'https://www.discogs.com/release/7')]
+    g = _export(pairs, credits, pages={'4masks': '/wiki/4masks', 'Song:Silver 44': '/wiki/Song:Silver_44'})
+    music = {m[0]: m for m in g['music']}
+    assert music['discogs:7'][5] == 1 and music['discogs:7'][6] == 'https://www.discogs.com/release/7'
+    assert music['discogs:8'][5] == 0                                           # a file, of a kind nobody says
+    assert music['arthel:4masks'][5:] == [2, 'gh/silver-44.yaml', '/wiki/4masks', '']        # no art said
+    assert g['songs'] == {'Silver 44': '/wiki/Song:Silver_44'}
+    names = [p[0] for p in g['people']]
+    cast = dict(zip([m[0] for m in g['music']], g['cast']))
+    assert [names[i] for i, _ in cast['arthel:4masks']] == ['Justin Myles Holmes', 'Kyle Tuttle']
+    assert dict((names[i], r) for i, r in cast['arthel:4masks'])['Justin Myles Holmes'] == 'guitar; vocals'
+    assert [names[i] for i, _ in cast['discogs:7']] == ['Molly Tuttle']         # only pickers the graph has a place for
+    tie = next(ev for a, b, ev in g['ties'] if {names[a], names[b]} == {'Molly Tuttle', 'Vickie Vaughn'})
+    assert [e[1] for e in tie] == [3, 1]                                        # the track first, the looser record after
+
+
+def test_the_pages_asked_after_are_cryptograsss_records_and_their_songs():
+    pairs = [pair('A', 'B', 'track', 'arthel:4masks', [('u', '', 'silver-44'), ('u', '', 'victory-ff7')]),
+             pair('A', 'B', 'track', 'lma:tape1', [('u', '', '01. Not [a] title')])]
+    assert cg.arthel_pages(pairs, TARGETS, cc.song) == ['4masks', 'Song:Silver 44', 'Song:Victory']
+
+
+def test_only_a_cryptograss_records_own_track_plays_in_rabbithole():
+    pairs = [pair('Kyle Tuttle', 'Justin Myles Holmes', 'track', 'arthel:4masks', [('gh/silver-44.yaml', '', 'silver-44')]),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'track', 'lma:tape2', [('https://archive.org/details/tape2', '', '01. Silver 44')]),
+             pair('Molly Tuttle', 'Vickie Vaughn', 'track', 'discogs:7', [('u', '9', 'Victory')])]
+    plays = {'Silver 44': 'QmSilver', '01. Silver 44': 'QmTaped', 'Victory': 'QmVictory', 'Unasked': 'QmNo'}
+    assert _export(pairs, plays=plays)['plays'] == {'Silver 44': 'QmSilver'}      # not the tape's take, nor another label's record
+    assert _export(pairs)['plays'] == {}
+
+
+def test_a_show_says_its_own_name_and_where_it_was_and_a_record_says_neither():
+    # Justin, #connectome, 21 Nov 2026: a show's name, city and venue, where its source has them
+    assert cg.show_place('arthel:show:0-11908068', {'kind': 'show', 'title': 'Hello Decentralization', 'venue': 'chiva lounge',
+                                                    'city': 'Barcelona, Catalonia'}) == ['Hello Decentralization', 'chiva lounge', 'Barcelona, Catalonia']
+    # a tape's title is archive.org's sentence, not a name of its own; a title that is only the file's is none either
+    assert cg.show_place('lma:tape1', {'kind': 'show', 'title': 'SGP Live at Grassfire on 2025-07-05', 'venue': 'Grassfire', 'city': ''}) == ['', 'Grassfire', '']
+    assert cg.show_place('arthel:show:0-14628177', {'kind': 'show', 'title': '0-14628177', 'venue': '', 'city': ''}) is None
+    assert cg.show_place('lma:tape2', {'kind': 'show', 'title': 'SGP Live at Grassfire'}) is None           # a store built before shows kept places
+    assert cg.show_place('arthel:4masks', {'kind': 'record', 'title': '4masks', 'venue': 'x'}) is None
+    targets = dict(TARGETS, **{'lma:tape1': dict(TARGETS['lma:tape1'], venue='Grassfire', city='Boone, NC')})
+    pairs = [pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:tape1'), pair('Kyle Tuttle', 'Molly Tuttle', 'track', 'arthel:4masks', [('u', '', 'silver-44')])]
+    g = cg.export(pairs, targets, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-21')
+    rows = {m[0]: m for m in g['music']}
+    assert rows['lma:tape1'][9] == ['', 'Grassfire', 'Boone, NC'] and len(rows['arthel:4masks']) == 9
+
+
+# ---- who a show is billed to: its acts, the main one first (Justin, #connectome, 26 Nov 2026, 02:15Z) ----
+
+def test_an_act_is_led_by_the_one_its_name_names():
+    people = ['Kyle Tuttle', 'Justin Myles Holmes', 'Bronwyn Keith-Hynes', 'Jason Carter']
+    assert cg.lead_of('Kyle Tuttle', people) == 'Kyle Tuttle'
+    assert cg.lead_of('Justin Holmes and the Immutable String Band', people) == 'Justin Myles Holmes'   # first and last name
+    assert cg.lead_of('Justin Myles Holmes and The Immutable String Band', people) == 'Justin Myles Holmes'
+    assert cg.lead_of('Bronwyn Keith-Hynes and Jason Carter', people) is None                       # two: no one leader
+    assert cg.lead_of('BKH & JC', people) is None
+    assert cg.lead_of('Yonder Mountain String Band', people) is None
+    assert cg.band_short('Justin Holmes & his Band') == 'Justin Holmes'
+
+
+def test_a_shows_acts_are_its_bands_the_main_one_first():
+    targets = {'wiki:Show:B': {'kind': 'show', 'artist': 'Bronwyn Keith-Hynes and Jason Carter',
+                               'bands': [{'title': 'Light the Wire', 'members': ['Alexa Toro']},
+                                         {'title': 'BKH & JC', 'members': ['Bronwyn Keith-Hynes', 'Jason Carter', 'Nobody Here']}]},
+               'lma:t': {'kind': 'show', 'artist': 'Kyle Tuttle', 'bands': []},
+               'video:Q': {'kind': 'show', 'artist': '', 'bands': []},
+               'discogs:1': {'kind': 'record', 'artist': 'Kyle Tuttle'}}
+    cast = {'wiki:Show:B': {'Alexa Toro': [], 'Bronwyn Keith-Hynes': [], 'Jason Carter': []},
+            'lma:t': {'Kyle Tuttle': [], 'Sam Leslie': []}, 'video:Q': {'Sam Leslie': [], 'Kyle Tuttle': []},
+            'discogs:1': {'Kyle Tuttle': []}}
+    pid = {n: i for i, n in enumerate(['Alexa Toro', 'Bronwyn Keith-Hynes', 'Jason Carter', 'Kyle Tuttle', 'Sam Leslie'])}
+    used = ['discogs:1', 'lma:t', 'video:Q', 'wiki:Show:B']
+    mid = {t: i for i, t in enumerate(used)}
+    acts = cg.acts_of(targets, used, mid, cast, pid)
+    # the act whose members the billing names comes first, though the page has it second; who isn't on stage isn't in it
+    assert acts['3'] == [['BKH & JC', [1, 2], -1], ['Light the Wire', [0], -1]]
+    assert acts['1'] == [['Kyle Tuttle', [3, 4], 3]]                  # a taper's tape: its artist, everyone on it
+    assert '2' not in acts and '0' not in acts                         # a video is billed to nobody; a record isn't a show

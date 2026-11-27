@@ -95,6 +95,15 @@ pipeline {
                     php tests/check-magenta-push.php
                     # Time zones: MediaWiki's time offset preference, read as a zone for {{#timezone:}}.
                     php tests/check-timezone.php
+                    # A page's card where its address is shared: its opening and its picture.
+                    php tests/check-socialcard.php
+                    # Posts (a user's subpages, read in the Broadside skin): which titles, their headlines and
+                    # series, the rail, their videos' shapes, and what is kept of magenta's word on a tiding.
+                    php tests/check-posts.php
+                    php tests/check-night.php
+                    # A pale ground written in a stylesheet of ours is answered by night, or named in the
+                    # list there of what is not yet answered.
+                    php tests/check-night-grounds.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter
                     # but MediaWiki is not downloaded yet at this stage, so a
@@ -305,11 +314,131 @@ pipeline {
                         cp -r "${WORKSPACE}/assets/"* "${MW_DIR}/assets/"
                     fi
 
-                    # Copy diagnostic script if present (for debugging)
-                    if [ -f "${WORKSPACE}/diag.php" ]; then
-                        cp "${WORKSPACE}/diag.php" "${MW_DIR}/"
-                    fi
+                    # diag.php is gone from the repository (it printed $_SERVER unescaped, to anyone). The build
+                    # directory is kept between builds, so the copy an earlier build left there goes too; the
+                    # staging and deploy rsyncs both --delete, which takes it off the wiki.
+                    rm -f "${MW_DIR}/diag.php"
                 '''
+            }
+        }
+
+        stage('Connectome') {
+            // The connectome store, the musician pages' cards, and graph.json for the big graph at
+            // assets/connectome/ (Justin, #connectome, 13 Nov 2026).
+            // tools/connectome_sources.txt says what the store reads, and the responses are kept on maybelle,
+            // so a build fetches only what's new, and for 20 seconds at most: a long list of new sources comes
+            // in over several builds, and no deploy waits behind it. The store is built again
+            // only when its sources, names, readers or arthel's data change; the cards every build, because the
+            // featured pickers and the wiki's pages change without a commit here. A failure marks the build
+            // unstable and leaves the last cards in place: the wiki still deploys.
+            steps {
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    sh '''#!/bin/bash
+                        set -e
+                        CACHE="/var/jenkins_home/shared/connectome"
+                        OUT="${MW_DIR}/assets/connectome"
+                        mkdir -p "${CACHE}/raw" "${OUT}"
+
+                        # The big graph draws with no library now (13 Nov 2026): what the old one fetched goes.
+                        rm -rf "${CACHE}/lib"
+                        rm -f "${OUT}/d3.min.js" "${OUT}/sql-wasm.js" "${OUT}/sql-wasm.wasm"
+
+                        # PyYAML, for arthel's YAML: the Jenkins image has none. A venv in the cache, pinned by
+                        # hash (PyPI's, 6.0.3, 13 Nov 2026), made once per Python version.
+                        VENV="${CACHE}/venv-$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+                        if ! "${VENV}/bin/python" -c 'import yaml' 2>/dev/null; then
+                            rm -rf "${VENV}"
+                            python3 -m venv "${VENV}"
+                            cat > "${CACHE}/requirements.txt" <<'REQS'
+pyyaml==6.0.3 \
+    --hash=sha256:b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d \
+    --hash=sha256:10892704fc220243f5305762e276552a0395f7beb4dbf9b14ec8fd43b57f126c \
+    --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc \
+    --hash=sha256:9149cad251584d5fb4981be1ecde53a1ca46c891a79788c0df828d2f166bda28 \
+    --hash=sha256:0f29edc409a6392443abf94b9cf89ce99889a1dd5376d94316ae5145dfedd5d6 \
+    --hash=sha256:ee2922902c45ae8ccada2c5b501ab86c36525b883eff4255313a253a3160861c \
+    --hash=sha256:d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f
+REQS
+                            "${VENV}/bin/pip" install -q --require-hashes -r "${CACHE}/requirements.txt"
+                        fi
+                        PY="${VENV}/bin/python"
+
+                        # arthel's records and shows, as githouse has its production branch.
+                        rm -rf "${CACHE}/arthel"
+                        git clone -q --depth 1 --branch production file:///srv/git/arthel.git "${CACHE}/arthel"
+
+                        # The sources: only what the cache lacks, for 20 seconds a build. What's left waits for the
+                        # next build, five minutes on, and the store is built from what the cache holds. This build is
+                        # the wiki's own, one at a time: archive.org answers in 0.4 to 4 seconds an item (blu's
+                        # machine, 13 Nov 2026), so 1,000 new sources in one go are 8 to 18 minutes of no deploys.
+                        # One that fails is fetched next time. `timeout` is for a server that hangs: the fetch is
+                        # stopped at 90 seconds and the build goes on. Any other failure fails the stage, as before.
+                        cd "${WORKSPACE}/tools"
+
+                        # Walk requests (Justin, #connectome, 18 Nov 2026: Category:Walk Requested triggers Artificial
+                        # Dumb only, not a wake). A page put in the category since its last walk is looked up on
+                        # Discogs, MusicBrainz and archive.org (connectome_walk.py), for 30 seconds a build; the rest
+                        # wait for the next. What's found goes into the cache, not git: walked_sources.txt and
+                        # walked_names.txt, read below beside the repo's own, and walked.json, published with the
+                        # graph so anyone can see what a walk added. A walk that fails leaves the build to go on.
+                        # Where a site has several artists of the picker's name and the page links none, the walk
+                        # asks which: the candidates go into walked.json, and a {{Which picker|status=proposed}} box
+                        # to the top of the page (Justin, #connectome, 20 Nov 2026). That is the only thing here that
+                        # edits the wiki, and it needs a bot password in Jenkins' environment
+                        # (CONNECTOME_WALK_BOT_USER, CONNECTOME_WALK_BOT_PASSWORD; maybelle-config). Without one the
+                        # question waits in walked.json. One such walk is 25 seconds of paced lookups (blu's machine).
+                        # With the same login a walk that is done moves its page from Category:Walk Requested to
+                        # Category:Walked, so the first is a queue and putting it back on a page walks it again
+                        # (Justin, magent and blu, #connectome, 20 Nov 2026). Without the login nothing moves, and a
+                        # page is walked once for each time it was put in the category, as before.
+                        WALKED=0
+                        timeout 90 "${PY}" connectome_walk.py --cache "${CACHE}" --budget 30 || WALKED=$?
+                        if [ "${WALKED}" -eq 124 ]; then
+                            echo "Connectome: the walk ran past 90 seconds and was stopped"
+                        elif [ "${WALKED}" -ne 0 ]; then
+                            echo "Connectome: the walk failed (${WALKED}); the build goes on without it"
+                        fi
+                        touch "${CACHE}/walked_sources.txt" "${CACHE}/walked_names.txt"
+
+                        FETCHED=0
+                        timeout 90 "${PY}" connectome_store.py fetch --raw "${CACHE}/raw" --sources connectome_sources.txt "${CACHE}/walked_sources.txt" --budget 20 || FETCHED=$?
+                        if [ "${FETCHED}" -eq 124 ]; then
+                            echo "Connectome: the fetch ran past 90 seconds and was stopped"
+                        elif [ "${FETCHED}" -ne 0 ]; then
+                            exit "${FETCHED}"
+                        fi
+
+                        # The tracks the wiki says are ready (state: production): where the wiki doesn't answer, the
+                        # last list read stands.
+                        timeout 60 "${PY}" connectome_store.py releases --out "${CACHE}/releases.json" || echo "Connectome: the ready tracks weren't read; the last list stands"
+                        touch "${CACHE}/releases.json"
+
+                        # The store, built again only when something it's built from has changed.
+                        KEY=$( { cat connectome_store.py recording_credits.py homeplace.py rambler.py lma_lineup.py connectome_sources.txt connectome_names.txt "${CACHE}/walked_sources.txt" "${CACHE}/walked_names.txt" "${CACHE}/releases.json"
+                                 git -C "${CACHE}/arthel" rev-parse HEAD
+                                 find "${CACHE}/raw" -name '*.json' | sort; } | sha256sum | cut -c1-16 )
+                        STORE="${CACHE}/store-${KEY}"
+                        if [ ! -f "${STORE}/pairs.json" ]; then
+                            rm -rf "${STORE}.part"
+                            mkdir -p "${STORE}.part"
+                            "${PY}" connectome_store.py build --raw "${CACHE}/raw" --arthel "${CACHE}/arthel/src/data" --lma-names connectome_names.txt "${CACHE}/walked_names.txt" --releases "${CACHE}/releases.json" --out "${STORE}.part/credits.jsonl" --db "${STORE}.part/connectome.sqlite"
+                            "${PY}" connectome_store.py pairs --credits "${STORE}.part/credits.jsonl" --out "${STORE}.part/pairs.json"
+                            mv "${STORE}.part" "${STORE}"
+                            ls -dt "${CACHE}"/store-* | tail -n +4 | xargs -r rm -rf
+                        fi
+
+                        # The cards and the big graph's graph.json, from the store and the wiki as it is now; swapped in whole.
+                        rm -rf "${CACHE}/cards.part"
+                        "${PY}" connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part" --arthel "${CACHE}/arthel/src/data"
+                        cp "${STORE}/connectome.sqlite" "${OUT}/connectome.sqlite"
+                        if [ -f "${CACHE}/walked.json" ]; then cp "${CACHE}/walked.json" "${OUT}/walked.json"; fi
+                        cp "${CACHE}/cards.part/graph.json" "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"
+                        rm -rf "${OUT}/cards"
+                        mv "${CACHE}/cards.part/cards" "${OUT}/cards"
+                        rm -rf "${CACHE}/cards.part"
+                        echo "Connectome: $(ls "${OUT}/cards" | wc -l) cards, store ${KEY}"
+                    '''
+                }
             }
         }
 

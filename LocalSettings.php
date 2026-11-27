@@ -138,6 +138,19 @@ $wgNamespaceAliases['VC'] = NS_VERSIONCONTROL;
 $wgNamespaceAliases['VC_talk'] = NS_VERSIONCONTROL_TALK;
 $wgNamespacesWithSubpages[NS_VERSIONCONTROL] = true;
 
+# The Bacon namespace: bacon graphs kept as shared (Justin, #connectome, 16 Nov
+# 2026: "a permalink that I can copy and paste to someone and share that exact
+# thing"). A signed-in reader's 🔗 on the big graph keeps the view in sight
+# here, as Bacon:<its ID>, and /bacon/<its ID> draws it from the page
+# (assets/connectome/connectome.js). Each page links the pickers in it, so
+# their pages know. Made by the graph, not written: kept out of search
+# engines' indexes, and out of the wiki's own search unless asked for.
+define( "NS_BACON", 3018 );
+define( "NS_BACON_TALK", 3019 );
+$wgExtraNamespaces[NS_BACON] = "Bacon";
+$wgExtraNamespaces[NS_BACON_TALK] = "Bacon_talk";
+$wgNamespaceRobotPolicies[NS_BACON] = 'noindex,follow';
+
 # Make Cryptograss namespace searchable by default
 $wgNamespacesToBeSearchedDefault[NS_CRYPTOGRASS] = true;
 $wgNamespacesToBeSearchedDefault[NS_BLUERAILROAD] = true;
@@ -198,6 +211,11 @@ $wgDBTableOptions = "ENGINE=InnoDB, DEFAULT CHARSET=binary";
 ## Shared memory / caching
 $wgMainCacheType = CACHE_ACCEL;
 $wgMemCachedServers = [];
+# Sessions in the database, not APCu (Justin, 12 Nov 2026, #interfaces). With no $wgSessionCacheType,
+# sessions followed $wgMainCacheType into APCu: the PHP process's own memory, emptied by every redeploy and
+# restart, which signed everyone out. Skyler lost an edit to it: signed out mid-edit by the 22:11Z redeploy,
+# the save was refused. In the objectcache table they outlive the process.
+$wgSessionCacheType = CACHE_DB;
 
 ## File uploads
 $wgEnableUploads = true;
@@ -243,8 +261,14 @@ $wgSVGNativeRendering = true;
 $wgUseInstantCommons = true;
 
 ## Logos
+# The art the fliers were printed from, scaled down (Justin, #connectome, 20 Nov 2026: the mark looked wonky,
+# more so zoomed in on a phone; the file before was 135px wide with the white behind the art only partly taken
+# out). The second file is 540px and stands in at 1.5x and 2x, where the skin draws it 135px wide: sharp on a
+# dense screen, and when a reader zooms in.
 $wgLogos = [
     '1x' => "$wgResourceBasePath/assets/logo.png",
+    '1.5x' => "$wgResourceBasePath/assets/logo-2x.png",
+    '2x' => "$wgResourceBasePath/assets/logo-2x.png",
 ];
 $wgFavicon = "$wgResourceBasePath/assets/favicon.ico";
 
@@ -513,6 +537,16 @@ if ( getenv('DELIVERY_KID_API_KEY') ) {
 	$wgDeliveryKidApiKey = getenv('DELIVERY_KID_API_KEY');
 }
 
+# PickiPediaConnectionNotes - the connection box: a visitor's note about an
+# unrecorded connection, saved as plain text to Cryptograss talk:Connection
+# inbox by a system user (created on update.php), so a signed-out visitor
+# publishes no IP. Docs: Cryptograss:Bacon graphs/Discovery.
+wfLoadExtension( 'PickiPediaConnectionNotes' );
+# Rate limit for the connection box: 5 notes an hour per visitor, so a
+# script cannot fill the inbox. Keyed by IP for signed-out visitors; the
+# note itself is saved by the system user, so no IP is published.
+$wgRateLimits['connectionnote'] = [ 'ip' => [ 5, 3600 ], 'newbie' => [ 5, 3600 ] ];
+
 # PickiPediaRecordingMetadata - per-recording timeline + ensemble editor.
 # Routes Release:*\/Metadata pages to the recording-metadata-yaml content
 # model; loaded after PickiPediaReleases so NS_RELEASE is available.
@@ -554,7 +588,10 @@ if ( !empty( $wgOAuth2PrivateKey ) && !empty( $wgOAuth2PublicKey ) ) {
 # wfLoadExtension( 'UserMerge' );
 
 # WikiSEO - social sharing cards and SEO meta tags (installed via Composer)
-# DISABLED in test environment (not in Docker image)
+# Off: a page's card (og: and twitter: tags) is made by PickiPediaContent
+# (src/SocialCard.php) from the page's own opening and first picture. WikiSEO
+# would need TextExtracts and PageImages for the same, and loaded alongside it
+# would put a second set of tags in the head.
 # wfLoadExtension( 'WikiSEO' );
 # $wgWikiSeoDefaultImage = "$wgServer/w/images/pickipedia-card.png";
 # $wgTwitterSiteHandle = "@cryptograss";
@@ -587,22 +624,21 @@ $wgDevelopmentWarnings = (getenv('WIKI_DEV_MODE') === 'true');
 ## Allow embedding in iframes (for rabbithole integration)
 $wgEditPageFrameOptions = false;
 
-## Build info footer (generated at build time)
+## Footer icons: none. SMW and MediaWiki get their thanks on the about pages
+## (Justin, #interfaces, 13 Nov 2026). An icon with no 'src' isn't drawn, and
+## SMW adds its own only when nothing is set at this key, so this keeps it out.
+$wgFooterIcons['poweredby'] = [];
+$wgFooterIcons['poweredbysmw']['semanticmediawiki'] = [];
+
+## Build info under the article (generated at build time)
 if ( file_exists( __DIR__ . '/build-info.php' ) ) {
     require_once __DIR__ . '/build-info.php';
     if ( isset( $wgPickipediaBuildInfo ) && $wgPickipediaBuildInfo['blockheight'] > 0 ) {
         $blockheight = number_format( $wgPickipediaBuildInfo['blockheight'] );
         $commit = $wgPickipediaBuildInfo['commit'];
-        $wgFooterIcons['poweredby']['pickipedia-build'] = [
-            'src' => '',
-            'url' => "https://etherscan.io/block/{$wgPickipediaBuildInfo['blockheight']}",
-            'alt' => "Built at block {$blockheight}",
-            'height' => false,
-            'width' => false,
-        ];
-        // Also add to site notice / footer text
+        // The block and commit, under the article
         $wgHooks['SkinAfterContent'][] = function ( &$data, $skin ) use ( $blockheight, $commit ) {
-            $data .= "<div style='text-align: center; font-size: 0.8em; color: #666; padding: 5px;'>"
+            $data .= "<div id='pp-build-info' style='text-align: center; font-size: 0.8em; color: #666; padding: 0;'>"
                 . "Built at Ethereum block <a href='https://etherscan.io/block/{$GLOBALS['wgPickipediaBuildInfo']['blockheight']}'>{$blockheight}</a>"
                 . " | commit {$commit}"
                 . "</div>";

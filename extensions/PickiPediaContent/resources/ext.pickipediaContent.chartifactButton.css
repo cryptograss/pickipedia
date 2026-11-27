@@ -1,0 +1,16 @@
+/* The toolbar's buttons are icons; this one is words. */
+.wikiEditor-ui-toolbar .group-chartifacts .tool-button[rel='chartifact'] {
+	width: auto;
+	height: auto;
+	background-image: none;
+	text-indent: 0;
+	font-size: 0.85em;
+	line-height: 1.6;
+	padding: 2px 8px;
+	margin: 3px 4px;
+	border: 1px solid #87a96b;
+	border-radius: 3px;
+	color: #2d5016;
+	white-space: nowrap;
+	cursor: pointer;
+}

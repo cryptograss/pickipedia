@@ -68,7 +68,17 @@ function definedClasses( string $file ): array {
 }
 
 $emitted = emittedClasses( [ "$root/lua/pickipedia/*.lua", "$root/src/*.php" ] );
-$defined = definedClasses( "$root/resources/ext.pickipediaContent.css" );
+$day = definedClasses( "$root/resources/ext.pickipediaContent.css" );
+
+// A class can have nothing to say by day and something to say by night: the
+// instrument icons drawn in black on nothing are turned over so they are not
+// lost in the dark, and are left alone otherwise. night.less is this
+// extension's stylesheet too, so a rule there is styling. It counts only
+// towards "emitted but not styled" -- the other direction below stays on the
+// day sheet, because night styles plenty that templates and other extensions
+// emit, and this check only knows what this extension emits.
+$defined = array_values( array_unique( array_merge(
+	$day, definedClasses( "$root/resources/night/night.less" ) ) ) );
 
 $failures = [];
 
@@ -92,8 +102,8 @@ foreach ( $emitted as $name ) {
 
 // And the other way. A rule for markup nothing produces any more is worse
 // than no rule, because the next person cannot tell which half is live.
-sort( $defined );
-foreach ( $defined as $name ) {
+sort( $day );
+foreach ( $day as $name ) {
 	if ( !in_array( $name, $emitted, true ) ) {
 		$failures[] = "  styled but nothing emits it: .$name";
 	}

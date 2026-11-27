@@ -178,6 +178,11 @@ Messages in #magenta-interface that link pages here, October 2026.
   who: magent
   when: '2026-10-19T16:30:00Z'
   words: Peter Rowan has no page yet.
+- page: Old Earl
+  message: 6d6d6d6d-1111-4222-8333-444455556666
+  who: re
+  when: '2026-10-20T09:00:00Z'
+  words: Old Earl is up.
 </moodlinks>
 EOF
 cat > /tmp/ledger-september.txt <<'EOF'
@@ -193,6 +198,10 @@ php maintenance/edit.php -u Admin -s "links" "Cryptograss:Moods/magenta-interfac
 php maintenance/edit.php -u Admin -s "links" "Cryptograss:Moods/general/links/2026-09" < /tmp/ledger-september.txt >/dev/null
 echo 'The father of bluegrass.' | php maintenance/edit.php -u Admin -s "words" "Bill Monroe" >/dev/null
 echo 'A guitarist.' | php maintenance/edit.php -u Admin -s "words" "Tony Rice" >/dev/null
+# A page linked under one title, then moved to another, as a headline is bettered: its redirect stays.
+echo 'A banjo player.' | php maintenance/edit.php -u Admin -s "words" "Old Earl" >/dev/null
+echo 'Old Earl|Earl Scruggs' > /tmp/moves.txt
+php maintenance/run.php moveBatch --u Admin --r "a better title" /tmp/moves.txt >/dev/null 2>&1
 php maintenance/runJobs.php >/dev/null 2>&1 || true
 php -S 127.0.0.1:8080 -t /var/www/html >/tmp/php-server.log 2>&1 &
 sleep 2
@@ -207,7 +216,7 @@ echo 'FOOT ' . $argv[1] . ( isset( $argv[2] ) ? " ($argv[2])" : '' ) . ' rows=' 
 	. implode( ' | ', array_map( static fn ( $r ) => html_entity_decode( $r[2] ) . ' -> ' . $r[1], $rows ) )
 	. ( str_contains( $foot, '<script>' ) ? ' MARKUP' : '' ) . ( $html === '' ? ' NOPAGE' : '' ) . "\n";
 EOF
-for page in 'Bill_Monroe' 'Tony_Rice' 'Cryptograss:Banjo_setups' 'Cryptograss:Moods/magenta-interface/links/2026-10'; do
+for page in 'Bill_Monroe' 'Tony_Rice' 'Earl_Scruggs' 'Cryptograss:Banjo_setups' 'Cryptograss:Moods/magenta-interface/links/2026-10'; do
     php /tmp/foot.php "$page"
 done
 php /tmp/foot.php 'Bill_Monroe' history
@@ -216,6 +225,37 @@ php /tmp/foot.php 'Peter_Rowan'
 php /tmp/foot.php 'Peter_Rowan' edit
 php -r '$h = file_get_contents("http://127.0.0.1:8080/index.php?title=Cryptograss:Moods/magenta-interface/links/2026-10");
     echo "LEDGER " . ( str_contains( $h, "href=\"/index.php/Bill_Monroe\"" ) || str_contains( $h, "title=Bill_Monroe" ) ? "links-pages" : "no-page-links" ) . "\n";'
+
+# A page's card where its address is shared (SocialCard.php): its head, as served.
+cat > /tmp/card.php <<'EOF'
+<?php
+$html = (string)@file_get_contents( 'http://127.0.0.1:8080/index.php?title=' . rawurlencode( $argv[1] )
+	. ( isset( $argv[2] ) ? '&action=' . $argv[2] : '' ), false, stream_context_create( [ 'http' => [ 'ignore_errors' => true ] ] ) );
+preg_match_all( '#<meta (?:property|name)="((?:og|twitter):[a-z_]+|description)" content="([^"]*)"#', $html, $tags, PREG_SET_ORDER );
+echo 'CARD ' . $argv[1] . ( isset( $argv[2] ) ? " ($argv[2])" : '' ) . ' ['
+	. implode( ' | ', array_map( static fn ( $t ) => $t[1] . '=' . html_entity_decode( $t[2] ), $tags ) ) . "]\n";
+EOF
+php /tmp/card.php 'Bill_Monroe'
+php /tmp/card.php 'Bill_Monroe' edit
+php /tmp/card.php 'Special:RecentChanges'
+
+# Signing in from Rabbithole (SpecialRabbithole.php): Special:UserLogin -> Special:Rabbithole -> /rabbithole/.
+LOGIN_URL='http://127.0.0.1:8080/index.php?title=Special:UserLogin&returnto=Special:Rabbithole&returntoquery=track%3DQmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a%26page%3DSong%253AAugust'
+LOGIN_TOKEN=$(curl -s -H 'Host: localhost' -c /tmp/rh-cookies.txt 'http://127.0.0.1:8080/api.php?action=query&meta=tokens&type=login&format=json' \
+    | php -r '$d = json_decode(stream_get_contents(STDIN), true); echo $d["query"]["tokens"]["logintoken"] ?? "";')
+STEP1=$(curl -s -D - -o /dev/null -H 'Host: localhost' -b /tmp/rh-cookies.txt -c /tmp/rh-cookies.txt \
+    --data-urlencode "wpName=Admin" \
+    --data-urlencode "wpPassword=testtesttest" \
+    --data-urlencode "wploginattempt=Log in" \
+    --data-urlencode "wpEditToken=+\\" \
+    --data-urlencode "authAction=login" \
+    --data-urlencode "force=" \
+    --data-urlencode "wpLoginToken=$LOGIN_TOKEN" \
+    "$LOGIN_URL" | tr -d '\r' | sed -n 's/^[Ll]ocation: //p' | tail -1)
+STEP1_LOCAL=$(printf '%s' "$STEP1" | sed 's#^http://[^/]*#http://127.0.0.1:8080#')
+STEP2=$(curl -s -D - -o /dev/null -H 'Host: localhost' -b /tmp/rh-cookies.txt "$STEP1_LOCAL" | tr -d '\r' | sed -n 's/^[Ll]ocation: //p' | tail -1)
+STEP_BARE=$(curl -s -D - -o /dev/null -H 'Host: localhost' "http://127.0.0.1:8080/index.php?title=Special:Rabbithole" | tr -d '\r' | sed -n 's/^[Ll]ocation: //p' | tail -1)
+echo "RH_LOGIN step1=$STEP1 step2=$STEP2 bare=$STEP_BARE"
 
 printf '%s' 'FAMILY:{{#invoke:Instruments|family|5-string banjo}} EMPTY:[{{#invoke:Instruments|family|cello}}] BADGE:{{#invoke:Instruments|badge|1=5-string banjo|size=18|tuck=1}}' \
     | php maintenance/parse.php --title "Test" 2>/dev/null
@@ -282,6 +322,7 @@ echo "Pages list the magenta messages that link them (MoodLinks.php):"
 expect "a page shows its links from every Mood's ledger, newest first" \
     "FOOT Bill_Monroe rows=2 justin in #magenta-interface, 19 Oct 2026, 15:44 UTC -> https://magenta.cryptograss.live/moods/magenta-interface/#m-0f132ada-1111-4222-8333-444455556666 | skyler in #general, 2 Sep 2026, 10:00 UTC -> https://magenta.cryptograss.live/moods/general/#m-7a7a7a7a-1111-4222-8333-444455556666"
 expect "another page only its own" "FOOT Tony_Rice rows=1 justin in #magenta-interface"
+expect "a moved page keeps what was said of its old title" "FOOT Earl_Scruggs rows=1 re in #magenta-interface"
 expect "a page no message links shows nothing" "FOOT Cryptograss:Banjo_setups rows=0"
 expect "nor does the ledger itself" "FOOT Cryptograss:Moods/magenta-interface/links/2026-10 rows=0"
 expect "and on its history" "FOOT Bill_Monroe (history) rows=2"
@@ -291,6 +332,22 @@ expect "and so does the form that starts it" "FOOT Peter_Rowan (edit) rows=1 mag
 refute "a message's words never become markup" " MARKUP"
 refute "every page answered" " NOPAGE"
 expect "the ledger links the pages it names" "LEDGER links-pages"
+
+echo
+echo "A page's card where its address is shared (SocialCard.php):"
+expect "its title and where it is" "og:site_name=TestWiki | og:type=article | og:title=Bill Monroe | og:url=http://localhost/index.php/Bill_Monroe |"
+expect "what it says" "og:description=The father of bluegrass. |"
+expect "and for search, the same" "CARD Bill_Monroe [description=The father of bluegrass. |"
+expect "with no picture, the wiki's logo and a small card" "og:image=http://localhost/resources/assets/change-your-logo.svg | twitter:card=summary]"
+expect "its edit form has none" "CARD Bill_Monroe (edit) []"
+expect "nor a special page" "CARD Special:RecentChanges []"
+
+echo
+echo "Signing in from Rabbithole returns into Rabbithole (SpecialRabbithole.php):"
+expect "login redirects back to the exact track and page in /rabbithole/" \
+    "/rabbithole/?track=QmS3QEZFa1c75BBa9vwNEsXkS6GBmS75Cs6RyDJBXqRx8a&page=Song%3AAugust bare="
+expect "bare Special:Rabbithole lands at /rabbithole/" \
+    "bare=http://localhost/rabbithole/"
 
 echo
 if [ "$failures" -ne 0 ]; then

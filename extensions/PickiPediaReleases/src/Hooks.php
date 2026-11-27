@@ -11,12 +11,18 @@ namespace MediaWiki\Extension\PickiPediaReleases;
 use MediaWiki\Installer\Hook\LoadExtensionSchemaUpdatesHook;
 use MediaWiki\Installer\DatabaseUpdater;
 use MediaWiki\Hook\BeforePageDisplayHook;
+use MediaWiki\Hook\ParserFirstCallInitHook;
 use MediaWiki\Html\Html;
 use MediaWiki\Output\Hook\OutputPageParserOutputHook;
 use MediaWiki\Output\OutputPage;
 use Skin;
 
-class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook, OutputPageParserOutputHook {
+class Hooks implements
+	LoadExtensionSchemaUpdatesHook,
+	BeforePageDisplayHook,
+	OutputPageParserOutputHook,
+	ParserFirstCallInitHook
+{
 
 	/**
 	 * Handle schema updates
@@ -25,6 +31,19 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook, Ou
 	 */
 	public function onLoadExtensionSchemaUpdates( $updater ): void {
 		// No schema updates needed at this time
+	}
+
+	/**
+	 * {{#ontherecord:<track CID>|<record page>}}: the record a track is on, as
+	 * a row of its tracks (OnTheRecord.php). Its output is wikitext, so the
+	 * record's page and its Release page are real links.
+	 *
+	 * @param \Parser $parser
+	 */
+	public function onParserFirstCallInit( $parser ): void {
+		$parser->setFunctionHook( 'ontherecord', static function ( $parser, $track = '', $record = '' ) {
+			return OnTheRecord::forTrack( $parser, (string)$track, (string)$record );
+		} );
 	}
 
 	/**
@@ -60,12 +79,8 @@ class Hooks implements LoadExtensionSchemaUpdatesHook, BeforePageDisplayHook, Ou
 		$out->addModules( 'ext.pickipediaReleases.blocksAgo' );
 		$out->addModules( 'ext.pickipediaReleases.instrumentForm' );
 
-		// The zine look for user subpages (User:Name/Post), sent by the server
-		// so the page arrives styled instead of flashing the default skin
-		// first. See Zine.php.
-		if ( Zine::applies( $out ) ) {
-			Zine::addTo( $out );
-		}
+		// A user's subpages (User:Name/Post) used to be dressed here as a "zine". They are posts now, read in
+		// a skin of their own: PickiPediaContent's src/Posts/SkinBroadside.php.
 
 		// Also inject tokens on Special:FormEdit pages and any page using
 		// the deliveryKidInput module (PageForms forms).

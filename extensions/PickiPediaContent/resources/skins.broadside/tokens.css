@@ -1,0 +1,85 @@
+/*
+ * Broadside: its colours and its type (src/Posts/SkinBroadside.php).
+ *
+ * Between the wiki and magenta, on purpose (Justin, 13 Nov 2026: "a style
+ * that's somewhere between pickipedia and magenta"). The paper and the ink
+ * are the old zine's, warmed down toward magenta's off-white and its
+ * violet-black. Each place keeps its own colour, so a reader always knows
+ * where a thing leads:
+ *
+ *   rust     the wiki as a publication: the line over a headline, a drop
+ *            cap, the rule beside a quotation
+ *   blue     a page on the wiki (red: one nobody has written yet), as the
+ *            wiki draws its links and as magenta draws them on a tiding
+ *   magenta  magenta: the tiding, its thread, whatever is pressed
+ *   green    Rabbithole: anything that plays there
+ *
+ * Every colour is light-dark(day, night), and color-scheme says which: the
+ * reader's system, unless they chose (bs-dark, bs-light, on <html> from the
+ * server, so the choice is there before anything paints). A browser without
+ * light-dark() gets the day's colours, written out first.
+ *
+ * No web fonts: nothing to wait for, so nothing reflows when a font lands.
+ */
+
+:root.bs-root {
+	color-scheme: light dark;
+
+	--bs-paper: #f8f3ea;
+	--bs-panel: #fffdf8;
+	--bs-wash: #f1e9db;
+	--bs-ink: #261c15;
+	--bs-soft: #4d4036;
+	--bs-muted: #776a5e;
+	--bs-line: #e4d9c7;
+	--bs-rust: #9a3b1b;
+	--bs-link: #2c5cb5;
+	--bs-link-new: #c2372d;
+	--bs-magenta: #b8106b;
+	--bs-magenta-soft: #fbe7f1;
+	--bs-on-magenta: #ffffff;
+	--bs-green: #4a7c59;
+	--bs-green-line: #3c6749;
+	--bs-green-soft: #f1f4ef;
+	--bs-green-ink: #2d5016;
+	--bs-shadow: 0 1px 2px rgba( 60, 40, 20, 0.07 ), 0 10px 28px rgba( 60, 40, 20, 0.1 );
+	/* Words on a patch of colour a page brought with it (a template's own light box): dark by night too. */
+	--bs-on-patch: currentColor;
+
+	--bs-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "URW Palladio L", P052, Georgia, "Times New Roman", serif;
+	--bs-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--bs-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+	/* The column of words: about 66 characters of the serif. */
+	--bs-measure: 42rem;
+	--bs-rail: 15rem;
+	--bs-side: 19rem;
+	--bs-size: clamp( 1.0625rem, 0.98rem + 0.42vw, 1.1875rem );
+	--bs-top: 3.5rem;
+}
+
+@supports ( color: light-dark( #000, #fff ) ) {
+	:root.bs-root {
+		--bs-paper: light-dark( #f8f3ea, #18151a );
+		--bs-panel: light-dark( #fffdf8, #211c22 );
+		--bs-wash: light-dark( #f1e9db, #272129 );
+		--bs-ink: light-dark( #261c15, #ece3d8 );
+		--bs-soft: light-dark( #4d4036, #cfc4b8 );
+		--bs-muted: light-dark( #776a5e, #a2978c );
+		--bs-line: light-dark( #e4d9c7, #3a323b );
+		--bs-rust: light-dark( #9a3b1b, #e08a5b );
+		--bs-link: light-dark( #2c5cb5, #8fb1f2 );
+		--bs-link-new: light-dark( #c2372d, #ff8a75 );
+		--bs-magenta: light-dark( #b8106b, #ef5aa6 );
+		--bs-magenta-soft: light-dark( #fbe7f1, #3a1a2b );
+		--bs-on-magenta: light-dark( #ffffff, #1b0d14 );
+		--bs-green-soft: light-dark( #f1f4ef, #1e2a22 );
+		--bs-green-ink: light-dark( #2d5016, #b6dcc0 );
+		--bs-shadow: light-dark( 0 1px 2px rgba( 60, 40, 20, 0.07 ), 0 1px 2px rgba( 0, 0, 0, 0.4 ) ),
+			0 10px 28px light-dark( rgba( 60, 40, 20, 0.1 ), rgba( 0, 0, 0, 0.45 ) );
+		--bs-on-patch: light-dark( currentColor, #261c15 );
+	}
+}
+
+:root.bs-root.bs-dark { color-scheme: dark; }
+:root.bs-root.bs-light { color-scheme: light; }

@@ -1,0 +1,418 @@
+/*
+ * Broadside: the parts that are more than words. A video and the place it
+ * keeps playing, the tiding and its thread, and the card on a link.
+ */
+
+/* ---- A video ({{HLSVideo}}; the player is PickiPediaReleases' videoPlayer.js) ---- */
+
+/* Whatever the template floated it beside: in a post, a video has the column. */
+.bs-body div:has( > .hls-video-player ),
+.bs-body .thumb:has( .hls-video-player ),
+.bs-body .thumbinner:has( > .hls-video-player ) {
+	float: none !important;
+	width: auto !important;
+	max-width: 100% !important;
+	margin: 1.8em 0 !important;
+	padding: 0 !important;
+	border: 0 !important;
+	background: none !important;
+}
+.bs-body .thumbinner:has( > .hls-video-player ) { margin: 0 !important; }
+
+.bs-body .hls-video-player {
+	position: relative;
+	display: flow-root;
+	font-family: var( --bs-sans );
+}
+/* Its place is kept before the player is there, at the shape its release gives (--bs-ar, from the
+   server: Post::shapeVideos), so nothing below it moves when the picture arrives. */
+.bs-body .hls-video-player:not( :has( video ) )::before {
+	content: "";
+	display: block;
+	aspect-ratio: var( --bs-ar, 16 / 9 );
+	border-radius: 0.75rem;
+	background: #0d0b0e;
+}
+/* And the room for the two rows of pills the player puts under it, speed and then quality (each a pill's
+   1.6rem and the 0.5rem above it), kept until each row is there: the quality row arrives last, once the
+   stream has said what it offers, and pushed the post down 34px when it did. Kept as padding, which is
+   not a thing that can be seen to move. A video with one rendition has no quality row and keeps the room. */
+.bs-body .hls-video-player:not( :has( .hls-quality-bar ) ) { padding-bottom: 2.1rem; }
+.bs-body .hls-video-player:not( :has( .hls-playback-bar ) ):not( :has( .hls-quality-bar ) ) { padding-bottom: 4.2rem; }
+.bs-body .hls-video-player video {
+	display: block;
+	width: 100% !important;
+	max-width: 100% !important;
+	height: auto;
+	aspect-ratio: var( --bs-ar, 16 / 9 );
+	border-radius: 0.75rem;
+	background: #0d0b0e;
+	box-shadow: var( --bs-shadow );
+}
+/* An upright video (a phone's) is not blown up to the column's width. */
+.bs-body .hls-video-player.is-upright {
+	max-width: min( 100%, 22rem );
+	margin-inline: auto;
+}
+.bs-body .hls-video-player.is-upright video,
+.bs-body .hls-video-player.is-upright:not( :has( video ) )::before {
+	max-height: 80dvh;
+}
+
+/* Speed, captions, quality: pills, as on a tiding's page. The player sets its own colours on each
+   button as it is pressed, hence the insistence. */
+.bs-body .hls-playback-bar,
+.bs-body .hls-quality-bar {
+	display: flex !important;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.3rem !important;
+	margin-top: 0.5rem !important;
+	color: var( --bs-muted );
+	font: 400 0.75rem/1 var( --bs-sans ) !important;
+}
+.bs-body .hls-playback-bar .hls-speed { gap: 0.3rem !important; }
+.bs-body .hls-playback-bar span,
+.bs-body .hls-quality-bar span { opacity: 1 !important; }
+.bs-body .hls-video-player button {
+	appearance: none;
+	min-height: 1.6rem;
+	padding: 0.2rem 0.65rem !important;
+	border: 1px solid var( --bs-line ) !important;
+	border-radius: 999px !important;
+	background: var( --bs-panel ) !important;
+	color: var( --bs-ink ) !important;
+	font: 500 0.75rem/1 var( --bs-sans ) !important;
+	cursor: pointer;
+}
+.bs-body .hls-video-player button:hover { border-color: var( --bs-magenta ) !important; }
+.bs-body .hls-video-player button[aria-pressed="true"] {
+	border-color: var( --bs-magenta ) !important;
+	background: var( --bs-magenta-soft ) !important;
+	font-weight: 650 !important;
+}
+
+/* ---- Where a playing video goes when the reader scrolls on ---- */
+
+/* The place kept for it, at the top of the side column. */
+.bs-dock {
+	anchor-name: --bs-dock;
+	display: grid;
+	place-items: center;
+	aspect-ratio: 16 / 9;
+	padding: 1rem;
+	border: 1px dashed var( --bs-line );
+	border-radius: 0.75rem;
+	color: var( --bs-muted );
+	text-align: center;
+}
+.bs-dock-note {
+	max-width: 15rem;
+	margin: 0;
+	font-size: 0.75rem;
+	line-height: 1.45;
+	text-wrap: balance;
+}
+.bs-dock.is-taken { border-color: transparent; }
+.bs-dock.is-taken .bs-dock-note { visibility: hidden; }
+
+/* What stands where the video was, the same size, so the post doesn't close up behind it. */
+.bs-held {
+	display: grid;
+	place-items: center;
+	border: 1px dashed var( --bs-line );
+	border-radius: 0.75rem;
+	color: var( --bs-muted );
+	font: 400 0.8125rem/1.4 var( --bs-sans );
+}
+.bs-held button {
+	appearance: none;
+	padding: 0.4rem 0.9rem;
+	border: 1px solid var( --bs-line );
+	border-radius: 999px;
+	background: var( --bs-panel );
+	color: var( --bs-soft );
+	font: inherit;
+	cursor: pointer;
+}
+.bs-held button:hover { border-color: var( --bs-magenta ); color: var( --bs-ink ); }
+
+/* The video, following: in the corner by default; on a wide screen, in the place kept for it. */
+.bs-body .hls-video-player.is-docked {
+	position: fixed;
+	z-index: 5;
+	top: 0.75rem;
+	right: 0.75rem;
+	width: min( 21rem, 56vw );
+	max-width: none;
+	margin: 0;
+	padding: 0.4rem;
+	border-radius: 1rem;
+	background: var( --bs-panel );
+	box-shadow: 0 0 0 1px var( --bs-line ), var( --bs-shadow );
+	view-transition-name: bs-video;
+}
+.bs-body .hls-video-player.is-docked.is-upright { width: min( 12rem, 38vw ); }
+.bs-body .hls-video-player.is-docked video {
+	border-radius: 0.65rem;
+	box-shadow: none;
+	max-height: 62dvh;
+}
+.bs-body .hls-video-player.is-docked .hls-playback-bar { display: none !important; }
+.bs-body .hls-video-player.is-docked .hls-quality-bar { margin-top: 0.4rem !important; padding: 0 0.15rem 0.1rem; }
+@supports ( position-area: center ) {
+	@media ( min-width: 62rem ) {
+		.bs-body .hls-video-player.is-docked:not( .is-upright ) {
+			position-anchor: --bs-dock;
+			top: anchor( top );
+			left: anchor( left );
+			right: auto;
+			width: anchor-size( width );
+			padding: 0;
+			background: none;
+			box-shadow: none;
+		}
+		.bs-body .hls-video-player.is-docked:not( .is-upright ) video { box-shadow: var( --bs-shadow ); }
+	}
+}
+.bs-dockbar {
+	display: none;
+}
+.is-docked > .bs-dockbar {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.3rem;
+	position: absolute;
+	z-index: 2;
+	top: 0.7rem;
+	right: 0.7rem;
+	opacity: 0;
+	transition: opacity 0.15s;
+}
+.is-docked:hover > .bs-dockbar,
+.is-docked:focus-within > .bs-dockbar { opacity: 1; }
+@media ( hover: none ) {
+	.is-docked > .bs-dockbar { opacity: 1; }
+}
+.bs-body .hls-video-player .bs-dockbar button {
+	width: 1.75rem;
+	min-height: 1.75rem;
+	padding: 0 !important;
+	border-color: transparent !important;
+	background: rgba( 16, 12, 18, 0.72 ) !important;
+	color: #fff !important;
+	font-size: 0.875rem !important;
+	backdrop-filter: blur( 6px );
+}
+::view-transition-group( bs-video ) { animation-duration: 0.28s; }
+
+/* ---- The tiding ---- */
+
+/* Beside the post: that it is on Tidings, and the way there. In magenta's colours: it is magenta's. */
+a.bs-tidingcard {
+	display: grid;
+	gap: 0.3rem;
+	padding: 0.9rem 1rem;
+	border: 1px solid var( --bs-line );
+	border-left: 4px solid var( --bs-magenta );
+	border-radius: 0.6rem;
+	background: var( --bs-panel );
+	color: var( --bs-ink );
+	text-decoration: none;
+	transition: border-color 0.15s, transform 0.15s;
+}
+.bs-tidingcard:hover {
+	border-color: var( --bs-magenta );
+	color: var( --bs-ink );
+	text-decoration: none;
+	transform: translateY( -1px );
+}
+.bs-tidingcard-head {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	font-size: 0.875rem;
+	font-weight: 650;
+}
+.bs-tidingcard-count { color: var( --bs-muted ); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.bs-tidingcard-go { color: var( --bs-magenta ); font-size: 0.8125rem; font-weight: 600; }
+
+/* Under the post: the last things said about it there. */
+.bs-thread {
+	margin-top: 2.5rem;
+	padding: 1.25rem clamp( 1rem, 3vw, 1.5rem ) 1.4rem;
+	border: 1px solid var( --bs-line );
+	border-top: 3px solid transparent;
+	border-radius: 0.9rem;
+	background:
+		linear-gradient( var( --bs-panel ), var( --bs-panel ) ) padding-box,
+		linear-gradient( 90deg, var( --bs-rust ), var( --bs-magenta ) ) border-box;
+	scroll-margin-top: 1.5rem;
+}
+/* The rule across its top runs rust to magenta, the wiki to magenta; the other three sides are plain. */
+.bs-thread {
+	border-left-color: transparent;
+	border-right-color: transparent;
+	border-bottom-color: transparent;
+	box-shadow: 0 0 0 1px var( --bs-line );
+}
+.bs-thread-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.3rem 1rem;
+	margin-bottom: 0.75rem;
+}
+.bs-thread h2 {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	color: var( --bs-ink );
+	font: 650 1rem/1.3 var( --bs-sans );
+}
+.bs-thread-count { color: var( --bs-muted ); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.bs-said {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.bs-said-item {
+	--bs-who: var( --bs-line );
+	margin: 0;
+	padding: 0.7rem 0 0.7rem 0.9rem;
+	border-left: 3px solid var( --bs-who );
+	border-top: 1px solid var( --bs-line );
+}
+.bs-said-item:first-child { border-top: 0; }
+.bs-said-who { color: var( --bs-muted ); font-size: 0.8125rem; }
+.bs-said-who b { color: var( --bs-ink ); font-weight: 650; }
+.bs-said-who a { color: inherit; text-decoration: none; }
+.bs-said-who a:hover { color: var( --bs-magenta ); text-decoration: underline; }
+.bs-block { font-family: var( --bs-mono ); font-size: 0.6875rem; letter-spacing: 0.02em; }
+.bs-said-words p {
+	margin: 0.3rem 0 0;
+	color: var( --bs-ink );
+	font-size: 0.9375rem;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.bs-thread-empty { margin: 0; color: var( --bs-muted ); }
+.bs-end a.bs-thread-go {
+	display: inline-block;
+	margin-top: 1rem;
+	padding: 0.55rem 1.1rem;
+	border-radius: 0.5rem;
+	background: var( --bs-magenta );
+	color: var( --bs-on-magenta );
+	font-size: 0.875rem;
+	font-weight: 650;
+	text-decoration: none;
+	transition: filter 0.15s;
+}
+.bs-end a.bs-thread-go:hover { filter: brightness( 1.08 ); }
+
+/* ---- The card on a link ---- */
+
+/* A popover, hung from the link it describes (anchor positioning). A browser that can't hang it
+   never opens it (broadside.js asks first): the link is still a link. */
+.bs-card {
+	position: fixed;
+	inset: auto;
+	margin: 0.5rem 0;
+	width: min( 21rem, calc( 100vw - 1.5rem ) );
+	padding: 0;
+	border: 1px solid var( --bs-line );
+	border-radius: 0.8rem;
+	overflow: hidden;
+	background: var( --bs-panel );
+	color: var( --bs-ink );
+	box-shadow: var( --bs-shadow );
+	font: 400 0.875rem/1.45 var( --bs-sans );
+	position-anchor: --bs-link;
+	position-area: top;
+	position-try-fallbacks: flip-block, top span-right, top span-left, bottom span-right, bottom span-left;
+	opacity: 0;
+	transform: translateY( 4px );
+	transition: opacity 0.14s, transform 0.14s, display 0.14s allow-discrete, overlay 0.14s allow-discrete;
+}
+.bs-card:popover-open {
+	opacity: 1;
+	transform: none;
+}
+@starting-style {
+	.bs-card:popover-open {
+		opacity: 0;
+		transform: translateY( 4px );
+	}
+}
+a.bs-card-in {
+	display: grid;
+	grid-template-columns: minmax( 0, 1fr );
+	color: inherit;
+	text-decoration: none;
+}
+.bs-card-in:hover { color: inherit; text-decoration: none; }
+.bs-card-img {
+	display: block;
+	width: 100%;
+	max-height: 10.5rem;
+	object-fit: cover;
+	object-position: 50% 28%;
+	background: var( --bs-wash );
+}
+.bs-card.is-person .bs-card-in { grid-template-columns: auto minmax( 0, 1fr ); align-items: center; }
+.bs-card.is-person .bs-card-img {
+	width: 3.5rem;
+	height: 3.5rem;
+	margin: 0.8rem 0 0.8rem 0.9rem;
+	border-radius: 50%;
+}
+.bs-card-words {
+	display: grid;
+	gap: 0.25rem;
+	padding: 0.8rem 0.95rem 0.9rem;
+}
+.bs-card-label {
+	color: var( --bs-rust );
+	font: 600 0.625rem/1.3 var( --bs-mono );
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+.bs-card-title {
+	font: 700 1.05rem/1.25 var( --bs-serif );
+	text-wrap: balance;
+}
+.bs-card-text {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 5;
+	line-clamp: 5;
+	overflow: hidden;
+	color: var( --bs-soft );
+	font-size: 0.8125rem;
+}
+.bs-card.is-missing .bs-card-title { color: var( --bs-link-new ); }
+.bs-card.is-outside .bs-card-title { font: 600 0.9375rem/1.3 var( --bs-sans ); overflow-wrap: anywhere; }
+.bs-card.is-outside .bs-card-text { -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+.bs-card-listen {
+	justify-self: start;
+	margin-top: 0.35rem;
+	padding: 0.25rem 0.7rem;
+	border: 1px solid var( --bs-green-line );
+	border-radius: 999px;
+	background: var( --bs-green );
+	color: #fff;
+	font-size: 0.75rem;
+	font-weight: 600;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.bs-card,
+	.bs-tidingcard,
+	.bs-songs li > a.bs-play { transition: none; }
+	::view-transition-group( bs-video ) { animation: none; }
+}

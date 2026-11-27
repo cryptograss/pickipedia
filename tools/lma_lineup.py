@@ -1,0 +1,412 @@
+#!/usr/bin/env python3
+"""
+LMA lineup: who played, read out of a Live Music Archive item. A prototype.
+
+    python3 tools/lma_lineup.py SGP2025-07-05 --name "Kyle Tuttle" --name "Molly Tuttle"
+
+An Artificial Dumb reader for the connectome (Justin, #connectome, 9-10 Nov
+2026). The archive's tapers write who played in free text, in many shapes:
+"Lineup:" lists, "Name - Instrument" lines, footnote marks tied to setlist
+songs ("% w/ Kyle Tuttle" under "07. Hobo Song %"), song-inline credits,
+"with" lines, prose. Each line that names a person is put into one shape, and
+each shape says how far the line reaches:
+
+  song      the line ties the person to songs (a resolved footnote, an inline credit)
+  show      on the stage for the show or a set (a lineup, a "with" line)
+  stage     introduced on stage; no songs claimed (a banter track)
+  bill      the same night, not the same stage ("opened", "also performing")
+  festival  a festival's roster, pasted onto a set ("Artists at Large")
+  none      names someone, but not as a player (taper, thanks, songwriter)
+  song?     "Song (Name)": a guest or the songwriter; the line can't say which
+
+A line no shape fits comes back with shape None, verbatim, for a person.
+Names are copied as written and never merged. Nothing is written anywhere.
+
+Measured 10 Nov 2026 on lines that name one of 115 people from Justin's and
+Vickie Vaughn's circles: 98.1% of 1,630 lines read on the 1,030 items the
+shapes were written against, and 94.7% of 436 lines on 400 items held out.
+"Read" means a shape was assigned, not that it was right: whether each shape
+is right is for a person to check on a sample.
+"""
+import argparse
+import html
+import json
+import re
+import sys
+from urllib.request import Request, urlopen
+
+MARKS = r"(?:\*{1,3}|\^{1,2}|#{1,2}|\${1,2}|%{1,2}|@{1,2}|&{1,2}|~{1,2}|§|\+{1,2}|!{1,2}|†|‡|\(\d{1,2}\)|\[\d{1,2}\]|\d{1,2}\))"
+INSTR = (r"(?<=\()(?:g|m|b|f|bj|v|bs|dob|mand|gtr|vcl)(?=\))|banjo|banjer|guitar|mandolin|mando|fiddle|violin|viola|cello|bass|upright|dobro|resonator|"
+         r"steel|vocals?|vox|harmony|harmonica|keys|keyboards?|piano|organ|b3|drums?|percussion|"
+         r"sax(?:ophone)?|trumpet|trombone|horns?|flute|accordion|washboard|spoons|bones|ukulele|"
+         r"clarinet|whistle|pipes|harp|melodica|synth|lap steel|pedal steel|slide")
+HEADER = re.compile(r"(?i)^(?:the\s+)?(lineup|line-up|line up|personnel|band|musicians|players|"
+                    r"guests?|special guests?|featuring|with|the guests|sit-?ins?|also appearing)\b[^a-z0-9]*$")
+SETLIST_LINE = re.compile(r"^(?:d\d+t\d+|[a-z]?\d{1,3})\s*[.)\-:]?\s*[A-Za-z\"'(]|^(?:encore|set\s*[12i]+)\b", re.I)
+TRAP_FESTIVAL = re.compile(r"(?i)^artists?\s+at\s+large\b")
+TRAP_BILL = re.compile(r"(?i)\b(opened|opening(?: set| act)?|openers?|support(?:ed)? by|headlin)")
+STAGE = re.compile(r"(?i)\b(intro|introduction|banter|tuning|band intros?)\b")
+
+
+# Words a capitalised name can follow, or be hyphened to, without being part
+# of a longer name: "Special Guest Kenny Smith", "Enter Sam Bush",
+# "The Sam Grisman Project", "Chris Elliott-Banjo".
+LEAD_IN = re.compile(rf"(?i)^(?:{INSTR}|the|special|guests?|featuring|feat|ft|with|w|and|plus|also|by|on|"
+                     r"enter|welcome|introducing|vocals?|drums?|keys|keyboards?|piano|harmonica|sax|"
+                     r"saxophone|percussion|trumpet|organ|pedal|steel|lap|harp|flute|accordion|bassist|"
+                     r"guitarist|drummer|fiddler|mandolinist|banjoist|singer|lead|harmony|backing|speaks)$")
+
+
+def mentions(name, text, known=()):
+    """True when text names this person, not just contains the string.
+    Kenny Smith is not in "Ambrose Kenny Smith", "Kenny Smithson" or
+    "Kenny Smith-Jones". Names glued on by stripped markup still count
+    ("VocalsChristian Ward - Fiddle"), and so does a name right after
+    another known name ("Kyle Tuttle Bronwyn Keith-Hynes")."""
+    for m in re.finditer(re.escape(name), text, re.I):
+        s, e = m.span()
+        pre, post = text[s - 1:s], text[e:e + 1]
+        if pre.isalnum() and not ((pre.islower() or pre.isdigit()) and text[s].isupper()):
+            continue
+        if pre in "'’" and pre:
+            continue
+        if post.isalnum() and not (post.isupper() and text[e - 1].islower()):
+            continue
+        if post and post in "'’" and not re.match(r"['’]s\b", text[e:]):
+            continue
+        if post == "-" and re.match(r"-[A-Za-z]", text[e:]):
+            if not LEAD_IN.match(re.match(r"-([\w'’]+)", text[e:]).group(1)):
+                continue
+        before = re.search(r"([A-Z][a-z][\w'’.-]*) $", text[:s])
+        if before and not LEAD_IN.match(before.group(1).rstrip(".")):
+            head = text[:s].rstrip().lower()
+            if not any(head.endswith(k.lower()) for k in known if k.lower() != name.lower()):
+                continue
+        return True
+    return False
+
+
+# Whose song it is, not who played it (Justin, #connectome, 15 Nov 2026: "obviously a cover is not a
+# sit-in"). A cover, a version, or an act as a whole: "(The David Grisman Quintet cover)", "[3] David
+# Grisman cover", "(Jeff White Country Version)", "Dawg After Dark (David Grisman Quintet)": not on stage.
+# "Cody Kilby tune" is his own tune, and on a Travelin' McCourys tape he is playing it: a writer who may
+# be on the stage too, as "Song (Name)" already is. The name and the word that says so sit together:
+# "Tim O'Brien sings lead on a Tim-written song" is Tim O'Brien singing, and "(Lovin' Spoonful cover)
+# w/ Kyle Tuttle" is Kyle Tuttle playing.
+ACT = r"(?:quintet|quartet|trio|band|project|orchestra|ensemble)"
+
+
+def credited_as_source(name, text):
+    """None, or how text names this person as the song's own artist rather than a player:
+    "cover" (a cover, their version, their act), off the stage; "writer" (their tune, their song), maybe on it."""
+    n = re.escape(name)
+    lead = rf"(?i)(?<![\w])(?:the\s+)?{n}(?:['’]s)?(?:\s+{ACT})?(?:['’]s)?\s+"
+    if re.search(lead + r"(?:cover|(?:[\w-]+\s+)?version)\b", text) \
+            or re.search(rf"(?i)\(\s*(?:the\s+)?{n}\s+{ACT}\s*\)", text):
+        return "cover"
+    if re.search(lead + r"(?:song|tune)\b", text):
+        return "writer"
+    return None
+
+
+def lines_of(value):
+    s = value if isinstance(value, str) else "\n".join(value or [])
+    s = re.sub(r"(?i)<br\s*/?>|</p>|</div>|<p[^>]*>|<div[^>]*>|</li>|<li[^>]*>|</tr>", "\n", s)
+    s = html.unescape(re.sub(r"<[^>]+>", "", s))
+    return [l.strip() for l in s.replace("\r", "\n").split("\n") if l.strip()]
+
+
+def footnote_mark(line):
+    m = re.match(rf"^\s*({MARKS})\s*(?:[-=:–—]\s*)?(.+)$", line)
+    return (m.group(1), m.group(2)) if m and not SETLIST_LINE.match(line) else None
+
+
+def songs_marked(lines, mark):
+    esc = re.escape(mark.strip("()[]") if mark[0] in "([" else mark)
+    if mark[0] in "([":
+        pat = re.compile(rf"[(\[]{esc}[)\]]")
+    elif mark[0].isdigit():
+        pat = re.compile(rf"\({esc}\b")
+    else:
+        # the mark, not part of a longer run of the same symbol (* vs **)
+        sym = re.escape(mark[0])
+        pat = re.compile(rf"(?<!{sym}){esc}(?!{sym})")
+    out = []
+    for l in lines:
+        if footnote_mark(l):
+            continue
+        if pat.search(l):
+            out.append(re.sub(rf"\s*{MARKS}+\s*$|\s*{MARKS}(?=\s|$)", "", l).strip(" >"))
+    return out
+
+
+# A sentence about a player, not about this music: who someone is likened to or learned from, what a peer
+# or a critic says of them, their career. Names in it are not on the stage. The Arabesque tapes of 1980
+# put David Grier, Bryan Sutton and Tim O'Brien on stage with Mike Scap (16 Nov 2026) from a line of their
+# notes: "Former band mate Tim O'Brien places Scap “in a class with David Grier, or Bryan Sutton”", and from
+# their bassist's biography: "a sought after sideman on over 100 albums, including ... Tim O'Brien".
+ABOUT = re.compile(r"\b(?:[Ii]n (?:a|the same) (?:class|league) (?:with|as)|[Cc]ompar(?:ed|es|ing|isons?) (?:\w+ ){0,2}(?:to|with)"
+                   r"|(?:[Tt]he )?likes of|[Rr]eminiscent of|[Ii]n the (?:vein|tradition|mou?ld) of|(?:[Ii]nfluenced|[Ii]nspired) by"
+                   r"|[Ii]n the words of|during (?:his|her|their) (?:\w+ )?careers?|sought.after sideman|\d+ (?:albums|records)"
+                   r"|(?:has|have) (?:since )?(?:played|performed|toured|recorded) with|to name a few|shared the stage with"
+                   r"|appear(?:s|ed)? as guests? on|[Ii] was (?:at|over at) the"
+                   r"|[Ii]n (?:19|20)\d\d,? (?:he|she|they) (?:joined|formed|moved|toured|recorded))\b"
+                   r"|[\u201d\"]\s*[\u2014\u2013]\s*[A-Z]")    # a blurb's signature: \u201c...\u201d \u2014 Sam Bush
+# Larry Keel's biography (LKE2019-06-30): "... Bill Monroe, Peter Rowan, and Danny Barnes to name a few"; a taper
+# elsewhere: "(I was at the Peter Rowan show with Mike Marshall & Brynn Bright)" (ymsb2004-10-07); the blurbs
+# on Keel's tape ("...Larry does.\u201d \u2014 Sam Bush"); Tyler Grant's: "In 2004 he joined Casey and Chris Henry".
+# Lower case, as prose writes it: a setlist's "The Likes Of Me" is a song (Billy Strings, 2021-12-11, where
+# John Mailander is on the fiddle). And a sentence's length: a description with no stops in it reads as one.
+PROSE_LONGEST = 600
+
+
+def about_a_player(line, name):
+    """The sentence of line naming name, when that sentence is about a player rather than this music; or None."""
+    flat = lambda t: t.replace("\u2019", "'").replace("\u2018", "'").lower()
+    for s in re.split(r"(?<=[.!?\u201d\"])\s+(?=[A-Z\u201c\"])", line):
+        if len(s) <= PROSE_LONGEST and flat(name) in flat(s) and ABOUT.search(s):
+            return s
+    return None
+
+
+def classify(lines, i, name="", creator=""):
+    """The shape of lines[i], which contains name. Returns (shape, scope, detail) or None."""
+    l = lines[i]
+    core = re.sub(r"(?i)^the\s+|[:.]$|\s+(?:and friends|band)$", "", l.strip())
+    if creator and (core.lower() in creator.lower() or creator.lower() in core.lower()) and len(core) <= len(creator) + 25:
+        return ("band name", "show", l)
+    # Not connections, though they name someone: say so, so a person never ticks them.
+    if re.search(r"(?i)\b(thanks?|thank you)\b.*\b(for|to)\b|\ballowing (?:audio )?(?:recording|taping)\b", l):
+        return ("thanks / permission", "none", l)
+    if re.search(r"(?i)^(?:taper|taped by|recorded by|transfer(?:red)?(?: by)?|conversion by|shn conversion|mixed by|mastered by|seeded by|edited by|lineage|source)\b|\b(?:conversion|transfer|seeded|edited)\s+by\b", l):
+        return ("crew (taper, transfer)", "none", l)
+    if re.search(r"(?i)\b(other acts|also on the bill|before any of the others)\b", l):
+        return ("same bill", "bill", l)
+    if re.search(r"(?i)\b(written|composed|penned)\s+by\b|original artist|\bcover(?:ed)? of\b", l):
+        return ("songwriter", "none", l)
+    said = name and credited_as_source(name, l)
+    if said == "cover":
+        return ("the song's own artist (a cover, their version, their act)", "none", l)
+    if said == "writer":
+        return ("the song's writer (on the stage too?)", "song?", l)
+    if re.search(r"(?i)\b(check out|online at|buy one of|support (?:the|this) (?:band|artist)|free .* concerts|available for download)\b", l):
+        return ("promotion", "none", l)
+    if len(re.findall(r"(?i)\d{1,2}(?::\d\d)?\s*[ap]\.?m\.?\s*[-\u2013]\s*\d{1,2}(?::\d\d)?\s*[ap]\.?m", l)) >= 2:
+        return ("festival schedule (acts and their hours)", "festival", l)
+    about = name and about_a_player(l, name)
+    if about:
+        return ("about a player, not this music (likened, quoted, a career)", "none", about)
+    if re.search(r"(?i)\b(filler|bonus)\b.*\bfrom\b|\(on bt\.etree\.org\)|^barn\d+", l):
+        return ("other recording", "none", l)
+    if re.search(r"(?i)\.(flac|shn|mp3|wav|ffp|md5)\b|:[0-9a-f]{32}\b", l):
+        return ("checksum / file list", "none", l)
+    if creator and core.lower().startswith(creator.lower()) and re.search(r"\d{1,4}[/-]\d{1,2}[/-]\d{2,4}|\b(?:19|20)\d\d\b|\blive (?:from|at)\b", l):
+        return ("band name", "show", l)
+    if re.search(r"(?i)\b(lineup|line-up)\s*:", l) and l.count(",") >= 2:
+        return ("festival day lineup", "festival", l)
+    if re.search(r"(?i)\b(also performing|in support of|on the bill|same night)\b", l):
+        return ("same bill", "bill", l)
+    if re.search(r"(?i)\(([^()]*/[^()]*)\)", l) and re.search(r"(?i)\b(band|revival|boys|project)\b", l) and name and name.lower() in re.search(r"\(([^()]*)\)", l).group(1).lower():
+        return ("affiliation", "none", l)
+    if re.search(r"(?i)\b(billed as|feat\s*:|featuring\s*:)", l):
+        return ("billing", "show", l)
+    if re.search(r"(?i)\b(enter|welcome|introducing)\s+[A-Z]", l) or re.search(r"(?i)\[\s*welcome\b", l):
+        return ("banter track", "stage", l)
+    if re.search(r"(?i)\b(sitting in|sat in|played the whole show|for most of the show|whole show|entire show)\b", l):
+        return ("prose", "show", l)
+    if re.match(r"^[^,]{3,40}(?:,\s*[^,]{3,40}){1,}(?:,?\s*(?:and|&)\s+[^,]{3,40})?\s*(?:trio|duo|quartet|band)?\.?$", l, re.I) \
+            and all(re.match(r"^(?:and |& )?[A-Z][\w.'’-]+(?: [A-Z&][\w.'’-]*){0,3}(?: (?:trio|duo|quartet))?$", p.strip(), re.I) for p in re.split(r",", l)):
+        return ("billing names", "show", l)
+    if re.search(r"(?i)\b(duo|trio)\b", l) and re.search(r"&|\band\b", l):
+        return ("billing names", "show", l)
+    m = re.match(r"^(?:\d{1,3}[.)]?\s*)?([^()]+?)\s*\(([^()]+)\)\s*[>*^%#$@&~+]*$", l)
+    if m and name and name.lower() in m.group(2).lower() and not re.match(r"(?i)\s*(?:w/|with\b|feat)", m.group(2)):
+        # "Song (Name, Name)": a guest or the songwriter; the line alone can't say which
+        return ("song parenthetical (guest or writer?)", "song?", l)
+    if re.search(r"\s[/|]\s.*\s[/|]\s", l):
+        return ("bill list", "bill", l)
+    if re.search(r"(?i)\b(intro(?:duction)?|outro|call back|thank you'?s)\b.*\bby\b", l):
+        return ("banter track", "stage", l)
+    if re.match(r"(?i)^notes?\s*:\s*", l):
+        l = re.sub(r"(?i)^notes?\s*:\s*", "", l); lines = lines[:i] + [l] + lines[i+1:]
+    # traps first: they look like connections
+    for k in range(i, max(-1, i - 6), -1):
+        if TRAP_FESTIVAL.match(lines[k]):
+            return ("festival roster", "festival", lines[k])
+        if lines[k] == "" or (k < i and not re.match(r"^[A-Z][\w.'’ -]+$", lines[k])):
+            break
+    if TRAP_BILL.search(l) and not re.search(r"(?i)\bw/|\bwith\b.*\bon\b", l):
+        return ("same bill", "bill", l)
+    fm = footnote_mark(l)
+    if fm:
+        songs = songs_marked(lines, fm[0])
+        return ("footnote", "song" if songs else "show", songs)
+    if SETLIST_LINE.match(l) or re.search(r"(?i)\((?:w/|with\b|feat\.?|featuring\b)", l) or re.search(r"(?i)\s[-–]\s*(?:w/|with)\s", l):
+        if STAGE.search(l) and not re.search(r"(?i)\bw/|\bwith\b", l):
+            return ("banter track", "stage", l)
+        return ("song-inline", "song", l)
+    if re.search(rf"(?i)\b({INSTR})\b", l):
+        if re.search(rf"(?i)\bon\s+(?!{INSTR}).+?[.]?$", l) and re.search(r"(?i)^with\b|^w/", l) and not re.search(rf"(?i)\bon\s+({INSTR})", l):
+            return ("prose", "song", l)
+        return ("name-instrument", "show", l)
+    if HEADER.match(l):
+        return ("header", "show", l)
+    for k in range(i - 1, max(-1, i - 15), -1):
+        if HEADER.match(lines[k]):
+            return ("listed under header", "show", lines[k])
+        if SETLIST_LINE.match(lines[k]):
+            break
+    if re.match(r"(?i)^(with|w/|featuring|feat\.?|ft\.?|special guests?|featured)\b", l) or re.search(r"(?i)\b(?:with|featuring|feat\.?)\s|\bw/\s*[A-Z]", l):
+        return ("with-line", "show", l)
+    if re.search(r"(?i)\b(sat in|sits in|joined|joins|guest|guests)\b", l):
+        return ("prose", "show", l)
+    if re.match(r"^[A-Z][\w.'’-]+(?: [A-Z][\w.'’-]+){1,3}$", l):
+        # a bare name on its own line, in a block of bare names: a list with no header
+        nb = [x for x in lines[max(0, i - 3):i + 4] if re.match(r"^[A-Z][\w.'’-]+(?: [A-Z][\w.'’-]+){1,3}$", x)]
+        if len(nb) >= 3:
+            return ("bare name list", "show", l)
+    return None
+
+
+def narrowed(names, texts):
+    """Which of names are worth asking mentions() about, for any one of texts: a function, text -> [names],
+    each list in names' own order.
+
+    read_item used to ask mentions() about every name on every line and on four fields of every file: 260
+    names, a few hundred strings an item, some hundred million regex searches over the store's 1,400 tapes,
+    and all but a few thousand of them for a name that is nowhere in the item. That was the whole of the
+    store's build: 4 minutes on blu's machine and 21 on Jenkins, with every pickipedia deploy waiting behind
+    it (13 Nov 2026).
+
+    So the item's strings are joined into two texts and each name is looked for once in each. A name found
+    in neither is in no one string, so nobody asks about it. Nothing else changes: mentions() still decides,
+    about the same names, in the same order.
+
+    Two texts, because lower() is the same test as the regex's re.I only where everything is ASCII (to a
+    regex, 'ſ' is an s and 'ı' an i; to lower() they are not). The ASCII strings are searched as one lowered
+    text, with `in`. The others, and any name that is not ASCII, are searched with the regex mentions() uses.
+    """
+    plain = "\n".join(t for t in texts if t.isascii())
+    fancy = "\n".join(t for t in texts if not t.isascii())
+    low = plain.lower()
+    in_plain, in_fancy = [], []
+    for n in names:
+        found = n.lower() in low if n.isascii() else re.search(re.escape(n), plain, re.I)
+        if found:
+            in_plain.append(n)
+        if fancy and re.search(re.escape(n), fancy, re.I):
+            in_fancy.append(n)
+    return lambda text: in_plain if text.isascii() else in_fancy
+
+
+def read_item(j, names):
+    """{name: [(where, shape, scope, detail)]} for each known name in the item.
+    A name with no shape is listed with shape None."""
+    m = j.get("metadata", {})
+    out = {}
+    creator = m.get("creator"); creator = creator[0] if isinstance(creator, list) else (creator or "")
+    fields = [("description", lines_of(m.get("description"))), ("notes", lines_of(m.get("notes")))]
+    files = [(f, key, str(f.get(key, ""))) for f in j.get("files", []) for key in ("comment", "artist", "creator", "title")]
+    tops = [(key, " / ".join(m[key]) if isinstance(m.get(key), list) else str(m.get(key) or ""))
+            for key in ("creator", "title", "subject")]
+    worth = narrowed(names, [l for _, lines in fields for l in lines] + [v for _, _, v in files] + [v for _, v in tops])
+    for where, lines in fields:
+        for i, l in enumerate(lines):
+            for n in worth(l):
+                if mentions(n, l, names):
+                    out.setdefault(n, []).append((where, *(classify(lines, i, n, creator) or (None, None, l))))
+    for f, key, v in files:
+        for n in worth(v):
+            if mentions(n, v, names):
+                said = credited_as_source(n, v)
+                if said:
+                    out.setdefault(n, []).append(("files", f"file {key}: the song's " +
+                                                  ("own artist (a cover)" if said == "cover" else "writer"),
+                                                  "none" if said == "cover" else "song?", v))
+                    continue
+                shape = ("file comment", "song", f.get("title") or f["name"]) if key == "comment" else \
+                        ("file " + key, "song" if " ft. " in v or " feat" in v.lower() else "show", v)
+                out.setdefault(n, []).append(("files", *shape))
+    for key, v in tops:
+        for n in worth(v):
+            if mentions(n, v, names):
+                out.setdefault(n, []).append((key, "item " + key, "show", v))
+    return out
+
+
+ON_STAGE = {"song", "song?", "show", "stage"}
+
+
+def song_key(text):
+    """A song as a footnote, an inline credit or a file title writes it, cut to
+    what the three share: '07. Hobo Song %', 'd1t07 Hobo Song (w/ Kyle Tuttle)'
+    and 'Hobo Song' all give 'hobosong'."""
+    t = re.sub(r"(?i)^\s*(?:d\d+\s*t\d+|[a-z]?\d{1,3})\s*[.)\-:]?\s*", "", str(text))
+    t = re.sub(r"(?i)\([^)]*\)|\[[^\]]*\]|\s[-–]\s*(?:w/|with)\s.*$|\bw/.*$", "", t)
+    t = re.sub(rf"{MARKS}+", "", t)
+    return re.sub(r"[^a-z0-9]", "", t.casefold())
+
+
+def songs_of(rows):
+    """The song keys a person's song-scope readings in one item name."""
+    out = set()
+    for where, shape, scope, detail in rows:
+        if scope == "song":
+            for d in detail if isinstance(detail, list) else [detail]:
+                k = song_key(d)
+                if len(k) >= 3:
+                    out.add(k)
+    return out
+
+
+def pairs(found):
+    """Each two people read out of one item, and how far the item puts them together:
+
+      song   both are tied to the same song (by its key; see song_key)
+      show   both are on the stage that night (song, song?, show or stage scope)
+      apart  at least one of them isn't on the stage: a bill, a festival
+             roster, a taper, a thank-you, or a line no shape fits
+
+    Returns [{"a", "b", "kind", "songs"}], names sorted, songs as keys.
+    """
+    out = []
+    names = sorted(found)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            shared = sorted(songs_of(found[a]) & songs_of(found[b]))
+            sa = {r[2] for r in found[a]}
+            sb = {r[2] for r in found[b]}
+            kind = "song" if shared else "show" if (sa & ON_STAGE and sb & ON_STAGE) else "apart"
+            out.append({"a": a, "b": b, "kind": kind, "songs": shared})
+    return out
+
+
+def fetch(identifier):
+    req = Request(f"https://archive.org/metadata/{identifier}",
+                  headers={"User-Agent": "pickipedia-lma-lineup/0.1 (https://pickipedia.xyz)"})
+    with urlopen(req, timeout=60) as resp:
+        return json.load(resp)
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(description="Who played, read out of a Live Music Archive item.")
+    ap.add_argument("item", help="an archive.org identifier, or an archive.org/details/... URL")
+    ap.add_argument("--name", action="append", required=True, help="a person to look for (repeatable)")
+    ap.add_argument("--pairs", action="store_true", help="also say how far the item puts each two of them together")
+    args = ap.parse_args(argv[1:])
+    ident = re.sub(r"^https?://archive\.org/details/", "", args.item).strip("/")
+    found = read_item(fetch(ident), args.name)
+    print(f"https://archive.org/details/{ident}")
+    for n in args.name:
+        for where, shape, scope, detail in found.get(n, []):
+            print(f"  {n}: [{scope or '?'}] {shape or 'not read; for a person'} ({where}): {detail}")
+        if n not in found:
+            print(f"  {n}: not named in this item")
+    if args.pairs:
+        for p in pairs(found):
+            print(f"  {p['a']} + {p['b']}: {p['kind']}" + (f" ({', '.join(p['songs'])})" if p["songs"] else ""))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

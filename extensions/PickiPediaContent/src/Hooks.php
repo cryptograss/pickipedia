@@ -18,7 +18,13 @@
 
 namespace MediaWiki\Extension\PickiPediaContent;
 
+use MediaWiki\Extension\PickiPediaContent\Posts\Post;
+use MediaWiki\Extension\PickiPediaContent\Posts\PostData;
 use MediaWiki\Hook\BeforePageDisplayHook;
+use MediaWiki\Hook\GetDoubleUnderscoreIDsHook;
+use MediaWiki\Hook\LinksUpdateCompleteHook;
+use MediaWiki\Hook\RequestContextCreateSkinHook;
+use MediaWiki\Page\Hook\PageDeleteCompleteHook;
 use MediaWiki\Hook\PageMoveCompleteHook;
 use MediaWiki\Hook\ParserFirstCallInitHook;
 use MediaWiki\Hook\UploadCompleteHook;
@@ -37,7 +43,49 @@ use Wikimedia\Rdbms\LikeValue;
 
 class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPermissionsErrorsHook,
 	ChangesListSpecialPageStructuredFiltersHook, SkinAfterContentHook, GetPreferencesHook, SaveUserOptionsHook,
-	PageSaveCompleteHook, PageMoveCompleteHook, UploadCompleteHook {
+	PageSaveCompleteHook, PageMoveCompleteHook, UploadCompleteHook, RequestContextCreateSkinHook,
+	GetDoubleUnderscoreIDsHook, LinksUpdateCompleteHook, PageDeleteCompleteHook {
+
+	/**
+	 * A post is read in its own skin, Broadside (Posts/SkinBroadside.php): chosen here, on the server, so the
+	 * page arrives as it will look. Only the post as it reads: its edit form, its history, a diff and an old
+	 * revision are the wiki's own pages. A skin asked for by name (?useskin=) is the one given, which is also
+	 * the way to see a post as a plain wiki page.
+	 */
+	public function onRequestContextCreateSkin( $context, &$skin ) {
+		$title = $context->getTitle();
+		$request = $context->getRequest();
+		if ( !$title || $request->getRawVal( 'useskin' ) !== null
+			|| $request->getRawVal( 'action', 'view' ) !== 'view' || $request->getRawVal( 'veaction' ) !== null
+			|| $request->getRawVal( 'diff' ) !== null || $request->getRawVal( 'oldid' ) !== null
+			|| $request->getRawVal( 'redirect' ) === 'no' || $request->getCheck( 'printable' )
+		) {
+			return;
+		}
+		if ( PostData::enabled() && PostData::isPost( $title ) ) {
+			$skin = 'broadside';
+		}
+	}
+
+	/** __NOTAPOST__: a user subpage that is read as an ordinary wiki page (PostData::isPost). */
+	public function onGetDoubleUnderscoreIDs( &$doubleUnderscoreIDs ) {
+		$doubleUnderscoreIDs[] = PostData::PROP_NOT;
+	}
+
+	/** A page under User:Name was saved and its links and properties written: what's kept of Name is read again. */
+	public function onLinksUpdateComplete( $linksUpdate, $ticket ) {
+		self::touchPosts( $linksUpdate->getTitle() );
+	}
+
+	public function onPageDeleteComplete( $page, $deleter, $reason, $pageID, $deletedRev, $logEntry, $archivedRevisionCount ) {
+		self::touchPosts( Title::newFromPageIdentity( $page ) );
+	}
+
+	private static function touchPosts( ?Title $title ): void {
+		if ( $title && $title->getNamespace() === NS_USER ) {
+			PostData::touch( explode( '/', $title->getText(), 2 )[0] );
+		}
+	}
 
 	/** A save, told to magenta at once (MagentaPush.php). */
 	public function onPageSaveComplete( $wikiPage, $user, $summary, $flags, $revisionRecord, $editResult ) {
@@ -50,6 +98,8 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	/** A move: both titles, so magenta forgets the old and reads the new. */
 	public function onPageMoveComplete( $old, $new, $user, $pageid, $redirid, $reason, $revision ) {
 		$from = Title::newFromLinkTarget( $old )->getPrefixedText();
+		self::touchPosts( Title::newFromLinkTarget( $old ) );
+		self::touchPosts( Title::newFromLinkTarget( $new ) );
 		MagentaPush::tell( MagentaPush::payload(
 			Title::newFromLinkTarget( $new )->getPrefixedText(), $revision ? $revision->getId() : null,
 			$user->getName(), 'move', $from
@@ -133,6 +183,56 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			$parser->getOutput()->updateCacheExpiry( 3600 );
 			return wfEscapeWikiText( self::timeZoneOf( trim( (string)$name ) ) );
 		} );
+		// {{#connectome:}}: the page's connectome card, or nothing (Connectome.php). The cards are rebuilt at each
+		// deploy, without an edit to the page, so a page takes its new card within a day.
+		$parser->setFunctionHook( 'connectome', static function ( $parser, $name = '', ...$args ) {
+			$output = $parser->getOutput();
+			$output->updateCacheExpiry( 86400 );
+			$name = trim( (string)$name );
+			// A cut naming itself ({{#connectome:|record=…|number=…|cid=…}}) gets that cut's own card:
+			// the graph lives beside the {{Studio cut}} block that states it (Justin, #connectome, 15 Nov 2026).
+			$record = $number = $cid = '';
+			foreach ( $args as $arg ) {
+				if ( preg_match( '/^\s*(record|number|cid)\s*=\s*(.*)$/s', (string)$arg, $m ) ) {
+					$$m[1] = trim( $m[2] );
+				}
+			}
+			$page = $parser->getPage();
+			$title = $name !== '' ? Title::newFromText( $name ) : ( $page ? Title::newFromPageReference( $page ) : null );
+			$html = $title ? Connectome::cardFor( Connectome::dir(), $title->getPrefixedText(), $record, $number, $cid ) : '';
+			if ( $html === '' ) {
+				return '';
+			}
+			$output->addModuleStyles( [ 'ext.pickipediaContent.connectome.styles' ] );
+			$output->addModules( [ 'ext.pickipediaContent.connectome' ] );
+			return [ $html, 'isHTML' => true, 'noparse' => true ];
+		} );
+		// {{#byline:name=|person=|picture=|says=}}, on a user's own page: who they are under what they write
+		// (Posts/PostData::author). name: as they sign; person: their page here, whose songs are theirs;
+		// picture: a file, in place of the page's first; says: a line about them. It draws nothing.
+		$parser->setFunctionHook( 'byline', static function ( $parser, ...$args ) {
+			$page = $parser->getPage();
+			if ( !$page || $page->getNamespace() !== NS_USER || str_contains( $page->getDBkey(), '/' ) ) {
+				return '';
+			}
+			$output = $parser->getOutput();
+			foreach ( $args as $arg ) {
+				[ $key, $value ] = array_pad( explode( '=', (string)$arg, 2 ), 2, '' );
+				$key = strtolower( trim( $key ) );
+				$value = trim( html_entity_decode( strip_tags( $value ), ENT_QUOTES | ENT_HTML5 ) );
+				if ( !isset( PostData::BYLINE[$key] ) || $value === '' ) {
+					continue;
+				}
+				if ( $key === 'person' || $key === 'picture' ) {
+					$value = trim( $value, "[] \t" );
+				}
+				if ( $key === 'picture' ) {
+					$value = preg_replace( '/^(File|Image)\s*:\s*/i', '', $value );
+				}
+				$output->setUnsortedPageProperty( PostData::BYLINE[$key], mb_substr( $value, 0, 255 ) );
+			}
+			return '';
+		} );
 		$parser->setHook( 'todo', static function ( $input, array $args, $parser, $frame ) {
 			$page = $parser->getPage();
 			$pageTitle = $page ? Title::newFromPageReference( $page )->getPrefixedText() : '';
@@ -186,20 +286,39 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 		$dbr = $services->getConnectionProvider()->getReplicaDatabase();
 		$links = $services->getLinksMigration();
 		$info = $links->getQueryInfo( 'pagelinks' );
-		$conds = $links->getLinksConditions( 'pagelinks', $title );
-		$ledgers = $dbr->newSelectQueryBuilder()
-			->select( [ 'page_id', 'page_title' ] )
-			->tables( $info['tables'] )
-			->joinConds( $info['joins'] )
-			->join( 'page', null, 'page_id = pl_from' )
-			->where( $conds )
-			->andWhere( [ 'pl_from_namespace' => Todo::NAMESPACE ] )
-			->andWhere( $dbr->expr( 'page_title', IExpression::LIKE,
-				new LikeValue( MoodLinks::PREFIX, $dbr->anyString(), MoodLinks::INFIX, $dbr->anyString() ) ) )
-			->orderBy( 'page_title', 'DESC' )
-			->limit( 48 )
+		// The page, and every title that redirects to it: a page moved for a better headline keeps the links
+		// said to its old title (Justin, #interfaces, 13 Nov 2026).
+		$targets = [ $title ];
+		$redirects = $dbr->newSelectQueryBuilder()
+			->select( [ 'page_namespace', 'page_title' ] )
+			->from( 'redirect' )
+			->join( 'page', null, 'page_id = rd_from' )
+			->where( [ 'rd_namespace' => $title->getNamespace(), 'rd_title' => $title->getDBkey(), 'rd_interwiki' => '' ] )
+			->limit( 20 )
 			->caller( __METHOD__ )
 			->fetchResultSet();
+		foreach ( $redirects as $redirect ) {
+			$targets[] = Title::makeTitle( (int)$redirect->page_namespace, $redirect->page_title );
+		}
+		$ledgers = [];
+		foreach ( $targets as $target ) {
+			$found = $dbr->newSelectQueryBuilder()
+				->select( [ 'page_id', 'page_title' ] )
+				->tables( $info['tables'] )
+				->joinConds( $info['joins'] )
+				->join( 'page', null, 'page_id = pl_from' )
+				->where( $links->getLinksConditions( 'pagelinks', $target ) )
+				->andWhere( [ 'pl_from_namespace' => Todo::NAMESPACE ] )
+				->andWhere( $dbr->expr( 'page_title', IExpression::LIKE,
+					new LikeValue( MoodLinks::PREFIX, $dbr->anyString(), MoodLinks::INFIX, $dbr->anyString() ) ) )
+				->orderBy( 'page_title', 'DESC' )
+				->limit( 48 )
+				->caller( __METHOD__ )
+				->fetchResultSet();
+			foreach ( $found as $ledger ) {
+				$ledgers[(int)$ledger->page_id] = $ledger;
+			}
+		}
 		$rows = [];
 		$revisions = $services->getRevisionLookup();
 		foreach ( $ledgers as $ledger ) {
@@ -211,8 +330,11 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			}
 			foreach ( MoodLinks::rows( MoodLinks::body( $content->getText() ) ) ?? [] as $row ) {
 				$named = Title::newFromText( $row['page'] );
-				if ( $named && $named->equals( $title ) ) {
-					$rows[] = $row + [ 'mood' => $mood ];
+				foreach ( $targets as $target ) {
+					if ( $named && $named->equals( $target ) ) {
+						$rows[] = $row + [ 'mood' => $mood ];
+						break;
+					}
 				}
 			}
 		}
@@ -259,6 +381,8 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 	 */
 	public function onBeforePageDisplay( $out, $skin ): void {
 		$out->addModuleStyles( [ 'ext.pickipediaContent.styles' ] );
+		// Day or night, as the reader's system or their own choice says (Night.php).
+		Night::onPage( $out, $skin );
 		// A user page says whose pronouns are what, under its title.
 		$title = $out->getTitle();
 		if ( $title && $title->getNamespace() === NS_USER && !$title->isSubpage()
@@ -267,6 +391,107 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			if ( $pronouns !== '' ) {
 				$out->addSubtitle( htmlspecialchars( $out->msg( 'pickipediacontent-pronouns-subtitle', $pronouns )->text() ) );
 			}
+		}
+		self::addCard( $out );
+		// A post's page carries its tiding itself, sent with the page (Posts/SkinBroadside.php).
+		if ( $skin->getSkinName() !== 'broadside' ) {
+			self::addTidingBanner( $out );
+		}
+		// "+ chartifact" on the edit toolbar, and beside a Chartifacts
+		// heading's "edit source" for whoever can edit (Skyler, #rabbithole,
+		// 13 Nov 2026).
+		$action = $out->getRequest()->getVal( 'action', 'view' );
+		if ( in_array( $action, [ 'edit', 'submit' ], true )
+			|| ( $action === 'view' && $out->getUser()->isRegistered() ) ) {
+			$out->addModules( [ 'ext.pickipediaContent.chartifactButton' ] );
+		}
+		self::addShowPage( $out );
+	}
+
+	/**
+	 * A show page is drawn as a poster (ext.pickipediaContent.showPage.js).
+	 *
+	 * "Show:" is a prefix in the main namespace, not a namespace of its own:
+	 * the convention predates any thought of one, and the pages are named
+	 * Show:<Artist>-<blockheight>. The styles come with the script rather than
+	 * before it on purpose -- they hide the wiki's own chrome, and a reader
+	 * whose JavaScript never arrives should keep the page they can read.
+	 *
+	 * This replaced the pickipedia-show gadget (Justin, #connectome, 26 Nov
+	 * 2026). While MediaWiki:Gadgets-definition still names that gadget both
+	 * load, and whichever runs first builds the hero; neither builds a second.
+	 *
+	 * @param \MediaWiki\Output\OutputPage $out
+	 */
+	private static function addShowPage( $out ): void {
+		$title = $out->getTitle();
+		if ( !$title || $title->getNamespace() !== NS_MAIN
+			|| $out->getRequest()->getVal( 'action', 'view' ) !== 'view'
+			|| strpos( $title->getText(), 'Show:' ) !== 0 ) {
+			return;
+		}
+		$out->addModules( [ 'ext.pickipediaContent.showPage' ] );
+	}
+
+	/**
+	 * A page that is a tiding on magenta says so at its foot, linking to the
+	 * discussion there (Justin, #interfaces, 13 Nov 2026). Whether it is, and
+	 * the words (Magenta:Interface's wiki-tiding-banner), are magenta's to say:
+	 * the reader's browser asks it, so the page here stays cached as it is.
+	 *
+	 * @param \OutputPage $out
+	 */
+	private static function addTidingBanner( $out ): void {
+		$title = $out->getTitle();
+		$request = $out->getRequest();
+		if ( !$title || !$title->exists() || $title->isSpecialPage() || $title->isTalkPage()
+			|| $request->getVal( 'action', 'view' ) !== 'view'
+			|| $request->getVal( 'diff' ) !== null || $request->getVal( 'oldid' ) !== null ) {
+			return;
+		}
+		$out->addJsConfigVars( 'wgPickiPediaMagenta',
+			rtrim( (string)$out->getConfig()->get( 'PickiPediaContentMagentaPublicUrl' ), '/' ) );
+		$out->addModules( [ 'ext.pickipediaContent.tidingBanner' ] );
+	}
+
+	/**
+	 * The page's card where its address is shared (SocialCard.php): Open Graph
+	 * and Twitter tags, for a page as it reads -- not an edit, a diff, an old
+	 * revision or a special page.
+	 *
+	 * @param \OutputPage $out
+	 */
+	private static function addCard( $out ): void {
+		$title = $out->getTitle();
+		$request = $out->getRequest();
+		if ( !$title || !$title->exists() || $title->isSpecialPage()
+			|| $request->getVal( 'action', 'view' ) !== 'view'
+			|| $request->getVal( 'diff' ) !== null || $request->getVal( 'oldid' ) !== null ) {
+			return;
+		}
+		$config = $out->getConfig();
+		$server = $config->get( 'CanonicalServer' );
+		$card = SocialCard::fromHtml( $out->getHTML(), $server );
+		$urls = MediaWikiServices::getInstance()->getUrlUtils();
+		$logo = $config->get( 'Logos' )['1x'] ?? '';
+		$image = $card['image'] ?? ( $logo !== '' ? $urls->expand( $logo, PROTO_CANONICAL ) : null );
+		$tags = [
+			'og:site_name' => $config->get( 'Sitename' ),
+			'og:type' => 'article',
+			'og:title' => $title->getPrefixedText(),
+			'og:url' => $title->getCanonicalURL(),
+			'og:description' => $card['description'],
+			'og:image' => $image,
+		];
+		foreach ( $tags as $property => $content ) {
+			if ( $content !== null && $content !== '' ) {
+				$out->addHeadItem( $property, \MediaWiki\Html\Html::element( 'meta', [ 'property' => $property, 'content' => $content ] ) );
+			}
+		}
+		$out->addHeadItem( 'twitter:card', \MediaWiki\Html\Html::element( 'meta',
+			[ 'name' => 'twitter:card', 'content' => $card['image'] ? 'summary_large_image' : 'summary' ] ) );
+		if ( $card['description'] !== '' ) {
+			$out->addMeta( 'description', $card['description'] );
 		}
 	}
 

@@ -1,0 +1,137 @@
+<!doctype html>
+<!--
+  The connectome's big graph: what opens when a reader clicks a line, a dot or the rabbit on a musician
+  page's connectome card ({{#connectome:}}), over the page; and a page of its own at /bacon. Its files stay
+  in /assets/connectome/, and the page names them by that whole path: at /bacon, a bare name would be
+  looked for at the site's root (.htaccess serves this page there, and sends the old address on).
+
+    ?a=Kyle+Tuttle&b=Bronwyn    two pickers: what they've played together, and who both have played with
+    ?p=Kyle+Tuttle              one picker and their company
+    ?m=arthel:4masks&s=Victory  one piece of music (a record or a show by its key; s, a track of a record),
+                                with the graph inside out: the music as the circles, the pickers as the lines
+  /bacon/c4f9qk2mzx7          a bacon graph kept as it was shared (🔗): the page Bacon:c4f9qk2mzx7 holds it
+  /bacon/challenge/Vickie_Vaughn   the challenge: start somewhere random, find your way to Vickie Vaughn
+  /bacon/challenge                 the same, with someone at random to find; the address then names them
+    (?from= and ?to= are read as a and b)
+
+  A click never leaves the graph: a picker's click goes to that picker, a piece of music's turns the graph
+  inside out around it. The ways out to a wiki page are said as that ("page ↗").
+
+  A pointer that hovers gets a note beside what it's over, and its click goes further in. A finger can't
+  hover: its tap goes further in, as a click does, and holding it still on a mark opens a sheet saying what
+  it's on, with the other ways on, the page, and the way back to the graph as buttons.
+
+  connectome-core.js decides what a view holds and where it sits; connectome.js draws it; graph.json, built
+  at deploy by tools/connectome_card.py, is everything it knows. No library, and nothing fetched from
+  another site.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>The Oracle of Bluegrass Bacon</title>
+<script>
+/* Day or night as the reader chose on the wiki (the cookie "pickipedia-mode"), on <html> before anything
+   paints; with no choice made, connectome.css follows their system. */
+( function () {
+	var m = /(?:^|;\s*)pickipedia-mode=(dark|light)(?:;|$)/.exec( document.cookie );
+	if ( m ) {
+		document.documentElement.classList.add( 'pp-' + m[ 1 ] );
+	}
+}() );
+</script>
+<link rel="stylesheet" href="/assets/connectome/connectome.css">
+</head>
+<body>
+<header class="bar">
+	<button type="button" id="back" title="Back to where you were" hidden>←</button>
+	<button type="button" id="share" title="Keep this graph as it is now, and copy a link to it" aria-label="Keep this graph, and copy its link" hidden>🔗</button>
+	<a id="faqlink" href="/wiki/Cryptograss:Bacon_graphs/FAQ" target="_top" aria-controls="faq" aria-expanded="false" title="Questions and answers about the bacon graph">FAQ</a>
+	<a id="home" href="/wiki/Main_Page" target="_top" title="PickiPedia: the front page"><img src="/assets/connectome/pickipedia-mark.png" alt="" width="36" height="36"><span>PickiPedia</span></a>
+</header>
+<div id="game" class="bar game" role="region" aria-label="The challenge" hidden>
+	<label for="goal">Find a path to:</label>
+	<input id="goal" list="names" autocomplete="off" spellcheck="false">
+	<span id="jumps" role="status"></span>
+	<span id="after"></span>
+	<button type="button" id="restart" title="Start again from somewhere else">New start</button>
+</div>
+<div id="shared" role="status" hidden></div>
+<main>
+	<section id="stage" aria-label="The graph">
+		<div id="say"><h1></h1><p></p></div>
+		<p id="kept" hidden></p>
+		<aside id="card" aria-label="The one in the middle" hidden></aside>
+		<div id="zoom" role="dialog" aria-modal="true" aria-label="A closer look" hidden></div>
+		<button type="button" id="qr" hidden title="Scan it to pick up here on a phone; click to make it bigger"><svg aria-hidden="true"><path></path></svg><span>scan to pick up here</span></button>
+		<svg id="g" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="The connectome"></svg>
+		<div id="tip" role="status" hidden></div>
+		<div id="sheet" role="dialog" aria-label="What you're holding" hidden></div>
+		<div id="drop" role="menu" aria-label="The tracks they share" hidden></div>
+		<div id="watch" role="dialog" aria-label="A video" hidden></div>
+		<section id="faq" role="dialog" aria-labelledby="faq-h" hidden>
+			<div class="faq-top"><h2 id="faq-h">Questions and answers</h2><button type="button" class="x" aria-label="Back to the graph" title="Back to the graph">×</button></div>
+			<div class="faq-body"></div>
+			<div class="faq-tell"></div>
+			<p class="faq-foot"><a href="/wiki/Cryptograss:Bacon_graphs/FAQ" target="_top">These answers live on PickiPedia ↗</a></p>
+		</section>
+		<div id="confetti" aria-hidden="true" hidden></div>
+		<div id="wait">Loading the connectome…</div>
+		<button type="button" id="key" aria-controls="legend" aria-expanded="false" title="What the lines and the marks mean">key</button>
+		<footer id="legend">
+			<span class="lg pv"><svg width="30" height="12" aria-hidden="true"><line class="glow" x1="2" y1="6" x2="28" y2="6"/><line class="core t2" x1="2" y1="6" x2="28" y2="6"/></svg>
+				<a href="/wiki/PickiPedia:Release_Types" target="_top">Permanent Release</a>: an etree tape or Creative Commons</span>
+			<span class="lg pv"><svg width="30" height="12" aria-hidden="true"><line class="core t1" x1="2" y1="6" x2="28" y2="6"/></svg>
+				<a href="/wiki/PickiPedia:Release_Types" target="_top">Full Release</a>: no DRM</span>
+			<span class="lg pv"><svg width="30" height="12" aria-hidden="true"><line class="core t0" x1="2" y1="6" x2="28" y2="6"/></svg>
+				the rest, or same record only</span>
+			<span class="lg pv wb"><svg width="30" height="12" aria-hidden="true"><path class="thread" d="M2 10Q15 -3 28 10" stroke-width="1.5"/></svg>
+				a thin line: those two have played together, too</span>
+			<span class="lg pv dp"><svg width="34" height="12" aria-hidden="true"><line class="thread" x1="2" y1="6" x2="27" y2="6" stroke-width="1.5"/><circle class="dot" cx="29" cy="6" r="3.2"/></svg>
+				further out: who they've played with that the one in the middle hasn't</span>
+			<span class="lg dv"><svg width="16" height="14" aria-hidden="true"><g class="mu t2"><circle class="ring" cx="8" cy="7" r="5"/></g></svg>
+				<a href="/wiki/PickiPedia:Release_Types" target="_top">Permanent Release</a>: an etree tape or Creative Commons</span>
+			<span class="lg dv"><svg width="16" height="14" aria-hidden="true"><g class="mu t1"><circle class="ring" cx="8" cy="7" r="5"/></g></svg>
+				<a href="/wiki/PickiPedia:Release_Types" target="_top">Full Release</a>: no DRM</span>
+			<span class="lg dv"><svg width="16" height="14" aria-hidden="true"><g class="mu t0"><circle class="ring" cx="8" cy="7" r="5"/></g></svg>
+				the rest</span>
+			<span class="lg dv"><svg width="30" height="12" aria-hidden="true"><line class="core th on" x1="2" y1="6" x2="28" y2="6" stroke-width="2.4"/></svg>
+				a line: the pickers on both</span>
+			<span class="lg dv wb"><svg width="30" height="12" aria-hidden="true"><path class="core th" d="M2 10Q15 -3 28 10" stroke-width="1.2"/></svg>
+				a thin line: those two share pickers, too</span>
+			<span class="lg wk"><svg width="30" height="12" aria-hidden="true"><line class="core th" x1="2" y1="6" x2="23" y2="6" stroke-width="1.2" opacity=".5"/><g class="mu t2"><circle class="bead" cx="25" cy="6" r="3.6"/></g></svg>
+				a bead on a thin line: a road not taken, where another picker on the song leads</span>
+			<span class="lg more"><svg width="16" height="12" aria-hidden="true"><g class="gl" transform="translate(8 6)"><rect x="-6.8" y="-4.6" width="13.6" height="9.2" rx="1.8"/><circle cx="-2.9" r="1.5"/><circle cx="2.9" r="1.5"/></g></svg> a show
+				<svg width="14" height="12" aria-hidden="true"><g class="gl" transform="translate(7 6)"><circle r="5.2"/><circle class="f" r="1.4"/></g></svg> a record
+				<svg width="12" height="12" aria-hidden="true"><g class="gl" transform="translate(6 6.5) scale(0.9)"><circle class="f" cx="-2" cy="3.6" r="2.7"/><path d="M0.4 3.6V-5.2L4.6 -3.4"/></g></svg> a track</span>
+			<span class="lg more pv"><svg width="14" height="12" aria-hidden="true"><circle class="dot" cx="7" cy="6" r="4"/></svg> a picker
+				<svg width="14" height="12" aria-hidden="true"><circle class="dot hollow" cx="7" cy="6" r="4"/></svg> no page yet</span>
+			<span class="lg more">thicker, bigger = more together</span>
+		</footer>
+		<nav id="path" aria-label="The way you came" hidden><ol></ol><span id="pathx"><button type="button" title="Start over from here: let go of the way you came" aria-label="Start over from here">×</button></span></nav>
+	</section>
+	<section id="oracle" aria-labelledby="oracle-h" hidden><div class="card">
+		<h1 id="oracle-h">The Oracle of Bluegrass Bacon</h1>
+		<div class="rocker" role="radiogroup" aria-label="What to do">
+			<label><input type="radio" name="oracle-mode" value="challenge"><b>challenge</b><span>the six degrees of bluegrass bacon</span></label>
+			<label><input type="radio" name="oracle-mode" value="explore"><b>explore</b><span>find music and connections and pickers</span></label>
+		</div>
+		<div class="ask" hidden>
+			<div class="goal-row"><label for="oracle-goal">Find a path to:</label><input id="oracle-goal" list="names" autocomplete="off" spellcheck="false"><button type="button" class="random" title="Someone else to find">random</button></div>
+			<p class="rules"></p>
+		</div>
+		<form class="find" hidden>
+			<label><span class="vh">A picker, a song, a show or a record to start with</span><input id="pa" list="names" autocomplete="off" spellcheck="false" placeholder="start with"></label>
+			<label><span class="vh">Another picker, to find a path to (optional)</span><input id="pb" list="names" autocomplete="off" spellcheck="false" placeholder="find a path to (optional)"></label>
+			<button type="submit" title="Go there">go</button>
+		</form>
+		<p class="note" role="status"></p>
+		<p class="pick"></p>
+		<div class="minis"></div>
+	</div></section>
+</main>
+<datalist id="names"></datalist>
+<script type="module" src="/assets/connectome/connectome.js"></script>
+</body>
+</html>

@@ -25,7 +25,7 @@ function lift(name) {
 }
 
 const scope = {};
-eval(lift('stripWikitext') + lift('findProposedTagBySource') + lift('findProposedTagContaining') +
+eval(lift('decodeEntities') + 'var ENTITIES = ' + src.match(/var ENTITIES = (\{[\s\S]*?\});/)[1] + ';\n' + lift('stripWikitext') + lift('findProposedTagBySource') + lift('findProposedTagContaining') +
 	lift('findTemplateContaining') + lift('verifiedMark') + lift('verifiedContent') + lift('sourceLink') +
 	'\nscope.content = verifiedContent; scope.link = sourceLink;' +
 	'\nscope.mark = verifiedMark; scope.bySource = findProposedTagBySource; scope.byText = findProposedTagContaining;' +
@@ -114,6 +114,28 @@ check('a bare host has no rest', scope.link('https://watertower.band/').rest ===
 check('words are not a link', scope.link('I was there') === null);
 check('nor a host without a scheme', scope.link('watertower.band') === null);
 check('nor javascript:', scope.link('javascript:alert(1)') === null);
+
+console.log('\nEntities and escaped pipes read as the page shows them:');
+// Skyler, 13 Nov 2026: on Song:August, three {{Bot_proposes}} claims could
+// not be found -- &mdash; and &middot; in the source, a dash and a dot on the
+// page; and [[4masks{{!}}the record]], which read as a link only once the
+// pipe was back.
+const august = [
+	"{{Bot_proposes|'''4masks''' &mdash; [[4masks{{!}}the record]] &middot; [[Release:QmUW{{!}}the release]] &middot; eleven tracks:|by=Magent}}",
+	'',
+	'{{Bot_proposes|Silver 44 &middot; Paint Exchange &middot; Moon Factory &middot; Proximity|by=Magent}}',
+	'',
+	'{{Bot_proposes|One [[Template:Chartifact{{!}}chartifact]] per solo, so <code>sheet</code> stays blank.|by=Magent}}',
+].join('\n');
+const found = (text, want) => {
+	const f = scope.byTemplate(august, text);
+	return f !== null && f.content.includes(want);
+};
+check('dashes and dots', found('4masks — the record · the release · eleven tracks:', 'eleven tracks'));
+check('dots alone', found('Silver 44 · Paint Exchange · Moon Factory · Proximity', 'Silver 44'));
+check('a piped link written with {{!}}', found('One chartifact per solo, so sheet stays blank.', 'per solo'));
+check('a numeric entity', scope.byTemplate('{{Bot_proposes|caf&#233; &#x2014; ok|by=X}}', 'café — ok') !== null);
+check('an unknown entity is left as it is', scope.byTemplate('{{Bot_proposes|a &zz; b|by=X}}', 'a &zz; b') !== null);
 
 console.log(failures === 0 ? '\nAll checks passed.\n' : `\n${failures} FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);
