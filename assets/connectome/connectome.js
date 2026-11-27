@@ -2459,11 +2459,15 @@ function showScene( v ) {
 	const posterR = stack && m.art ? ( narrowFrame ? 36 : 42 ) : 30;
 	// The show
 	const named = K.naming( G, { m: me.m, how: K.STAGE, songs: [] } ), night = K.night( m.date );
-	// its own name, else where it was, else whose it was; and the night under that. A year alone names nothing (Justin,
-	// #connectome, 27 Nov 2026, 06:09Z: "what are the nodes that say only "2026"?  That's not a good name.")
-	const called = named.who || night || 'a show';
-	addPiece( sc, v.m, S, 'subject', { below: true, big: posterR, label: K.clip( called, 30 ),
-		sub: called === night ? '' : K.clip( night, 28 ), dx: 0, sdx: 0, delay: 0 } );
+	// its own name, else "Live at" where it was, else "Live"; the night under that. A year alone names nothing (Justin,
+	// #connectome, 27 Nov 2026, 06:09Z: "what are the nodes that say only "2026"?  That's not a good name."), and the
+	// venue's name alone on the show and on the venue said nothing of which was which (07:01Z: "'Bayboro Brewing'
+	// appearing twice ... it's not obvious from looking"): the show says it was live there, and the venue's own mark
+	// then says it is the venue, its name being on the show already
+	const atVenue = !named.named && !!m.venue;
+	const called = named.named ? named.who : ( atVenue ? 'Live at ' + named.who : 'Live' + ( night ? ' · ' + night : '' ) );
+	addPiece( sc, v.m, S, 'subject', { below: true, big: posterR, label: K.clip( called, narrowFrame ? 30 : 40 ),
+		sub: named.named || atVenue ? K.clip( night, 28 ) : '', dx: 0, sdx: 0, delay: 0 } );
 	// The acts: a leader's own mark, or the act's
 	const actKey = [];
 	acts.slice( 0, actAt.length ).forEach( ( a, i ) => {
@@ -2487,7 +2491,7 @@ function showScene( v ) {
 	// The venue, where the source says one
 	if ( m.venue ) {
 		sc.nodes.set( 'venue', { stands: 'venue', is: 'venue', x: venueAt.x, y: venueAt.y, kind: 'named', o: 1, delay: 90,
-			title: m.venue, city: m.city || '', page: G.wikipages[ m.venue ] || '', clip: venueClip } );
+			title: m.venue, say: atVenue ? 'the venue' : '', city: m.city || '', page: G.wikipages[ m.venue ] || '', clip: venueClip } );
 		sc.lines.set( 'sv', { a: stack ? actKey[ 0 ] : 'q' + v.m, b: 'venue', u: -1, v: -1, tie: { played: true, tier: m.tier, w: 0.5 }, stands: 'tie',
 			w: 1.4, o: 0.8, role: 'spoke', quiet: true, delay: 90 } );
 	}
@@ -3003,7 +3007,7 @@ function drawShowMark( g, d ) {
 			s( 'path', { d: 'M-12 8c0-5 3-7 5.5-7s5.5 2 5.5 7M1 8c0-5 3-7 5.5-7s5.5 2 5.5 7M-6 8c0-6 3-8.5 6-8.5s6 2.5 6 8.5z' } ) ) :
 		s( 'path', { class: 'roof', transform: `scale(${ k.toFixed( 2 ) })`, d: 'M-9 1L0-8l9 9M-6.5-1.5V8h13v-9.5M-2 8V3h4v5' } ) );
 	const y = d.above ? -R - 9 : R + 17 + down( band && d.main ? 17 : 13 );
-	const words = s( 'text', { x: 0, y, 'text-anchor': 'middle' }, K.clip( d.title, d.clip || 30 ) );    // clip: shorter on a phone (showScene)
+	const words = s( 'text', { x: 0, y, 'text-anchor': 'middle' }, K.clip( d.say || d.title, d.clip || 30 ) );    // say: what it's called here; clip: shorter on a phone (showScene)
 	if ( !band && d.city ) {
 		words.appendChild( s( 'tspan', { class: 'inst', x: 0, dy: tx( 15 ) }, K.clip( d.city, d.clip || 30 ) ) );
 	}
@@ -3469,7 +3473,7 @@ function playButton( m, song ) {
 
 const sig = {
 	node: ( d ) => [ d.stands, d.kind, d.lit, d.below, d.rabbit, d.side, d.anchor, d.up, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) + ( d.tight ? 't' : '' ) : '', d.label, d.dx, d.sub, d.sdx, d.play, d.note,
-		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '', d.title, d.cut, d.above, d.clip ].join( '|' ),   // a song's: which, and its name over or under it
+		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '', d.title, d.cut, d.above, d.clip, d.say ].join( '|' ),   // a song's: which, and its name over or under it
 	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role ] :
 		[ d.strand ? 's' + d.e.m : d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
 	pill: ( d ) => [ d.stands, d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy, d.anchor, !!d.lit ].join( '|' )
