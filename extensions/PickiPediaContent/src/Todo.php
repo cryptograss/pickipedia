@@ -209,7 +209,7 @@ class Todo {
 				? rawurlencode( $m[1] ) : null;
 			return $slug ? self::MAGENTA . "/moods/$slug/" . $link : null;
 		}
-		if ( preg_match( '/^#([\w-]+)$/', $link, $m ) ) {
+		if ( preg_match( '/^#([\w-]+(?:\.[\w-]+)*)$/', $link, $m ) ) {
 			return self::MAGENTA . '/moods/' . rawurlencode( $m[1] ) . '/';
 		}
 		return $pageUrl( $link );
