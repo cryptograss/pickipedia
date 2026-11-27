@@ -536,6 +536,27 @@ test( "a show's stage: each thing two of it share besides that night is a strand
 	assert.deepEqual( K.strandBow( A, B, { x: 0, y: 0 }, 2, 6 ), { x: 0, y: 24 } );
 } );
 
+test( "a show whose stage shares little is filled out with its pickers' own other music, never other people", () => {
+	// Justin, #connectome, 27 Nov 2026, 02:13Z ("some kind of minimum number of shown connections") and 05:15Z
+	const g = K.build( { people: [ [ 'A', 1, '' ], [ 'B', 1, '' ], [ 'C', 1, '' ] ], music: [
+		[ 'lma:a2026-11-23', 'show', 'A', '2026-11-23', 'A Live at Dees on 2026-11-23', 2, 'https://archive.org/details/x', '' ],   // the show: A and B
+		[ 'lma:a2021-05-29', 'show', 'A', '2021-05-29', 'A Live at the Farm', 2, 'https://archive.org/details/z', '' ],              // A alone
+		[ 'lma:a2025-07-05', 'show', 'A', '2025-07-05', 'A Live at Grassfire', 2, 'https://archive.org/details/w', '' ],             // A alone, newer
+		[ 'discogs:1', 'record', 'A', '2024-05-00', 'Labor', 1, 'https://www.discogs.com/release/1', '' ],                         // A and C, two tracks
+		[ 'discogs:2', 'record', 'B', '2023', 'Shared', 1, 'https://www.discogs.com/release/2', '' ],                              // A and B: the rainbow's
+		[ 'lma:b2020-01-01', 'show', 'B', '2020-01-01', 'B Live', 0, 'https://archive.org/details/v', '' ] ],                      // B alone
+	cast: [ [ [ 0, '' ], [ 1, '' ] ], [ [ 0, '' ] ], [ [ 0, '' ] ], [], [], [ [ 1, '' ] ] ],
+	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 4, 3, 1, [ 'S' ] ] ] ], [ 0, 2, [ [ 3, 3, 1, [ 'One', 'Two' ] ] ] ] ] } );
+	const show = K.findPiece( g, 'lma:a2026-11-23' ), key = ( f ) => g.people[ f.id ].name + ' ' + g.music[ g.pieces[ f.piece ].m ].key;
+	// by turns, A then B; each one's freest first, then newest; what A and B share is left to the rainbow
+	assert.deepEqual( K.fillFor( g, [ 0, 1 ], show, new Set(), 10 ).map( key ),
+		[ 'A lma:a2025-07-05', 'B lma:b2020-01-01', 'A lma:a2021-05-29', 'A discogs:1' ] );
+	assert.deepEqual( K.fillFor( g, [ 0, 1 ], show, new Set(), 2 ).map( key ), [ 'A lma:a2025-07-05', 'B lma:b2020-01-01' ] );
+	assert.deepEqual( K.fillFor( g, [ 0, 1 ], show, new Set(), 10, 1 ).map( key ), [ 'A lma:a2025-07-05', 'B lma:b2020-01-01' ] );   // one each
+	const drawn = new Set( [ K.findPiece( g, 'lma:a2025-07-05' ) ] );
+	assert.deepEqual( K.fillFor( g, [ 0, 1 ], show, drawn, 1 ).map( key ), [ 'A lma:a2021-05-29' ] );                                     // what's drawn already isn't again
+} );
+
 test( 'a show leads with its own name, else its venue, else its band; the rest is the line under it', () => {
 	// Justin, #connectome, 21 Nov 2026: "if the name of the show (festival or if the show itself has a name), city and
 	// venue are available, display them in various relevant places. These are better at evoking memories and
