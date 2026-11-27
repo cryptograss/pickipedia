@@ -653,6 +653,80 @@ export function clearSteps( A, B, base, n, gap, boxes, { taken = false, far = 6,
 }
 
 /**
+ * A lane for n strands between A and B where the way `base` bows has room for fewer: that way lifted to one side of
+ * the straight line or the other, a little further each time, until a lane holds them all; else the one that held
+ * the most, the nearest first (between two of a show's stage, the show and its act and its venue standing between
+ * them: Justin, #connectome, 27 Nov 2026, 08:24Z). Returns { base, steps }, steps as clearSteps gives them.
+ */
+export function clearLane( A, B, base, n, gap, boxes, opts = {} ) {
+	const count = ( steps ) => steps.filter( ( k ) => k !== null ).length;
+	let best = { base, steps: clearSteps( A, B, base, n, gap, boxes, opts ) };
+	const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot( dx, dy ) || 1;
+	for ( let d = 40; count( best.steps ) < n && d <= ( opts.reach || 640 ); d += 40 ) {
+		for ( const side of [ 1, -1 ] ) {
+			const lifted = { x: base.x - side * d * dy / len, y: base.y + side * d * dx / len };
+			const steps = clearSteps( A, B, lifted, n, gap, boxes, opts );
+			if ( count( steps ) > count( best.steps ) ) {
+				best = { base: lifted, steps };
+			}
+		}
+	}
+	return best;
+}
+
+/**
+ * The bow of a line from A, under a box, to B, up past it, swung out round the end of the box on B's side of `mid`
+ * (an x), its middle `pad` past the box's lower corner: from the act under a show to one of its stage sitting up
+ * past the show's name, where no step to either side gets by it (Justin, #connectome, 27 Nov 2026, 08:24Z, at
+ * Dee's: "Why do Kyle and Dom appear to have so few connections?").
+ */
+export function roundEnd( A, B, box, mid, pad = 14 ) {
+	const px = B.x >= mid ? box.x2 + pad : box.x1 - pad, py = box.y2 + 4;
+	return { x: 2 * px - A.x - B.x, y: 2 * py - A.y - B.y };              // a quadratic's middle is half way to its control point
+}
+
+/**
+ * Who of a show's stage sits where round it, so that the most of what they share can be drawn (Justin,
+ * #connectome, 27 Nov 2026, 08:24Z, at Dee's: "Why do Kyle and Dom appear to have so few connections?" They share
+ * seven things besides that night, and not one was drawn: Dom sat up past the show's name, and no strand from
+ * Kyle, under it, could get round it). The seats come as given (start: a seat each), then two trade places while
+ * that lets more be drawn in all, the first such trade first, until none does; so where they were given to sit
+ * (as the picture slides) holds wherever it costs nothing. Those after start's own are fixed at their seats
+ * (fixed: an act's own mark). want( i, j ): how many lines the i-th and the j-th would have between them, in
+ * that order (start's, then fixed's); room( s, t ): how many could lie clear between seats s and t.
+ */
+export function seatsFor( start, fixed, want, room ) {
+	const at = start.concat( fixed ), n = start.length;
+	const wants = at.map( ( _, i ) => at.map( ( __, j ) => ( i < j ? want( i, j ) : 0 ) ) );
+	const drawn = () => {
+		let sum = 0;
+		for ( let i = 0; i < at.length; i++ ) {
+			for ( let j = i + 1; j < at.length; j++ ) {
+				sum += wants[ i ][ j ] > 0 ? Math.min( wants[ i ][ j ], room( at[ i ], at[ j ] ) ) : 0;
+			}
+		}
+		return sum;
+	};
+	let best = drawn();
+	for ( let better = true, pass = 0; better && pass < 20; pass++ ) {
+		better = false;
+		for ( let i = 0; i < n; i++ ) {
+			for ( let j = i + 1; j < n; j++ ) {
+				[ at[ i ], at[ j ] ] = [ at[ j ], at[ i ] ];
+				const now = drawn();
+				if ( now > best ) {
+					best = now;
+					better = true;
+				} else {
+					[ at[ i ], at[ j ] ] = [ at[ j ], at[ i ] ];
+				}
+			}
+		}
+	}
+	return at.slice( 0, n );
+}
+
+/**
  * A show whose stage shares little besides that night, filled out by `need` more (Justin, #connectome, 27 Nov 2026,
  * 02:13Z: "some kind of minimum number of shown connections"; 05:15Z, to blu's pick: "I... guess? Can I see a
  * preview?"): its pickers' own other shows and records, those no one else of the stage is on (what two of them

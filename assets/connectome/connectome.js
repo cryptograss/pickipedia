@@ -2503,14 +2503,88 @@ function showScene( v ) {
 		return i === undefined || stack ? wanted( 'm' + v.m + '·' + id, pan ) : { x: C.x + ( ax / len ) * rx, y: C.y + ( ay / len ) * ry };
 	};
 	const mine = ring.slice( 0, lay.named.length );
-	const seats = K.seat( lay.named, mine.map( toward ) );
+	// What a line between two of the stage keeps off (K.clearSteps): the show and its name, the venue and its, the
+	// acts, and those of the stage it doesn't end at; a strand with no clear way is left out
+	const most = narrowFrame ? 5 : 9, gap = narrowFrame ? 4.5 : 6;
+	const halfOf = ( text, px ) => Math.max( 34, String( text || '' ).length * px / 2 + 6 );   // a name's half width, roughly, px a letter
+	const own = sc.nodes.get( 'q' + v.m ), ownW = halfOf( own.label, 10 );       // each mark's circle, and its name under it, a box each
+	const ownR = posterR + 4;
+	const marks = [ { k: 'q' + v.m, x1: S.x - ownR, x2: S.x + ownR, y1: S.y - ownR, y2: S.y + ownR },
+		{ k: 'q' + v.m, x1: S.x - ownW, x2: S.x + ownW, y1: S.y + ownR - 6, y2: S.y + ownR + ( own.sub ? 38 : 20 ) } ];
+	if ( sc.nodes.has( 'venue' ) ) {
+		marks.push( { k: 'venue', x1: venueAt.x - 20, x2: venueAt.x + 20, y1: venueAt.y - 20, y2: venueAt.y + 20 },
+			{ k: 'venue', x1: venueAt.x - halfOf( K.clip( m.venue, venueClip ), 8.4 ), x2: venueAt.x + halfOf( K.clip( m.venue, venueClip ), 8.4 ), y1: venueAt.y + 18, y2: venueAt.y + ( m.city ? 58 : 42 ) } );   // its town under it
+	}
+	actKey.forEach( ( key, i ) => {
+		const at = actAt[ i ], nd = sc.nodes.get( key ), name = nd.label || nd.title || '';
+		marks.push( { k: key, x1: at.x - Math.max( 30, halfOf( name, 10 ) ), x2: at.x + Math.max( 30, halfOf( name, 10 ) ), y1: at.y - ( stack ? 30 : 52 ), y2: at.y + ( stack ? 52 : 30 ) } );
+	} );
+	// A leader's spoke, round the show's name where the straight way runs through it: a step or more to either side
+	// where that clears it, else, from the act under the show to one sitting up past its name, swung out round the
+	// end of the name on their side. { bow, clear }: clear false, it runs straight, through what's in its way.
+	const showName = marks[ 1 ];
+	const spokeBow = ( pa, pb, boxes ) => {
+		const k = K.clearSteps( pa, pb, STRAIGHT, 1, 2 * gap, boxes, { W, H } )[ 0 ];
+		if ( k !== null ) {
+			return { bow: k ? K.strandBow( pa, pb, STRAIGHT, k, 2 * gap ) : STRAIGHT, clear: true };
+		}
+		const [ act, them ] = pa.y > pb.y ? [ pa, pb ] : [ pb, pa ];
+		if ( stack && act.y > showName.y2 && them.y < showName.y2 ) {
+			const round = K.roundEnd( act, them, showName, S.x );
+			const j = K.clearSteps( pa, pb, round, 1, 2 * gap, boxes, { W, H } )[ 0 ];
+			if ( j !== null ) {
+				return { bow: j ? K.strandBow( pa, pb, round, j, 2 * gap ) : round, clear: true };
+			}
+		}
+		return { bow: STRAIGHT, clear: false };
+	};
+	const seatMark = ( p, k ) => ( { k, x1: p.x - 13, x2: p.x + 13, y1: p.y - 13, y2: p.y + 13 } );
+	let seats = K.seat( lay.named, mine.map( toward ) );
+	// One act, under the show: no side of theirs says who sits where, so they sit where the most of what they share
+	// can be drawn (K.seatsFor). Up past the show's name, a strand from the act under it has no way round it: Dom sat
+	// there at Dee's, and of the seven things he and Kyle share besides that night not one was drawn (Justin,
+	// #connectome, 27 Nov 2026, 08:24Z: "Why do Kyle and Dom appear to have so few connections?")
+	if ( stack && mine.length > 1 ) {
+		const lead = actKey[ 0 ] === 'p' + acts[ 0 ].lead ? acts[ 0 ].lead : null;
+		const who = lead === null ? mine : mine.concat( [ lead ] );
+		const placeOf = ( s ) => ( s < 0 ? actAt[ 0 ] : lay.named[ s ] ), keyOf = ( s ) => ( s < 0 ? actKey[ 0 ] : 's' + s );
+		const all = marks.concat( lay.named.map( ( p, s ) => seatMark( p, 's' + s ) ) );
+		const known = new Map();
+		const clear = ( ks ) => ks.filter( ( k ) => k !== null ).length;
+		const room = ( s, t ) => {
+			const key = Math.min( s, t ) + ',' + Math.max( s, t );
+			if ( !known.has( key ) ) {
+				const pa = placeOf( s ), pb = placeOf( t ), boxes = all.filter( ( b ) => b.k !== keyOf( s ) && b.k !== keyOf( t ) );
+				if ( s < 0 || t < 0 ) {                                // the act's spoke, round the show's name where it can, and beside it
+					const sb = spokeBow( pa, pb, boxes );
+					known.set( key, ( sb.clear ? 1 : 0 ) + clear( K.clearSteps( pa, pb, sb.bow, most, gap, boxes, { taken: true, W, H } ) ) );
+				} else {
+					known.set( key, clear( K.clearLane( pa, pb, K.arc( lay, pa, pb ), most, gap, boxes, { W, H } ).steps ) );
+				}
+			}
+			return known.get( key );
+		};
+		const want = ( i, j ) => {
+			const tie = G.adj[ who[ i ] ].get( who[ j ] ), n = tie && tie.played ? K.elsewhere( G, tie, v.m, most ).length : 0;
+			return n && ( who[ i ] === lead || who[ j ] === lead ) ? n + 1 : n;   // a leader's spoke says the first of them
+		};
+		seats = K.seatsFor( seats, lead === null ? [] : [ -1 ], want, room );
+	}
 	const seatOf = new Map( mine.map( ( id, i ) => [ id, lay.named[ seats[ i ] ] ] ) );
+	for ( const [ id, p ] of seatOf ) {
+		marks.push( seatMark( p, 'p' + id ) );
+	}
 	for ( const id of mine ) {
 		const i = actOf.get( id ), from = i !== undefined && actKey[ i ] ? actKey[ i ] : 'q' + v.m;
 		sc.lines.set( 'sp' + id, { a: from, b: 'p' + id, u: -1, v: id, tie: { played: true, tier: m.tier, w: 0.35 }, stands: 'tie',
 			w: lineWidth( { w: 0.35 } ), o: 0.9, role: 'spoke', c: id, quiet: true, delay: 120 } );
 		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { delay: 180, act: i !== undefined ? acts[ i ].title : '' },
 			playsAs( first( id ), roles.get( id ) || '', seatOf.get( id ), W, FONT.named ) ) );
+	}
+	for ( const id of mine ) {                                        // and their names, over or under them: no strand runs through one
+		const d = sc.nodes.get( 'p' + id ), half = Math.max( wide( d.label || '', FONT.named ), d.inst ? wide( d.inst, FONT.inst ) : 0 ) / 2 + 3;
+		const deep = tx( 18 ) + ( d.inst ? tx( INST_LH ) : 0 );
+		marks.push( Object.assign( { k: 'p' + id }, nameBox( d, d.dx || 0, half, d.below ? 14 : -14 - deep, d.below ? 14 + deep : -14 ) ) );
 	}
 	ring.slice( mine.length ).forEach( ( id, k ) => {
 		if ( lay.dots[ k ] ) {
@@ -2524,25 +2598,6 @@ function showScene( v ) {
 	// spoke from a leader is the first already: what else they share lies beside it.
 	const drawn = new Set( [ ...mine, ...leaders ] );
 	const posOf = ( id ) => seatOf.get( id ) || ( sc.nodes.get( 'p' + id ) ) || C;
-	const most = narrowFrame ? 5 : 9, gap = narrowFrame ? 4.5 : 6;
-	// what a strand keeps off: the show and its name, the venue and its, the acts, and those of the stage it doesn't
-	// end at (K.clearSteps); a strand with no clear way is left out
-	const wide = ( text, px ) => Math.max( 34, String( text || '' ).length * px / 2 + 6 );
-	const own = sc.nodes.get( 'q' + v.m ), ownW = wide( own.label, 10 );       // each mark's circle, and its name under it, a box each
-	const ownR = posterR + 4;
-	const marks = [ { k: 'q' + v.m, x1: S.x - ownR, x2: S.x + ownR, y1: S.y - ownR, y2: S.y + ownR },
-		{ k: 'q' + v.m, x1: S.x - ownW, x2: S.x + ownW, y1: S.y + ownR - 6, y2: S.y + ownR + ( own.sub ? 38 : 20 ) } ];
-	if ( sc.nodes.has( 'venue' ) ) {
-		marks.push( { k: 'venue', x1: venueAt.x - 20, x2: venueAt.x + 20, y1: venueAt.y - 20, y2: venueAt.y + 20 },
-			{ k: 'venue', x1: venueAt.x - wide( K.clip( m.venue, venueClip ), 8.4 ), x2: venueAt.x + wide( K.clip( m.venue, venueClip ), 8.4 ), y1: venueAt.y + 18, y2: venueAt.y + 42 } );
-	}
-	actKey.forEach( ( key, i ) => {
-		const at = actAt[ i ], nd = sc.nodes.get( key ), name = nd.label || nd.title || '';
-		marks.push( { k: key, x1: at.x - Math.max( 30, wide( name, 10 ) ), x2: at.x + Math.max( 30, wide( name, 10 ) ), y1: at.y - ( stack ? 30 : 52 ), y2: at.y + ( stack ? 52 : 30 ) } );
-	} );
-	for ( const [ id, p ] of seatOf ) {
-		marks.push( { k: 'p' + id, x1: p.x - 13, x2: p.x + 13, y1: p.y - 13, y2: p.y + 13 } );
-	}
 	const keepOff = ( ...ends ) => marks.filter( ( b ) => !ends.includes( b.k ) );
 	for ( const t of K.among( G, [ ...drawn ], false ) ) {
 		const also = K.elsewhere( G, t.tie, v.m, most );
@@ -2556,21 +2611,23 @@ function showScene( v ) {
 			const who = leaders.has( t.u ) ? t.v : t.u, sp = sc.lines.get( 'sp' + who );
 			if ( sp ) {                                               // the spoke from their leader says it: what else they share
 				// and bends round the show's name where the straight way runs through it
-				const k = K.clearSteps( pa, pb, STRAIGHT, 1, 2 * gap, boxes, { W, H } )[ 0 ];
-				base = k ? K.strandBow( pa, pb, STRAIGHT, k, 2 * gap ) : STRAIGHT;
+				base = spokeBow( pa, pb, boxes ).bow;
 				Object.assign( sp, { tie: t.tie, quiet: false, u: t.u, v: t.v, role: 'shared', w: Math.max( sp.w, lineWidth( t.tie ) * 0.7 ), o: 1, bow: base } );
 				taken = true;
 			}
 		} else if ( seatOf.has( t.u ) && seatOf.has( t.v ) ) {
 			base = K.arc( lay, pa, pb );
 		}
-		K.clearSteps( pa, pb, base, also.length, gap, boxes, { taken, W, H } ).forEach( ( k, i ) => {
+		// where the way they'd bow has no room for them all, a lane further round what stands between them (K.clearLane)
+		const lane = taken ? { base, steps: K.clearSteps( pa, pb, base, also.length, gap, boxes, { taken, W, H } ) } :
+			K.clearLane( pa, pb, base, also.length, gap, boxes, { W, H } );
+		lane.steps.forEach( ( k, i ) => {
 			if ( k === null ) {
 				return;
 			}
 			const x = also[ i ];
 			sc.lines.set( 'ss' + lineKey( t.u, t.v ) + '.' + x.piece, { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, e: x.e, piece: x.piece,
-				stands: 'piece', strand: true, role: 'shared', fine: true, w: strandWidth( x.e ), o: 0.85, bow: K.strandBow( pa, pb, base, k, gap ),
+				stands: 'piece', strand: true, role: 'shared', fine: true, w: strandWidth( x.e ), o: 0.85, bow: K.strandBow( pa, pb, lane.base, k, gap ),
 				delay: 300 + i * 18 } );
 		} );
 	}
@@ -2585,7 +2642,7 @@ function showScene( v ) {
 		const over = ( p, q ) => p.x1 < q.x2 && p.x2 > q.x1 && p.y1 < q.y2 && p.y2 > q.y1;
 		const room = marks.slice();
 		for ( const [ id, p ] of seatOf ) {                           // the ring's names, under their circles
-			const half = wide( first( id ), FONT.named ) / 2 + 4;
+			const half = wide( K.clip( first( id ), 26 ), FONT.named ) / 2 + 4;
 			room.push( { x1: p.x - half, x2: p.x + half, y1: p.y + 8, y2: p.y + 42 } );
 		}
 		if ( carded ) {

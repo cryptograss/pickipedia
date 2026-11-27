@@ -536,6 +536,50 @@ test( "a show's stage: each thing two of it share besides that night is a strand
 	assert.deepEqual( K.strandBow( A, B, { x: 0, y: 0 }, 2, 6 ), { x: 0, y: 24 } );
 } );
 
+test( "a show's stage sits where the most of what they share can be drawn; where it costs nothing, as it was given", () => {
+	// Justin, #connectome, 27 Nov 2026, 08:24Z, at Dee's: "Why do Kyle and Dom appear to have so few connections?" Seat 0 is up
+	// past the show's name: from the act's own place (-1) nothing gets round it. Dom (0) shares 7 with Kyle (3), Sam (2) 4,
+	// Geoff (1) 2; Dom and Sam 8 between them, by the rim from seat 0 or 1 to seat 2, and only 3 across the foot from 1 to 2.
+	const room = ( s, t ) => {
+		const [ a, b ] = [ Math.min( s, t ), Math.max( s, t ) ];
+		return { '-1,0': 0, '-1,1': 9, '-1,2': 9, '0,1': 9, '0,2': 9, '1,2': 3 }[ a + ',' + b ];
+	};
+	const shares = { '0,3': 8, '1,3': 3, '2,3': 5, '0,2': 8, '0,1': 2 };   // with the act, its spoke as well
+	const want = ( i, j ) => shares[ i + ',' + j ] || 0;
+	// as given, Dom up past the name: 0 + 3 + 5 + 8 + 2 = 18 drawn of 26; Dom by the act and Sam up there: 8 + 3 + 0 + 8 + 2 = 21
+	assert.deepEqual( K.seatsFor( [ 0, 1, 2 ], [ -1 ], want, room ), [ 2, 1, 0 ] );
+	// nothing to gain: the seats as they were given
+	assert.deepEqual( K.seatsFor( [ 0, 1, 2 ], [ -1 ], () => 0, room ), [ 0, 1, 2 ] );
+	assert.deepEqual( K.seatsFor( [ 2, 0, 1 ], [], ( i, j ) => ( i === 0 && j === 1 ? 1 : 0 ), () => 9 ), [ 2, 0, 1 ] );
+	// no act among them: only what they share with one another
+	assert.deepEqual( K.seatsFor( [ 1, 2, 0 ], [], ( i, j ) => ( i === 0 && j === 1 ? 8 : 0 ), room ), [ 0, 2, 1 ] );
+	// from the act under the show's name to one up past it: no step either side gets by; swung round the name's end, it does
+	const name = { x1: 309, x2: 691, y1: 269, y2: 313 }, act = { x: 500, y: 357 }, off = ( pts ) => pts.every( ( p ) => !( p.x > name.x1 && p.x < name.x2 && p.y > name.y1 && p.y < name.y2 ) );
+	for ( const up of [ { x: 670, y: 113 }, { x: 330, y: 120 } ] ) {                                                       // up and right, up and left
+		assert.deepEqual( K.clearSteps( act, up, { x: 0, y: 0 }, 1, 12, [ name ] ), [ null ] );
+		const bow = K.roundEnd( act, up, name, 500 ), pts = K.curvePoints( act, up, bow, 48, 0 );
+		assert.ok( off( pts ), JSON.stringify( up ) );
+		assert.ok( pts.some( ( p ) => ( up.x > 500 ? p.x > name.x2 : p.x < name.x1 ) && p.y > name.y1 && p.y < name.y2 ) );   // by the end on their side
+		assert.notDeepEqual( K.clearSteps( act, up, bow, 1, 12, [ name ] ), [ null ] );
+	}
+	// two across a show's column (the show, its act, its venue, 300 tall): no step of the way they'd bow gets by it; a lane round it holds all nine
+	const column = { x1: 470, x2: 530, y1: 150, y2: 450 }, left = { x: 200, y: 330 }, right = { x: 800, y: 270 }, opts = { W: 1000, H: 700 };
+	assert.equal( K.clearSteps( left, right, { x: 0, y: 0 }, 9, 6, [ column ], opts ).filter( ( k ) => k !== null ).length, 0 );
+	const lane = K.clearLane( left, right, { x: 0, y: 0 }, 9, 6, [ column ], opts );
+	assert.equal( lane.steps.filter( ( k ) => k !== null ).length, 9 );
+	for ( const k of lane.steps ) {
+		const pts = K.curvePoints( left, right, K.strandBow( left, right, lane.base, k, 6 ) );
+		assert.ok( pts.every( ( p ) => !( p.x > column.x1 && p.x < column.x2 && p.y > column.y1 && p.y < column.y2 ) && p.y >= 2 && p.y <= 698 ) );
+	}
+	assert.ok( Math.hypot( lane.base.x, lane.base.y ) <= 640 );
+	// more than any lane holds: the nearest of those that held the most
+	const full = K.clearLane( left, right, { x: 0, y: 0 }, 40, 6, [ column ], opts );
+	assert.equal( full.steps.filter( ( k ) => k !== null ).length, 13 );
+	assert.equal( Math.round( Math.hypot( full.base.x, full.base.y ) ), 400 );
+	// where the way they'd bow has room, it is that way
+	assert.deepEqual( K.clearLane( left, right, { x: 0, y: -400 }, 3, 6, [ column ], opts ).base, { x: 0, y: -400 } );
+} );
+
 test( "a show whose stage shares little is filled out with its pickers' own other music, never other people", () => {
 	// Justin, #connectome, 27 Nov 2026, 02:13Z ("some kind of minimum number of shown connections") and 05:15Z
 	const g = K.build( { people: [ [ 'A', 1, '' ], [ 'B', 1, '' ], [ 'C', 1, '' ] ], music: [
