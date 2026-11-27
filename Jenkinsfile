@@ -56,6 +56,7 @@ pipeline {
                     # And what verifying does to them: a claim unwrapped, a
                     # proposed removal taken away.
                     php extensions/PickiPediaVerification/tests/check-verify-strip.php
+                    php extensions/PickiPediaVerification/tests/check-verify-groups.php
 
                     # And the button that reads them. Skipped rather than
                     # failed where the agent has no node: a missing runtime is
