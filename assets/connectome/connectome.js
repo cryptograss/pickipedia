@@ -2408,6 +2408,7 @@ function pieceLabel( id, pos, W, own ) {
  * Yonder Mountain String Band) is a mark of its own, with its name.
  */
 const SHOW_RING = 16;            // pickers round a show, named; past that, beads
+const SHOW_LEAST = 10;          // lines a show's graph draws at the least, filled out with its pickers' own other music (K.fillFor)
 function showScene( v ) {
 	const { W, H } = frame();
 	const sc = newScene();
@@ -2555,6 +2556,46 @@ function showScene( v ) {
 			sc.lines.set( 'ss' + lineKey( t.u, t.v ) + '.' + x.piece, { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, e: x.e, piece: x.piece,
 				stands: 'piece', strand: true, role: 'shared', fine: true, w: strandWidth( x.e ), o: 0.85, bow: K.strandBow( pa, pb, base, k, gap ),
 				delay: 300 + i * 18 } );
+		} );
+	}
+	// A stage that shares little besides this night: filled out to SHOW_LEAST lines with its pickers' own other shows
+	// and records (K.fillFor), each a bead past its picker, away from the middle, where it lies clear (its tip and its
+	// sheet say what it is);
+	// never anyone who wasn't on the stage (Justin, #connectome, 27 Nov 2026, 02:13Z and 05:15Z)
+	const said = [ ...sc.lines.values() ].filter( ( l ) => !l.quiet ).length;
+	if ( said < SHOW_LEAST ) {
+		const strung = new Set( [ ...sc.lines.values() ].filter( ( l ) => l.strand ).map( ( l ) => l.piece ) );
+		const fill = K.fillFor( G, [ ...leaders, ...mine ], v.m, strung, SHOW_LEAST - said, narrowFrame ? 2 : 4 );
+		const over = ( p, q ) => p.x1 < q.x2 && p.x2 > q.x1 && p.y1 < q.y2 && p.y2 > q.y1;
+		const room = marks.slice();
+		for ( const [ id, p ] of seatOf ) {                           // the ring's names, under their circles
+			const half = wide( first( id ), FONT.named ) / 2 + 4;
+			room.push( { x1: p.x - half, x2: p.x + half, y1: p.y + 8, y2: p.y + 42 } );
+		}
+		if ( carded ) {
+			room.push( cardRoom( W ).box );
+		}
+		const many = new Map(), nth = new Map();
+		fill.forEach( ( f ) => many.set( f.id, ( many.get( f.id ) || 0 ) + 1 ) );
+		fill.forEach( ( f, i ) => {
+			const p = posOf( f.id ), j = nth.get( f.id ) || 0, n = many.get( f.id ), out = Math.atan2( p.y - C.y, p.x - C.x );
+			nth.set( f.id, j + 1 );
+			const R = narrowFrame ? 52 : 70;
+			for ( const r of [ R, R + 34, R - 18 ] ) {
+				for ( const s of [ 0, 1, -1, 2, -2, 3, -3 ] ) {
+					const a = out + ( j - ( n - 1 ) / 2 ) * 0.42 + s * 0.26;
+					const at = { x: Math.round( p.x + Math.cos( a ) * r ), y: Math.round( p.y + Math.sin( a ) * r ), below: true };
+					const box = { x1: at.x - 10, x2: at.x + 10, y1: at.y - 10, y2: at.y + 10 };   // a bead: its tip says what and when
+					if ( box.x1 < 4 || box.x2 > W - 4 || box.y1 < 4 || box.y2 > H - 4 || room.some( ( b ) => over( box, b ) ) ) {
+						continue;
+					}
+					room.push( box );
+					addPiece( sc, f.piece, at, 'dot', { r: narrowFrame ? 5 : 5.5, who: [ f.id ], delay: 380 + i * 30 } );
+					sc.lines.set( 'sf' + f.id + '.' + f.piece, { a: 'p' + f.id, b: 'q' + f.piece, u: f.id, v: -1, stands: 'tie', role: 'spoke', quiet: true, fine: true,
+						tie: { played: true, tier: G.music[ M( f.piece ).m ].tier, w: 0.3 }, w: 1.1, o: 0.65, delay: 360 + i * 30 } );
+					return;
+				}
+			}
 		} );
 	}
 	sc.web = false;

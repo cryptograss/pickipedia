@@ -653,6 +653,46 @@ export function clearSteps( A, B, base, n, gap, boxes, { taken = false, far = 6,
 }
 
 /**
+ * A show whose stage shares little besides that night, filled out by `need` more (Justin, #connectome, 27 Nov 2026,
+ * 02:13Z: "some kind of minimum number of shown connections"; 05:15Z, to blu's pick: "I... guess? Can I see a
+ * preview?"): its pickers' own other shows and records, those no one else of the stage is on (what two of them
+ * share is the rainbow's), and never anyone who wasn't on it. By turns from picker to picker in the order given,
+ * each one's freest first, then newest; `per` each at most. A record once, however many of its tracks they're on.
+ * shown: pieces drawn already. [{ id, piece }]
+ */
+export function fillFor( G, stage, show, shown, need, per = 4 ) {
+	const onStage = new Set( stage ), taken = new Set( shown ), out = [];
+	taken.add( show );
+	const queues = stage.map( ( id ) => {
+		const best = new Map();                                       // a record or a night as a whole, at its best for them
+		for ( const p of G.on[ id ] || [] ) {
+			const m = G.music[ G.pieces[ p ].m ], whole = G.whole[ G.pieces[ p ].m ] !== undefined ? G.whole[ G.pieces[ p ].m ] : p;
+			if ( whole === show || G.pieces[ whole ].cast.some( ( q ) => q !== id && onStage.has( q ) ) ) {
+				continue;
+			}
+			const at = standing( m, m.kind === 'show' ? STAGE : TRACK );
+			if ( !best.has( whole ) || at > best.get( whole ).at ) {
+				best.set( whole, { p: whole, at, year: +yearOf( m.date ) || 0 } );
+			}
+		}
+		return [ ...best.values() ].sort( ( x, y ) => ( y.at - x.at ) || ( y.year - x.year ) || ( x.p - y.p ) ).map( ( x ) => x.p );
+	} );
+	for ( let round = 0; round < per && out.length < need; round++ ) {
+		stage.forEach( ( id, i ) => {
+			while ( out.length < need && queues[ i ].length ) {
+				const p = queues[ i ].shift();
+				if ( !taken.has( p ) ) {
+					taken.add( p );
+					out.push( { id, piece: p } );
+					return;
+				}
+			}
+		} );
+	}
+	return out;
+}
+
+/**
  * The pickers on both of two pieces: what a line between them stands for, inside out. Those on the most pieces
  * first (they lead the furthest), then by name.
  */
