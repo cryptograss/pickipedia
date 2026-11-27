@@ -25,7 +25,8 @@ class SpecialVerifyBotEdits extends SpecialPage {
 	 */
 	public const KINDS = [
 		'lineups' => 'Records, recordings and lineups',
-		'people' => 'People and bands',
+		'bands' => 'Bands',
+		'people' => 'People',
 		'shows' => 'Shows, venues, festivals and scenes',
 		'songs' => 'Songs and tunes',
 		'releases' => 'Releases',
@@ -81,7 +82,13 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			'Festival editions', 'Jams', 'Recurring events', 'Events', 'Scenes' ] ) ) {
 			return 'shows';
 		}
-		if ( $in( [ 'Musicians', 'People', 'Bands' ] ) ) {
+		// A band's claims are its stints, read against the band's own page or a
+		// news story; a person's are a life. Different reading, so a group each
+		// (blu, #connectome, 27 Nov 2026). A page in both goes with the bands.
+		if ( $in( [ 'Bands' ] ) ) {
+			return 'bands';
+		}
+		if ( $in( [ 'Musicians', 'People' ] ) ) {
 			return 'people';
 		}
 		if ( $in( [ 'Compositions', 'Songs', 'Tunes', 'Blue Railroad Songs' ] ) ) {
@@ -141,13 +148,17 @@ class SpecialVerifyBotEdits extends SpecialPage {
 	}
 
 	/**
-	 * Show list of pages with unverified bot claims.
+	 * The queue, grouped by what each page's claims are about.
+	 *
+	 * Read by the list and by "verify every page in this group", so the group
+	 * a button acts on is the group the reader was shown, worked out the same
+	 * way from the same query rather than from ids posted back by a browser.
+	 *
+	 * @return array<string,array> A list of rows per key of KINDS; every key
+	 *   present, empty where the queue holds nothing of that kind.
 	 */
-	private function showUnverifiedPages() {
-		$out = $this->getOutput();
+	private function queueGroups(): array {
 		$categoryName = 'Pages_with_unverified_bot_claims';
-
-		$out->addWikiTextAsInterface( "Pages holding claims an emergent or bot proposed and no person has verified yet, grouped by what they are about. Pages that name the same source sit together.\n\n" );
 
 		// Query category members
 		$dbr = MediaWikiServices::getInstance()->getDBLoadBalancer()->getConnection( DB_REPLICA );
@@ -172,8 +183,7 @@ class SpecialVerifyBotEdits extends SpecialPage {
 		}
 
 		if ( empty( $pages ) ) {
-			$out->addWikiTextAsInterface( "'''No pages with unverified bot claims found.''' All bot edits have been verified." );
-			return;
+			return array_fill_keys( array_keys( self::KINDS ), [] );
 		}
 
 		// Every page's categories in one query, for grouping.
@@ -221,6 +231,23 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			} );
 		}
 		unset( $rows );
+
+		return $groups;
+	}
+
+	/**
+	 * Show list of pages with unverified bot claims.
+	 */
+	private function showUnverifiedPages() {
+		$out = $this->getOutput();
+
+		$out->addWikiTextAsInterface( "Pages holding claims an emergent or bot proposed and no person has verified yet, grouped by what they are about. Pages that name the same source sit together.\n\n" );
+
+		$groups = $this->queueGroups();
+		if ( !array_filter( $groups ) ) {
+			$out->addWikiTextAsInterface( "'''No pages with unverified bot claims found.''' All bot edits have been verified." );
+			return;
+		}
 
 		$only = $this->getRequest()->getVal( 'kind' );
 		if ( !isset( self::KINDS[$only] ) ) {
@@ -275,13 +302,20 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			$html .= Html::closeElement( 'table' );
 		}
 
-		// Verify All posts no list: it means every page in the queue. Under
-		// one group that would verify the groups you aren't looking at, so it
-		// is offered only on the whole list.
-		$html .= Html::rawElement( 'p', [],
-			Html::submitButton( 'Verify Selected', [ 'name' => 'verify_selected' ] ) .
-			( $only === null ? ' ' . Html::submitButton( 'Verify All', [ 'name' => 'verify_all' ] ) : '' )
-		);
+		// Verify All posts no list: it means every page in the queue. Under one
+		// group that would verify the groups you aren't looking at, so each has
+		// its own button instead, naming the group it acts on. Justin, 27 Nov:
+		// the whole list is impossible to work through, and a kind at a time is
+		// what makes it possible.
+		$buttons = Html::submitButton( 'Verify Selected', [ 'name' => 'verify_selected' ] );
+		if ( $only === null ) {
+			$buttons .= ' ' . Html::submitButton( 'Verify All', [ 'name' => 'verify_all' ] );
+		} else {
+			$buttons .= ' ' . Html::hidden( 'kind', $only )
+				. Html::submitButton( 'Verify every page in ' . self::KINDS[$only],
+					[ 'name' => 'verify_kind' ] );
+		}
+		$html .= Html::rawElement( 'p', [], $buttons );
 
 		$html .= Html::closeElement( 'form' );
 
@@ -371,8 +405,23 @@ class SpecialVerifyBotEdits extends SpecialPage {
 
 		// Determine which pages to verify
 		$pageIds = [];
+		$errors = [];
 
-		if ( $request->getVal( 'verify_all' ) ) {
+		$kind = $request->getVal( 'kind' );
+		if ( $request->getVal( 'verify_kind' ) && isset( self::KINDS[$kind] ) ) {
+			// One group, worked out here rather than taken from the browser, so
+			// what is verified is what the group holds now. A page whose
+			// brackets don't balance is skipped, as Verify All skips it: its own
+			// row button is the way to say "I looked, do it anyway".
+			foreach ( $this->queueGroups()[$kind] as $row ) {
+				if ( !empty( $row['problems'] ) ) {
+					$errors[] = 'Skipped ' . $row['title']->getPrefixedText()
+						. ' (unbalanced brackets; use its row verify button to override)';
+					continue;
+				}
+				$pageIds[] = $row['id'];
+			}
+		} elseif ( $request->getVal( 'verify_all' ) ) {
 			// Get all pages from category
 			$dbr = MediaWikiServices::getInstance()->getDBLoadBalancer()->getConnection( DB_REPLICA );
 			$res = $dbr->newSelectQueryBuilder()
@@ -409,8 +458,10 @@ class SpecialVerifyBotEdits extends SpecialPage {
 			return;
 		}
 
+		// $errors was opened before the pages were chosen: the skips Verify All
+		// and a whole group record belong in the same report, and resetting it
+		// here threw them away.
 		$verified = 0;
-		$errors = [];
 
 		foreach ( $pageIds as $pageId ) {
 			$result = $this->verifyPage( $pageId, $user );

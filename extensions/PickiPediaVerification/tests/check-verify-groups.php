@@ -44,6 +44,11 @@ namespace {
 	check( 'a record', kind( '', '4masks', [ 'Records' ] ) === 'lineups' );
 	check( 'a recording, by its title', kind( '', "Recording:Barlow's Jig (Justin Holmes and David Grier)" ) === 'lineups' );
 	check( 'a musician', kind( '', 'Christina Docenko', [ 'Musicians' ] ) === 'people' );
+	check( 'a band is its own group, not the people one',
+		kind( '', "The Travelin' McCourys", [ 'Bands' ] ) === 'bands' );
+	check( 'a band whose page is also a musician page goes with the bands (Billy Strings)',
+		kind( '', 'Billy Strings (band)', [ 'Musicians', 'Bands' ] ) === 'bands' );
+	check( 'a record still beats a band', kind( '', 'Della Mae', [ 'Records', 'Bands' ] ) === 'lineups' );
 	check( 'categories as the database keeps them, underscores and all',
 		kind( '', 'Bluegrass Jam Along', [ 'Podcast_episodes' ] ) === 'podcasts' );
 	check( 'a show, by its title', kind( '', 'Show:JustinHolmes-25254342' ) === 'shows' );
@@ -58,8 +63,13 @@ namespace {
 	check( 'a namespace beats a category', kind( 'Song', 'Lost', [ 'Records' ] ) === 'songs' );
 	check( 'a record beats a person (an album page in both)', kind( '', 'Fair Weather', [ 'Records', 'Musicians' ] ) === 'lineups' );
 	check( 'and the rest is everything else', kind( '', 'Moon Factory' ) === 'other' );
-	check( 'every group has a label', count( array_diff( [ 'lineups', 'people', 'shows', 'songs',
+	check( 'every group has a label', count( array_diff( [ 'lineups', 'bands', 'people', 'shows', 'songs',
 		'releases', 'podcasts', 'project', 'model', 'other' ], array_keys( V::KINDS ) ) ) === 0 );
+	check( 'and every label a group', count( array_diff( array_keys( V::KINDS ), [ 'lineups', 'bands',
+		'people', 'shows', 'songs', 'releases', 'podcasts', 'project', 'model', 'other' ] ) ) === 0 );
+	check( 'bands are offered before people, since that is the shorter read',
+		array_search( 'bands', array_keys( V::KINDS ), true )
+			< array_search( 'people', array_keys( V::KINDS ), true ) );
 
 	echo "\nWhat a page's claims are:\n";
 
@@ -80,6 +90,26 @@ namespace {
 	check( 'a note is not a source', !in_array( 'supporting text', $scan['sources'], true ) );
 	check( '"unspecified" is not a source', V::claimsIn( '<proposed source="unspecified">x</proposed>' )['sources'] === [] );
 	check( 'a page with nothing proposed', V::claimsIn( 'Plain.' ) === [ 'claims' => 0, 'sources' => [] ] );
+
+	echo "\nVerifying a whole group:\n";
+
+	$src = file_get_contents( __DIR__ . '/../src/SpecialVerifyBotEdits.php' );
+	check( 'the button is offered under one group', str_contains( $src, "'name' => 'verify_kind'" ) );
+	check( 'and the group it acts on travels with it', str_contains( $src, "Html::hidden( 'kind', \$only )" ) );
+	check( 'the handler knows the button', str_contains( $src, "getVal( 'verify_kind' )" ) );
+	check( 'only a group that exists', str_contains( $src, 'isset( self::KINDS[$kind] )' ) );
+	// The group is read here, not posted: a browser can tick what it likes, but
+	// "every page in Bands" means what Bands holds at the moment of the click.
+	check( 'the pages come from the queue, not the request',
+		str_contains( $src, '$this->queueGroups()[$kind]' ) );
+	check( 'unbalanced brackets are skipped, as Verify All skips them',
+		preg_match( '/queueGroups\(\)\[\$kind\].{0,400}unbalanced brackets/s', $src ) === 1 );
+	// $errors used to be emptied after the pages were chosen, which threw away
+	// every "Skipped ..." line Verify All had just written.
+	check( 'the skips survive to the report',
+		strpos( $src, '$errors = [];' ) < strpos( $src, "getVal( 'verify_kind' )" ) );
+	check( 'and nothing empties it again',
+		substr_count( $src, '$errors = [];' ) === 1 );
 
 	echo $failures === 0 ? "\nAll checks passed.\n\n" : "\n$failures FAILED\n\n";
 	exit( $failures === 0 ? 0 : 1 );
