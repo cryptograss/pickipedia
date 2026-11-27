@@ -28,6 +28,10 @@ The atom is a credit:
   excerpt     for LMA, the line as the taper wrote it
   read_by     which reader produced it
 
+A band is not a credit. Its page's stints (who was a member, playing what, from when until when, by what source)
+are kept beside the credits, in `bands` and `stints`, and only as far as a person has verified them. A stint says
+who you'd expect to see; it puts nobody on a stage and ties nobody to anybody (Cryptograss:Bacon graphs/Bands).
+
 Several sources agreeing make several rows. Nothing here judges; each row is
 what one reader said about one source. Raw responses are kept under --raw so a
 build never refetches.
@@ -203,7 +207,9 @@ READY = "production"
 def fetch_releases(wiki, get=None):
     """What the wiki itself says was played, for the store: every Release whose /Metadata says `state: production`
     ({cid, title, ensemble}); every video Release that names two or more performers ({video: cid, title, performers,
-    venue, block}); and every Show: page ({show: title, artist, venue, block, ensemble}). By cid, then by title."""
+    venue, block}); every Show: page ({show: title, artist, venue, block, ensemble}); and every band's page
+    ({band: title, kind, leader, offshoot_of, billed_as, stints}), as far as a person has verified it. By cid, then
+    by title."""
     import yaml
     get = get or (lambda q: json.load(urllib.request.urlopen(urllib.request.Request(
         wiki.rstrip("/") + "/api.php?" + urllib.parse.urlencode(dict(q, format="json", formatversion=2)),
@@ -265,6 +271,7 @@ def fetch_releases(wiki, get=None):
         v["performers"] = list(dict.fromkeys(pages[n] for n in v["performers"] if n in pages))
     out = [v for v in out if not v.get("video") or len(v["performers"]) >= 2]
     out += fetch_show_pages(get)
+    out += fetch_band_pages(get)
     return out
 
 
@@ -362,6 +369,193 @@ def show_page(title, text):
             "ensemble": ens, "bands": bands}
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# Bands (Justin, #connectome, 27 Nov 2026, 18:15Z: "it's time for a model of a band"; decided the same day, 20:13Z;
+# Cryptograss:Bacon graphs/Bands). A band is a page: {{BandInfo}} says what kind it is, who leads it, what it grew
+# out of and what else it is billed as; each {{Band member}} line is a stint, one picker in one chair from one date
+# until another, with its source. Nobody writes a lineup down: lineups() works them out of the stints.
+#
+# A stint is a claim about the band, never about a night: it puts nobody on a stage, and makes no credit. Who played
+# is still only what a tape, a record or a show page says.
+#
+# Only what a person has verified is read. A claim an emergent wrote sits in <proposed>...</proposed> or
+# {{Bot_proposes|...}} until someone clicks it, and verifying takes the wrapper off; so what is outside a wrapper is
+# what somebody has stood behind (Justin, 27 Nov: "when we are wrong ... a really easy way for the user to discover
+# our good intentions and help us fix the error").
+# ---------------------------------------------------------------------------------------------------------------
+BAND_KINDS = ("regular", "rotating", "pickup")
+A_DAY = re.compile(r"\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?")
+
+
+def verified_text(text):
+    """A page's wikitext with every claim that still waits for a person taken out: each <proposed> block and each
+    {{Bot_proposes|...}} call. A proposed removal is the other way round: what it wraps still stands until someone
+    agrees it goes, so that stays."""
+    text, out, i = text or "", [], 0
+    for m in re.finditer(r"<proposed\b([^>]*)>(.*?)</proposed\s*>", text, re.S | re.I):
+        out.append(text[i:m.start()])
+        if re.search(r"\baction\s*=\s*[\"']?remove\b", m.group(1), re.I):
+            out.append(m.group(2))
+        i = m.end()
+    text, out, i = "".join(out) + text[i:], [], 0
+    for m in re.finditer(r"\{\{\s*Bot[ _]proposes\s*\|", text, re.I):
+        if m.start() < i:
+            continue
+        depth, j = 2, m.end()
+        while j < len(text) and depth:
+            if text.startswith("{{", j):
+                depth, j = depth + 2, j + 2
+            elif text.startswith("}}", j):
+                depth, j = depth - 2, j + 2
+            else:
+                j += 1
+        out.append(text[i:m.start()])
+        i = j
+    return "".join(out) + text[i:]
+
+
+def template_calls(text, name):
+    """Each call of one template in a page, as ([positional values], {named: value}), in the page's order. A pipe
+    inside a link or another template is part of its value; a value's own "=" (a source's address) is kept."""
+    calls = []
+    for m in re.finditer(r"\{\{\s*" + re.escape(name).replace(r"\ ", "[ _]") + r"\s*(?=[|}])", text, re.I):
+        parts, cur, depth, j = [], "", 0, m.end()
+        while j < len(text):
+            two = text[j:j + 2]
+            if two in ("{{", "[["):
+                depth, cur, j = depth + 1, cur + two, j + 2
+            elif two in ("}}", "]]") and depth:
+                depth, cur, j = depth - 1, cur + two, j + 2
+            elif two == "}}":
+                break
+            elif text[j] == "|" and not depth:
+                parts.append(cur)
+                cur, j = "", j + 1
+            else:
+                cur, j = cur + text[j], j + 1
+        else:
+            continue                                   # never closed: not a call
+        parts.append(cur)
+        positional, named = [], {}
+        for part in parts[1:]:
+            k, eq, v = part.partition("=")
+            if eq and re.fullmatch(r"\s*[A-Za-z_][A-Za-z_ ]*\s*|\s*\d+\s*", k):
+                named[k.strip().lower()] = v.strip()
+            else:
+                positional.append(part.strip())
+        for n in sorted(k for k in named if k.isdigit()):          # |1=Name is the first value, as the wiki has it
+            while len(positional) < int(n):
+                positional.append("")
+            positional[int(n) - 1] = named.pop(n)
+        calls.append((positional, named))
+    return calls
+
+
+def unlinked(value):
+    """A value without its link brackets: "[[Rob McCoury|Robbie]]" is Rob McCoury."""
+    return re.sub(r"\[\[([^\]|#]*)(?:[|#][^\]]*)?\]\]", r"\1", value or "").strip()
+
+
+def band_page(title, text):
+    """One band's page, as far as it is verified: {band, kind, leader, offshoot_of, billed_as: [...], stints: [{name,
+    plays, from, until, source, checked}], unread: [...]}; None where nothing of a band is verified on it. A stint
+    whose date isn't a date ("2015", "2015-11", "2015-11-10") is left out and named in `unread`: a date nobody can
+    read is not a date to draw."""
+    text = verified_text(text)
+    info = template_calls(text, "BandInfo")
+    said = info[0][1] if info else {}
+    kind = said.get("kind", "").strip().lower()
+    stints, unread = [], []
+    for positional, named in template_calls(text, "Band member"):
+        name = unlinked(positional[0]) if positional else ""
+        if not name or re.search(r"[\[\]{}|<>]", name):
+            continue
+        if str(named.get("status") or "").strip().lower() in ("proposed", "unverified"):
+            continue
+        start, until = named.get("from", "").strip(), named.get("until", "").strip()
+        if any(d and not A_DAY.fullmatch(d) for d in (start, until)) or (start and until and day_from(until) < day_from(start)):
+            unread.append(f"{name}: {start or '?'} to {until or '?'}")
+            continue
+        stints.append({"name": name, "plays": unlinked(positional[1]) if len(positional) > 1 else "",
+                       "from": start, "until": until, "source": named.get("source", "").strip(),
+                       "checked": named.get("checked", "").strip()})
+    if not info and not stints:
+        return None
+    return {"band": title, "kind": kind if kind in BAND_KINDS else "", "leader": unlinked(said.get("leader")),
+            "offshoot_of": unlinked(said.get("offshoot_of")),
+            "billed_as": [b for b in (unlinked(x) for x in said.get("billed_as", "").split(";")) if b],
+            "stints": stints, "unread": unread}
+
+
+def fetch_band_pages(get):
+    """The wiki's band pages: every article that uses {{BandInfo}} or {{Band member}}, each as band_page reads it."""
+    titles = set()
+    for template in ("Template:BandInfo", "Template:Band member"):
+        cont = {}
+        while True:
+            r = get(dict({"action": "query", "list": "embeddedin", "eititle": template, "eilimit": 500,
+                          "einamespace": 0, "eifilterredir": "nonredirects"}, **cont))
+            titles |= {p["title"] for p in r["query"]["embeddedin"] if p.get("ns", 0) == 0}
+            if "continue" not in r:
+                break
+            cont = r["continue"]
+    titles, out = sorted(titles), []
+    for i in range(0, len(titles), 50):
+        r = get({"action": "query", "titles": "|".join(titles[i:i + 50]), "prop": "revisions", "rvprop": "content",
+                 "rvslots": "main"})
+        for p in r["query"]["pages"]:
+            if p.get("revisions"):
+                band = band_page(p["title"], p["revisions"][0]["slots"]["main"]["content"])
+                if band:
+                    out.append(band)
+    return sorted(out, key=lambda b: b["band"])
+
+
+def day_from(text):
+    """The first day a stint's start can mean: "2015" is 1 Jan 2015. '' (no source gives it) is ''."""
+    text = (text or "").strip()
+    return text + "-01-01"[len(text) - 4:] if text else ""
+
+
+def day_until(text):
+    """The day after the last one a stint's end can mean: "2015" is 1 Jan 2016, "2015-11" is 1 Dec 2015, and a
+    whole date is itself (the day the leaving was news, they are gone). '' (still a member) is ''."""
+    text = (text or "").strip()
+    if len(text) == 4:
+        return f"{int(text) + 1:04d}-01-01"
+    if len(text) == 7:
+        y, m = int(text[:4]), int(text[5:])
+        return f"{y + (m == 12):04d}-{m % 12 + 1:02d}-01"
+    return text
+
+
+def lineup_at(stints, day):
+    """Who the stints say was in the band on a day ("2017-07-03"), in the page's order. A stint with no start counts
+    from the beginning, and a year alone is read generously at both ends: this is who you'd expect to see, and it
+    is never evidence of who played."""
+    out = []
+    for s in stints:
+        a, b = day_from(s.get("from")), day_until(s.get("until"))
+        if (not a or a <= day) and (not b or day < b) and s["name"] not in out:
+            out.append(s["name"])
+    return out
+
+
+def lineups(stints):
+    """The band's versions: [(from, until, [names])], each stretch of days over which the same people were members,
+    oldest first. '' at the start is "no source says since when", '' at the end is "still". A stretch with nobody
+    in it (the band between two bands) is left out."""
+    cuts = sorted({day_from(s.get("from")) for s in stints} | {day_until(s.get("until")) or "9999" for s in stints})
+    out = []
+    for a, b in zip(cuts, cuts[1:]):
+        who = lineup_at(stints, a or "0000")
+        if who and out and out[-1][1] == a and sorted(out[-1][2]) == sorted(who):
+            out[-1] = (out[-1][0], b, out[-1][2])
+        elif who:
+            out.append((a, b, who))
+    return [(a, "" if b == "9999" else b, who) for a, b, who in out]
+
+
 def from_releases(releases, arthel=None):
     """The ready tracks' ensembles, each a credit on its track: a record of its own, `release:<cid>`."""
     import yaml
@@ -373,6 +567,8 @@ def from_releases(releases, arthel=None):
             held.add(sideman.normalize_title(str(data.get("title") or os.path.basename(fn)[:-5])))
     rows = []
     for rel in releases:
+        if rel.get("band"):
+            continue                                   # a band's page puts nobody on a stage: to_sqlite keeps it
         if rel.get("video"):
             # a video: a night of its own on the graph, `video:<cid>`, everyone in it on stage together
             target = {"kind": "show", "id": "video:" + rel["video"], "title": rel.get("title") or "a video",
@@ -531,14 +727,39 @@ CREATE TABLE credit_tracks (credit INTEGER REFERENCES credits(n), position TEXT,
 CREATE TABLE people (name TEXT PRIMARY KEY, person TEXT, decided_by TEXT);  -- filled by a person, never by a reader
 CREATE INDEX credits_person ON credits(person);
 CREATE INDEX credits_target ON credits(target);
+-- A band's page, as far as a person has verified it (Cryptograss:Bacon graphs/Bands). A stint is one picker in one
+-- chair: a claim about the band, never about a night. start and until are as the page writes them ('' where no source
+-- says, or still a member); from_day and until_day are the same as whole days, so a day can be asked for:
+--   SELECT member, plays FROM stints WHERE band = :band AND (from_day = '' OR from_day <= :day)
+--                                                 AND (until_day = '' OR :day < until_day) ORDER BY n
+CREATE TABLE bands (name TEXT PRIMARY KEY, kind TEXT, leader TEXT, offshoot_of TEXT,
+                    billed_as TEXT);           -- its other names, "; " between
+CREATE TABLE stints (n INTEGER PRIMARY KEY, band TEXT REFERENCES bands(name), member TEXT, plays TEXT,
+                     start TEXT, until TEXT, from_day TEXT, until_day TEXT, source TEXT, checked TEXT);
+CREATE INDEX stints_band ON stints(band);
+CREATE INDEX stints_member ON stints(member);
 """
 
 
-def to_sqlite(rows, path):
+def bands_into(db, bands):
+    """The bands and their stints, into a store's database."""
+    for b in bands:
+        db.execute("INSERT OR IGNORE INTO bands VALUES (?,?,?,?,?)",
+                   (b["band"], b.get("kind", ""), b.get("leader", ""), b.get("offshoot_of", ""),
+                    "; ".join(b.get("billed_as") or [])))
+        for s in b.get("stints") or []:
+            db.execute("INSERT INTO stints (band, member, plays, start, until, from_day, until_day, source, checked) "
+                       "VALUES (?,?,?,?,?,?,?,?,?)",
+                       (b["band"], s["name"], s.get("plays", ""), s.get("from", ""), s.get("until", ""),
+                        day_from(s.get("from")), day_until(s.get("until")), s.get("source", ""), s.get("checked", "")))
+
+
+def to_sqlite(rows, path, bands=()):
     if os.path.exists(path):
         os.remove(path)
     db = sqlite3.connect(path)
     db.executescript(SCHEMA)
+    bands_into(db, bands)
     for i, r in enumerate(rows):
         t = r["target"]
         db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -624,7 +845,8 @@ def main(argv):
     b.add_argument("--out", required=True)
     b.add_argument("--db")
     b.add_argument("--releases", help="the ready tracks, as `releases` wrote them")
-    r = sub.add_parser("releases", help="read the wiki's ready tracks (state: production) into a file")
+    r = sub.add_parser("releases", help="read the wiki's ready tracks (state: production), its videos, its show "
+                                        "pages and its band pages into a file")
     r.add_argument("--wiki", default="https://pickipedia.xyz/")
     r.add_argument("--out", required=True)
     e = sub.add_parser("pairs", help="write every pair as JSON, for a viewer")
@@ -653,11 +875,13 @@ def main(argv):
         with open(args.out, "w") as out:
             for r in rows:
                 out.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
+        bands = [r for r in releases if r.get("band")]
         if args.db:
-            to_sqlite(rows, args.db)
+            to_sqlite(rows, args.db, bands)
         people = {r["person"] for r in rows}
         targets = {r["target"]["id"] for r in rows}
-        print(f"{len(rows)} credits, {len(people)} names, {len(targets)} targets")
+        print(f"{len(rows)} credits, {len(people)} names, {len(targets)} targets"
+              + (f", {len(bands)} bands with {sum(len(b['stints']) for b in bands)} stints" if bands else ""))
     elif args.cmd == "releases":
         rels = fetch_releases(args.wiki)
         with open(args.out + ".part", "w") as out:
@@ -669,6 +893,10 @@ def main(argv):
         print(f"{len(tracks)} tracks ready: " + "; ".join(r["title"] or r["cid"] for r in tracks))
         print(f"{len(videos)} videos of two or more: " + "; ".join(r["title"] or r["video"] for r in videos))
         print(f"{len(shows)} show pages: " + "; ".join(r["show"] for r in shows))
+        bands = [r for r in rels if r.get("band")]
+        print(f"{len(bands)} band pages with something verified: "
+              + "; ".join(f"{b['band']} ({len(b['stints'])} stints, {len(lineups(b['stints']))} lineups"
+                          + (f"; not read: {', '.join(b['unread'])}" if b.get("unread") else "") + ")" for b in bands))
     elif args.cmd == "pairs":
         rows = [json.loads(l) for l in open(args.credits)]
         ps = pairs(rows)

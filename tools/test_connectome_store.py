@@ -257,7 +257,8 @@ def _wiki(pages, people=(), redirects=None):
         if q.get("list") == "allpages":
             return {"query": {"allpages": [{"title": t} for t in sorted(pages) if t.startswith("Release:")]}}
         if q.get("list") == "embeddedin":
-            return {"query": {"embeddedin": [{"title": t} for t in sorted(pages) if "{{Show" in pages[t]]}}
+            used = "{{" + q["eititle"][len("Template:"):]
+            return {"query": {"embeddedin": [{"title": t, "ns": 0} for t in sorted(pages) if used in pages[t]]}}
         if q.get("redirects"):
             asked = q["titles"].split("|")
             return {"query": {"redirects": [{"from": n, "to": redirects[n]} for n in asked if n in redirects],
@@ -385,3 +386,103 @@ def test_a_ready_track_is_a_record_of_its_own_unless_arthel_holds_the_cut(tmp_pa
     assert r["source"] == "https://pickipedia.xyz/wiki/Release:QmA/Metadata"
     pair = S.pairs(rows)
     assert len(pair) == 1 and pair[0]["kind"] == "track"
+
+
+# ---- bands: a page, its stints, and the lineups worked out of them (Justin, #connectome, 27 Nov 2026) ----
+
+MCCOURYS = """<proposed by="Blu">
+{{BandInfo
+|kind=regular
+|offshoot_of=Del McCoury Band
+}}
+</proposed>
+== Members ==
+{{Band member|Ronnie McCoury|mandolin|source=https://www.thetravelinmccourys.com/about|checked=2026-11-27}}
+{{Band member|[[Rob McCoury|Robbie]]|banjo}}
+{{Band member|1=Alan Bartram|2=bass}}
+{{Band member|Jason Carter|fiddle|until=2025-02-10|source=https://example.com/story?id=7&x=y}}
+<proposed by="Blu">
+{{Band member|Cody Kilby|guitar|from=2015-11-10}}
+</proposed>
+* {{Bot_proposes|{{Band member|Christian Ward|fiddle|from=2025-02-24}}|by=Blu}}
+{{Band member|Somebody Else|dobro|status=proposed}}
+<proposed by="Re" action="remove">
+{{Band member|Still Here|guitar|from=2019}}
+</proposed>
+"""
+
+
+def test_a_band_page_is_read_only_as_far_as_a_person_has_verified_it():
+    got = S.band_page("The Travelin' McCourys", MCCOURYS)
+    # the infobox still waits for a person, so its kind and what it grew out of aren't read
+    assert (got["band"], got["kind"], got["offshoot_of"], got["billed_as"]) == ("The Travelin' McCourys", "", "", [])
+    # nor a stint in a <proposed> block, in {{Bot_proposes}}, or marked status=proposed; one whose removal is only
+    # proposed still stands
+    assert [s["name"] for s in got["stints"]] == ["Ronnie McCoury", "Rob McCoury", "Alan Bartram", "Jason Carter", "Still Here"]
+    assert got["stints"][0] == {"name": "Ronnie McCoury", "plays": "mandolin", "from": "", "until": "",
+                                "source": "https://www.thetravelinmccourys.com/about", "checked": "2026-11-27"}
+    assert got["stints"][3]["until"] == "2025-02-10" and got["stints"][3]["source"] == "https://example.com/story?id=7&x=y"
+    assert S.band_page("Nobody Yet", '<proposed by="Blu">\n{{BandInfo|kind=regular}}\n{{Band member|Ann}}\n</proposed>') is None
+
+
+def test_a_verified_infobox_says_the_kind_the_leader_and_the_other_names():
+    got = S.band_page("Billy Strings (band)", "{{BandInfo\n|kind=Regular\n|leader=[[Billy Strings]]\n"
+                      "|billed_as=Billy Strings; [[Billy Strings Band]]\n|website=https://x.example/?a=b\n}}")
+    assert (got["kind"], got["leader"], got["billed_as"], got["stints"]) == ("regular", "Billy Strings",
+                                                                          ["Billy Strings", "Billy Strings Band"], [])
+    assert S.band_page("Odd", "{{BandInfo|kind=supergroup}}")["kind"] == ""        # a kind the model doesn't have is not guessed at
+
+
+def test_a_stint_with_a_date_nobody_can_read_is_left_out_and_named():
+    got = S.band_page("A Band", "{{BandInfo}}\n{{Band member|Ann|fiddle|from=2015}}\n{{Band member|Bob|bass|from=November 2015}}\n"
+                      "{{Band member|Cat|banjo|from=2015-13}}\n{{Band member|Dee|guitar|from=2019|until=2017}}\n"
+                      "{{Band member|Eve|mandolin|from=2015-11|until=2015-11-30}}")
+    assert [s["name"] for s in got["stints"]] == ["Ann", "Eve"]
+    assert got["unread"] == ["Bob: November 2015 to ?", "Cat: 2015-13 to ?", "Dee: 2019 to 2017"]
+
+
+def test_a_part_date_is_read_at_its_widest():
+    assert [S.day_from(d) for d in ("", "2015", "2015-11", "2015-11-10")] == ["", "2015-01-01", "2015-11-01", "2015-11-10"]
+    assert [S.day_until(d) for d in ("", "2015", "2015-11", "2015-12", "2015-11-10")] == [
+        "", "2016-01-01", "2015-12-01", "2016-01-01", "2015-11-10"]
+
+
+STINTS = [{"name": "Ronnie", "from": "", "until": ""}, {"name": "Jason", "from": "", "until": "2025-02-10"},
+          {"name": "Cody", "from": "2015-11-10", "until": ""}, {"name": "Christian", "from": "2025-02-24", "until": ""}]
+
+
+def test_lineups_are_worked_out_of_the_stints():
+    assert S.lineups(STINTS) == [("", "2015-11-10", ["Ronnie", "Jason"]),
+                                 ("2015-11-10", "2025-02-10", ["Ronnie", "Jason", "Cody"]),
+                                 ("2025-02-10", "2025-02-24", ["Ronnie", "Cody"]),       # the two weeks between two stories
+                                 ("2025-02-24", "", ["Ronnie", "Cody", "Christian"])]
+    assert S.lineup_at(STINTS, "2014-05-24") == ["Ronnie", "Jason"]
+    assert S.lineup_at(STINTS, "2025-02-10") == ["Ronnie", "Cody"]                      # gone the day the leaving was news
+    assert S.lineup_at(STINTS, "2025-02-24") == ["Ronnie", "Cody", "Christian"]
+    assert S.lineups([]) == []
+
+
+def test_a_change_of_instrument_is_a_second_stint_and_the_same_lineup():
+    stints = [{"name": "Ann", "plays": "fiddle", "from": "2015", "until": "2019"},
+              {"name": "Ann", "plays": "mandolin", "from": "2020", "until": ""},
+              {"name": "Bob", "plays": "bass", "from": "2015", "until": "2017"},
+              {"name": "Bob", "plays": "bass", "from": "2022", "until": ""}]      # left, and came back
+    assert S.lineups(stints) == [("2015-01-01", "2018-01-01", ["Ann", "Bob"]), ("2018-01-01", "2022-01-01", ["Ann"]),
+                                 ("2022-01-01", "", ["Ann", "Bob"])]
+    assert S.lineups([{"name": "Ann", "from": "2001", "until": "2003"}, {"name": "Bob", "from": "2010", "until": ""}]) == [
+        ("2001-01-01", "2004-01-01", ["Ann"]), ("2010-01-01", "", ["Bob"])]       # the years with nobody are no lineup
+
+
+def test_the_wikis_band_pages_come_with_the_ready_tracks_and_put_nobody_on_a_stage(tmp_path):
+    pages = {"The Travelin' McCourys": MCCOURYS, "Arkansauce": "{{BandInfo|kind=regular}}",
+             "Waiting": '<proposed by="Blu">{{BandInfo}}</proposed>'}
+    got = S.fetch_releases("https://wiki.example/", get=_wiki(pages))
+    assert [(b["band"], b["kind"], len(b["stints"])) for b in got] == [("Arkansauce", "regular", 0), ("The Travelin' McCourys", "", 5)]
+    assert S.from_releases(got) == []                                       # a stint is no credit
+    db = S.to_sqlite([], str(tmp_path / "c.sqlite"), got)
+    assert db.execute("SELECT name, kind FROM bands ORDER BY name").fetchall() == [("Arkansauce", "regular"), ("The Travelin' McCourys", "")]
+    on = lambda day: [r[0] for r in db.execute(
+        "SELECT member FROM stints WHERE band = :band AND (from_day = '' OR from_day <= :day) "
+        "AND (until_day = '' OR :day < until_day) ORDER BY n", {"band": "The Travelin' McCourys", "day": day})]
+    assert on("2017-07-03") == ["Ronnie McCoury", "Rob McCoury", "Alan Bartram", "Jason Carter"]
+    assert on("2025-03-01") == ["Ronnie McCoury", "Rob McCoury", "Alan Bartram", "Still Here"]

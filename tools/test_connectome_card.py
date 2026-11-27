@@ -785,3 +785,49 @@ def test_the_graph_says_which_venues_and_acts_have_a_page():
     k = [i for i, m in enumerate(g['music']) if m[0] == 'wiki:Show:K'][0]
     assert g['acts'][str(k)] == [['Kyle Tuttle', [names.index('Kyle Tuttle'), names.index('Sam Leslie')], names.index('Kyle Tuttle')]]
     assert "Dee's Country Cocktail Lounge" in g['wikipages'] and 'Kyle Tuttle' in g['wikipages']
+
+
+def test_a_band_named_in_a_source_is_the_band_and_never_a_picker():
+    pairs = [pair('Kyle Tuttle', 'Della Mae', 'show', 'lma:show1'), pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:show1'),
+             pair('Della Mae', 'Molly Tuttle', 'show', 'lma:show1'), pair('Kyle Tuttle', 'The Dellas', 'record', 'discogs:1'),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'track', 'arthel:4masks', [('u', '', 'silver-44')])]
+    whole = {'lma:show1': {'kind': 'show', 'title': 'Kyle Live', 'date': '2025-07-05', 'artist': 'Sam Grisman Project',
+                           'grp': 'lma:show1', 'formats': []},
+             'discogs:1': {'kind': 'record', 'title': 'Some Record', 'date': '2015', 'artist': 'Somebody', 'grp': 'discogs:1',
+                           'formats': []},
+             'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []}}
+    credits = [('Kyle Tuttle', 'banjo', 'lma:show1', 'show', 'u'), ('Molly Tuttle', 'guitar', 'lma:show1', 'show', 'u'),
+               ('della mae', '', 'lma:show1', 'show', 'u'), ('The Dellas', '', 'discogs:1', 'release', 'v'),
+               ('Della Mae', '', 'arthel:4masks', 'none', 'w')]      # named there, and not as playing ("a Della Mae cover")
+    wiki = FakeWiki(redirects={'The Dellas': 'Della Mae', 'Kimber': 'Kimber Ludiker'},
+                    pages={'Kyle Tuttle', 'Molly Tuttle', 'Della Mae', 'Kimber Ludiker'}, musicians=['Kyle Tuttle'])
+    bands = [{'band': 'Della Mae', 'kind': 'regular', 'leader': '', 'offshoot_of': '', 'billed_as': ['della mae'],
+              'stints': [{'name': 'Kimber', 'plays': 'fiddle', 'from': '', 'until': ''}]}]
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 27), None, whole, credits, bands)
+    g = result['graph']
+    names = [p[0] for p in g['people']]
+    assert names == ['Kimber Ludiker', 'Kyle Tuttle', 'Molly Tuttle']       # the band is out; its member is in, by her page's name
+    assert [(names[a], names[b]) for a, b, _ in g['ties']] == [('Kyle Tuttle', 'Molly Tuttle')]
+    music = [m[0] for m in g['music']]
+    # where a source names it: the show. Not the record nobody else here is on, nor where it is named and not playing
+    assert 'arthel:4masks' in music and 'discogs:1' not in music
+    assert g['bands'] == [['Della Mae', 'regular', -1, '', ['della mae'], [[0, 'fiddle', '', '']], [music.index('lma:show1')]]]
+    assert 'Della Mae' not in result['cards']['Kyle Tuttle']                # nor on anybody's card
+    before = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 27), None, whole, credits)['graph']
+    assert 'Della Mae' in [p[0] for p in before['people']] and 'bands' not in before    # with no band page, as it was
+
+
+def test_the_bands_are_read_back_from_the_store_and_an_older_store_has_none(tmp_path):
+    import sqlite3
+    import connectome_store
+    bands = [{'band': 'The Band', 'kind': 'regular', 'leader': 'Ann', 'offshoot_of': '', 'billed_as': ['Band', 'Them'],
+              'stints': [{'name': 'Ann', 'plays': 'fiddle', 'from': '2015', 'until': '', 'source': 'u', 'checked': '2026-11-27'},
+                         {'name': 'Bob', 'plays': 'bass', 'from': '', 'until': '2019-03'}]}]
+    connectome_store.to_sqlite([], str(tmp_path / 'c.sqlite'), bands).close()
+    assert cc.load_bands(str(tmp_path / 'c.sqlite')) == [
+        {'band': 'The Band', 'kind': 'regular', 'leader': 'Ann', 'offshoot_of': '', 'billed_as': ['Band', 'Them'],
+         'stints': [{'name': 'Ann', 'plays': 'fiddle', 'from': '2015', 'until': ''},
+                    {'name': 'Bob', 'plays': 'bass', 'from': '', 'until': '2019-03'}]}]
+    sqlite3.connect(str(tmp_path / 'old.sqlite')).execute('CREATE TABLE targets (id TEXT)').connection.commit()
+    assert cc.load_bands(str(tmp_path / 'old.sqlite')) == []
+

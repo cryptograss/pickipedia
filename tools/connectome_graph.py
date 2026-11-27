@@ -35,6 +35,13 @@ graph.json:
             where cryptograss cut it; [] for a show. At the other end of a song's line the recording artist
             stands first, then the writer (Justin, #connectome, 15 Nov 2026, 07:29Z)
   featured  this month's featured pickers (Cryptograss:Connectome/Featured), and month
+  bands     [name, kind, leader, offshoot of, [billed as, ...], [[picker, plays, from, until], ...], [music, ...]]:
+            each band the wiki has a page for, as far as a person has verified it (Cryptograss:Bacon graphs/Bands).
+            name is its page; kind is regular, rotating, pickup or '' where the page doesn't say; leader is a picker,
+            or -1; the stints are its page's {{Band member}} lines in its order, dates as written ('' where no source
+            gives a start, or for someone still in it); the music is where a source names the band itself ("w/ Della
+            Mae"). A stint says who you'd expect to see and is no tie: nothing in `ties` comes from one. The key is
+            absent while the wiki has no band
 
 how:    3 the same track, 2 the same stage, 1 the same record (no source puts them
         on the same track). Only 3 and 2 are "played with".
@@ -252,7 +259,7 @@ def icon_for(roles, icons):
 
 
 def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None, songcuts=None, icons=(),
-           pics=None):
+           pics=None, bands=()):
     """
     pairs     the store's pairs, each name already as the wiki knows it
     targets   id -> {kind, title, date, artist, grp, formats: [..]}
@@ -261,6 +268,8 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
     song_title(target, track) -> the song's name, as the cards name it
     pages     title -> the wiki page's URL, for record and Song: pages that exist
     plays     song title -> the CID of the track its Song: page plays in Rabbithole
+    bands     [{band, kind, leader, offshoot_of, billed_as, stints: [{name, plays, from, until}], on: [target, ...]}],
+              names as the wiki knows them
     """
     track, stage, record = casts(pairs)
 
@@ -301,7 +310,9 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                         said.append(r)
     names = sorted({n for a, b, _ in best for n in (a, b)} | set(featured)
                    | { p for cast in page_people.values() for p in cast }
-                   | { c['artist'] for cuts in (songcuts or {}).values() for c in cuts if c.get('artist') })
+                   | { c['artist'] for cuts in (songcuts or {}).values() for c in cuts if c.get('artist') }
+                   # a band's members and its leader are pickers here though no source has tied them to anyone yet
+                   | { n for b in bands for n in [b.get('leader')] + [s['name'] for s in b.get('stints', [])] if n })
     pid = {n: i for i, n in enumerate(names)}
     used = sorted({c[3] for c, _ in best.values()} | { t for ts in page_cut.values() for t in ts })
     mid = {t: i for i, t in enumerate(used)}
@@ -385,7 +396,11 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                     played[s] = plays[s]
         ties[(pid[a], pid[b])].append([mid[p['target']], cand[0], round(cand[2], 4), titles])
 
-    return {
+    band_rows = [[b['band'], b.get('kind', ''), pid.get(b.get('leader'), -1), b.get('offshoot_of', ''),
+                  list(b.get('billed_as') or []),
+                  [[pid[s['name']], s.get('plays', ''), s.get('from', ''), s.get('until', '')] for s in b.get('stints', [])],
+                  [mid[t] for t in b.get('on', []) if t in mid]] for b in sorted(bands, key=lambda b: b['band'])]
+    out = {
         'v': 1, 'built': built, 'month': month, 'featured': [pid[f] for f in featured if f in pid],
         # name, has a page, instrument; and, only where their page gives one, the file that is their picture
         'people': [[n, 1 if has_page(n) else 0, inst.get(n, '')] + ([pics[n]] if pics and pics.get(n) else []) for n in names],
@@ -398,6 +413,9 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         'plays': dict(sorted(played.items())),
         'acts': acts_of(targets, used, mid, cast, pid),
     }
+    if band_rows:
+        out['bands'] = band_rows
+    return out
 
 
 def arthel_pages(pairs, targets, song_title):

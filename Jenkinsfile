@@ -407,8 +407,9 @@ REQS
                             exit "${FETCHED}"
                         fi
 
-                        # The tracks the wiki says are ready (state: production): where the wiki doesn't answer, the
-                        # last list read stands.
+                        # The tracks the wiki says are ready (state: production), its videos, its show pages, and its
+                        # band pages as far as a person has verified them (Cryptograss:Bacon graphs/Bands): where the
+                        # wiki doesn't answer, the last list read stands.
                         timeout 60 "${PY}" connectome_store.py releases --out "${CACHE}/releases.json" || echo "Connectome: the ready tracks weren't read; the last list stands"
                         touch "${CACHE}/releases.json"
 
