@@ -2459,8 +2459,11 @@ function showScene( v ) {
 	const posterR = stack && m.art ? ( narrowFrame ? 36 : 42 ) : 30;
 	// The show
 	const named = K.naming( G, { m: me.m, how: K.STAGE, songs: [] } ), night = K.night( m.date );
-	addPiece( sc, v.m, S, 'subject', { below: true, big: posterR, label: K.clip( named.named ? named.who : ( night || 'a show' ), 28 ),
-		sub: K.clip( named.named ? night : '', 28 ), dx: 0, sdx: 0, delay: 0 } );
+	// its own name, else where it was, else whose it was; and the night under that. A year alone names nothing (Justin,
+	// #connectome, 27 Nov 2026, 06:09Z: "what are the nodes that say only "2026"?  That's not a good name.")
+	const called = named.who || night || 'a show';
+	addPiece( sc, v.m, S, 'subject', { below: true, big: posterR, label: K.clip( called, 30 ),
+		sub: called === night ? '' : K.clip( night, 28 ), dx: 0, sdx: 0, delay: 0 } );
 	// The acts: a leader's own mark, or the act's
 	const actKey = [];
 	acts.slice( 0, actAt.length ).forEach( ( a, i ) => {
