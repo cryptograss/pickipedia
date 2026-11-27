@@ -1177,10 +1177,15 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
     # A band is never a picker (Cryptograss:Bacon graphs/Bands; decided 27 Nov 2026): a name a source wrote down
     # that is a band's page, or one of the names that page says it is billed as, comes out of the pickers, and
     # where the source named it is kept with the band. The wiki says what is a band; nothing here guesses one.
+    # A band billed under its leader's name ("Billy Strings" is Billy Strings (band)) leaves the leader a picker:
+    # a name that is anybody's leader or member is a person's.
+    persons = {x.lower() for b in bands for n in [b.get('leader')] + [s['name'] for s in b.get('stints', [])] if n
+               for x in (n, alias.get(n, n))}
     called = {}
     for b in bands:
         for n in [b['band']] + list(b.get('billed_as') or []):
-            called.setdefault(n.lower(), b['band'])
+            if n.lower() not in persons and alias.get(n, n).lower() not in persons:
+                called.setdefault(n.lower(), b['band'])
     banded = {n: called[k] for n in names for k in (alias.get(n, n).lower(), n.lower()) if k in called}
     named_on = defaultdict(set)                             # band -> the records and shows a source names it on
     for c in credits:

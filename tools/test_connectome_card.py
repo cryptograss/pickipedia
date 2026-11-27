@@ -831,3 +831,17 @@ def test_the_bands_are_read_back_from_the_store_and_an_older_store_has_none(tmp_
     sqlite3.connect(str(tmp_path / 'old.sqlite')).execute('CREATE TABLE targets (id TEXT)').connection.commit()
     assert cc.load_bands(str(tmp_path / 'old.sqlite')) == []
 
+
+def test_a_band_billed_as_its_leader_leaves_the_leader_a_picker():
+    pairs = [pair('Billy Strings', 'Jarrod Walker', 'show', 'lma:show1'), pair('Billy Strings Band', 'Jarrod Walker', 'show', 'lma:show1')]
+    whole = {'lma:show1': {'kind': 'show', 'title': 'Live', 'date': '2025-07-05', 'artist': 'Billy Strings', 'grp': 'lma:show1',
+                           'formats': []}}
+    credits = [('Billy Strings', 'guitar', 'lma:show1', 'show', 'u'), ('Jarrod Walker', 'mandolin', 'lma:show1', 'show', 'u')]
+    wiki = FakeWiki(pages={'Billy Strings', 'Jarrod Walker', 'Billy Strings (band)'})
+    bands = [{'band': 'Billy Strings (band)', 'kind': 'regular', 'leader': 'Billy Strings', 'offshoot_of': '',
+              'billed_as': ['Billy Strings', 'Billy Strings Band'], 'stints': [{'name': 'Jarrod Walker', 'plays': 'mandolin', 'from': '', 'until': ''}]}]
+    g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 27), None, whole, credits, bands)['graph']
+    names = [p[0] for p in g['people']]
+    assert names == ['Billy Strings', 'Jarrod Walker']                      # the leader stays; "Billy Strings Band" is the band
+    assert g['bands'][0][:3] == ['Billy Strings (band)', 'regular', 0]
+    assert [(names[a], names[b]) for a, b, _ in g['ties']] == [('Billy Strings', 'Jarrod Walker')]

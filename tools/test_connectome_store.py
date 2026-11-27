@@ -4,6 +4,8 @@ Tests for the connectome store. Canned Discogs and MusicBrainz documents shaped
 like the real ones (Julia Belle, discogs 34168519; Safe, Sensible And Sane,
 discogs 35460307); nothing touches the network.
 """
+import json
+
 import connectome_store as S
 
 JULIA = {"id": 34168519, "title": "Julia Belle", "year": 2025, "master_id": 1,
@@ -486,3 +488,18 @@ def test_the_wikis_band_pages_come_with_the_ready_tracks_and_put_nobody_on_a_sta
         "AND (until_day = '' OR :day < until_day) ORDER BY n", {"band": "The Travelin' McCourys", "day": day})]
     assert on("2017-07-03") == ["Ronnie McCoury", "Rob McCoury", "Alan Bartram", "Jason Carter"]
     assert on("2025-03-01") == ["Ronnie McCoury", "Rob McCoury", "Alan Bartram", "Still Here"]
+
+
+def test_a_verified_bands_members_and_its_names_are_given_to_the_tape_reader(tmp_path):
+    bands = [{"band": "The Band", "billed_as": ["Band, The", "Ann Leader"], "leader": "Ann Leader",
+              "stints": [{"name": "Bob Member"}, {"name": "Cher"}, {"name": "Bob Member"}]},
+             {"band": "Arkansauce", "stints": []}]
+    # a member of one word is too loose; a band billed as its leader doesn't put the leader on the list
+    assert S.band_names(bands) == ["Bob Member", "The Band", "Band, The", "Arkansauce"]
+    (tmp_path / "lma" / "x").mkdir(parents=True)
+    (tmp_path / "lma" / "x" / "tape.json").write_text(json.dumps({"metadata": {
+        "identifier": "tape", "creator": "Somebody", "date": "2020-01-01",
+        "description": "Bob Member - bass\nKyle Tuttle - banjo\nw/ Arkansauce"}}))
+    read = lambda releases: sorted({r["person"] for r in S.build(str(tmp_path), None, ["Kyle Tuttle"], releases)})
+    assert read([]) == ["Kyle Tuttle"]
+    assert read([dict(b, kind="", offshoot_of="") for b in bands]) == ["Arkansauce", "Bob Member", "Kyle Tuttle"]

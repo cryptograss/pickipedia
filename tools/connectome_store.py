@@ -556,6 +556,21 @@ def lineups(stints):
     return [(a, "" if b == "9999" else b, who) for a, b, who in out]
 
 
+def band_names(bands):
+    """The names the tape reader is given because a band's page says them: each member a stint names, and the band
+    itself, by its page's name and the names it says it is billed as, so "w/ Della Mae" on somebody's tape is read.
+    A member of one word is too loose to look for, as anywhere. A band's name that is a person's (a band billed as
+    its leader) isn't added here: that person is on the list when a source of their own puts them there."""
+    people = {n.casefold() for b in bands for n in [b.get("leader")] + [s["name"] for s in b.get("stints") or []] if n}
+    out = []
+    for b in bands:
+        for n in [s["name"] for s in b.get("stints") or [] if len(s["name"].split()) >= 2] + \
+                 [n for n in [b["band"]] + list(b.get("billed_as") or []) if n.casefold() not in people]:
+            if n and n.casefold() not in {x.casefold() for x in out}:
+                out.append(n)
+    return out
+
+
 def from_releases(releases, arthel=None):
     """The ready tracks' ensembles, each a credit on its track: a record of its own, `release:<cid>`."""
     import yaml
@@ -704,6 +719,10 @@ def build(raw, arthel=None, lma_names=(), releases=()):
     if arthel:
         rows += from_arthel(arthel)
     rows += from_releases(releases, arthel)
+    # and the names the verified band pages give the tape reader (band_names): a band's members are looked for on
+    # every tape, so verifying a stint is what puts that picker on the list
+    known = {n.casefold() for n in lma_names}
+    lma_names = list(lma_names) + [n for n in band_names([r for r in releases if r.get("band")]) if n.casefold() not in known]
     if lma_names:
         for fn in sorted(glob.glob(os.path.join(raw, "lma", "*", "*.json"))):
             try:
