@@ -1364,6 +1364,25 @@ test( 'what comes first: a Permanent studio track, a Permanent show, a Full stud
 	assert.deepEqual( tieOf( [ 3, K.STAGE, 1 ], [ 2, K.TRACK, 1 ], [ 1, K.STAGE, 1 ], [ 0, K.TRACK, 1 ] ).ev.map( ( e ) => e.m ), [ 0, 1, 2, 3 ] );
 } );
 
+test( 'each kind of connection has its colour, and a tie wears that of the freest thing in it, a cut before a night', () => {
+	const rec = ( tier ) => ( { kind: 'record', tier } ), show = ( tier ) => ( { kind: 'show', tier } );
+	// Justin's four, in his order (27 Nov 2026: "more colors to differentiate the various types of connection"), then the rest
+	assert.deepEqual( [ [ rec( 2 ), K.TRACK ], [ show( 2 ), K.STAGE ], [ rec( 1 ), K.TRACK ], [ show( 1 ), K.STAGE ] ].map( ( [ m, how ] ) => K.shade( m, how ) ),
+		[ 'pt', 'ps', 'ft', 'fs' ] );
+	assert.deepEqual( [ K.shade( show( 0 ), K.STAGE ), K.shade( rec( 0 ), K.TRACK ), K.shade( rec( 2 ), K.RECORD ) ], [ 't0', 't0', 't0' ] );
+	assert.equal( K.shade( show( 2 ), K.TRACK ), 'ps' );                                    // a sit-in on a tape is a show's
+	const music = [ rec( 2 ), show( 2 ), rec( 1 ), show( 0 ), show( 1 ) ].map( ( m, id ) => Object.assign( m, { id, date: '', key: 'k' + id } ) );
+	const tieOf = ( ...ev ) => K.summarize( 0, 1, ev.map( ( [ m, how, w ] ) => ( { m, how, w, songs: how === K.TRACK ? [ 'A Song' ] : [] } ) ), music );
+	assert.equal( K.tieShade( tieOf( [ 1, K.STAGE, 40 ], [ 0, K.TRACK, 1 ] ), music ), 'pt' );      // one Permanent cut among many nights: gold
+	assert.equal( K.tieShade( tieOf( [ 1, K.STAGE, 1 ], [ 2, K.TRACK, 9 ] ), music ), 'ps' );       // a Permanent night over any Full cut
+	assert.equal( K.tieShade( tieOf( [ 3, K.STAGE, 9 ], [ 4, K.STAGE, 1 ] ), music ), 'fs' );       // the Full night, not the one nothing vouches for
+	assert.equal( K.tieShade( tieOf( [ 3, K.STAGE, 9 ] ), music ), 't0' );
+	assert.equal( K.tieShade( tieOf( [ 0, K.RECORD, 9 ] ), music ), 't0' );                         // only a record shared: dotted, however free
+	// a line a view makes with only a tier behind it says whether it is a show's; unsaid, it is drawn as a cut was
+	assert.deepEqual( [ { played: true, tier: 2, show: true }, { played: true, tier: 2 }, { played: true, tier: 1, show: true }, { played: true, tier: 1 },
+		{ played: true, tier: 0, show: true }, { played: false, tier: 2 } ].map( ( t ) => K.tieShade( t, music ) ), [ 'ps', 'pt', 'fs', 'ft', 't0', 't0' ] );
+} );
+
 test( 'a piece stands as its kind does; a record whole, where no source says who is on which track, after them', () => {
 	assert.equal( K.pieceStanding( G, G.pieces[ SILVER ] ), 5 );
 	assert.equal( K.pieceStanding( G, G.pieces[ 1 ] ), 4 );                                       // a taper's tape

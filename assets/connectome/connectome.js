@@ -2464,9 +2464,13 @@ function showScene( v ) {
 	// venue's name alone on the show and on the venue said nothing of which was which (07:01Z: "'Bayboro Brewing'
 	// appearing twice ... it's not obvious from looking"): the show says it was live there, and the venue's own mark
 	// then says it is the venue, its name being on the show already
+	// And who it was (Justin, 27 Nov 2026, 23:20Z: "Instead of just "live at..." - let's say "<band name/picker name> live
+	// at..."", and "Instead of "the venue", name the venue"): the main act, as the show bills it, before the place; and
+	// the venue's mark has the venue's own name again. The two can't be taken for each other now: one is a sentence.
 	const atVenue = !named.named && !!m.venue;
-	const called = named.named ? named.who : ( atVenue ? 'Live at ' + named.who : 'Live' + ( night ? ' · ' + night : '' ) );
-	addPiece( sc, v.m, S, 'subject', { below: true, big: posterR, label: K.clip( called, narrowFrame ? 30 : 40 ),
+	const whose = ( acts[ 0 ] && acts[ 0 ].title ) || m.artist || '';
+	const called = named.named ? named.who : ( whose ? whose + ' live' : 'Live' ) + ( atVenue ? ' at ' + m.venue : ( night ? ' · ' + night : '' ) );
+	addPiece( sc, v.m, S, 'subject', { below: true, big: posterR, label: K.clip( called, narrowFrame ? 34 : 56 ),
 		sub: named.named || atVenue ? K.clip( night, 28 ) : '', dx: 0, sdx: 0, delay: 0 } );
 	// The acts: a leader's own mark, or the act's
 	const actKey = [];
@@ -2485,14 +2489,14 @@ function showScene( v ) {
 			sc.nodes.set( 'act' + i, { stands: 'act', is: 'act' + i, x: at.x, y: at.y, kind: a.main ? 'subject' : 'named', o: 1, delay: 60, above: !stack,
 				title: a.title || 'the band', members: a.members, main: a.main, page: G.wikipages[ a.title ] || '' } );
 		}
-		sc.lines.set( 'sa' + i, { a: 'q' + v.m, b: actKey[ i ], u: -1, v: -1, tie: { played: true, tier: m.tier, w: 1 }, stands: 'tie',
+		sc.lines.set( 'sa' + i, { a: 'q' + v.m, b: actKey[ i ], u: -1, v: -1, tie: { played: true, tier: m.tier, w: 1, show: true }, stands: 'tie',
 			w: a.main ? 3.2 : 2.2, o: 0.95, role: 'spoke', quiet: true, delay: 80 } );
 	} );
 	// The venue, where the source says one
 	if ( m.venue ) {
 		sc.nodes.set( 'venue', { stands: 'venue', is: 'venue', x: venueAt.x, y: venueAt.y, kind: 'named', o: 1, delay: 90,
-			title: m.venue, say: atVenue ? 'the venue' : '', city: m.city || '', page: G.wikipages[ m.venue ] || '', clip: venueClip } );
-		sc.lines.set( 'sv', { a: stack ? actKey[ 0 ] : 'q' + v.m, b: 'venue', u: -1, v: -1, tie: { played: true, tier: m.tier, w: 0.5 }, stands: 'tie',
+			title: m.venue, city: m.city || '', page: G.wikipages[ m.venue ] || '', clip: venueClip } );
+		sc.lines.set( 'sv', { a: stack ? actKey[ 0 ] : 'q' + v.m, b: 'venue', u: -1, v: -1, tie: { played: true, tier: m.tier, w: 0.5, show: true }, stands: 'tie',
 			w: 1.4, o: 0.8, role: 'spoke', quiet: true, delay: 90 } );
 	}
 	// Who else was on stage, round them, each as near their act's side as the ring allows
@@ -2576,7 +2580,7 @@ function showScene( v ) {
 	}
 	for ( const id of mine ) {
 		const i = actOf.get( id ), from = i !== undefined && actKey[ i ] ? actKey[ i ] : 'q' + v.m;
-		sc.lines.set( 'sp' + id, { a: from, b: 'p' + id, u: -1, v: id, tie: { played: true, tier: m.tier, w: 0.35 }, stands: 'tie',
+		sc.lines.set( 'sp' + id, { a: from, b: 'p' + id, u: -1, v: id, tie: { played: true, tier: m.tier, w: 0.35, show: true }, stands: 'tie',
 			w: lineWidth( { w: 0.35 } ), o: 0.9, role: 'spoke', c: id, quiet: true, delay: 120 } );
 		addNode( sc, id, seatOf.get( id ), 'named', Object.assign( { delay: 180, act: i !== undefined ? acts[ i ].title : '' },
 			playsAs( first( id ), roles.get( id ) || '', seatOf.get( id ), W, FONT.named ) ) );
@@ -2668,7 +2672,7 @@ function showScene( v ) {
 					room.push( box );
 					addPiece( sc, f.piece, at, 'dot', { r: narrowFrame ? 5 : 5.5, who: [ f.id ], delay: 380 + i * 30 } );
 					sc.lines.set( 'sf' + f.id + '.' + f.piece, { a: 'p' + f.id, b: 'q' + f.piece, u: f.id, v: -1, stands: 'tie', role: 'spoke', quiet: true, fine: true,
-						tie: { played: true, tier: G.music[ M( f.piece ).m ].tier, w: 0.3 }, w: 1.1, o: 0.65, delay: 360 + i * 30 } );
+						tie: { played: true, tier: G.music[ M( f.piece ).m ].tier, w: 0.3, show: M( f.piece ).kind === 'show' }, w: 1.1, o: 0.65, delay: 360 + i * 30 } );
 					return;
 				}
 			}
@@ -3152,7 +3156,7 @@ function chartMark( cut, song ) {
 function drawPiece( g, d ) {
 	const pc = M( d.piece ), c = K.called( G, pc );
 	g.textContent = '';
-	g.setAttribute( 'class', 'pk mu ' + d.kind + ' t' + G.music[ pc.m ].tier + ( d.lit ? ' lit' : '' ) );
+	g.setAttribute( 'class', 'pk mu ' + d.kind + ' t' + G.music[ pc.m ].tier + ( pc.kind === 'show' ? ' sh' : '' ) + ( d.lit ? ' lit' : '' ) );
 	g.setAttribute( 'aria-label', [ c.name, c.sub ].filter( Boolean ).join( ', ' ) );
 	( d.kind === 'dot' ? layers.dots : layers.nodes ).appendChild( g );
 	if ( d.kind === 'dot' ) {
@@ -3357,23 +3361,33 @@ const draw = {
 			return;
 		}
 		// A strand between two pickers is one thing they share, and is marked as that thing is; any other line, as all of it.
-		const t = d.strand ? { played: d.e.how >= K.STAGE, tier: G.music[ d.e.m ].tier } : d.tie;
-		const gold = t.played && t.tier === K.PERMANENT;
-		const cls = !t.played ? 't0' : 't' + t.tier;
+		// and coloured by what kind of thing that is (K.shade): a Permanent track gold, a Permanent show ember, a Full
+		// track blue, a Full show ink, the rest dotted; each kind a little lighter than the one before it, so what comes
+		// first is still what is seen first
+		const hue = d.strand ? K.shade( G.music[ d.e.m ], d.e.how ) : K.tieShade( d.tie, G.music );
+		const gold = hue === 'pt' || hue === 'ps';                   // a Permanent Release: lit, it glows
+		const cls = hue === 't0' ? 't0' : 't1 ' + hue;
+		const heft = { pt: 0.62, ps: 0.54, ft: 0.47, fs: 0.42, t0: 0.42 }[ hue ];
 		g.textContent = '';
 		const far = d.role === 'far', fine = d.role === 'web' || far || d.fine;
 		g.setAttribute( 'class', 'ln ' + ( fine ? 'fine ' : '' ) + ( d.role === 'web' ? 'web ' : '' ) + ( far ? 'far ' : '' ) + ( d.strand ? 'strand ' : '' ) + ( d.quiet ? 'quiet' : '' ) );
 		( d.quiet ? layers.faint : layers.lines ).appendChild( g );
 		if ( fine ) {                                                // the web, the ways on, the rest of the company: the same marks, half as heavy
-			g.appendChild( s( 'path', { class: gold ? 'thread' : 'core ' + cls,
-				'stroke-width': ( cls === 't0' ? 1.3 : Math.max( far ? 1.5 : 1.1, d.w * ( far ? 0.42 : 0.32 ) ) ).toFixed( 1 ) } ) );
-		} else if ( gold && d.emph ) {                               // the one that's lit: gold, with ink down the middle
-			g.appendChild( s( 'path', { class: 'glow', 'stroke-width': ( d.w + 7 ).toFixed( 1 ) } ) );
+			// each kind a little lighter than the one before it, the thinnest of them too: a blue line is never the lesser of
+			// an ink one. The stylesheet draws every .core 2px wide whatever is asked here; a Full line's width is handed
+			// to it as --w (.core.tw), so the order holds among the lines that have a colour
+			const lean = { pt: 1.5, ps: 1.3, ft: 1.15, fs: 1 }[ hue ];
+			const fw = ( cls === 't0' ? 1.3 : lean * Math.max( far ? 1.5 : 1.1, d.w * ( far ? 0.42 : 0.32 ) ) ).toFixed( 1 );
+			g.appendChild( s( 'path', Object.assign( { class: gold ? 'thread ' + hue : 'core ' + cls + ( cls === 't0' ? '' : ' tw' ), 'stroke-width': fw },
+				gold || cls === 't0' ? {} : { style: '--w:' + fw } ) ) );
+		} else if ( gold && d.emph ) {                               // the one that's lit: its colour, with ink down the middle
+			g.appendChild( s( 'path', { class: 'glow ' + hue, 'stroke-width': ( d.w + 7 ).toFixed( 1 ) } ) );
 			g.appendChild( s( 'path', { class: 'core t2', 'stroke-width': Math.max( 1.8, d.w * 0.42 ).toFixed( 1 ) } ) );
-		} else if ( gold ) {                                         // a gold thread
-			g.appendChild( s( 'path', { class: 'thread', 'stroke-width': Math.max( 2.2, d.w * 0.62 ).toFixed( 1 ) } ) );
+		} else if ( gold ) {                                         // a gold thread, or an ember one
+			g.appendChild( s( 'path', { class: 'thread ' + hue, 'stroke-width': Math.max( hue === 'pt' ? 2.2 : 2, d.w * heft ).toFixed( 1 ) } ) );
 		} else {
-			g.appendChild( s( 'path', { class: 'core ' + cls, 'stroke-width': ( cls === 't0' ? 1.6 : Math.max( 1.4, d.w * ( d.emph ? 0.6 : 0.42 ) ) ).toFixed( 1 ) } ) );
+			const cw = ( cls === 't0' ? 1.6 : Math.max( hue === 'ft' ? 1.7 : 1.4, d.w * ( d.emph ? 0.6 : heft ) ) ).toFixed( 1 );
+			g.appendChild( s( 'path', Object.assign( { class: 'core ' + cls + ( cls === 't0' ? '' : ' tw' ), 'stroke-width': cw }, cls === 't0' ? {} : { style: '--w:' + cw } ) ) );
 		}
 		if ( !d.quiet ) {
 			g.appendChild( s( 'path', { class: 'hit' } ) );
@@ -3399,7 +3413,8 @@ const draw = {
 			return;
 		}
 		g.textContent = '';
-		g.setAttribute( 'class', 'pill ' + ( d.more ? 'more' : 't' + d.tier ) + ( d.lit ? ' lit' : '' ) + ( d.shy ? ' shy' : '' ) );
+		g.setAttribute( 'class', 'pill ' + ( d.more ? 'more' : 't' + d.tier ) + ( d.piece !== undefined && M( d.piece ) && M( d.piece ).kind === 'show' ? ' sh' : '' )
+			+ ( d.lit ? ' lit' : '' ) + ( d.shy ? ' shy' : '' ) );
 		layers.pills.appendChild( g );
 		if ( coarse ) {                                              // more to land on than can be seen
 			g.appendChild( s( 'rect', { class: 'reach', x: -d.w / 2 - 4, y: -21, width: d.w + 8, height: 42 } ) );
@@ -3532,7 +3547,7 @@ const sig = {
 	node: ( d ) => [ d.stands, d.kind, d.lit, d.below, d.rabbit, d.side, d.anchor, d.up, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) + ( d.tight ? 't' : '' ) : '', d.label, d.dx, d.sub, d.sdx, d.play, d.note,
 		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '', d.title, d.cut, d.above, d.clip, d.say ].join( '|' ),   // a song's: which, and its name over or under it
 	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role ] :
-		[ d.strand ? 's' + d.e.m : d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
+		[ d.strand ? 's' + d.e.m : K.tieShade( d.tie, G.music ), d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
 	pill: ( d ) => [ d.stands, d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy, d.anchor, !!d.lit ].join( '|' )
 };
 

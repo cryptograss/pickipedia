@@ -70,8 +70,10 @@ UA = 'PickiPedia-connectome-card/1.0'
 LISTEN = re.compile(r'\{\{\s*Listen[ _]in[ _]Rabbithole\s*\|\s*([A-Za-z0-9]{20,})\s*[|}]')
 STUDIO_CUT_CID = re.compile(r'\{\{\s*Studio[ _]cut\b[^}]*?\bcid\s*=\s*([A-Za-z0-9]{20,})', re.S)
 
-GOLD = '#eda100'                        # a Permanent Release, and nothing else
-INK2 = '#52514e'                        # a Full Release
+GOLD = '#eda100'                        # a Permanent Release, and nothing else: a studio track
+EMBER = '#d9480f'                       # a Permanent Release that is a night: a show
+BLUE = '#2f6fb3'                        # a Full Release: a studio track
+INK2 = '#52514e'                        # a Full Release that is a show
 SHUT = '#898781'                        # the rest: counted, not vouched for
 PAPER = '#fcfcfb'
 INK = '#0b0b0b'
@@ -427,8 +429,10 @@ class Store:
         for o, gs in ev.items():
             lst = sorted(gs.values(), key=lambda e: (-e['tier'], -RANK[e['kind']], e['text']))
             with_ = [e for e in lst if e['kind'] != 'record'] or lst     # played with, when they have
-            out[o] = {'list': lst, 'kind': max((e['kind'] for e in lst), key=RANK.get),
-                      'tier': max(e['tier'] for e in with_)}
+            tier = max(e['tier'] for e in with_)
+            out[o] = {'list': lst, 'kind': max((e['kind'] for e in lst), key=RANK.get), 'tier': tier,
+                      # the freest thing they share is a night, and no cut is as free: its line is a show's colour
+                      'show': all(a_show(e) for e in with_ if e['tier'] == tier)}
         return out if y is None else out.get(y)
 
     def path(self, s, t):
@@ -533,16 +537,39 @@ def tip_box(lines, x, y, box):
             f'<text x="{cx:.1f}" y="{ty:.1f}" text-anchor="middle" fill="{INK}">{spans}</text></g>')
 
 
-def strokes_svg(a, b, tier, loose, lit):
-    """A line by what it stands on: gold for a Permanent Release, ink for a Full one, dotted for the rest."""
+# The start of every card's key: the five lines, as the card and the big graph draw them (the classes are in
+# ext.pickipediaContent.connectome.css). Each card ends it with a line of its own.
+KEY_LINES = ('<div class="cc-legend">'
+             '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent</a> track '
+             '<span class="cc-key cc-ember"></span> Permanent show: an etree tape, or Creative Commons<br>'
+             '<span class="cc-key cc-blue"></span> Full track '
+             '<span class="cc-key cc-ink"></span> Full show: no DRM '
+             '<span class="cc-key cc-rest"></span> the rest<br>')
+
+
+def hue(tier, show):
+    """The colour of a kind of connection, as the big graph draws it (connectome-core.js, shade; Justin, #connectome,
+    27 Nov 2026, 23:20Z: "more colors to differentiate the various types of connection"): a Permanent track gold, a
+    Permanent show ember, a Full track blue, a Full show ink."""
+    return (EMBER if show else GOLD) if tier == 2 else (INK2 if show else BLUE)
+
+
+def a_show(e):
+    """Whether what two share is a night: a show, or a sit-in on one song of a tape."""
+    return bool(e.get('show')) or e.get('kind') == 'show'
+
+
+def strokes_svg(a, b, tier, loose, lit, show=False):
+    """A line by what it stands on: gold or ember for a Permanent Release, blue or ink for a Full one (hue), dotted for
+    the rest. Each kind a little lighter than the one before, so what comes first is seen first."""
     if loose or tier == 0:
         return line_svg(a, b, stroke=SHUT, stroke_width=2 if lit else 1.2, stroke_dasharray='1 5', stroke_linecap='round')
     if tier == 2 and lit:
-        return (line_svg(a, b, stroke=GOLD, stroke_width=8, opacity='.6', stroke_linecap='round')
+        return (line_svg(a, b, stroke=hue(2, show), stroke_width=8, opacity='.6', stroke_linecap='round')
                 + line_svg(a, b, stroke=INK, stroke_width=2, stroke_linecap='round'))
     if tier == 2:
-        return line_svg(a, b, stroke=GOLD, stroke_width=2.2, stroke_linecap='round')
-    return line_svg(a, b, stroke=INK2, stroke_width=2 if lit else 1.2, stroke_linecap='round')
+        return line_svg(a, b, stroke=hue(2, show), stroke_width=2 if show else 2.2, stroke_linecap='round')
+    return line_svg(a, b, stroke=hue(1, show), stroke_width=2 if lit else (1.2 if show else 1.4), stroke_linecap='round')
 
 
 NOTE = ('<circle r="21" fill="%s" stroke="%s" stroke-width="1.5"/>' % (PAPER, INK) +
@@ -743,10 +770,10 @@ def card(center, store, has_page, inst, named=None, made=None, wrote=None):
     o(f'<a class="cc-bg" href="{attr(viewer(p=center))}" aria-label="{attr("Explore " + center + " in the connectome")}">'
       f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/></a>')
     for n in placed:                                 # the crowd: thin spokes
-        o(strokes(C, pos[n], nb[n]['tier'], False, False))
+        o(strokes(C, pos[n], nb[n]['tier'], False, False, nb[n].get('show', False)))
     for a, b, ev in fedges:
         pa = C if a == center else pos[a]
-        o(strokes(pa, pos[b], ev['tier'] if ev else 0, not ev or ev['kind'] == 'record', True))
+        o(strokes(pa, pos[b], ev['tier'] if ev else 0, not ev or ev['kind'] == 'record', True, bool(ev and ev.get('show'))))
     for n in named:
         x, y = pos[n]
         lx, ly, _ = labels[n]
@@ -780,16 +807,12 @@ def card(center, store, has_page, inst, named=None, made=None, wrote=None):
         s, e = trim(C, (x, y), 23, rad(n) + 2)
         head = n + (f' · {inst[n]}' if n in inst else '')
         o(f'<g class="cc-h"><a href="{focus(n)}">{line(s, e, **{"class": "cc-hit"})}</a>'
-          f'{line(C, (x, y), **{"class": "cc-hi", "stroke": GOLD if nb[n]["tier"] == 2 else INK2, "stroke_width": 3.5})}'
+          f'{line(C, (x, y), **{"class": "cc-hi", "stroke": hue(nb[n]["tier"], nb[n].get("show", False)) if nb[n]["tier"] else INK2, "stroke_width": 3.5})}'
           f'<a href="{focus(n)}">{dot(n, rad(n))}<circle cx="{x:.1f}" cy="{y:.1f}" r="9" fill="transparent"/></a>'
           f'{tip([head, what(n)], x, y)}</g>')
     o('</svg>')
 
-    legend = ('<div class="cc-legend">'
-              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
-              'an etree tape or Creative Commons<br>'
-              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
-              '<span class="cc-key cc-rest"></span> the rest<br>'
+    legend = (KEY_LINES +
               'bigger = more times · hollow = no page yet</div>')
     return (f'<div class="connectome-card" data-picker="{attr(center)}">'
             f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(viewer(p=center))}">⤢ explore</a></div>'
@@ -866,7 +889,7 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
             if e['tier'] == 0:
                 html = line_svg(s, t, stroke=SHUT, stroke_width=1.2, stroke_dasharray='1 5', stroke_linecap='round')
             else:
-                col = GOLD if e['tier'] == 2 else INK2
+                col = hue(e['tier'], a_show(e))
                 w = 2.2 if e['kind'] == 'track' else 1.2            # the same cut again: solid; a record or a stage: thin
                 html = line_svg(s, t, stroke=col, stroke_width=w, stroke_linecap='round')
             edges.append((x, y, html, e, len(others)))
@@ -928,11 +951,7 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
           f'{tip([head, where], x, y)}</g>')
     o('</svg>')
 
-    legend = ('<div class="cc-legend">'
-              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
-              "an etree tape or Creative Commons<br>"
-              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
-              '<span class="cc-key cc-rest"></span> the rest<br>'
+    legend = (KEY_LINES +
               'a solid line: the same cut again · a thin one: a record or a stage</div>')
     record = f'<a href="{attr(cut["page"])}">{escape(cut["title"])}</a>' if cut['page'] else escape(cut['title'])
     which = ', track ' + escape(cut['number']) if cut.get('number') else ''
@@ -1040,7 +1059,7 @@ def page_card(title, members, store, has_page, inst, home=HOME):
             if not with_ or e['tier'] == 0:         # only a record shared, or nothing to vouch for it: dotted
                 html = line_svg(s, t, stroke=SHUT, stroke_width=1.2, stroke_dasharray='1 5', stroke_linecap='round')
             else:
-                col = GOLD if e['tier'] == 2 else INK2
+                col = hue(e['tier'], a_show(e))
                 html = line_svg(s, t, stroke=col, stroke_width=2.2 if e['kind'] == 'track' else 1.4,
                                 stroke_linecap='round')
             said = e['text'] if with_ else 'on a record: ' + e['text']
@@ -1106,11 +1125,7 @@ def page_card(title, members, store, has_page, inst, home=HOME):
           f'fill="transparent"/></a>{tip(lines, x, y)}</g>')
     o('</svg>')
 
-    legend = ('<div class="cc-legend">'
-              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
-              "an etree tape or Creative Commons<br>"
-              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
-              '<span class="cc-key cc-rest"></span> the rest<br>'
+    legend = (KEY_LINES +
               'a line between two: they played together; dotted: only a record, or the rest · '
               'a hairline from the middle: on this page, and only here'
               '</div>')

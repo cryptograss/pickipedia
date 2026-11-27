@@ -209,24 +209,31 @@ def test_the_build_knows_who_made_a_record_by_the_wikis_own_name(tmp_path):
     assert card.index('>Bronwyn</text></a>') < card.index('>Allen Cooke</text></a>') < card.index('>Ann Picker</text></a>')
 
 
-def test_a_card_is_gold_for_permanent_ink_for_full_and_dotted_for_the_rest():
-    targets = dict(TARGETS, **{'discogs:2': ('Looser', '2016', 'Else')})
+def test_a_card_is_gold_or_ember_for_permanent_blue_or_ink_for_full_and_dotted_for_the_rest():
+    targets = dict(TARGETS, **{'discogs:2': ('Looser', '2016', 'Else'), 'lma:show2': ('Off Etree', '2024-01-01', 'A Band')})
     pairs = [pair('K', 'Tape', 'show', 'lma:show1'), pair('K', 'Disc', 'track', 'discogs:1', [('u', '1', 'Song')]),
-             pair('K', 'Unknown', 'track', 'discogs:2', [('u', '1', 'Other')])]
-    tiers = {'lma:show1': 2, 'discogs:1': 1, 'discogs:2': 0}
+             pair('K', 'Unknown', 'track', 'discogs:2', [('u', '1', 'Other')]),
+             pair('K', 'Cut', 'track', 'arthel:4masks', [('u', '', 'silver-44')]), pair('K', 'Loose', 'show', 'lma:show2')]
+    tiers = {'lma:show1': 2, 'discogs:1': 1, 'discogs:2': 0, 'arthel:4masks': 2, 'lma:show2': 1}
     store = cc.Store(pairs, targets, {t: t for t in targets}, {}, tiers)
     assert store.evidence('K', 'Tape')['tier'] == 2 and store.evidence('K', 'Disc')['tier'] == 1
+    assert store.evidence('K', 'Tape')['show'] and not store.evidence('K', 'Cut')['show']
+    # a Permanent cut and a Permanent night between the same two: the cut's colour, as it comes first
+    both = cc.Store(pairs + [pair('K', 'Tape', 'track', 'arthel:4masks', [('u', '', 'silver-44')])], targets, {t: t for t in targets}, {}, tiers)
+    assert not both.evidence('K', 'Tape')['show']
+    assert [cc.hue(2, False), cc.hue(2, True), cc.hue(1, False), cc.hue(1, True)] == [cc.GOLD, cc.EMBER, cc.BLUE, cc.INK2]
 
     def spoke(html, name):                                                # the lines drawn before this picker's dot
         return html[:html.index('>' + name + ' ')]
 
-    for name, colour in (('Tape', cc.GOLD), ('Disc', cc.INK2)):
+    for name, colour in (('Cut', cc.GOLD), ('Tape', cc.EMBER), ('Disc', cc.BLUE), ('Loose', cc.INK2)):
         html = cc.card('K', cc.Store([p for p in pairs if name in (p['a'], p['b'])], targets, {t: t for t in targets}, {}, tiers),
                        lambda n: True, {})
         assert f'stroke="{colour}"' in html and 'stroke-dasharray="1 5"' not in html
-    html = cc.card('K', cc.Store(pairs[2:], targets, {t: t for t in targets}, {}, tiers), lambda n: True, {})
+    html = cc.card('K', cc.Store(pairs[2:3], targets, {t: t for t in targets}, {}, tiers), lambda n: True, {})
     assert 'stroke-dasharray="1 5"' in html and f'stroke="{cc.GOLD}"' not in html
-    assert 'Permanent Release' in html and 'Full Release' in html         # the legend names the tiers
+    for said in ('Permanent</a> track', 'Permanent show', 'Full track', 'Full show'):       # the key names the four kinds
+        assert said in html
 
 
 def test_a_store_with_no_tiers_given_draws_a_tape_full_not_permanent():

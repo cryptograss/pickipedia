@@ -80,7 +80,7 @@ svg.cc a {
 	font-size: 85%;
 }
 
-/* The legend's keys: the three lines, as the card and the big graph draw them. */
+/* The legend's keys: the five lines, as the card and the big graph draw them. */
 .connectome-card .cc-key {
 	display: inline-block;
 	width: 18px;
@@ -91,7 +91,17 @@ svg.cc a {
 	border-top: 4px solid #eda100;
 }
 
+.connectome-card .cc-ember {
+	margin-left: 6px;
+	border-top: 3px solid #d9480f;
+}
+
+.connectome-card .cc-blue {
+	border-top: 3px solid #2f6fb3;
+}
+
 .connectome-card .cc-ink {
+	margin-left: 6px;
 	border-top: 2px solid #52514e;
 }
 
