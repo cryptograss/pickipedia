@@ -18,6 +18,12 @@
 	--axis: #c3c2b7;
 	--gold: #eda100;
 	--gold-wash: #fdf1cf;
+	/* The kinds of connection, in the order they come first (connectome-core.js, shade): a Permanent track gold, a
+	   Permanent show ember, a Full track blue, a Full show ink. Checked as a set against this paper for the three
+	   kinds of colour blindness (gold and ember, the nearest two, are 16 apart for a deuteranope; 8 is the floor). */
+	--ember: #d9480f;
+	--ember-wash: #fde4d7;
+	--blue: #2f6fb3;
 	--link: #0645ad;
 	--play: #4a7c59;
 	--play-on: #3c6749;
@@ -46,6 +52,9 @@
 		--hair: light-dark( #e1e0d9, #3a323b );
 		--axis: light-dark( #c3c2b7, #5a4f5c );
 		--gold-wash: light-dark( #fdf1cf, #4a3a12 );
+		--ember: light-dark( #d9480f, #e8590c );
+		--ember-wash: light-dark( #fde4d7, #4a2413 );
+		--blue: light-dark( #2f6fb3, #4f94d4 );
 		--link: light-dark( #0645ad, #8fb1f2 );
 		--hover: light-dark( #f0efec, #2f2832 );
 		--halo: light-dark( rgba( 11, 11, 11, 0.07 ), rgba( 236, 227, 216, 0.12 ) );
@@ -254,6 +263,10 @@ main {
 
 .core.t2 { stroke: var( --ink ); }
 .core.t1 { stroke: var( --ink2 ); }
+/* a Full studio track; a Full show keeps the ink. Their widths are the script's (--w), each kind lighter than the one before */
+.core.ft { stroke: var( --blue ); }
+.core.tw { stroke-width: calc( var( --w, 2 ) * 1px ); }
+.glow.ps { stroke: var( --ember ); }
 
 .core.t0 {
 	stroke: var( --muted );
@@ -265,6 +278,9 @@ main {
 	stroke: var( --gold );
 	stroke-linecap: round;
 }
+
+/* a Permanent show: a night, not a cut */
+.thread.ps { stroke: var( --ember ); }
 
 .ln .hit {
 	fill: none;
@@ -395,6 +411,9 @@ main {
 	stroke: var( --muted );
 	stroke-dasharray: 2 3;
 }
+
+.pill.t2.sh rect { fill: var( --ember-wash ); stroke: var( --ember ); }
+.pill.t1:not( .sh ) rect { stroke: var( --blue ); stroke-width: 1.3; }
 
 .pill text {
 	font: 600 calc( 12.5px * var( --t, 1 ) ) var( --ui );
@@ -633,7 +652,8 @@ a.play:focus {
 }
 
 /* ---- inside out: the music is the circles, the pickers are the lines ---- */
-/* A piece's ring is as free as the piece: gold for a Permanent Release, ink for a Full one, dotted for the rest. */
+/* A piece's ring is as free as the piece, and says whether it is a night or a cut: gold for a Permanent record or track,
+   ember for a Permanent show, blue for a Full record or track, ink for a Full show, dotted for the rest. */
 .mu .ring {
 	fill: var( --surface );
 	stroke: var( --ink2 );
@@ -650,6 +670,10 @@ a.play:focus {
 	stroke: var( --muted );
 	stroke-dasharray: 2 4;
 }
+
+/* and as the lines are: a Permanent show ember, a Full record or track blue (a Full show keeps the ink) */
+.mu.t2.sh .ring { fill: var( --ember-wash ); stroke: var( --ember ); }
+.mu.t1:not( .sh ) .ring { stroke: var( --blue ); }
 
 .mu.subject .ring { stroke-width: 3; }
 .mu.subject.t2 .ring { stroke-width: 5; }
@@ -669,6 +693,9 @@ a.play:focus {
 	stroke: var( --ink2 );
 	stroke-width: 0.9;
 }
+
+.mu.t2.sh .bead { fill: var( --ember ); }
+.mu.t1:not( .sh ) .bead { fill: var( --blue ); }
 
 .mu.t0 .bead {
 	fill: var( --surface );

@@ -271,6 +271,44 @@ export function standing( m, how ) {
 	return show ? 2 : ( m.tier === FULL ? 3 : 1 );
 }
 
+/**
+ * What colour a connection is drawn in (Justin, #connectome, 27 Nov 2026, 23:20Z: "let's add more colors to
+ * differentiate the various types of connection. Make sure that the prominence still holds according to priority").
+ * One for each of the four kinds he ranked, in his order, each drawn a little lighter than the one before:
+ *
+ *   'pt'  a Permanent studio track    gold
+ *   'ps'  a Permanent show            ember
+ *   'ft'  a Full studio track         blue
+ *   'fs'  a Full show                 ink
+ *   't0'  the rest: a track or a show not known to be free, or a record two are only both on: dotted, as before
+ *
+ * Gold still means Permanent and nothing else; ember is the Permanent Release that is a night and not a cut.
+ */
+export function shade( m, how ) {
+	if ( how < STAGE || m.tier < FULL ) {
+		return 't0';
+	}
+	const show = m.kind === 'show';
+	return m.tier === PERMANENT ? ( show ? 'ps' : 'pt' ) : ( show ? 'fs' : 'ft' );
+}
+
+/**
+ * A whole tie's colour: that of whatever the two share that comes first (a Permanent track, a Permanent show, a Full
+ * track, a Full show). A line made for a view with
+ * nothing behind it but a tier (a spoke of a show, of a song) says with `show` which it is; one that says nothing is
+ * drawn as a track was.
+ */
+export function tieShade( tie, music ) {
+	if ( !tie || !tie.played ) {
+		return 't0';
+	}
+	const of = ( tie.ev || [] ).filter( ( e ) => e.how >= STAGE ).map( ( e ) => shade( music[ e.m ], e.how ) );
+	if ( of.length ) {
+		return [ 'pt', 'ps', 'ft', 'fs', 't0' ].find( ( x ) => of.includes( x ) );        // the order they come first in
+	}
+	return tie.tier === PERMANENT ? ( tie.show ? 'ps' : 'pt' ) : tie.tier === FULL ? ( tie.show ? 'fs' : 'ft' ) : 't0';
+}
+
 /** A piece's standing: a track's or a show's own; a record whole, where no source says who is on which track, after them all. */
 export function pieceStanding( G, piece ) {
 	const m = G.music[ piece.m ];
