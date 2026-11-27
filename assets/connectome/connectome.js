@@ -2436,7 +2436,14 @@ function showScene( v ) {
 	const narrowFrame = W < 520;
 	const dx = narrowFrame ? Math.max( 78, Math.min( 105, W * 0.24 ) ) : Math.max( 110, Math.min( 150, W * 0.12 ) );
 	const dy = narrowFrame ? 92 : Math.max( 96, Math.min( 120, H * 0.15 ) );
-	const rxMin = dx + ( narrowFrame ? 64 : 120 ), ryMin = dy + ( narrowFrame ? 70 : 64 );
+	// One act: it stands right under the show, the show's poster bigger over it, the venue under the act (Justin,
+	// #connectome, 27 Nov 2026, 05:59Z: "if there's only one main act, it looks weird to have it off to the left. It
+	// seems like it needs to be stacked right under the show, maybe with the show poster")
+	const stack = acts.length === 1;
+	const S = stack ? { x: C.x, y: Math.round( C.y - dy * 0.62 ) } : C;              // the show's own place
+	const venueClip = narrowFrame ? 16 : 30, venueHalf = m.venue ? Math.min( venueClip, String( m.venue ).length ) * 4.3 + 8 : 0;
+	const rxMin = stack ? Math.max( narrowFrame ? 110 : 150, venueHalf + ( narrowFrame ? 34 : 80 ) ) : dx + ( narrowFrame ? 64 : 120 );
+	const ryMin = stack ? Math.round( dy * 1.5 ) + ( narrowFrame ? 62 : 70 ) : dy + ( narrowFrame ? 70 : 64 );
 	for ( const p of lay.named.concat( lay.dots ) ) {
 		const vx = p.x - C.x, vy = p.y - C.y, e = Math.hypot( vx / rxMin, vy / ryMin );
 		if ( e > 0 && e < 1 ) {
@@ -2446,12 +2453,13 @@ function showScene( v ) {
 	}
 	const rx = Math.max( rxMin, ...lay.named.map( ( p ) => Math.abs( p.x - C.x ) ) );
 	const ry = Math.max( ryMin, ...lay.named.map( ( p ) => Math.abs( p.y - C.y ) ) );
-	const actAt = [ { x: C.x - dx, y: C.y - dy * 0.12 }, { x: C.x + dx, y: C.y - dy * 0.12 }, { x: C.x - dx * 0.62, y: C.y - dy * 0.95 },
-		{ x: C.x + dx * 0.62, y: C.y - dy * 0.95 } ];
-	const venueAt = { x: C.x, y: C.y + dy };
+	const actAt = stack ? [ { x: C.x, y: Math.round( C.y + dy * 0.5 ) } ] : [ { x: C.x - dx, y: C.y - dy * 0.12 }, { x: C.x + dx, y: C.y - dy * 0.12 },
+		{ x: C.x - dx * 0.62, y: C.y - dy * 0.95 }, { x: C.x + dx * 0.62, y: C.y - dy * 0.95 } ];
+	const venueAt = stack ? { x: C.x, y: Math.round( C.y + dy * 1.5 ) } : { x: C.x, y: C.y + dy };
+	const posterR = stack && m.art ? ( narrowFrame ? 36 : 42 ) : 30;
 	// The show
 	const named = K.naming( G, { m: me.m, how: K.STAGE, songs: [] } ), night = K.night( m.date );
-	addPiece( sc, v.m, C, 'subject', { below: true, big: true, label: K.clip( named.named ? named.who : ( night || 'a show' ), 28 ),
+	addPiece( sc, v.m, S, 'subject', { below: true, big: posterR, label: K.clip( named.named ? named.who : ( night || 'a show' ), 28 ),
 		sub: K.clip( named.named ? night : '', 28 ), dx: 0, sdx: 0, delay: 0 } );
 	// The acts: a leader's own mark, or the act's
 	const actKey = [];
@@ -2462,12 +2470,12 @@ function showScene( v ) {
 			const rest = K.actRest( a.title, first( a.lead ) );
 			// under their name, the rest of the act's name ("and the Immutable String Band"), else what they played
 			const plays = String( roles.get( a.lead ) || '' ).split( ';' ).map( ( r ) => r.trim() ).filter( Boolean ).join( ', ' );
-			// named over the mark: under it is the show's own name's row
-			addNode( sc, a.lead, at, a.main ? 'subject' : 'named', { below: false, act: a.title, lead: true,
+			// named over the mark, where under it is the show's own name's row; under it, where it stands under the show
+			addNode( sc, a.lead, at, a.main ? 'subject' : 'named', { below: stack, act: a.title, lead: true,
 				inst: K.clip( rest || plays, 34 ), label: K.clip( first( a.lead ), 26 ), delay: 60 } );
 		} else {
 			actKey[ i ] = 'act' + i;
-			sc.nodes.set( 'act' + i, { stands: 'act', is: 'act' + i, x: at.x, y: at.y, kind: a.main ? 'subject' : 'named', o: 1, delay: 60, above: true,
+			sc.nodes.set( 'act' + i, { stands: 'act', is: 'act' + i, x: at.x, y: at.y, kind: a.main ? 'subject' : 'named', o: 1, delay: 60, above: !stack,
 				title: a.title || 'the band', members: a.members, main: a.main, page: G.wikipages[ a.title ] || '' } );
 		}
 		sc.lines.set( 'sa' + i, { a: 'q' + v.m, b: actKey[ i ], u: -1, v: -1, tie: { played: true, tier: m.tier, w: 1 }, stands: 'tie',
@@ -2476,16 +2484,16 @@ function showScene( v ) {
 	// The venue, where the source says one
 	if ( m.venue ) {
 		sc.nodes.set( 'venue', { stands: 'venue', is: 'venue', x: venueAt.x, y: venueAt.y, kind: 'named', o: 1, delay: 90,
-			title: m.venue, city: m.city || '', page: G.wikipages[ m.venue ] || '' } );
-		sc.lines.set( 'sv', { a: 'q' + v.m, b: 'venue', u: -1, v: -1, tie: { played: true, tier: m.tier, w: 0.5 }, stands: 'tie',
+			title: m.venue, city: m.city || '', page: G.wikipages[ m.venue ] || '', clip: venueClip } );
+		sc.lines.set( 'sv', { a: stack ? actKey[ 0 ] : 'q' + v.m, b: 'venue', u: -1, v: -1, tie: { played: true, tier: m.tier, w: 0.5 }, stands: 'tie',
 			w: 1.4, o: 0.8, role: 'spoke', quiet: true, delay: 90 } );
 	}
 	// Who else was on stage, round them, each as near their act's side as the ring allows
-	const pan = slide( 'm' + v.m, C );
+	const pan = slide( 'm' + v.m, S );
 	const toward = ( id ) => {
 		const i = actOf.get( id ), at = i !== undefined && i < actAt.length ? actAt[ i ] : C;
 		const ax = at.x - C.x, ay = at.y - C.y, len = Math.hypot( ax, ay ) || 1;
-		return i === undefined ? wanted( 'm' + v.m + '·' + id, pan ) : { x: C.x + ( ax / len ) * rx, y: C.y + ( ay / len ) * ry };
+		return i === undefined || stack ? wanted( 'm' + v.m + '·' + id, pan ) : { x: C.x + ( ax / len ) * rx, y: C.y + ( ay / len ) * ry };
 	};
 	const mine = ring.slice( 0, lay.named.length );
 	const seats = K.seat( lay.named, mine.map( toward ) );
@@ -2514,15 +2522,16 @@ function showScene( v ) {
 	// end at (K.clearSteps); a strand with no clear way is left out
 	const wide = ( text, px ) => Math.max( 34, String( text || '' ).length * px / 2 + 6 );
 	const own = sc.nodes.get( 'q' + v.m ), ownW = wide( own.label, 10 );       // each mark's circle, and its name under it, a box each
-	const marks = [ { k: 'q' + v.m, x1: C.x - 34, x2: C.x + 34, y1: C.y - 34, y2: C.y + 34 },
-		{ k: 'q' + v.m, x1: C.x - ownW, x2: C.x + ownW, y1: C.y + 28, y2: C.y + ( own.sub ? 72 : 54 ) } ];
+	const ownR = posterR + 4;
+	const marks = [ { k: 'q' + v.m, x1: S.x - ownR, x2: S.x + ownR, y1: S.y - ownR, y2: S.y + ownR },
+		{ k: 'q' + v.m, x1: S.x - ownW, x2: S.x + ownW, y1: S.y + ownR - 6, y2: S.y + ownR + ( own.sub ? 38 : 20 ) } ];
 	if ( sc.nodes.has( 'venue' ) ) {
 		marks.push( { k: 'venue', x1: venueAt.x - 20, x2: venueAt.x + 20, y1: venueAt.y - 20, y2: venueAt.y + 20 },
-			{ k: 'venue', x1: venueAt.x - wide( m.venue, 8.4 ), x2: venueAt.x + wide( m.venue, 8.4 ), y1: venueAt.y + 18, y2: venueAt.y + 42 } );
+			{ k: 'venue', x1: venueAt.x - wide( K.clip( m.venue, venueClip ), 8.4 ), x2: venueAt.x + wide( K.clip( m.venue, venueClip ), 8.4 ), y1: venueAt.y + 18, y2: venueAt.y + 42 } );
 	}
 	actKey.forEach( ( key, i ) => {
 		const at = actAt[ i ], nd = sc.nodes.get( key ), name = nd.label || nd.title || '';
-		marks.push( { k: key, x1: at.x - Math.max( 30, wide( name, 10 ) ), x2: at.x + Math.max( 30, wide( name, 10 ) ), y1: at.y - 52, y2: at.y + 30 } );
+		marks.push( { k: key, x1: at.x - Math.max( 30, wide( name, 10 ) ), x2: at.x + Math.max( 30, wide( name, 10 ) ), y1: at.y - ( stack ? 30 : 52 ), y2: at.y + ( stack ? 52 : 30 ) } );
 	} );
 	for ( const [ id, p ] of seatOf ) {
 		marks.push( { k: 'p' + id, x1: p.x - 13, x2: p.x + 13, y1: p.y - 13, y2: p.y + 13 } );
@@ -2578,12 +2587,15 @@ function showScene( v ) {
 		const many = new Map(), nth = new Map();
 		fill.forEach( ( f ) => many.set( f.id, ( many.get( f.id ) || 0 ) + 1 ) );
 		fill.forEach( ( f, i ) => {
-			const p = posOf( f.id ), j = nth.get( f.id ) || 0, n = many.get( f.id ), out = Math.atan2( p.y - C.y, p.x - C.x );
+			const p = posOf( f.id ), j = nth.get( f.id ) || 0, n = many.get( f.id );
+			// out from the middle, past its picker; the act under the show has its own to either side, not down the column
+			const column = stack && actKey[ 0 ] === 'p' + f.id, side = column ? Math.ceil( ( j % 2 ? n - 1 : n ) / 2 ) : n;
+			const out = column ? ( j % 2 ? 0 : Math.PI ) : Math.atan2( p.y - C.y, p.x - C.x ), k = column ? Math.floor( j / 2 ) : j;
 			nth.set( f.id, j + 1 );
 			const R = narrowFrame ? 52 : 70;
 			for ( const r of [ R, R + 34, R - 18 ] ) {
 				for ( const s of [ 0, 1, -1, 2, -2, 3, -3 ] ) {
-					const a = out + ( j - ( n - 1 ) / 2 ) * 0.42 + s * 0.26;
+					const a = out + ( k - ( side - 1 ) / 2 ) * 0.42 + s * 0.26;
 					const at = { x: Math.round( p.x + Math.cos( a ) * r ), y: Math.round( p.y + Math.sin( a ) * r ), below: true };
 					const box = { x1: at.x - 10, x2: at.x + 10, y1: at.y - 10, y2: at.y + 10 };   // a bead: its tip says what and when
 					if ( box.x1 < 4 || box.x2 > W - 4 || box.y1 < 4 || box.y2 > H - 4 || room.some( ( b ) => over( box, b ) ) ) {
@@ -2988,9 +3000,9 @@ function drawShowMark( g, d ) {
 			s( 'path', { d: 'M-12 8c0-5 3-7 5.5-7s5.5 2 5.5 7M1 8c0-5 3-7 5.5-7s5.5 2 5.5 7M-6 8c0-6 3-8.5 6-8.5s6 2.5 6 8.5z' } ) ) :
 		s( 'path', { class: 'roof', transform: `scale(${ k.toFixed( 2 ) })`, d: 'M-9 1L0-8l9 9M-6.5-1.5V8h13v-9.5M-2 8V3h4v5' } ) );
 	const y = d.above ? -R - 9 : R + 17 + down( band && d.main ? 17 : 13 );
-	const words = s( 'text', { x: 0, y, 'text-anchor': 'middle' }, K.clip( d.title, 30 ) );
+	const words = s( 'text', { x: 0, y, 'text-anchor': 'middle' }, K.clip( d.title, d.clip || 30 ) );    // clip: shorter on a phone (showScene)
 	if ( !band && d.city ) {
-		words.appendChild( s( 'tspan', { class: 'inst', x: 0, dy: tx( 15 ) }, K.clip( d.city, 30 ) ) );
+		words.appendChild( s( 'tspan', { class: 'inst', x: 0, dy: tx( 15 ) }, K.clip( d.city, d.clip || 30 ) ) );
 	}
 	g.appendChild( d.page ? s( 'a', { href: wikiUrl( d.page ), target: '_top', 'aria-label': d.title + ': its page on PickiPedia' }, words ) : words );
 }
@@ -3088,7 +3100,7 @@ function drawPiece( g, d ) {
 		}
 		return;
 	}
-	const R = d.big ? 30 : ( d.kind === 'subject' ? 24 : 15 );
+	const R = d.big ? ( d.big > 1 ? d.big : 30 ) : ( d.kind === 'subject' ? 24 : 15 );     // big: a number is the radius (a show's poster)
 	const gl = glyph( c.glyph );
 	gl.setAttribute( 'transform', `scale(${ d.kind === 'subject' ? 1.9 : 1.25 })` );
 	g.appendChild( s( 'circle', { class: 'halo', r: R + 8 } ) );
@@ -3454,7 +3466,7 @@ function playButton( m, song ) {
 
 const sig = {
 	node: ( d ) => [ d.stands, d.kind, d.lit, d.below, d.rabbit, d.side, d.anchor, d.up, d.bare, d.kind === 'dot' ? d.r.toFixed( 1 ) + ( d.tight ? 't' : '' ) : '', d.label, d.dx, d.sub, d.sdx, d.play, d.note,
-		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '', d.title, d.cut, d.above ].join( '|' ),   // a song's: which, and its name over or under it
+		d.at ? d.at.x + ' ' + d.at.y + d.at.anchor : '', d.title, d.cut, d.above, d.clip ].join( '|' ),   // a song's: which, and its name over or under it
 	line: ( d ) => ( d.stands === 'thread' ? [ 'th', d.w.toFixed( 1 ), d.quiet, d.emph, d.role ] :
 		[ d.strand ? 's' + d.e.m : d.tie.played, d.tie.tier, d.w.toFixed( 1 ), d.quiet, d.emph, d.role, !!d.fine ] ).join( '|' ),
 	pill: ( d ) => [ d.stands, d.tag, d.label, d.extra, d.tier, d.glyph, d.w.toFixed( 0 ), d.play, !!d.shy, d.anchor, !!d.lit ].join( '|' )
