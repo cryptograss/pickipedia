@@ -209,3 +209,22 @@ def test_a_shows_acts_are_its_bands_the_main_one_first():
     assert acts['3'] == [['BKH & JC', [1, 2], -1], ['Light the Wire', [0], -1]]
     assert acts['1'] == [['Kyle Tuttle', [3, 4], 3]]                  # a taper's tape: its artist, everyone on it
     assert '2' not in acts and '0' not in acts                         # a video is billed to nobody; a record isn't a show
+
+
+def test_a_band_is_its_stints_and_where_a_source_names_it_and_makes_no_tie():
+    pairs = [pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:tape1')]
+    bands = [{'band': 'The Band', 'kind': 'regular', 'leader': 'Kyle Tuttle', 'offshoot_of': 'An Older Band', 'billed_as': ['Band, The'],
+              'stints': [{'name': 'Kyle Tuttle', 'plays': 'banjo', 'from': '', 'until': ''},
+                         {'name': 'Never Taped', 'plays': 'fiddle', 'from': '2015-11-10', 'until': '2025'}],
+              'on': ['lma:tape1', 'discogs:nowhere']},
+             {'band': 'A Band With A Page Only', 'stints': []}]
+    g = cg.export(pairs, TARGETS, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-27', bands=bands)
+    names = [p[0] for p in g['people']]
+    assert names == ['Kyle Tuttle', 'Molly Tuttle', 'Never Taped']             # a member is a picker, tied to anyone or not
+    assert g['bands'] == [['A Band With A Page Only', '', -1, '', [], [], []],
+                          ['The Band', 'regular', 0, 'An Older Band', ['Band, The'],
+                           [[0, 'banjo', '', ''], [2, 'fiddle', '2015-11-10', '2025']],
+                           [[m[0] for m in g['music']].index('lma:tape1')]]]    # only music the graph holds
+    assert len(g['ties']) == 1                                                  # a stint ties nobody to anybody
+    assert 'bands' not in _export(pairs)                                        # and with no band, nothing is added
+

@@ -289,3 +289,13 @@ def test_between_says_who_is_unresolved_and_when_candidates_are_capped():
     kw, reads = between_world(recs, {"A": titles, "B": titles}, {})
     result = rambler.between("A", "B", max_candidates=2, **kw)
     assert len(reads) == 2 and result["unread"] == 1
+
+
+def test_a_name_is_the_same_whichever_apostrophe_it_is_typed_with(monkeypatch):
+    assert rambler.same_name("The Travelin\u2019 McCourys", "the travelin' mccourys")
+    assert not rambler.same_name("The Travelin McCourys", "The Travelin' McCourys")
+    monkeypatch.setattr(rambler.sideman, "mb_get", lambda *a, **k: {"artists": [
+        {"id": "e72e", "name": "The Travelin\u2019 McCourys"}, {"id": "0000", "name": "The Travelin\u2019 McCourys Band"}]})
+    assert rambler.mb_artists_named("The Travelin' McCourys") == [("e72e", "The Travelin\u2019 McCourys")]
+    monkeypatch.setattr(rambler.sideman, "discogs_get", lambda path: {"results": [{"id": 7, "title": "O\u2019Connor Band (2)"}]})
+    assert rambler.discogs_artists_named("O'Connor Band") == [("7", "O\u2019Connor Band")]

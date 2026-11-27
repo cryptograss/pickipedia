@@ -1163,8 +1163,25 @@ def load_whole(db_path):
     return whole, credits
 
 
-def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()):
+def load_bands(db_path):
+    """The bands the store holds, each with its stints in its page's order (connectome_store.py, band_page); [] from a
+    store made before it kept them."""
+    db = sqlite3.connect(db_path)
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'bands'").fetchone():
+        return []
+    bands = {r[0]: {'band': r[0], 'kind': r[1] or '', 'leader': r[2] or '', 'offshoot_of': r[3] or '',
+                    'billed_as': [b for b in (r[4] or '').split('; ') if b], 'stints': []}
+             for r in db.execute('SELECT name, kind, leader, offshoot_of, billed_as FROM bands ORDER BY name')}
+    for band, member, plays, start, until in db.execute('SELECT band, member, plays, start, until FROM stints ORDER BY n'):
+        if band in bands:
+            bands[band]['stints'].append({'name': member, 'plays': plays or '', 'from': start or '', 'until': until or ''})
+    return list(bands.values())
+
+
+def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=(), bands=()):
     names = {p['a'] for p in pairs} | {p['b'] for p in pairs} | {c[0] for c in credits}   # a credit's spelling joins too
+    # and each band's members and leader, who are pickers whether or not a source has put them on a stage yet
+    names |= {n for b in bands for n in [b.get('leader')] + [s['name'] for s in b.get('stints', [])] if n}
     # and each name a record's artist credit gives, so who made it is known by the wiki's own name
     names |= {n for d in (whole or {}).values() if d.get('kind') == 'record' for n in connectome_graph.credited(d.get('artist', ''))}
     resolved = wiki.resolve(names)
@@ -1172,6 +1189,25 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
     exists = {t for t, ok in resolved.values() if ok}
     tiers = {t: connectome_graph.tier(t, d.get('formats')) for t, d in (whole or {}).items()}
     shows = {t for t, d in (whole or {}).items() if d.get('kind') == 'show'} if whole else None
+    # A band is never a picker (Cryptograss:Bacon graphs/Bands; decided 27 Nov 2026): a name a source wrote down
+    # that is a band's page, or one of the names that page says it is billed as, comes out of the pickers, and
+    # where the source named it is kept with the band. The wiki says what is a band; nothing here guesses one.
+    # A band billed under its leader's name ("Billy Strings" is Billy Strings (band)) leaves the leader a picker:
+    # a name that is anybody's leader or member is a person's.
+    persons = {x.lower() for b in bands for n in [b.get('leader')] + [s['name'] for s in b.get('stints', [])] if n
+               for x in (n, alias.get(n, n))}
+    called = {}
+    for b in bands:
+        for n in [b['band']] + list(b.get('billed_as') or []):
+            if n.lower() not in persons and alias.get(n, n).lower() not in persons:
+                called.setdefault(n.lower(), b['band'])
+    banded = {n: called[k] for n in names for k in (alias.get(n, n).lower(), n.lower()) if k in called}
+    named_on = defaultdict(set)                             # band -> the records and shows a source names it on
+    for c in credits:
+        if c[0] in banded and c[3] != 'none':
+            named_on[banded[c[0]]].add(c[2])
+    pairs = [p for p in pairs if p['a'] not in banded and p['b'] not in banded]
+    credits = [c for c in credits if c[0] not in banded]
     store = Store(pairs, targets, groups, alias, tiers, shows)
 
     # The featured pickers are set aside for now (Justin, #connectome, 15 Nov 2026): the page isn't read.
@@ -1258,7 +1294,10 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
             has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons,
-            pics=pics)
+            pics=pics,
+            bands=[dict(b, leader=alias.get(b.get('leader'), b.get('leader') or ''),
+                        stints=[dict(s, name=alias.get(s['name'], s['name'])) for s in b.get('stints', [])],
+                        on=sorted(named_on.get(b['band'], ()))) for b in bands])
         # Who wrote each song, where its page says (Justin, #connectome, 23 Nov 2026, 18:30Z: a song's card says
         # "by <author(s)>" or "traditional", and its pills the authors "in most situations"): song -> [names], or
         # 'traditional'. Only songs the graph names: a track's songs, and the cuts'.
@@ -1382,7 +1421,7 @@ def main(argv):
     today = date.fromisoformat(a.today) if a.today else date.today()
     pairs, targets, groups = load_store(a.db, a.pairs)
     whole, credits = load_whole(a.db)
-    result = build(pairs, targets, groups, Wiki(a.wiki), today, a.only, whole, credits)
+    result = build(pairs, targets, groups, Wiki(a.wiki), today, a.only, whole, credits, load_bands(a.db))
     if a.arthel and result.get('graph') is not None:
         set_stones.into(result['graph'], a.arthel)
     write(result, a.out, {'db': os.path.basename(a.db), 'wiki': a.wiki, 'today': today.isoformat()})
