@@ -2501,25 +2501,61 @@ function showScene( v ) {
 			addNode( sc, id, lay.dots[ k ], 'dot', { r: 4, delay: 300 } );
 		}
 	} );
-	// Lines between those of the show who have played together anywhere else: never anyone who wasn't on its stage
+	// Lines between those of the show who have played together anywhere else: never anyone who wasn't on its stage.
+	// Each thing two of them share besides this night is a strand of its own, a rainbow between them (Justin,
+	// #connectome, 27 Nov 2026, 02:13Z: "still looks very bare ... Rainbow graphs between the existing pickers might
+	// help?"): the freest where one line alone would lie, the rest beside it by turns (K.elsewhere, K.besides). A
+	// spoke from a leader is the first already: what else they share lies beside it.
 	const drawn = new Set( [ ...mine, ...leaders ] );
 	const posOf = ( id ) => seatOf.get( id ) || ( sc.nodes.get( 'p' + id ) ) || C;
+	const most = narrowFrame ? 5 : 9, gap = narrowFrame ? 4.5 : 6;
+	// what a strand keeps off: the show and its name, the venue and its, the acts, and those of the stage it doesn't
+	// end at (K.clearSteps); a strand with no clear way is left out
+	const wide = ( text, px ) => Math.max( 34, String( text || '' ).length * px / 2 + 6 );
+	const own = sc.nodes.get( 'q' + v.m ), ownW = wide( own.label, 10 );       // each mark's circle, and its name under it, a box each
+	const marks = [ { k: 'q' + v.m, x1: C.x - 34, x2: C.x + 34, y1: C.y - 34, y2: C.y + 34 },
+		{ k: 'q' + v.m, x1: C.x - ownW, x2: C.x + ownW, y1: C.y + 28, y2: C.y + ( own.sub ? 72 : 54 ) } ];
+	if ( sc.nodes.has( 'venue' ) ) {
+		marks.push( { k: 'venue', x1: venueAt.x - 20, x2: venueAt.x + 20, y1: venueAt.y - 20, y2: venueAt.y + 20 },
+			{ k: 'venue', x1: venueAt.x - wide( m.venue, 8.4 ), x2: venueAt.x + wide( m.venue, 8.4 ), y1: venueAt.y + 18, y2: venueAt.y + 42 } );
+	}
+	actKey.forEach( ( key, i ) => {
+		const at = actAt[ i ], nd = sc.nodes.get( key ), name = nd.label || nd.title || '';
+		marks.push( { k: key, x1: at.x - Math.max( 30, wide( name, 10 ) ), x2: at.x + Math.max( 30, wide( name, 10 ) ), y1: at.y - 52, y2: at.y + 30 } );
+	} );
+	for ( const [ id, p ] of seatOf ) {
+		marks.push( { k: 'p' + id, x1: p.x - 13, x2: p.x + 13, y1: p.y - 13, y2: p.y + 13 } );
+	}
+	const keepOff = ( ...ends ) => marks.filter( ( b ) => !ends.includes( b.k ) );
 	for ( const t of K.among( G, [ ...drawn ], false ) ) {
-		if ( !t.tie.ev.some( ( e ) => e.m !== me.m && !( G.music[ e.m ].kind === 'show' && K.pieceFor( G, e ) === v.m ) ) ) {
+		const also = K.elsewhere( G, t.tie, v.m, most );
+		if ( !also.length ) {
 			continue;                                                 // this show is all they share
 		}
-		const pa = posOf( t.u ), pb = posOf( t.v );
+		const pa = posOf( t.u ), pb = posOf( t.v ), boxes = keepOff( 'p' + t.u, 'p' + t.v );
 		const spoke = ( x, y ) => leaders.has( x ) && actKey[ actOf.get( y ) ] === 'p' + x;
+		let base = STRAIGHT, taken = false;
 		if ( spoke( t.u, t.v ) || spoke( t.v, t.u ) ) {
 			const who = leaders.has( t.u ) ? t.v : t.u, sp = sc.lines.get( 'sp' + who );
 			if ( sp ) {                                               // the spoke from their leader says it: what else they share
-				Object.assign( sp, { tie: t.tie, quiet: false, u: t.u, v: t.v, role: 'shared', w: Math.max( sp.w, lineWidth( t.tie ) * 0.7 ), o: 1 } );
+				// and bends round the show's name where the straight way runs through it
+				const k = K.clearSteps( pa, pb, STRAIGHT, 1, 2 * gap, boxes, { W, H } )[ 0 ];
+				base = k ? K.strandBow( pa, pb, STRAIGHT, k, 2 * gap ) : STRAIGHT;
+				Object.assign( sp, { tie: t.tie, quiet: false, u: t.u, v: t.v, role: 'shared', w: Math.max( sp.w, lineWidth( t.tie ) * 0.7 ), o: 1, bow: base } );
+				taken = true;
 			}
-			continue;
+		} else if ( seatOf.has( t.u ) && seatOf.has( t.v ) ) {
+			base = K.arc( lay, pa, pb );
 		}
-		const bow = seatOf.has( t.u ) && seatOf.has( t.v ) ? K.arc( lay, pa, pb ) : 0;
-		sc.lines.set( lineKey( t.u, t.v ), { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, stands: 'tie', role: 'shared', fine: true,
-			w: Math.max( 1, lineWidth( t.tie ) * 0.6 ), o: 0.75, bow, delay: 300 } );
+		K.clearSteps( pa, pb, base, also.length, gap, boxes, { taken, W, H } ).forEach( ( k, i ) => {
+			if ( k === null ) {
+				return;
+			}
+			const x = also[ i ];
+			sc.lines.set( 'ss' + lineKey( t.u, t.v ) + '.' + x.piece, { a: 'p' + t.u, b: 'p' + t.v, u: t.u, v: t.v, tie: t.tie, e: x.e, piece: x.piece,
+				stands: 'piece', strand: true, role: 'shared', fine: true, w: strandWidth( x.e ), o: 0.85, bow: K.strandBow( pa, pb, base, k, gap ),
+				delay: 300 + i * 18 } );
+		} );
 	}
 	sc.web = false;
 	sc.head = [ h( 'span', { class: 'kind' }, glyphBox( nm.glyph ) ), nm.name + ( nm.sub ? ' · ' + nm.sub : '' ) ];
@@ -5300,7 +5336,7 @@ function aPicker( d ) {
 /** One who was on the stage of the show in the middle: whose act they were in, what they played, who else here they've played with. */
 function aShowPicker( d ) {
 	const id = d.id, name = first( id ), plays = d.inst && !d.lead ? ' · ' + d.inst : instOf( id );
-	const also = [ ...scene.lines.values() ].filter( ( l ) => l.role === 'shared' && ( l.u === id || l.v === id ) ).map( ( l ) => ( l.u === id ? l.v : l.u ) );
+	const also = [ ...new Set( [ ...scene.lines.values() ].filter( ( l ) => l.role === 'shared' && ( l.u === id || l.v === id ) ).map( ( l ) => ( l.u === id ? l.v : l.u ) ) ) ];
 	const w = { kind: ( d.lead ? 'whose show it was · ' : 'on its stage · ' ) + 'a picker' + plays, title: name, tipTitle: name + plays,
 		lines: [ d.act ? ( d.lead ? d.act : 'with ' + d.act ) : '', also.length ? 'has played elsewhere with ' + listNames( also ) + ', here too' : '' ],
 		hint: 'click: go to ' + name, acts: [ act( 'Go to ' + name, () => go( { a: id } ) ) ] };
@@ -5314,6 +5350,14 @@ function aShowTie( d ) {
 	return { kind: 'two pickers of this show', title: `${ first( d.u ) } & ${ first( d.v ) }`,
 		lines: [ K.together( t ), K.clip( top.short, 44 ) + ( t.ev.length > 1 ? `, and ${ t.ev.length - 1 } more` : '' ) ], hint: 'click: open these two',
 		acts: [ act( 'Open these two', () => go( { a: d.u, b: d.v } ) ) ] };
+}
+
+/** A strand between two of a show's stage: one thing they share besides it. It goes there; the two of them are the next way on. */
+function aShowStrand( d ) {
+	const w = aPiece( d );
+	w.kind += ` · ${ first( d.u ) } & ${ first( d.v ) } both on it`;
+	w.acts.splice( 1, 0, act( 'Open these two', () => go( { a: d.u, b: d.v } ) ) );
+	return w;
 }
 
 /** A show's band with no one leader, or where it was: its name, and its page where the wiki has one. */
@@ -5467,6 +5511,9 @@ function what( g ) {
 		}
 		if ( d.stands === 'tie' ) {
 			return d.quiet ? null : aShowTie( d );
+		}
+		if ( d.stands === 'piece' && d.strand ) {
+			return aShowStrand( d );
 		}
 	}
 	switch ( d.stands ) {

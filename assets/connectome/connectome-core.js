@@ -587,6 +587,72 @@ export function among( G, ids, loose = false ) {
 }
 
 /**
+ * The rainbow between two of a show's stage (Justin, #connectome, 27 Nov 2026, 02:13Z: the show "still looks very
+ * bare ... some kind of minimum number of shown connections. Rainbow graphs between the existing pickers might
+ * help?"): each thing the two share besides that show, a strand each. A record is one thing however many of its
+ * tracks they share, and two tapes of one night are one; of its evidence, the freest. Freest first (standing),
+ * then newest, then as the store has them; `most` at most. [{ piece, e, at (its standing) }]
+ */
+export function elsewhere( G, tie, show, most = Infinity ) {
+	const own = G.pieces[ show ].m, best = new Map();
+	for ( const e of tie.ev ) {
+		const piece = G.whole[ e.m ] !== undefined ? G.whole[ e.m ] : pieceFor( G, e );
+		if ( e.m === own || piece === show ) {
+			continue;
+		}
+		const was = best.get( piece );
+		if ( !was || standing( G.music[ e.m ], e.how ) > standing( G.music[ was.m ], was.how ) ) {
+			best.set( piece, e );
+		}
+	}
+	return [ ...best ].map( ( [ piece, e ] ) => ( { piece, e, at: standing( G.music[ e.m ], e.how ), year: +yearOf( G.music[ e.m ].date ) || 0 } ) )
+		.sort( ( x, y ) => ( y.at - x.at ) || ( y.year - x.year ) || ( x.piece - y.piece ) )
+		.slice( 0, most ).map( ( { piece, e, at } ) => ( { piece, e, at } ) );
+}
+
+/** Where each of n strands lies, in steps out from where one line alone would: 0, then 1, -1, 2, -2, ... ; taken: 0 is drawn already. */
+export function besides( n, taken = false ) {
+	const out = [];
+	for ( let i = taken ? 1 : 0; out.length < n; i++ ) {
+		out.push( i === 0 ? 0 : ( i % 2 ? ( i + 1 ) / 2 : -i / 2 ) );
+	}
+	return out;
+}
+
+/**
+ * The bow of a strand k steps of `gap` from a line from A to B that bows `base` (a line's bow: how far its curve
+ * is pulled from the middle of the straight line; its middle stands half that out), square to the straight line;
+ * k > 0 on the side `base` bows to.
+ */
+export function strandBow( A, B, base, k, gap ) {
+	const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot( dx, dy ) || 1;
+	const flip = ( -dy * base.x + dx * base.y ) < 0 ? -1 : 1, nx = flip * -dy / len, ny = flip * dx / len;
+	return { x: base.x + nx * k * 2 * gap, y: base.y + ny * k * 2 * gap };
+}
+
+/** Points along the curve from A to B that bows `bow` (a quadratic: its control point the straight line's middle plus bow), its ends left off. */
+export function curvePoints( A, B, bow, n = 24, end = 0.1 ) {
+	const cx = ( A.x + B.x ) / 2 + bow.x, cy = ( A.y + B.y ) / 2 + bow.y, pts = [];
+	for ( let i = 0; i <= n; i++ ) {
+		const t = end + ( 1 - 2 * end ) * i / n, u = 1 - t;
+		pts.push( { x: u * u * A.x + 2 * u * t * cx + t * t * B.x, y: u * u * A.y + 2 * u * t * cy + t * t * B.y } );
+	}
+	return pts;
+}
+
+/**
+ * Where n strands of a rainbow lie clear of what else is drawn: of the steps out from `base` (besides(), `far` each
+ * way at most), those whose curve crosses none of `boxes` ({ x1, y1, x2, y2 }) and keeps inside a frame W by H, in
+ * turn. A strand with no clear step left is left out (null). taken: step 0 is drawn already.
+ */
+export function clearSteps( A, B, base, n, gap, boxes, { taken = false, far = 6, W = Infinity, H = Infinity } = {} ) {
+	const free = ( k ) => curvePoints( A, B, strandBow( A, B, base, k, gap ) ).every( ( p ) => p.x >= 2 && p.y >= 2 && p.x <= W - 2 && p.y <= H - 2 &&
+		!boxes.some( ( b ) => p.x > b.x1 && p.x < b.x2 && p.y > b.y1 && p.y < b.y2 ) );
+	const steps = besides( taken ? 2 * far : 2 * far + 1, taken ).filter( free );
+	return Array.from( { length: n }, ( _, i ) => ( i < steps.length ? steps[ i ] : null ) );
+}
+
+/**
  * The pickers on both of two pieces: what a line between them stands for, inside out. Those on the most pieces
  * first (they lead the furthest), then by name.
  */
@@ -1043,7 +1109,11 @@ export function when( date ) {
 	const s = String( date || '' ).trim();
 	let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( s );
 	if ( m && +m[ 2 ] >= 1 && +m[ 2 ] <= 12 ) {
-		return `${ +m[ 3 ] } ${ MONTHS[ +m[ 2 ] - 1 ] } ${ m[ 1 ] }`;
+		// Discogs writes a month with no day as day 00 ("2024-05-00"): "May 2024", not "0 May 2024"
+		return ( +m[ 3 ] ? `${ +m[ 3 ] } ` : '' ) + `${ MONTHS[ +m[ 2 ] - 1 ] } ${ m[ 1 ] }`;
+	}
+	if ( m && m[ 2 ] === '00' && m[ 3 ] === '00' ) {
+		return m[ 1 ];                                               // and a year alone as 2024-00-00
 	}
 	m = /^block (\d+)$/.exec( s );
 	if ( m ) {

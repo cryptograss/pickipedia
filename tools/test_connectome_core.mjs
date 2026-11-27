@@ -258,6 +258,8 @@ test( 'a date is read only where its shape is certain', () => {
 	assert.equal( K.when( '3 April, 2024' ), '3 April, 2024' );
 	assert.equal( K.when( '2025' ), '2025' );
 	assert.equal( K.when( '2025-13-40' ), '2025-13-40' );
+	assert.equal( K.when( '2024-05-00' ), 'May 2024' );             // Discogs: a month, no day
+	assert.equal( K.when( '2024-00-00' ), '2024' );                 // and a year alone
 	assert.equal( K.when( '' ), '' );
 } );
 
@@ -507,6 +509,31 @@ test( 'one night is one piece, however many tapers taped it; a show with a name 
 	assert.deepEqual( K.leads( g, 0 ).named.map( ( n ) => n.id ), [ 2 ] );    // the other tape of the night isn't somewhere else
 	const own = K.naming( g, g.adj[ 0 ].get( 2 ).ev[ 0 ] );
 	assert.deepEqual( [ own.short, own.brief, own.long ], [ 'devcon VI night 1 · 2022', 'devcon VI night 1 · 2022', 'block 15,735,471' ] );   // no band said; its year, the block in its line
+} );
+
+test( "a show's stage: each thing two of it share besides that night is a strand, freest first, a record once", () => {
+	// Justin, #connectome, 27 Nov 2026, 02:13Z: Kyle's show "still looks very bare ... Rainbow graphs between the existing pickers might help?"
+	const g = K.build( { people: [ [ 'A', 1, '' ], [ 'B', 1, '' ] ], music: [
+		[ 'lma:a2026-11-23', 'show', 'A', '2026-11-23', 'A Live at Dees on 2026-11-23', 2, 'https://archive.org/details/x', '' ],   // the show in the middle
+		[ 'lma:a2026-11-23.b', 'show', 'A', '2026-11-23', 'A Live at Dees on 2026-11-23', 2, 'https://archive.org/details/y', '' ], // its other tape
+		[ 'discogs:1', 'record', 'A', '2024-05-00', 'Labor', 1, 'https://www.discogs.com/release/1', '' ],                         // two of its tracks
+		[ 'lma:a2021-05-29', 'show', 'A', '2021-05-29', 'A Live at the Farm', 2, 'https://archive.org/details/z', '' ],
+		[ 'lma:a2025-07-05', 'show', 'A', '2025-07-05', 'A Live at Grassfire', 2, 'https://archive.org/details/w', '' ] ],
+	cast: [ [ [ 0, '' ], [ 1, '' ] ], [ [ 0, '' ], [ 1, '' ] ], [], [ [ 0, '' ], [ 1, '' ] ], [ [ 0, '' ], [ 1, '' ] ] ],
+	ties: [ [ 0, 1, [ [ 0, 2, 1, [] ], [ 1, 2, 1, [] ], [ 2, 3, 1, [ 'One', 'Two' ] ], [ 3, 2, 1, [] ], [ 4, 2, 1, [] ] ] ] ] } );
+	const show = K.findPiece( g, 'lma:a2026-11-23' ), tie = g.adj[ 0 ].get( 1 );
+	const keys = ( xs ) => xs.map( ( x ) => g.music[ x.e.m ].key );
+	assert.deepEqual( keys( K.elsewhere( g, tie, show ) ), [ 'lma:a2025-07-05', 'lma:a2021-05-29', 'discogs:1' ] );   // shows (CC) newest first, then the record
+	assert.deepEqual( keys( K.elsewhere( g, tie, show, 2 ) ), [ 'lma:a2025-07-05', 'lma:a2021-05-29' ] );
+	assert.deepEqual( K.elsewhere( g, { ev: tie.ev.slice( 0, 2 ) }, show ), [] );                                      // this night alone, on two tapes: nothing else
+	// where the strands lie: one line's place first, then out from it by turns; a leader's spoke is the first already
+	assert.deepEqual( K.besides( 5 ), [ 0, 1, -1, 2, -2 ] );
+	assert.deepEqual( K.besides( 3, true ), [ 1, -1, 2 ] );
+	assert.deepEqual( K.besides( 0 ), [] );
+	const A = { x: 0, y: 0 }, B = { x: 100, y: 0 };
+	assert.deepEqual( K.strandBow( A, B, { x: 0, y: -20 }, 1, 6 ), { x: 0, y: -32 } );   // out on the side the first bows to: its middle 6 further
+	assert.deepEqual( K.strandBow( A, B, { x: 0, y: -20 }, -1, 6 ), { x: 0, y: -8 } );
+	assert.deepEqual( K.strandBow( A, B, { x: 0, y: 0 }, 2, 6 ), { x: 0, y: 24 } );
 } );
 
 test( 'a show leads with its own name, else its venue, else its band; the rest is the line under it', () => {
