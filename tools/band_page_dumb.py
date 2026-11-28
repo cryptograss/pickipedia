@@ -12,7 +12,8 @@ For each name: the one MusicBrainz artist of that name that is a group (two of o
 its "member of band" relationships, each a {{Band member}} line with the instrument, the years and whether it has
 ended, as MusicBrainz gives them (one who has left with no year given gets no line: a line with no end would say
 they are still in it); its official homepage, where it lists one. Nothing is inferred: no kind, no leader,
-no offshoot. A member MusicBrainz gives two instruments gets two lines (a stint is one picker in one chair). The
+no offshoot. A member MusicBrainz gives two instruments in one relationship gets one line naming both, commas
+between (Justin, #connectome, 28 Nov 2026: doubling is one stint, not two); two relationships stay two lines. The
 source of every line is the band's relationships page at MusicBrainz, and `checked` is the day this ran.
 
 An instrument is written as PickiPedia writes it where INSTRUMENTS says how; any other as MusicBrainz has it.
@@ -60,13 +61,13 @@ def page(name, a, today):
             left.append(r["artist"]["name"])             # gone, and no year: a line with no end would say "still in it"
             continue
         chairs = [INSTRUMENTS.get(x, x) for x in r.get("attributes") or [] if x not in NOT_A_CHAIR]
-        for chair in list(dict.fromkeys(chairs)) or [""]:
-            parts = [r["artist"]["name"]] + ([chair] if chair else [])
-            if r.get("begin"):
-                parts.append("from=" + r["begin"])
-            if r.get("end"):
-                parts.append("until=" + r["end"])
-            stints.append("{{Band member|" + "|".join(parts) + f"|source={src}|checked={today}" + "}}")
+        plays = ", ".join(dict.fromkeys(chairs))
+        parts = [r["artist"]["name"]] + ([plays] if plays else [])
+        if r.get("begin"):
+            parts.append("from=" + r["begin"])
+        if r.get("end"):
+            parts.append("until=" + r["end"])
+        stints.append("{{Band member|" + "|".join(parts) + f"|source={src}|checked={today}" + "}}")
     began = (a.get("life-span") or {}).get("begin")
     if stints:
         lines += ["", "== Members =="] + stints + ["", "The members, what they play and the years are as [" + src

@@ -37,13 +37,12 @@ def test_a_page_says_what_musicbrainz_says_and_where_it_was_read():
     lines = text.split("\n")
     assert lines[:3] == ["{{BandInfo", "|website=https://dellamae.com/", "}}"]            # the homepage still in use
     stints = [l for l in lines if l.startswith("{{Band member|")]
-    assert n == len(stints) == 5
+    assert n == len(stints) == 4
     assert stints == [
         "{{Band member|No Chair Given|source=" + SRC + "|checked=2026-11-27}}",           # no date: first, as nobody says since when
         "{{Band member|Jenni Lyn Gardner|mandolin|from=2009|until=2019|source=" + SRC + "|checked=2026-11-27}}",
         "{{Band member|Kimber Ludiker|fiddle|from=2009|source=" + SRC + "|checked=2026-11-27}}",      # a violin is a fiddle here
-        "{{Band member|Celia Woodsmith|vocals|from=2011|source=" + SRC + "|checked=2026-11-27}}",     # two chairs: two lines
-        "{{Band member|Celia Woodsmith|guitar|from=2011|source=" + SRC + "|checked=2026-11-27}}"]
+        "{{Band member|Celia Woodsmith|vocals, guitar|from=2011|source=" + SRC + "|checked=2026-11-27}}"]   # doubling: one line
     assert "original" not in text                               # a word about the member is no chair
     assert "Another Band" not in text and "A Producer" not in text
     # who left with no year gets no line, and the page says why
@@ -89,7 +88,7 @@ def test_it_writes_files_and_says_what_it_skipped(monkeypatch, tmp_path, capsys)
     out = tmp_path / "pages"
     assert bp.main(["band_page_dumb.py", "--out", str(out), "Della Mae", "Nobody", "AC/DC"], today="2026-11-27") == 0
     said = capsys.readouterr().out
-    assert f"Della Mae: MusicBrainz Della Mae (Group), {ID}; 5 stints -> " in said
+    assert f"Della Mae: MusicBrainz Della Mae (Group), {ID}; 4 stints -> " in said
     assert "Nobody: MusicBrainz has 0 groups of that name (0 artists)" in said
     assert sorted(p.name for p in out.iterdir()) == ["AC_DC.wiki", "Della Mae.wiki"]         # a slash is no path
     text = (out / "Della Mae.wiki").read_text()
