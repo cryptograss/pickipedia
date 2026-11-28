@@ -1,0 +1,21 @@
+{
+ "name": "The Travelin' McCourys",
+ "kind": "regular",
+ "offshoot_of": "Del McCoury Band",
+ "billed_as": ["Travelin' McCourys", "The Traveling McCourys", "Traveling McCourys"],
+ "today": "2026-11-27",
+ "stints": [
+  {"name": "Ronnie McCoury", "plays": "mandolin", "from": "", "until": "",
+   "source": "https://www.thetravelinmccourys.com/about"},
+  {"name": "Rob McCoury", "plays": "banjo", "from": "", "until": "", "also_written": ["Robbie McCoury"],
+   "source": "https://www.thetravelinmccourys.com/about"},
+  {"name": "Alan Bartram", "plays": "bass", "from": "", "until": "", "also_written": ["Allen Bartram"],
+   "source": "https://www.thetravelinmccourys.com/about"},
+  {"name": "Jason Carter", "plays": "fiddle", "from": "", "until": "2025-02-10",
+   "source": "https://bluegrasstoday.com/jason-carter-leaves-del-mccoury-and-travelin-mccourys-to-focus-on-solo-career/"},
+  {"name": "Cody Kilby", "plays": "guitar", "from": "2015-11-10", "until": "",
+   "source": "https://bluegrasstoday.com/cody-kilby-leaves-skaggs-for-the-travelin-mccourys/"},
+  {"name": "Christian Ward", "plays": "fiddle", "from": "2025-02-24", "until": "",
+   "source": "https://bluegrasstoday.com/christian-ward-to-del-mccoury-band-travelin-mccourys/"}
+ ]
+}
