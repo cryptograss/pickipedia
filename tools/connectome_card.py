@@ -71,7 +71,7 @@ LISTEN = re.compile(r'\{\{\s*Listen[ _]in[ _]Rabbithole\s*\|\s*([A-Za-z0-9]{20,}
 STUDIO_CUT_CID = re.compile(r'\{\{\s*Studio[ _]cut\b[^}]*?\bcid\s*=\s*([A-Za-z0-9]{20,})', re.S)
 
 GOLD = '#eda100'                        # a Permanent Release, and nothing else: a studio track
-EMBER = '#d9480f'                       # a Permanent Release that is a night: a show
+GREEN = '#2a9441'                       # a Permanent Release that is a night: a show
 BLUE = '#2f6fb3'                        # a Full Release: a studio track
 INK2 = '#52514e'                        # a Full Release that is a show
 SHUT = '#898781'                        # the rest: counted, not vouched for
@@ -541,7 +541,7 @@ def tip_box(lines, x, y, box):
 # ext.pickipediaContent.connectome.css). Each card ends it with a line of its own.
 KEY_LINES = ('<div class="cc-legend">'
              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent</a> track '
-             '<span class="cc-key cc-ember"></span> Permanent show: an etree tape, or Creative Commons<br>'
+             '<span class="cc-key cc-green"></span> Permanent show: an etree tape, or Creative Commons<br>'
              '<span class="cc-key cc-blue"></span> Full track '
              '<span class="cc-key cc-ink"></span> Full show: no DRM '
              '<span class="cc-key cc-rest"></span> the rest<br>')
@@ -550,8 +550,8 @@ KEY_LINES = ('<div class="cc-legend">'
 def hue(tier, show):
     """The colour of a kind of connection, as the big graph draws it (connectome-core.js, shade; Justin, #connectome,
     27 Nov 2026, 23:20Z: "more colors to differentiate the various types of connection"): a Permanent track gold, a
-    Permanent show ember, a Full track blue, a Full show ink."""
-    return (EMBER if show else GOLD) if tier == 2 else (INK2 if show else BLUE)
+    Permanent show green (28 Nov, 00:52Z: "let's use green instead of ember"), a Full track blue, a Full show ink."""
+    return (GREEN if show else GOLD) if tier == 2 else (INK2 if show else BLUE)
 
 
 def a_show(e):
@@ -560,15 +560,16 @@ def a_show(e):
 
 
 def strokes_svg(a, b, tier, loose, lit, show=False):
-    """A line by what it stands on: gold or ember for a Permanent Release, blue or ink for a Full one (hue), dotted for
-    the rest. Each kind a little lighter than the one before, so what comes first is seen first."""
+    """A line by what it stands on: gold or green for a Permanent Release, blue or ink for a Full one (hue), dotted for
+    the rest. Each kind a little lighter than the one before, so what comes first is seen first; gold a quarter heavier
+    than it was (Justin, 28 Nov 2026, 00:52Z: "make the gold lines a little bolder")."""
     if loose or tier == 0:
         return line_svg(a, b, stroke=SHUT, stroke_width=2 if lit else 1.2, stroke_dasharray='1 5', stroke_linecap='round')
     if tier == 2 and lit:
         return (line_svg(a, b, stroke=hue(2, show), stroke_width=8, opacity='.6', stroke_linecap='round')
                 + line_svg(a, b, stroke=INK, stroke_width=2, stroke_linecap='round'))
     if tier == 2:
-        return line_svg(a, b, stroke=hue(2, show), stroke_width=2 if show else 2.2, stroke_linecap='round')
+        return line_svg(a, b, stroke=hue(2, show), stroke_width=2 if show else 2.8, stroke_linecap='round')
     return line_svg(a, b, stroke=hue(1, show), stroke_width=2 if lit else (1.2 if show else 1.4), stroke_linecap='round')
 
 
@@ -890,7 +891,7 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
                 html = line_svg(s, t, stroke=SHUT, stroke_width=1.2, stroke_dasharray='1 5', stroke_linecap='round')
             else:
                 col = hue(e['tier'], a_show(e))
-                w = 2.2 if e['kind'] == 'track' else 1.2            # the same cut again: solid; a record or a stage: thin
+                w = (2.8 if col == GOLD else 2.2) if e['kind'] == 'track' else 1.2      # the same cut again: solid (gold, bolder); a record or a stage: thin
                 html = line_svg(s, t, stroke=col, stroke_width=w, stroke_linecap='round')
             edges.append((x, y, html, e, len(others)))
 
@@ -1060,7 +1061,7 @@ def page_card(title, members, store, has_page, inst, home=HOME):
                 html = line_svg(s, t, stroke=SHUT, stroke_width=1.2, stroke_dasharray='1 5', stroke_linecap='round')
             else:
                 col = hue(e['tier'], a_show(e))
-                html = line_svg(s, t, stroke=col, stroke_width=2.2 if e['kind'] == 'track' else 1.4,
+                html = line_svg(s, t, stroke=col, stroke_width=(2.8 if col == GOLD else 2.2) if e['kind'] == 'track' else 1.4,
                                 stroke_linecap='round')
             said = e['text'] if with_ else 'on a record: ' + e['text']
             edges.append((x, y, html, dict(e, text=said), len(ev['list'])))

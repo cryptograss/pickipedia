@@ -1,6 +1,8 @@
 """Tests for connectome_card.py: the card on a musician's page, from the connectome store."""
 import hashlib
 import os
+import pathlib
+import re
 import sys
 from datetime import date
 
@@ -209,7 +211,7 @@ def test_the_build_knows_who_made_a_record_by_the_wikis_own_name(tmp_path):
     assert card.index('>Bronwyn</text></a>') < card.index('>Allen Cooke</text></a>') < card.index('>Ann Picker</text></a>')
 
 
-def test_a_card_is_gold_or_ember_for_permanent_blue_or_ink_for_full_and_dotted_for_the_rest():
+def test_a_card_is_gold_or_green_for_permanent_blue_or_ink_for_full_and_dotted_for_the_rest():
     targets = dict(TARGETS, **{'discogs:2': ('Looser', '2016', 'Else'), 'lma:show2': ('Off Etree', '2024-01-01', 'A Band')})
     pairs = [pair('K', 'Tape', 'show', 'lma:show1'), pair('K', 'Disc', 'track', 'discogs:1', [('u', '1', 'Song')]),
              pair('K', 'Unknown', 'track', 'discogs:2', [('u', '1', 'Other')]),
@@ -221,15 +223,24 @@ def test_a_card_is_gold_or_ember_for_permanent_blue_or_ink_for_full_and_dotted_f
     # a Permanent cut and a Permanent night between the same two: the cut's colour, as it comes first
     both = cc.Store(pairs + [pair('K', 'Tape', 'track', 'arthel:4masks', [('u', '', 'silver-44')])], targets, {t: t for t in targets}, {}, tiers)
     assert not both.evidence('K', 'Tape')['show']
-    assert [cc.hue(2, False), cc.hue(2, True), cc.hue(1, False), cc.hue(1, True)] == [cc.GOLD, cc.EMBER, cc.BLUE, cc.INK2]
+    assert [cc.hue(2, False), cc.hue(2, True), cc.hue(1, False), cc.hue(1, True)] == [cc.GOLD, cc.GREEN, cc.BLUE, cc.INK2]
 
     def spoke(html, name):                                                # the lines drawn before this picker's dot
         return html[:html.index('>' + name + ' ')]
 
-    for name, colour in (('Cut', cc.GOLD), ('Tape', cc.EMBER), ('Disc', cc.BLUE), ('Loose', cc.INK2)):
+    for name, colour in (('Cut', cc.GOLD), ('Tape', cc.GREEN), ('Disc', cc.BLUE), ('Loose', cc.INK2)):
         html = cc.card('K', cc.Store([p for p in pairs if name in (p['a'], p['b'])], targets, {t: t for t in targets}, {}, tiers),
                        lambda n: True, {})
         assert f'stroke="{colour}"' in html and 'stroke-dasharray="1 5"' not in html
+    # each kind lighter than the one before, and gold a step further ahead ("make the gold lines a little bolder")
+    heavy = [float(re.search(rf'stroke="{colour}" stroke-width="([\d.]+)"', cc.strokes_svg((0, 0), (9, 0), tier, False, False, show)).group(1))
+             for tier, show, colour in ((2, False, cc.GOLD), (2, True, cc.GREEN), (1, False, cc.BLUE), (1, True, cc.INK2))]
+    assert heavy == sorted(heavy, reverse=True) and len(set(heavy)) == 4 and heavy[0] == 2.8 and heavy[0] - heavy[1] > heavy[1] - heavy[2]
+    # the key's marks are classes of the card's stylesheet: each one it names is there, in the colour the lines are
+    css = (pathlib.Path(__file__).parent.parent / 'extensions/PickiPediaContent/resources/ext.pickipediaContent.connectome.css').read_text()
+    for cls in re.findall(r'cc-key (cc-\w+)', cc.KEY_LINES):
+        assert f'.connectome-card .{cls} {{' in css
+    assert 'cc-green' in cc.KEY_LINES and f'solid {cc.GREEN};' in css and f'solid {cc.GOLD};' in css and f'solid {cc.BLUE};' in css
     html = cc.card('K', cc.Store(pairs[2:3], targets, {t: t for t in targets}, {}, tiers), lambda n: True, {})
     assert 'stroke-dasharray="1 5"' in html and f'stroke="{cc.GOLD}"' not in html
     for said in ('Permanent</a> track', 'Permanent show', 'Full track', 'Full show'):       # the key names the four kinds

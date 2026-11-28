@@ -88,12 +88,12 @@ svg.cc a {
 }
 
 .connectome-card .cc-gold {
-	border-top: 4px solid #eda100;
+	border-top: 5px solid #eda100;
 }
 
-.connectome-card .cc-ember {
+.connectome-card .cc-green {
 	margin-left: 6px;
-	border-top: 3px solid #d9480f;
+	border-top: 3px solid #2a9441;
 }
 
 .connectome-card .cc-blue {
