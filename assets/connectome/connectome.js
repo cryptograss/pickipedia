@@ -2441,7 +2441,9 @@ function showScene( v ) {
 	// seems like it needs to be stacked right under the show, maybe with the show poster")
 	const stack = acts.length === 1;
 	const S = stack ? { x: C.x, y: Math.round( C.y - dy * 0.62 ) } : C;              // the show's own place
-	const venueClip = narrowFrame ? 16 : 30, venueHalf = m.venue ? Math.min( venueClip, String( m.venue ).length ) * 4.3 + 8 : 0;
+	// the venue's name as it is written under its mark, measured: at 4.3px a letter it came out a quarter short, and
+	// the ring's names ran into it (Justin, #connectome, 28 Nov 2026, 00:51Z: "Dee's and Geoff are kinda smushed together")
+	const venueClip = narrowFrame ? 16 : 30, venueHalf = m.venue ? wide( K.clip( m.venue, venueClip ), FONT.named ) / 2 + 8 : 0;
 	const rxMin = stack ? Math.max( narrowFrame ? 110 : 150, venueHalf + ( narrowFrame ? 34 : 80 ) ) : dx + ( narrowFrame ? 64 : 120 );
 	const ryMin = stack ? Math.round( dy * 1.5 ) + ( narrowFrame ? 62 : 70 ) : dy + ( narrowFrame ? 70 : 64 );
 	for ( const p of lay.named.concat( lay.dots ) ) {
@@ -2472,6 +2474,17 @@ function showScene( v ) {
 	const called = named.named ? named.who : ( whose ? whose + ' live' : 'Live' ) + ( atVenue ? ' at ' + m.venue : ( night ? ' · ' + night : '' ) );
 	addPiece( sc, v.m, S, 'subject', { below: true, big: posterR, label: K.clip( called, narrowFrame ? 34 : 56 ),
 		sub: named.named || atVenue ? K.clip( night, 28 ) : '', dx: 0, sdx: 0, delay: 0 } );
+	// Nobody sits in the row of the show's name closer than its ends: the name is as long as who played and where
+	// ("Kyle Tuttle live at Dee's Country Cocktail Lounge"), and a seat the ring gave beside the poster was inside it.
+	// Out past the end on their side; where the frame has no room there, up over the row or down under it. The same
+	// for the row of the venue's name (and its town's). K.clearRow.
+	const own0 = sc.nodes.get( 'q' + v.m );
+	const seatsOf = lay.named.concat( lay.dots );
+	K.clearRow( seatsOf, { x: S.x, half: wide( own0.label || '', FONT.own ) / 2, y1: S.y + posterR + 2, y2: S.y + posterR + tx( own0.sub ? 44 : 28 ) },
+		38, { W, H } );                                               // a mark hard by its first letter reads as the name's bullet
+	if ( m.venue ) {
+		K.clearRow( seatsOf, { x: venueAt.x, half: venueHalf - 8, y1: venueAt.y + 18, y2: venueAt.y + 18 + tx( m.city ? 34 : 19 ) }, 26, { W, H } );
+	}
 	// The acts: a leader's own mark, or the act's
 	const actKey = [];
 	acts.slice( 0, actAt.length ).forEach( ( a, i ) => {
@@ -2511,18 +2524,19 @@ function showScene( v ) {
 	// acts, and those of the stage it doesn't end at; a strand with no clear way is left out
 	const most = narrowFrame ? 5 : 9, gap = narrowFrame ? 4.5 : 6;
 	const halfOf = ( text, px ) => Math.max( 34, String( text || '' ).length * px / 2 + 6 );   // a name's half width, roughly, px a letter
-	const own = sc.nodes.get( 'q' + v.m ), ownW = halfOf( own.label, 10 );       // each mark's circle, and its name under it, a box each
+	const own = sc.nodes.get( 'q' + v.m ), ownW = Math.max( 34, wide( own.label || '', FONT.own ) / 2 + 6 );   // each mark's circle, and its name under it (as written), a box each
 	const ownR = posterR + 4;
 	const marks = [ { k: 'q' + v.m, x1: S.x - ownR, x2: S.x + ownR, y1: S.y - ownR, y2: S.y + ownR },
-		{ k: 'q' + v.m, x1: S.x - ownW, x2: S.x + ownW, y1: S.y + ownR - 6, y2: S.y + ownR + ( own.sub ? 38 : 20 ) } ];
+		{ k: 'q' + v.m, x1: S.x - ownW, x2: S.x + ownW, y1: S.y + ownR - 6, y2: S.y + posterR + tx( own.sub ? 44 : 28 ) } ];   // as tall as it is written
 	if ( sc.nodes.has( 'venue' ) ) {
 		marks.push( { k: 'venue', x1: venueAt.x - 20, x2: venueAt.x + 20, y1: venueAt.y - 20, y2: venueAt.y + 20 },
-			{ k: 'venue', x1: venueAt.x - halfOf( K.clip( m.venue, venueClip ), 8.4 ), x2: venueAt.x + halfOf( K.clip( m.venue, venueClip ), 8.4 ), y1: venueAt.y + 18, y2: venueAt.y + ( m.city ? 58 : 42 ) } );   // its town under it
+			{ k: 'venue', x1: venueAt.x - venueHalf, x2: venueAt.x + venueHalf, y1: venueAt.y + 18, y2: venueAt.y + tx( m.city ? 50 : 36 ) } );   // its town under it
 	}
 	actKey.forEach( ( key, i ) => {
 		const at = actAt[ i ], nd = sc.nodes.get( key ), name = nd.label || nd.title || '';
 		marks.push( { k: key, x1: at.x - Math.max( 30, halfOf( name, 10 ) ), x2: at.x + Math.max( 30, halfOf( name, 10 ) ), y1: at.y - ( stack ? 30 : 52 ), y2: at.y + ( stack ? 52 : 30 ) } );
 	} );
+	const middle = marks.slice();                                    // the show, its acts and its venue, and their names: what a name round the ring keeps clear of
 	// A leader's spoke, round the show's name where the straight way runs through it: a step or more to either side
 	// where that clears it, else, from the act under the show to one sitting up past its name, swung out round the
 	// end of the name on their side. { bow, clear }: clear false, it runs straight, through what's in its way.
@@ -2588,7 +2602,34 @@ function showScene( v ) {
 	for ( const id of mine ) {                                        // and their names, over or under them: no strand runs through one
 		const d = sc.nodes.get( 'p' + id ), half = Math.max( wide( d.label || '', FONT.named ), d.inst ? wide( d.inst, FONT.inst ) : 0 ) / 2 + 3;
 		const deep = tx( 18 ) + ( d.inst ? tx( INST_LH ) : 0 );
-		marks.push( Object.assign( { k: 'p' + id }, nameBox( d, d.dx || 0, half, d.below ? 14 : -14 - deep, d.below ? 14 + deep : -14 ) ) );
+		// A name that would be written into one of the middle's (the venue's, the show's, an act's) is set out past its
+		// end, on the picker's own side, as far as the frame lets it
+		const boxAt = ( dx, below = d.below ) => nameBox( d, dx, half, below ? 14 : -14 - deep, below ? 14 + deep : -14 );
+		const into = ( b ) => middle.filter( ( o ) => b.x1 < o.x2 + 10 && b.x2 > o.x1 - 10 && b.y1 < o.y2 + 3 && b.y2 > o.y1 - 3 );
+		const past = ( hit ) => {                                     // out past the end of what it is in, on the picker's own side, inside the frame
+			const want = d.x >= C.x ? Math.max( ...hit.map( ( o ) => o.x2 ) ) + 10 + half - d.x : Math.min( ...hit.map( ( o ) => o.x1 ) ) - 10 - half - d.x;
+			return Math.round( Math.max( 4 + half - d.x, Math.min( W - 4 - half - d.x, want ) ) );
+		};
+		let left = into( boxAt( d.dx || 0 ) ).length;
+		if ( left ) {
+			// then on the mark's other side (over it, where it was under), where the frame has the room; the first
+			// that is in nothing, else the one in the least
+			const flipped = boxAt( d.dx || 0, !d.below ), room = flipped.y1 >= 2 && flipped.y2 <= H - 2;
+			const tries = [ { below: d.below, dx: past( into( boxAt( d.dx || 0 ) ) ) } ].concat( !room ? [] : [ { below: !d.below, dx: d.dx || 0 } ],
+				room && into( flipped ).length ? [ { below: !d.below, dx: past( into( flipped ) ) } ] : [] );
+			for ( const t of tries ) {
+				const n = into( boxAt( t.dx, t.below ) ).length;
+				if ( n < left ) {
+					left = n;
+					d.dx = t.dx;
+					d.below = t.below;
+					if ( !n ) {
+						break;
+					}
+				}
+			}
+		}
+		marks.push( Object.assign( { k: 'p' + id }, boxAt( d.dx || 0 ) ) );
 	}
 	ring.slice( mine.length ).forEach( ( id, k ) => {
 		if ( lay.dots[ k ] ) {

@@ -1364,6 +1364,19 @@ test( 'what comes first: a Permanent studio track, a Permanent show, a Full stud
 	assert.deepEqual( tieOf( [ 3, K.STAGE, 1 ], [ 2, K.TRACK, 1 ], [ 1, K.STAGE, 1 ], [ 0, K.TRACK, 1 ] ).ev.map( ( e ) => e.m ), [ 0, 1, 2, 3 ] );
 } );
 
+test( 'nobody sits in the row of a name closer than its ends', () => {
+	const row = { x: 500, half: 200, y1: 300, y2: 340 }, frame = { W: 1000, H: 700 };
+	const seats = [ { x: 330, y: 320 }, { x: 690, y: 310 }, { x: 500, y: 200 }, { x: 760, y: 320 }, { x: 320, y: 352 } ];
+	assert.equal( K.clearRow( seats, row, 30, frame ), 3 );
+	assert.deepEqual( seats.slice( 0, 2 ), [ { x: 270, y: 320 }, { x: 730, y: 310 } ] );            // out past the end on their own side
+	assert.deepEqual( seats.slice( 2, 4 ), [ { x: 500, y: 200 }, { x: 760, y: 320 } ] );            // over the row, and past its end already: as they were
+	assert.deepEqual( seats[ 4 ], { x: 270, y: 352 } );                                             // a mark just under the row is in it too
+	// a frame too narrow to stand past the end: up over the row or down under it, whichever was nearer
+	const tight = [ { x: 150, y: 305 }, { x: 420, y: 338 } ];
+	K.clearRow( tight, { x: 250, half: 190, y1: 300, y2: 340 }, 30, { W: 500, H: 700 } );
+	assert.deepEqual( tight, [ { x: 150, y: 282 }, { x: 420, y: 358 } ] );
+} );
+
 test( 'each kind of connection has its colour, and a tie wears that of the freest thing in it, a cut before a night', () => {
 	const rec = ( tier ) => ( { kind: 'record', tier } ), show = ( tier ) => ( { kind: 'show', tier } );
 	// Justin's four, in his order (27 Nov 2026: "more colors to differentiate the various types of connection"), then the rest
