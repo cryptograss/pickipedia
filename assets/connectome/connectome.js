@@ -3361,13 +3361,14 @@ const draw = {
 			return;
 		}
 		// A strand between two pickers is one thing they share, and is marked as that thing is; any other line, as all of it.
-		// and coloured by what kind of thing that is (K.shade): a Permanent track gold, a Permanent show ember, a Full
+		// and coloured by what kind of thing that is (K.shade): a Permanent track gold, a Permanent show green, a Full
 		// track blue, a Full show ink, the rest dotted; each kind a little lighter than the one before it, so what comes
-		// first is still what is seen first
+		// first is still what is seen first. Gold is a step further ahead of the rest than it was (Justin, 28 Nov 2026,
+		// 00:52Z: "make the gold lines a little bolder"): a quarter heavier, thick and thin
 		const hue = d.strand ? K.shade( G.music[ d.e.m ], d.e.how ) : K.tieShade( d.tie, G.music );
 		const gold = hue === 'pt' || hue === 'ps';                   // a Permanent Release: lit, it glows
 		const cls = hue === 't0' ? 't0' : 't1 ' + hue;
-		const heft = { pt: 0.62, ps: 0.54, ft: 0.47, fs: 0.42, t0: 0.42 }[ hue ];
+		const heft = { pt: 0.78, ps: 0.54, ft: 0.47, fs: 0.42, t0: 0.42 }[ hue ];
 		g.textContent = '';
 		const far = d.role === 'far', fine = d.role === 'web' || far || d.fine;
 		g.setAttribute( 'class', 'ln ' + ( fine ? 'fine ' : '' ) + ( d.role === 'web' ? 'web ' : '' ) + ( far ? 'far ' : '' ) + ( d.strand ? 'strand ' : '' ) + ( d.quiet ? 'quiet' : '' ) );
@@ -3376,15 +3377,15 @@ const draw = {
 			// each kind a little lighter than the one before it, the thinnest of them too: a blue line is never the lesser of
 			// an ink one. The stylesheet draws every .core 2px wide whatever is asked here; a Full line's width is handed
 			// to it as --w (.core.tw), so the order holds among the lines that have a colour
-			const lean = { pt: 1.5, ps: 1.3, ft: 1.15, fs: 1 }[ hue ];
+			const lean = { pt: 1.9, ps: 1.3, ft: 1.15, fs: 1 }[ hue ];
 			const fw = ( cls === 't0' ? 1.3 : lean * Math.max( far ? 1.5 : 1.1, d.w * ( far ? 0.42 : 0.32 ) ) ).toFixed( 1 );
 			g.appendChild( s( 'path', Object.assign( { class: gold ? 'thread ' + hue : 'core ' + cls + ( cls === 't0' ? '' : ' tw' ), 'stroke-width': fw },
 				gold || cls === 't0' ? {} : { style: '--w:' + fw } ) ) );
 		} else if ( gold && d.emph ) {                               // the one that's lit: its colour, with ink down the middle
 			g.appendChild( s( 'path', { class: 'glow ' + hue, 'stroke-width': ( d.w + 7 ).toFixed( 1 ) } ) );
 			g.appendChild( s( 'path', { class: 'core t2', 'stroke-width': Math.max( 1.8, d.w * 0.42 ).toFixed( 1 ) } ) );
-		} else if ( gold ) {                                         // a gold thread, or an ember one
-			g.appendChild( s( 'path', { class: 'thread ' + hue, 'stroke-width': Math.max( hue === 'pt' ? 2.2 : 2, d.w * heft ).toFixed( 1 ) } ) );
+		} else if ( gold ) {                                         // a gold thread, or a green one
+			g.appendChild( s( 'path', { class: 'thread ' + hue, 'stroke-width': Math.max( hue === 'pt' ? 2.8 : 2, d.w * heft ).toFixed( 1 ) } ) );
 		} else {
 			const cw = ( cls === 't0' ? 1.6 : Math.max( hue === 'ft' ? 1.7 : 1.4, d.w * ( d.emph ? 0.6 : heft ) ) ).toFixed( 1 );
 			g.appendChild( s( 'path', Object.assign( { class: 'core ' + cls + ( cls === 't0' ? '' : ' tw' ), 'stroke-width': cw }, cls === 't0' ? {} : { style: '--w:' + cw } ) ) );

@@ -19,10 +19,11 @@
 	--gold: #eda100;
 	--gold-wash: #fdf1cf;
 	/* The kinds of connection, in the order they come first (connectome-core.js, shade): a Permanent track gold, a
-	   Permanent show ember, a Full track blue, a Full show ink. Checked as a set against this paper for the three
-	   kinds of colour blindness (gold and ember, the nearest two, are 16 apart for a deuteranope; 8 is the floor). */
-	--ember: #d9480f;
-	--ember-wash: #fde4d7;
+	   Permanent show green (Justin, #connectome, 28 Nov 2026, 00:52Z: "let's use green instead of ember"), a Full track
+	   blue, a Full show ink. Checked as a set against each paper for the three kinds of colour blindness: gold and
+	   green, the nearest two, are 11 apart for a protanope by day and 10 by night (8 is the floor; ember was 16). */
+	--green: #2a9441;
+	--green-wash: #dff2e2;
 	--blue: #2f6fb3;
 	--link: #0645ad;
 	--play: #4a7c59;
@@ -52,8 +53,8 @@
 		--hair: light-dark( #e1e0d9, #3a323b );
 		--axis: light-dark( #c3c2b7, #5a4f5c );
 		--gold-wash: light-dark( #fdf1cf, #4a3a12 );
-		--ember: light-dark( #d9480f, #e8590c );
-		--ember-wash: light-dark( #fde4d7, #4a2413 );
+		--green: light-dark( #2a9441, #259a52 );
+		--green-wash: light-dark( #dff2e2, #173622 );
 		--blue: light-dark( #2f6fb3, #4f94d4 );
 		--link: light-dark( #0645ad, #8fb1f2 );
 		--hover: light-dark( #f0efec, #2f2832 );
@@ -266,7 +267,7 @@ main {
 /* a Full studio track; a Full show keeps the ink. Their widths are the script's (--w), each kind lighter than the one before */
 .core.ft { stroke: var( --blue ); }
 .core.tw { stroke-width: calc( var( --w, 2 ) * 1px ); }
-.glow.ps { stroke: var( --ember ); }
+.glow.ps { stroke: var( --green ); }
 
 .core.t0 {
 	stroke: var( --muted );
@@ -280,7 +281,7 @@ main {
 }
 
 /* a Permanent show: a night, not a cut */
-.thread.ps { stroke: var( --ember ); }
+.thread.ps { stroke: var( --green ); }
 
 .ln .hit {
 	fill: none;
@@ -412,7 +413,7 @@ main {
 	stroke-dasharray: 2 3;
 }
 
-.pill.t2.sh rect { fill: var( --ember-wash ); stroke: var( --ember ); }
+.pill.t2.sh rect { fill: var( --green-wash ); stroke: var( --green ); }
 .pill.t1:not( .sh ) rect { stroke: var( --blue ); stroke-width: 1.3; }
 
 .pill text {
@@ -653,7 +654,7 @@ a.play:focus {
 
 /* ---- inside out: the music is the circles, the pickers are the lines ---- */
 /* A piece's ring is as free as the piece, and says whether it is a night or a cut: gold for a Permanent record or track,
-   ember for a Permanent show, blue for a Full record or track, ink for a Full show, dotted for the rest. */
+   green for a Permanent show, blue for a Full record or track, ink for a Full show, dotted for the rest. */
 .mu .ring {
 	fill: var( --surface );
 	stroke: var( --ink2 );
@@ -671,8 +672,8 @@ a.play:focus {
 	stroke-dasharray: 2 4;
 }
 
-/* and as the lines are: a Permanent show ember, a Full record or track blue (a Full show keeps the ink) */
-.mu.t2.sh .ring { fill: var( --ember-wash ); stroke: var( --ember ); }
+/* and as the lines are: a Permanent show green, a Full record or track blue (a Full show keeps the ink) */
+.mu.t2.sh .ring { fill: var( --green-wash ); stroke: var( --green ); }
 .mu.t1:not( .sh ) .ring { stroke: var( --blue ); }
 
 .mu.subject .ring { stroke-width: 3; }
@@ -694,7 +695,7 @@ a.play:focus {
 	stroke-width: 0.9;
 }
 
-.mu.t2.sh .bead { fill: var( --ember ); }
+.mu.t2.sh .bead { fill: var( --green ); }
 .mu.t1:not( .sh ) .bead { fill: var( --blue ); }
 
 .mu.t0 .bead {

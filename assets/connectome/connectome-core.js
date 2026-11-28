@@ -277,12 +277,12 @@ export function standing( m, how ) {
  * One for each of the four kinds he ranked, in his order, each drawn a little lighter than the one before:
  *
  *   'pt'  a Permanent studio track    gold
- *   'ps'  a Permanent show            ember
+ *   'ps'  a Permanent show            green (ember until 28 Nov 2026, 00:52Z: "let's use green instead of ember")
  *   'ft'  a Full studio track         blue
  *   'fs'  a Full show                 ink
  *   't0'  the rest: a track or a show not known to be free, or a record two are only both on: dotted, as before
  *
- * Gold still means Permanent and nothing else; ember is the Permanent Release that is a night and not a cut.
+ * Gold still means Permanent and nothing else; green is the Permanent Release that is a night and not a cut.
  */
 export function shade( m, how ) {
 	if ( how < STAGE || m.tier < FULL ) {
