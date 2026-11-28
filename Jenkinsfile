@@ -434,6 +434,20 @@ REQS
                         cp "${STORE}/connectome.sqlite" "${OUT}/connectome.sqlite"
                         if [ -f "${CACHE}/walked.json" ]; then cp "${CACHE}/walked.json" "${OUT}/walked.json"; fi
                         cp "${CACHE}/cards.part/graph.json" "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"
+
+                        # What a shared /bacon link's card is called (Justin, #interfaces, 28 Nov 2026: "the
+                        # social card for a link to the show needs to use the show name as the title"). A
+                        # crawler reads the head as served and runs no script, so the web server writes it
+                        # (rabbithole: public/bacon.html), and all it has is the address: this map turns the
+                        # key in ?m= into the name the graph's own page gives that piece. Where the agent has
+                        # no node, as the check above allows, the map says nothing and such a link gets the
+                        # Oracle's card, as before.
+                        if command -v node >/dev/null 2>&1; then
+                            node card_titles.mjs "${OUT}/graph.json" "${OUT}/card-titles.json"
+                        else
+                            echo "node not installed; /bacon cards keep the Oracle's title"
+                            echo '{}' > "${OUT}/card-titles.json"
+                        fi
                         rm -rf "${OUT}/cards"
                         mv "${CACHE}/cards.part/cards" "${OUT}/cards"
                         rm -rf "${CACHE}/cards.part"
