@@ -940,7 +940,12 @@ body.mini #g { cursor: pointer; }
 #faq {
 	position: absolute;
 	inset: 0;
-	z-index: 9;
+	/* Over the Oracle's front page (#oracle, 12), not under it. Justin, #interfaces, 28 Nov 2026: "getting a
+	   thud trying to click the faq on /bacon/" -- the panel opened and fetched its answers, under the front
+	   page covering the same ground, so nothing showed. A panel a reader opens comes out over what they
+	   opened it from; only the copied-link note (#shared, 30) sits over it. tools/test_connectome_layers.mjs
+	   keeps that order. */
+	z-index: 13;
 	overflow: auto;
 	padding: 12px 18px 28px;
 	background: var( --surface );
