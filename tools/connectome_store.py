@@ -351,16 +351,31 @@ def show_page(title, text):
                 add(entry, band["members"])
         if band["members"]:
             bands.append(band)
-    sec = re.search(r"^==\s*Ensemble\s*==\s*$(.*?)(?=^==|\Z)", text, re.M | re.S)
+    # The section runs to the next heading of its own level or above: a "=== Sit-ins ===" under it is still the
+    # night's stage (Justin, #connectome, 28 Nov 2026, the Warblers at the Station Inn), and the names under such a
+    # heading are an act of their own, named by it, as an {{Ensemble|title=...}} block would be: who sat in stood on
+    # the stage, not in the band. (The show view puts anyone in no act into the main one, so "in no act" won't do.)
+    sec = re.search(r"^==\s*Ensemble\s*==\s*$(.*?)(?=^==?(?!=)|\Z)", text, re.M | re.S)
+    into, sub_acts = loose, []
     for line in (sec.group(1).splitlines() if sec else []):
+        sub = re.match(r"^===+\s*(.*?)\s*=+\s*$", line.strip())
+        if sub:
+            act = {"title": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", sub.group(1)).strip(), "members": []}
+            sub_acts.append(act)
+            into = act["members"]
+            continue
         link = re.match(r"\*\s*\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]\s*(?:[(:–-]\s*([^)\n]*))?", line.strip())
         if link:
-            add(link.group(1) + (":" + link.group(2) if link.group(2) else ""), loose)
+            add(link.group(1) + (":" + link.group(2) if link.group(2) else ""), into)
     if not ens:
         return None
     banded = {n for b in bands for n in b["members"]}
     if [n for n in loose if n not in banded]:
         bands.append({"title": "", "members": [n for n in loose if n not in banded]})
+    for act in sub_acts:
+        act["members"] = [n for n in act["members"] if n not in banded and all(n not in b["members"] for b in bands)]
+        if act["members"]:
+            bands.append(act)
     block = re.sub(r"[^\d]", "", params.get("blockheight", ""))
     return {"show": title, "artist": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("artists", "")),
             "venue": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("venue", "")), "block": block,

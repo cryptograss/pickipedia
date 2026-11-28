@@ -337,6 +337,35 @@ def test_a_show_page_is_read_with_its_ensemble_however_it_is_written():
     assert [r["show"] for r in got] == ["Show:KyleTuttle-26482267"]        # only pages called Show:
 
 
+def test_a_show_pages_sit_ins_under_a_heading_are_an_act_of_their_own():
+    text = """{{Show
+|artists=The Tennessee Warblers
+|venue=The Station Inn
+|blockheight=26510890
+}}
+== Ensemble ==
+* [[John Beck]]: vocals, fiddle, mandolin
+* [[Luke Sands]]: upright bass
+
+===Sit-ins===
+* [[Allen Cooke]]: dobro
+* Laura Ray banjo
+* {{Bot_proposes|[[Erinn Peet-Lukes]]: vocals|by=Blu}}
+
+=== More of the band ===
+* [[Adam Dalton]]: vocals, guitar
+
+== When ==
+* [[Not A Picker]]
+"""
+    got = S.show_page("Show:TennesseeWarblers-26510890", text)
+    assert got["ensemble"] == {"John Beck": ["vocals, fiddle, mandolin"], "Luke Sands": ["upright bass"],
+                               "Allen Cooke": ["dobro"], "Adam Dalton": ["vocals, guitar"]}    # unlinked and proposed: not read
+    assert got["bands"] == [{"title": "", "members": ["John Beck", "Luke Sands"]},               # the band, by the page's artist
+                            {"title": "Sit-ins", "members": ["Allen Cooke"]},
+                            {"title": "More of the band", "members": ["Adam Dalton"]}]
+
+
 def test_videos_and_show_pages_put_their_people_on_stage_together():
     rows = S.from_releases([
         {"video": "QmV", "title": "Station Inn sit in with", "performers": ["Justin Myles Holmes", "Tristan Scroggins"],
