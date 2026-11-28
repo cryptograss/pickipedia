@@ -28,6 +28,10 @@ The atom is a credit:
   excerpt     for LMA, the line as the taper wrote it
   read_by     which reader produced it
 
+A band is not a credit. Its page's stints (who was a member, playing what, from when until when, by what source)
+are kept beside the credits, in `bands` and `stints`, and only as far as a person has verified them. A stint says
+who you'd expect to see; it puts nobody on a stage and ties nobody to anybody (Cryptograss:Bacon graphs/Bands).
+
 Several sources agreeing make several rows. Nothing here judges; each row is
 what one reader said about one source. Raw responses are kept under --raw so a
 build never refetches.
@@ -44,6 +48,9 @@ import re
 import sqlite3
 import sys
 import time
+import urllib.parse
+import urllib.request
+from urllib.parse import quote
 
 import recording_credits as sideman
 import homeplace
@@ -105,6 +112,14 @@ def from_mb(release):
 ARTHEL_ARTISTS = {"0": "Justin Holmes and the Immutable String Band"}
 
 
+def said(value):
+    """One line of what a source gave for a field: the first of a list, trimmed; '' for nothing or a placeholder."""
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    value = re.sub(r"\s+", " ", str(value or "")).strip(" ,;")
+    return "" if value.lower() in {"unknown", "n/a", "na", "none", "?", "tba"} else value
+
+
 def from_arthel(data_dir):
     """Studio cuts (songs_and_tunes) and shows, from arthel's YAML, through Homeplace's readers."""
     import yaml
@@ -133,11 +148,469 @@ def from_arthel(data_dir):
         # venue was standing in as the artist, so the graph named these shows by their title. Artist 0 is Justin
         # Holmes and the Immutable String Band (Justin, #connectome, 15 Nov 2026); an id nobody has said stays
         # unnamed (0_7: two ETHPrague shows, 2025), and that show goes by its title as before.
+        # Where it was, as its file says: the venue, and the town with its region ("Barcelona, Catalonia").
+        # (Justin, #connectome, 21 Nov 2026: "if the name of the show (festival or if the show itself has a
+        # name), city and venue are available, display them in various relevant places.")
         target = {"kind": "show", "id": "arthel:" + rec["id"], "title": rec["title"], "date": rec["date"],
-                  "artist": ARTHEL_ARTISTS.get(stem.split("-")[0], ""), "group": "arthel:" + rec["id"]}
+                  "artist": ARTHEL_ARTISTS.get(stem.split("-")[0], ""), "group": "arthel:" + rec["id"],
+                  "venue": said(data.get("venue")),
+                  "city": ", ".join(x for x in (said(data.get("locality")), said(data.get("region1"))) if x),
+                  "poster": arthel_poster(stem, data)}
         for name, p in rec["people"].items():
             for scope in sorted(p["scopes"]):
                 rows.append(credit(name, p["roles"], target, scope, [], src, "arthel", "homeplace.arthel_show"))
+    return rows
+
+
+# A show's poster (Justin, #connectome, 22 Nov 2026, 00:45Z: "Many of the shows (at least my shows) have posters on
+# arthel. Have we captured these as part of the dataset? It'd be nice to show them. I wonder if other show posters
+# are available as well, eg on archive.org?"; 00:46Z, posters and the tapers' cover art both). arthel's are put on
+# the wiki as File:Show poster <show id>.<its extension>, so the wiki makes the small ones; the build draws one only
+# where the wiki has it. A tape's is an image uploaded with it: one named a poster or a flyer first, else the cover
+# or folder art its taper chose; archive.org's IIIF service gives it small. Nothing else is taken for one: a photo
+# called IMG_2754 may be anything.
+POSTER_NAMES = (re.compile(r"poster|flyer|flier", re.I), re.compile(r"cover|folder", re.I))
+IMAGE = re.compile(r"\.(jpe?g|png|gif)$", re.I)
+IIIF = "https://iiif.archive.org/image/iiif/3/{ident}%2F{name}/full/!240,240/0/default.jpg"
+
+
+def arthel_poster(stem, data):
+    """The wiki file arthel's show poster goes by, where its YAML names one: '' where it names none."""
+    path = said(data.get("poster"))
+    ext = os.path.splitext(path)[1].lower()
+    return f"Show poster {stem}{ext}" if path and ext else ""
+
+
+def tape_poster(item):
+    """A small picture of the poster an archive.org item carries, or of its taper's cover art: '' for neither."""
+    ident = item.get("metadata", {}).get("identifier", "")
+    names = [f.get("name", "") for f in item.get("files") or [] if isinstance(f, dict) and f.get("source") == "original"
+             and IMAGE.search(f.get("name", "")) and not re.match(r"(__ia|thumb)", os.path.basename(f.get("name", "")), re.I)]
+    for want in POSTER_NAMES:
+        for name in sorted(names):
+            if want.search(os.path.basename(name)):
+                return IIIF.format(ident=quote(ident, safe=""), name=quote(name, safe=""))
+    return ""
+
+
+# A track whose /Metadata page says `state: production` belongs in the connectome (Justin, #connectome, 22 Nov
+# 2026, 00:58Z: "for now I think if something is `state:production` we want to treat that as something that
+# belongs in the connectome"). Its ensemble is who played it, its Release page's `title` what it is called. Read
+# off the wiki by `releases` into a file, so the store is built again when a track is tagged or its ensemble
+# changes (the file is in the stage's KEY). A track arthel already holds as a studio cut (August, Paint Exchange:
+# a song of that name in songs_and_tunes) is left to arthel, or the graph would have it twice.
+RELEASE_PAGE = "https://pickipedia.xyz/wiki/Release:"
+WIKI_PAGE = "https://pickipedia.xyz/wiki/"
+READY = "production"
+
+
+def fetch_releases(wiki, get=None):
+    """What the wiki itself says was played, for the store: every Release whose /Metadata says `state: production`
+    ({cid, title, ensemble}); every video Release that names two or more performers ({video: cid, title, performers,
+    venue, block}); every Show: page ({show: title, artist, venue, block, ensemble}); and every band's page
+    ({band: title, kind, leader, offshoot_of, billed_as, stints}), as far as a person has verified it. By cid, then
+    by title."""
+    import yaml
+    get = get or (lambda q: json.load(urllib.request.urlopen(urllib.request.Request(
+        wiki.rstrip("/") + "/api.php?" + urllib.parse.urlencode(dict(q, format="json", formatversion=2)),
+        headers={"User-Agent": "pickipedia-connectome/1.0"}), timeout=30)))
+    titles, cont = [], {}
+    while True:
+        r = get(dict({"action": "query", "list": "allpages", "apnamespace": 3004, "aplimit": 500}, **cont))
+        titles += [p["title"] for p in r["query"]["allpages"]]
+        if "continue" not in r:
+            break
+        cont = r["continue"]
+    texts = {}
+    for i in range(0, len(titles), 50):               # fifty a request: the most the API gives content for
+        r = get({"action": "query", "titles": "|".join(titles[i:i + 50]), "prop": "revisions", "rvprop": "content",
+                 "rvslots": "main"})
+        for p in r["query"]["pages"]:
+            if p.get("revisions"):
+                texts[p["title"]] = p["revisions"][0]["slots"]["main"]["content"]
+
+    def yml(text):
+        try:
+            d = yaml.safe_load(text or "")
+        except yaml.YAMLError:
+            return {}
+        return d if isinstance(d, dict) else {}
+    out = []
+    for t in sorted(texts):
+        if not t.endswith("/Metadata"):
+            continue
+        meta = yml(texts[t])
+        state = {str(k).lower(): v for k, v in meta.items()}.get("state")      # Justin wrote "State:" on one
+        if str(state or "").strip().lower() != READY:
+            continue
+        cid = t[len("Release:"):-len("/Metadata")]
+        ens = meta.get("ensemble") if isinstance(meta.get("ensemble"), dict) else {}
+        title = said(yml(texts.get("Release:" + cid)).get("title")) or said(meta.get("title"))
+        out.append({"cid": cid, "title": title if "/" not in title else "",
+                    "ensemble": {str(n): [str(x) for x in (r if isinstance(r, list) else [r]) if x]
+                                 for n, r in ens.items()}})
+    # A video is a source like a recording (Justin, #connectome, 24 Nov 2026, 19:27Z: "videos can be a source just
+    # like audio recordings. They aren't a specific _type_ of source ... the video is either (or both) evidence that
+    # such a thing occurred, or its intended outcome"). Its Release says who is in it (`performers`, as uploaded);
+    # one with fewer than two ties nobody to anybody.
+    for t in sorted(texts):
+        if "/" in t:
+            continue
+        rel = yml(texts[t])
+        who = rel.get("performers") if isinstance(rel.get("performers"), list) else []
+        who = list(dict.fromkeys(said(n) for n in who if said(n)))
+        if str(rel.get("release_type") or "").lower() != "video" or len(who) < 2:
+            continue
+        block = str(rel.get("blockheight") or "").strip()
+        out.append({"video": t[len("Release:"):], "title": said(rel.get("title")), "performers": who,
+                    "venue": said(rel.get("venue")), "block": block if block.isdigit() else ""})
+    # Who's in a video is typed in at upload ("Your mom", "skylergolden.eth"): a name stands only where the wiki has a
+    # page for it, and as the page is called ("Justin Holmes" is Justin Myles Holmes). Two or more, or none.
+    pages = person_pages(get, {n for v in out if v.get("video") for n in v["performers"]})
+    for v in [v for v in out if v.get("video")]:
+        v["performers"] = list(dict.fromkeys(pages[n] for n in v["performers"] if n in pages))
+    out = [v for v in out if not v.get("video") or len(v["performers"]) >= 2]
+    out += fetch_show_pages(get)
+    out += fetch_band_pages(get)
+    return out
+
+
+def person_pages(get, names):
+    """name -> the wiki page it is, redirects followed, for the names that have one."""
+    names, found = sorted(n for n in names if n and not re.search(r"[\[\]{}|#<>]", n)), {}
+    for i in range(0, len(names), 50):
+        r = get({"action": "query", "titles": "|".join(names[i:i + 50]), "redirects": 1})
+        q = r.get("query", {})
+        to = {x["from"]: x["to"] for x in q.get("normalized", [])}
+        hop = {x["from"]: x["to"] for x in q.get("redirects", [])}
+        real = {p["title"] for p in q.get("pages", []) if not p.get("missing") and not p.get("invalid") and p.get("ns", 0) == 0}
+        for n in names[i:i + 50]:
+            t = to.get(n, n)
+            t = hop.get(t, t)
+            if t in real:
+                found[n] = t
+    return found
+
+
+def fetch_show_pages(get):
+    """The wiki's own show pages, {{Show}} on a page called "Show:...": who was on stage, as its {{Show|ensemble=}},
+    its {{Ensemble}} or its "== Ensemble ==" list of links say (Justin, #connectome, 24 Nov 2026, 19:27Z: "Last night
+    at Dee's was Kyle Tuttle, Geoff Saunders, Dominick Leslie, and Sam Leslie. We need a show page for that")."""
+    titles, cont = [], {}
+    while True:
+        r = get(dict({"action": "query", "list": "embeddedin", "eititle": "Template:Show", "eilimit": 500,
+                      "eifilterredir": "nonredirects"}, **cont))
+        titles += [p["title"] for p in r["query"]["embeddedin"] if re.match(r"Show:\s*\S", p["title"])]
+        if "continue" not in r:
+            break
+        cont = r["continue"]
+    out = []
+    for i in range(0, len(titles), 50):
+        r = get({"action": "query", "titles": "|".join(titles[i:i + 50]), "prop": "revisions", "rvprop": "content",
+                 "rvslots": "main"})
+        for p in r["query"]["pages"]:
+            if p.get("revisions"):
+                show = show_page(p["title"], p["revisions"][0]["slots"]["main"]["content"])
+                if show:
+                    out.append(show)
+    return sorted(out, key=lambda s: s["show"])
+
+
+def show_page(title, text):
+    """One Show: page's {show, artist, venue, block, poster, ensemble: {name: [instruments]}, bands: [{title, members}]};
+    None with nobody on stage. Each {{Ensemble}} block is a band of the night, in the page's order, under its title= (one
+    per band: headliner, openers, sit-ins, as Template:Show says); names given otherwise (|ensemble=, an "== Ensemble =="
+    list) not in a band already are one more, untitled."""
+    m = re.search(r"\{\{\s*Show\s*\|(.*?)\}\}", text, re.S)
+    params = {}
+    for part in (m.group(1).split("|") if m else []):
+        k, eq, v = part.partition("=")
+        if eq:
+            params[k.strip().lower()] = v.strip()
+    ens, bands, loose = {}, [], []
+
+    def add(entry, into=None):
+        entry = re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", entry).strip()
+        name, _, inst = entry.partition(":")
+        name = name.strip()
+        if name and not re.search(r"[{}<>=]", name):
+            ens.setdefault(name, [])
+            if inst.strip() and inst.strip() not in ens[name]:
+                ens[name].append(inst.strip())
+            if into is not None and name not in into:
+                into.append(name)
+    for entry in (params.get("ensemble") or "").split(";"):
+        add(entry, loose)
+    for e in re.finditer(r"\{\{\s*Ensemble\s*((?:\|[^{}]*)*)\}\}", text):
+        band = {"title": "", "members": []}
+        for entry in e.group(1).split("|"):
+            k, eq, v = entry.partition("=")
+            if eq and k.strip().lower() == "title":
+                band["title"] = re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", v).strip()
+            elif not eq:
+                add(entry, band["members"])
+        if band["members"]:
+            bands.append(band)
+    sec = re.search(r"^==\s*Ensemble\s*==\s*$(.*?)(?=^==|\Z)", text, re.M | re.S)
+    for line in (sec.group(1).splitlines() if sec else []):
+        link = re.match(r"\*\s*\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]\s*(?:[(:–-]\s*([^)\n]*))?", line.strip())
+        if link:
+            add(link.group(1) + (":" + link.group(2) if link.group(2) else ""), loose)
+    if not ens:
+        return None
+    banded = {n for b in bands for n in b["members"]}
+    if [n for n in loose if n not in banded]:
+        bands.append({"title": "", "members": [n for n in loose if n not in banded]})
+    block = re.sub(r"[^\d]", "", params.get("blockheight", ""))
+    return {"show": title, "artist": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("artists", "")),
+            "venue": re.sub(r"\[\[([^\]|]*)(?:\|[^\]]*)?\]\]", r"\1", params.get("venue", "")), "block": block,
+            # its picture, a file on the wiki (Template:Show: official_poster, or the older image)
+            "poster": re.sub(r"^(?:File|Image):", "", params.get("official_poster") or params.get("image") or "").strip(),
+            "ensemble": ens, "bands": bands}
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Bands (Justin, #connectome, 27 Nov 2026, 18:15Z: "it's time for a model of a band"; decided the same day, 20:13Z;
+# Cryptograss:Bacon graphs/Bands). A band is a page: {{BandInfo}} says what kind it is, who leads it, what it grew
+# out of and what else it is billed as; each {{Band member}} line is a stint, one picker in one chair from one date
+# until another, with its source. Nobody writes a lineup down: lineups() works them out of the stints.
+#
+# A stint is a claim about the band, never about a night: it puts nobody on a stage, and makes no credit. Who played
+# is still only what a tape, a record or a show page says.
+#
+# Only what a person has verified is read. A claim an emergent wrote sits in <proposed>...</proposed> or
+# {{Bot_proposes|...}} until someone clicks it, and verifying takes the wrapper off; so what is outside a wrapper is
+# what somebody has stood behind (Justin, 27 Nov: "when we are wrong ... a really easy way for the user to discover
+# our good intentions and help us fix the error").
+# ---------------------------------------------------------------------------------------------------------------
+BAND_KINDS = ("regular", "rotating", "pickup")
+A_DAY = re.compile(r"\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?")
+
+
+def verified_text(text):
+    """A page's wikitext with every claim that still waits for a person taken out: each <proposed> block and each
+    {{Bot_proposes|...}} call. A proposed removal is the other way round: what it wraps still stands until someone
+    agrees it goes, so that stays."""
+    text, out, i = text or "", [], 0
+    for m in re.finditer(r"<proposed\b([^>]*)>(.*?)</proposed\s*>", text, re.S | re.I):
+        out.append(text[i:m.start()])
+        if re.search(r"\baction\s*=\s*[\"']?remove\b", m.group(1), re.I):
+            out.append(m.group(2))
+        i = m.end()
+    text, out, i = "".join(out) + text[i:], [], 0
+    for m in re.finditer(r"\{\{\s*Bot[ _]proposes\s*\|", text, re.I):
+        if m.start() < i:
+            continue
+        depth, j = 2, m.end()
+        while j < len(text) and depth:
+            if text.startswith("{{", j):
+                depth, j = depth + 2, j + 2
+            elif text.startswith("}}", j):
+                depth, j = depth - 2, j + 2
+            else:
+                j += 1
+        out.append(text[i:m.start()])
+        i = j
+    return "".join(out) + text[i:]
+
+
+def template_calls(text, name):
+    """Each call of one template in a page, as ([positional values], {named: value}), in the page's order. A pipe
+    inside a link or another template is part of its value; a value's own "=" (a source's address) is kept."""
+    calls = []
+    for m in re.finditer(r"\{\{\s*" + re.escape(name).replace(r"\ ", "[ _]") + r"\s*(?=[|}])", text, re.I):
+        parts, cur, depth, j = [], "", 0, m.end()
+        while j < len(text):
+            two = text[j:j + 2]
+            if two in ("{{", "[["):
+                depth, cur, j = depth + 1, cur + two, j + 2
+            elif two in ("}}", "]]") and depth:
+                depth, cur, j = depth - 1, cur + two, j + 2
+            elif two == "}}":
+                break
+            elif text[j] == "|" and not depth:
+                parts.append(cur)
+                cur, j = "", j + 1
+            else:
+                cur, j = cur + text[j], j + 1
+        else:
+            continue                                   # never closed: not a call
+        parts.append(cur)
+        positional, named = [], {}
+        for part in parts[1:]:
+            k, eq, v = part.partition("=")
+            if eq and re.fullmatch(r"\s*[A-Za-z_][A-Za-z_ ]*\s*|\s*\d+\s*", k):
+                named[k.strip().lower()] = v.strip()
+            else:
+                positional.append(part.strip())
+        for n in sorted(k for k in named if k.isdigit()):          # |1=Name is the first value, as the wiki has it
+            while len(positional) < int(n):
+                positional.append("")
+            positional[int(n) - 1] = named.pop(n)
+        calls.append((positional, named))
+    return calls
+
+
+def unlinked(value):
+    """A value without its link brackets: "[[Rob McCoury|Robbie]]" is Rob McCoury."""
+    return re.sub(r"\[\[([^\]|#]*)(?:[|#][^\]]*)?\]\]", r"\1", value or "").strip()
+
+
+def band_page(title, text):
+    """One band's page, as far as it is verified: {band, kind, leader, offshoot_of, billed_as: [...], stints: [{name,
+    plays, from, until, source, checked}], unread: [...]}; None where nothing of a band is verified on it. A stint
+    whose date isn't a date ("2015", "2015-11", "2015-11-10") is left out and named in `unread`: a date nobody can
+    read is not a date to draw."""
+    text = verified_text(text)
+    info = template_calls(text, "BandInfo")
+    said = info[0][1] if info else {}
+    kind = said.get("kind", "").strip().lower()
+    stints, unread = [], []
+    for positional, named in template_calls(text, "Band member"):
+        name = unlinked(positional[0]) if positional else ""
+        if not name or re.search(r"[\[\]{}|<>]", name):
+            continue
+        if str(named.get("status") or "").strip().lower() in ("proposed", "unverified"):
+            continue
+        start, until = named.get("from", "").strip(), named.get("until", "").strip()
+        if any(d and not A_DAY.fullmatch(d) for d in (start, until)) or (start and until and day_from(until) < day_from(start)):
+            unread.append(f"{name}: {start or '?'} to {until or '?'}")
+            continue
+        stints.append({"name": name, "plays": unlinked(positional[1]) if len(positional) > 1 else "",
+                       "from": start, "until": until, "source": named.get("source", "").strip(),
+                       "checked": named.get("checked", "").strip()})
+    if not info and not stints:
+        return None
+    return {"band": title, "kind": kind if kind in BAND_KINDS else "", "leader": unlinked(said.get("leader")),
+            "offshoot_of": unlinked(said.get("offshoot_of")),
+            "billed_as": [b for b in (unlinked(x) for x in said.get("billed_as", "").split(";")) if b],
+            "stints": stints, "unread": unread}
+
+
+def fetch_band_pages(get):
+    """The wiki's band pages: every article that uses {{BandInfo}} or {{Band member}}, each as band_page reads it."""
+    titles = set()
+    for template in ("Template:BandInfo", "Template:Band member"):
+        cont = {}
+        while True:
+            r = get(dict({"action": "query", "list": "embeddedin", "eititle": template, "eilimit": 500,
+                          "einamespace": 0, "eifilterredir": "nonredirects"}, **cont))
+            titles |= {p["title"] for p in r["query"]["embeddedin"] if p.get("ns", 0) == 0}
+            if "continue" not in r:
+                break
+            cont = r["continue"]
+    titles, out = sorted(titles), []
+    for i in range(0, len(titles), 50):
+        r = get({"action": "query", "titles": "|".join(titles[i:i + 50]), "prop": "revisions", "rvprop": "content",
+                 "rvslots": "main"})
+        for p in r["query"]["pages"]:
+            if p.get("revisions"):
+                band = band_page(p["title"], p["revisions"][0]["slots"]["main"]["content"])
+                if band:
+                    out.append(band)
+    return sorted(out, key=lambda b: b["band"])
+
+
+def day_from(text):
+    """The first day a stint's start can mean: "2015" is 1 Jan 2015. '' (no source gives it) is ''."""
+    text = (text or "").strip()
+    return text + "-01-01"[len(text) - 4:] if text else ""
+
+
+def day_until(text):
+    """The day after the last one a stint's end can mean: "2015" is 1 Jan 2016, "2015-11" is 1 Dec 2015, and a
+    whole date is itself (the day the leaving was news, they are gone). '' (still a member) is ''."""
+    text = (text or "").strip()
+    if len(text) == 4:
+        return f"{int(text) + 1:04d}-01-01"
+    if len(text) == 7:
+        y, m = int(text[:4]), int(text[5:])
+        return f"{y + (m == 12):04d}-{m % 12 + 1:02d}-01"
+    return text
+
+
+def lineup_at(stints, day):
+    """Who the stints say was in the band on a day ("2017-07-03"), in the page's order. A stint with no start counts
+    from the beginning, and a year alone is read generously at both ends: this is who you'd expect to see, and it
+    is never evidence of who played."""
+    out = []
+    for s in stints:
+        a, b = day_from(s.get("from")), day_until(s.get("until"))
+        if (not a or a <= day) and (not b or day < b) and s["name"] not in out:
+            out.append(s["name"])
+    return out
+
+
+def lineups(stints):
+    """The band's versions: [(from, until, [names])], each stretch of days over which the same people were members,
+    oldest first. '' at the start is "no source says since when", '' at the end is "still". A stretch with nobody
+    in it (the band between two bands) is left out."""
+    cuts = sorted({day_from(s.get("from")) for s in stints} | {day_until(s.get("until")) or "9999" for s in stints})
+    out = []
+    for a, b in zip(cuts, cuts[1:]):
+        who = lineup_at(stints, a or "0000")
+        if who and out and out[-1][1] == a and sorted(out[-1][2]) == sorted(who):
+            out[-1] = (out[-1][0], b, out[-1][2])
+        elif who:
+            out.append((a, b, who))
+    return [(a, "" if b == "9999" else b, who) for a, b, who in out]
+
+
+def band_names(bands):
+    """The names the tape reader is given because a band's page says them: each member a stint names, and the band
+    itself, by its page's name and the names it says it is billed as, so "w/ Della Mae" on somebody's tape is read.
+    A member of one word is too loose to look for, as anywhere. A band's name that is a person's (a band billed as
+    its leader) isn't added here: that person is on the list when a source of their own puts them there."""
+    people = {n.casefold() for b in bands for n in [b.get("leader")] + [s["name"] for s in b.get("stints") or []] if n}
+    out = []
+    for b in bands:
+        for n in [s["name"] for s in b.get("stints") or [] if len(s["name"].split()) >= 2] + \
+                 [n for n in [b["band"]] + list(b.get("billed_as") or []) if n.casefold() not in people]:
+            if n and n.casefold() not in {x.casefold() for x in out}:
+                out.append(n)
+    return out
+
+
+def from_releases(releases, arthel=None):
+    """The ready tracks' ensembles, each a credit on its track: a record of its own, `release:<cid>`."""
+    import yaml
+    held = set()
+    if arthel:
+        for fn in glob.glob(os.path.join(arthel, "songs_and_tunes", "*.yaml")):
+            with open(fn) as f:
+                data = yaml.safe_load(f) or {}
+            held.add(sideman.normalize_title(str(data.get("title") or os.path.basename(fn)[:-5])))
+    rows = []
+    for rel in releases:
+        if rel.get("band"):
+            continue                                   # a band's page puts nobody on a stage: to_sqlite keeps it
+        if rel.get("video"):
+            # a video: a night of its own on the graph, `video:<cid>`, everyone in it on stage together
+            target = {"kind": "show", "id": "video:" + rel["video"], "title": rel.get("title") or "a video",
+                      "date": "block " + rel["block"] if rel.get("block") else "", "artist": "",
+                      "group": "video:" + rel["video"], "venue": rel.get("venue") or "", "city": ""}
+            for name in rel["performers"]:
+                rows.append(credit(name, [], target, "show", [], RELEASE_PAGE + rel["video"], "pickipedia",
+                                   "connectome_store.from_releases"))
+            continue
+        if rel.get("show"):
+            # a show page: the night it names, `wiki:<page>`, its ensemble on stage
+            target = {"kind": "show", "id": "wiki:" + rel["show"], "title": rel["show"],
+                      "date": "block " + rel["block"] if rel.get("block") else "", "artist": rel.get("artist") or "",
+                      "group": "wiki:" + rel["show"], "venue": rel.get("venue") or "", "city": "",
+                      "poster": rel.get("poster") or "", "bands": rel.get("bands") or []}
+            for name, roles in rel["ensemble"].items():
+                rows.append(credit(name, roles, target, "show", [], WIKI_PAGE + rel["show"].replace(" ", "_"),
+                                   "pickipedia", "connectome_store.from_releases"))
+            continue
+        title = rel.get("title") or ""
+        if not title or not rel.get("ensemble") or sideman.normalize_title(title) in held:
+            continue
+        target = {"kind": "record", "id": "release:" + rel["cid"], "title": title, "date": "", "artist": "",
+                  "group": "release:" + rel["cid"]}
+        for name, roles in rel["ensemble"].items():
+            rows.append(credit(name, roles, target, "track", [{"position": "", "title": title}],
+                               RELEASE_PAGE + rel["cid"] + "/Metadata", "pickipedia", "connectome_store.from_releases"))
     return rows
 
 
@@ -151,9 +624,11 @@ def from_lma(item, names):
     collections = collections if isinstance(collections, list) else [collections] if collections else []
     # The tape's collections, as archive.org lists them: the release tier is read from these (etree's
     # policy makes a tape a Permanent Release; connectome_graph.tier).
+    # Where the tape was made, as the taper filled it in: archive.org's `venue` and `coverage` (the town).
     target = {"kind": "show", "id": f"lma:{ident}", "title": m.get("title", ""), "date": m.get("date", ""),
               "artist": creator, "group": f"lma-show:{creator}|{m.get('date', '')}",
-              "formats": [f"archive.org collection: {c}" for c in collections]}
+              "formats": [f"archive.org collection: {c}" for c in collections],
+              "venue": said(m.get("venue")), "city": said(m.get("coverage")), "poster": tape_poster(item)}
     rows = []
     for name, readings in lma_lineup.read_item(item, names).items():
         for where, shape, scope, detail in readings:
@@ -235,7 +710,7 @@ def fetch(raw, discogs=(), mb=(), lma=(), budget=None, clock=time.monotonic):
     return got, failed, waiting
 
 
-def build(raw, arthel=None, lma_names=()):
+def build(raw, arthel=None, lma_names=(), releases=()):
     rows = []
     for fn in sorted(glob.glob(os.path.join(raw, "discogs", "*.json"))):
         rows += from_discogs(json.load(open(fn)))
@@ -243,6 +718,11 @@ def build(raw, arthel=None, lma_names=()):
         rows += from_mb(json.load(open(fn)))
     if arthel:
         rows += from_arthel(arthel)
+    rows += from_releases(releases, arthel)
+    # and the names the verified band pages give the tape reader (band_names): a band's members are looked for on
+    # every tape, so verifying a stint is what puts that picker on the list
+    known = {n.casefold() for n in lma_names}
+    lma_names = list(lma_names) + [n for n in band_names([r for r in releases if r.get("band")]) if n.casefold() not in known]
     if lma_names:
         for fn in sorted(glob.glob(os.path.join(raw, "lma", "*", "*.json"))):
             try:
@@ -256,26 +736,55 @@ def build(raw, arthel=None, lma_names=()):
 
 SCHEMA = """
 CREATE TABLE targets (id TEXT PRIMARY KEY, kind TEXT, title TEXT, date TEXT, artist TEXT, grp TEXT,
-                      formats TEXT);  -- what the source says a record came out on, "; " between
+                      formats TEXT,   -- what the source says a record came out on, "; " between
+                      venue TEXT, city TEXT,   -- where a show was, as its source says; '' for a record
+                      poster TEXT,             -- a show's poster: a wiki file, or a small picture's address
+                      bands TEXT);             -- a show page's bands, as JSON: [{title, members}], in its order
 CREATE TABLE credits (n INTEGER PRIMARY KEY, person TEXT, mbid TEXT, roles TEXT, target TEXT REFERENCES targets(id),
                       scope TEXT, source TEXT, source_kind TEXT, read_by TEXT, excerpt TEXT);
 CREATE TABLE credit_tracks (credit INTEGER REFERENCES credits(n), position TEXT, title TEXT);
 CREATE TABLE people (name TEXT PRIMARY KEY, person TEXT, decided_by TEXT);  -- filled by a person, never by a reader
 CREATE INDEX credits_person ON credits(person);
 CREATE INDEX credits_target ON credits(target);
+-- A band's page, as far as a person has verified it (Cryptograss:Bacon graphs/Bands). A stint is one picker in one
+-- chair: a claim about the band, never about a night. start and until are as the page writes them ('' where no source
+-- says, or still a member); from_day and until_day are the same as whole days, so a day can be asked for:
+--   SELECT member, plays FROM stints WHERE band = :band AND (from_day = '' OR from_day <= :day)
+--                                                 AND (until_day = '' OR :day < until_day) ORDER BY n
+CREATE TABLE bands (name TEXT PRIMARY KEY, kind TEXT, leader TEXT, offshoot_of TEXT,
+                    billed_as TEXT);           -- its other names, "; " between
+CREATE TABLE stints (n INTEGER PRIMARY KEY, band TEXT REFERENCES bands(name), member TEXT, plays TEXT,
+                     start TEXT, until TEXT, from_day TEXT, until_day TEXT, source TEXT, checked TEXT);
+CREATE INDEX stints_band ON stints(band);
+CREATE INDEX stints_member ON stints(member);
 """
 
 
-def to_sqlite(rows, path):
+def bands_into(db, bands):
+    """The bands and their stints, into a store's database."""
+    for b in bands:
+        db.execute("INSERT OR IGNORE INTO bands VALUES (?,?,?,?,?)",
+                   (b["band"], b.get("kind", ""), b.get("leader", ""), b.get("offshoot_of", ""),
+                    "; ".join(b.get("billed_as") or [])))
+        for s in b.get("stints") or []:
+            db.execute("INSERT INTO stints (band, member, plays, start, until, from_day, until_day, source, checked) "
+                       "VALUES (?,?,?,?,?,?,?,?,?)",
+                       (b["band"], s["name"], s.get("plays", ""), s.get("from", ""), s.get("until", ""),
+                        day_from(s.get("from")), day_until(s.get("until")), s.get("source", ""), s.get("checked", "")))
+
+
+def to_sqlite(rows, path, bands=()):
     if os.path.exists(path):
         os.remove(path)
     db = sqlite3.connect(path)
     db.executescript(SCHEMA)
+    bands_into(db, bands)
     for i, r in enumerate(rows):
         t = r["target"]
-        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?)",
+        db.execute("INSERT OR IGNORE INTO targets VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                    (t["id"], t["kind"], t["title"], t["date"], t.get("artist", ""), t.get("group", t["id"]),
-                    "; ".join(t.get("formats") or [])))
+                    "; ".join(t.get("formats") or []), t.get("venue", ""), t.get("city", ""), t.get("poster", ""),
+                    json.dumps(t["bands"], ensure_ascii=False) if t.get("bands") else ""))
         db.execute("INSERT INTO credits VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (i, r["person"], r.get("mbid"), "; ".join(r["roles"]), t["id"], r["scope"], r["source"],
                     r["source_kind"], r["read_by"], r.get("excerpt")))
@@ -354,6 +863,11 @@ def main(argv):
                    help="files, one name per line, for the LMA parser to look for (connectome_names.txt; walked_names.txt)")
     b.add_argument("--out", required=True)
     b.add_argument("--db")
+    b.add_argument("--releases", help="the ready tracks, as `releases` wrote them")
+    r = sub.add_parser("releases", help="read the wiki's ready tracks (state: production), its videos, its show "
+                                        "pages and its band pages into a file")
+    r.add_argument("--wiki", default="https://pickipedia.xyz/")
+    r.add_argument("--out", required=True)
     e = sub.add_parser("pairs", help="write every pair as JSON, for a viewer")
     e.add_argument("--credits", required=True)
     e.add_argument("--out", required=True)
@@ -374,15 +888,34 @@ def main(argv):
         names = []
         for path in args.lma_names:
             names += [n for n in read_names(path) if n not in names]
-        rows = build(args.raw, args.arthel, names)
+        text = open(args.releases).read() if args.releases and os.path.exists(args.releases) else ""
+        releases = json.loads(text) if text.strip() else []
+        rows = build(args.raw, args.arthel, names, releases)
         with open(args.out, "w") as out:
             for r in rows:
                 out.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
+        bands = [r for r in releases if r.get("band")]
         if args.db:
-            to_sqlite(rows, args.db)
+            to_sqlite(rows, args.db, bands)
         people = {r["person"] for r in rows}
         targets = {r["target"]["id"] for r in rows}
-        print(f"{len(rows)} credits, {len(people)} names, {len(targets)} targets")
+        print(f"{len(rows)} credits, {len(people)} names, {len(targets)} targets"
+              + (f", {len(bands)} bands with {sum(len(b['stints']) for b in bands)} stints" if bands else ""))
+    elif args.cmd == "releases":
+        rels = fetch_releases(args.wiki)
+        with open(args.out + ".part", "w") as out:
+            json.dump(rels, out, ensure_ascii=False, sort_keys=True, indent=1)
+        os.replace(args.out + ".part", args.out)
+        tracks = [r for r in rels if r.get("cid")]
+        videos = [r for r in rels if r.get("video")]
+        shows = [r for r in rels if r.get("show")]
+        print(f"{len(tracks)} tracks ready: " + "; ".join(r["title"] or r["cid"] for r in tracks))
+        print(f"{len(videos)} videos of two or more: " + "; ".join(r["title"] or r["video"] for r in videos))
+        print(f"{len(shows)} show pages: " + "; ".join(r["show"] for r in shows))
+        bands = [r for r in rels if r.get("band")]
+        print(f"{len(bands)} band pages with something verified: "
+              + "; ".join(f"{b['band']} ({len(b['stints'])} stints, {len(lineups(b['stints']))} lineups"
+                          + (f"; not read: {', '.join(b['unread'])}" if b.get("unread") else "") + ")" for b in bands))
     elif args.cmd == "pairs":
         rows = [json.loads(l) for l in open(args.credits)]
         ps = pairs(rows)

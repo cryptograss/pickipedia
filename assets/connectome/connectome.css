@@ -18,6 +18,13 @@
 	--axis: #c3c2b7;
 	--gold: #eda100;
 	--gold-wash: #fdf1cf;
+	/* The kinds of connection, in the order they come first (connectome-core.js, shade): a Permanent track gold, a
+	   Permanent show green (Justin, #connectome, 28 Nov 2026, 00:52Z: "let's use green instead of ember"), a Full track
+	   blue, a Full show ink. Checked as a set against each paper for the three kinds of colour blindness: gold and
+	   green, the nearest two, are 11 apart for a protanope by day and 10 by night (8 is the floor; ember was 16). */
+	--green: #2a9441;
+	--green-wash: #dff2e2;
+	--blue: #2f6fb3;
 	--link: #0645ad;
 	--play: #4a7c59;
 	--play-on: #3c6749;
@@ -46,6 +53,9 @@
 		--hair: light-dark( #e1e0d9, #3a323b );
 		--axis: light-dark( #c3c2b7, #5a4f5c );
 		--gold-wash: light-dark( #fdf1cf, #4a3a12 );
+		--green: light-dark( #2a9441, #259a52 );
+		--green-wash: light-dark( #dff2e2, #173622 );
+		--blue: light-dark( #2f6fb3, #4f94d4 );
 		--link: light-dark( #0645ad, #8fb1f2 );
 		--hover: light-dark( #f0efec, #2f2832 );
 		--halo: light-dark( rgba( 11, 11, 11, 0.07 ), rgba( 236, 227, 216, 0.12 ) );
@@ -115,7 +125,6 @@ button:focus-visible,
 	outline-offset: 2px;
 }
 
-.bar .join { color: var( --muted ); }
 
 #back {
 	padding: 2px 9px;
@@ -255,6 +264,10 @@ main {
 
 .core.t2 { stroke: var( --ink ); }
 .core.t1 { stroke: var( --ink2 ); }
+/* a Full studio track; a Full show keeps the ink. Their widths are the script's (--w), each kind lighter than the one before */
+.core.ft { stroke: var( --blue ); }
+.core.tw { stroke-width: calc( var( --w, 2 ) * 1px ); }
+.glow.ps { stroke: var( --green ); }
 
 .core.t0 {
 	stroke: var( --muted );
@@ -266,6 +279,9 @@ main {
 	stroke: var( --gold );
 	stroke-linecap: round;
 }
+
+/* a Permanent show: a night, not a cut */
+.thread.ps { stroke: var( --green ); }
 
 .ln .hit {
 	fill: none;
@@ -307,6 +323,14 @@ main {
 /* A page in the middle of its own graph: a sheet with a turned corner and three lines of writing. */
 .pk.page .leaf { fill: var( --surface ); stroke: var( --ink ); stroke-width: 1.4; stroke-linejoin: round; }
 .pk.page .writ { fill: none; stroke: var( --ink ); stroke-width: 1.1; }
+
+/* A show's band with no one leader, and where the show was (showScene): marks of their own, named under them. */
+.pk.mark.main text { stroke-width: 6px; font-size: calc( 17px * var( --t, 1 ) ); }
+.pk.mark .heads circle,
+.pk.mark .heads path { fill: var( --ink ); stroke: none; }
+.pk.mark .roof { fill: none; stroke: var( --ink ); stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; }
+.pk.mark.venue .ring { stroke-dasharray: 3 2.5; }
+.pk.mark.nopage text { fill: var( --ink2 ); }
 
 /* What kind of thing a headline names, when it isn't a picker. */
 #say .kind svg { vertical-align: -2px; margin-right: 6px; }
@@ -389,6 +413,9 @@ main {
 	stroke-dasharray: 2 3;
 }
 
+.pill.t2.sh rect { fill: var( --green-wash ); stroke: var( --green ); }
+.pill.t1:not( .sh ) rect { stroke: var( --blue ); stroke-width: 1.3; }
+
 .pill text {
 	font: 600 calc( 12.5px * var( --t, 1 ) ) var( --ui );
 	fill: var( --ink );
@@ -431,113 +458,6 @@ main {
 /* A piece of music's note: when, then who (tipFor). */
 #tip .when { color: var( --ink ); font-weight: 600; }
 
-/* ---- the drawer: the list folds away at any width, and the graph takes the room (Justin, #connectome,
-   15 Nov 2026). Beside the graph it is a strip down the list's edge; under it, a bar across. ---- */
-#drawer {
-	display: flex;
-	flex: none;
-	align-items: center;
-	justify-content: center;
-	width: 22px;
-	padding: 0;
-	border: 0;
-	border-left: 1px solid var( --hair );
-	background: var( --plane );
-	color: var( --ink2 );
-	font: 700 15px var( --ui );
-	cursor: pointer;
-}
-#drawer:hover { background: var( --hover ); color: var( --ink ); }
-#drawer:focus-visible { outline: 2px solid var( --link ); outline-offset: -2px; }
-#drawer .word { display: none; }
-main.shut #panel { display: none; }
-
-/* ---- the panel: the same, as a list a reader can check ---- */
-#panel {
-	flex: none;
-	width: 330px;
-	overflow-y: auto;
-	padding: 12px 14px 20px;
-	border-left: 1px solid var( --hair );
-	background: var( --plane );
-}
-
-#panel h2 {
-	margin: 0 0 2px;
-	font: 700 17px/1.25 var( --name );
-}
-
-#panel h3 {
-	margin: 16px 0 5px;
-	color: var( --ink2 );
-	font: 600 11.5px var( --ui );
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
-}
-
-#panel h3.row {
-	display: flex;
-	gap: 8px;
-	align-items: baseline;
-	justify-content: space-between;
-}
-
-#panel .mini {
-	flex: none;
-	padding: 1px 7px;
-	border: 1px solid var( --axis );
-	border-radius: 6px;
-	background: var( --surface );
-	color: var( --ink );
-	font: 12px var( --ui );
-	letter-spacing: 0;
-	text-transform: none;
-	cursor: pointer;
-}
-
-#panel p { margin: 4px 0; }
-#panel .sub { color: var( --ink2 ); }
-
-#panel ul {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-#panel li {
-	display: flex;
-	gap: 8px;
-	align-items: flex-start;
-	padding: 6px 6px;
-	border-radius: 6px;
-}
-
-#panel li + li { border-top: 1px solid var( --hair ); }
-#panel li.go { cursor: pointer; }
-#panel li.go:hover, #panel li.hot { background: var( --hover ); }
-#panel li .mark { flex: none; width: 18px; margin-top: 2px; }
-#panel li .body { flex: 1 1 auto; min-width: 0; }
-#panel li .t { font-weight: 600; }
-#panel li .s { color: var( --ink2 ); font-size: 12.5px; overflow-wrap: anywhere; }
-#panel li .n { flex: none; color: var( --ink2 ); font-size: 12.5px; text-align: right; white-space: nowrap; }
-#panel .who { font: 700 14px var( --name ); }
-
-.badge {
-	display: inline-block;
-	padding: 0 6px;
-	border: 1px solid var( --axis );
-	border-radius: 9px;
-	color: var( --ink2 );
-	font-size: 11px;
-	white-space: nowrap;
-}
-
-.badge.t2 {
-	border-color: var( --gold );
-	background: var( --gold-wash );
-	color: var( --ink );
-}
-
 .acts {
 	display: flex;
 	flex-wrap: wrap;
@@ -560,17 +480,10 @@ main.shut #panel { display: none; }
 .acts a.page.new { border-color: var( --axis ); color: var( --ink ); }
 .acts a:hover, .acts button:hover { background: var( --hover ); }
 
-#panel .foot {
-	margin-top: 18px;
-	color: var( --muted );
-	font-size: 12px;
-}
-
-#panel table { width: 100%; border-collapse: collapse; }
-#panel td { padding: 4px 6px; border-top: 1px solid var( --hair ); }
-#panel td.num { width: 3em; font-weight: 700; text-align: center; }
-#panel tr.go { cursor: pointer; }
-#panel tr.go:hover { background: var( --hover ); }
+/* ---- a video of it: a ▶, red, beside a night's name; it plays over the graph (watchOpen) ---- */
+#g a.watch rect { fill: rgb( 204 40 64 ); stroke: none; }
+#g a.watch:hover rect, #g a.watch:focus rect { fill: rgb( 232 56 82 ); }
+#g a.watch .tri { fill: #fff; }
 
 /* ---- the way into Rabbithole: a rabbit and a play mark, green, beside a track's name ---- */
 #g a.play rect {
@@ -630,6 +543,30 @@ a.play:focus {
 }
 
 #sheet[ hidden ] { display: none; }
+
+/* a pill's "+n", opened under it: the tracks, the graph where it is (openDrop) */
+#drop { position: absolute; z-index: 7; min-width: 180px; max-width: min( 360px, calc( 100% - 8px ) ); padding: 6px 0 4px; border: 1px solid var( --axis );
+	border-radius: 10px; background: var( --surface ); box-shadow: 0 6px 24px var( --lift ); color: var( --ink2 ); font-size: 14px; }
+#drop[ hidden ] { display: none; }
+
+/* a video, over the graph: its own Release page, the wiki's player in it (watchOpen) */
+#watch { position: absolute; inset: 8px; z-index: 8; display: flex; flex-direction: column; border: 1px solid var( --axis ); border-radius: 12px;
+	background: var( --surface ); box-shadow: 0 6px 24px var( --lift ); overflow: hidden; }
+#watch[ hidden ] { display: none; }
+#watch .watch-top { display: flex; align-items: center; gap: 12px; padding: 4px 6px 4px 14px; color: var( --ink ); }
+#watch .watch-top b { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#watch .watch-top a { color: var( --link ); font-size: 14px; white-space: nowrap; }
+#watch .x { width: 42px; height: 42px; border: 0; background: none; color: var( --ink ); font: 28px/1 var( --ui ); cursor: pointer; }
+#watch iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+#drop .drop-head { margin: 0 12px 4px; font-size: 12px; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#drop ul { margin: 0; padding: 0; list-style: none; }
+#drop li { display: flex; align-items: center; }
+#drop button { flex: 1; min-width: 0; min-height: 34px; padding: 4px 12px; border: 0; background: none; color: var( --ink ); font: inherit; text-align: left; cursor: pointer;
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#drop button:hover, #drop button:focus-visible { background: var( --lift ); outline: none; }
+#drop .drop-by { margin-left: .5em; opacity: .7; }
+#drop .drop-more { color: var( --link ); }
+#drop .drop-play { padding: 4px 12px; color: var( --play ); text-decoration: none; }
 
 #sheet.up {
 	top: 8px;
@@ -716,7 +653,8 @@ a.play:focus {
 }
 
 /* ---- inside out: the music is the circles, the pickers are the lines ---- */
-/* A piece's ring is as free as the piece: gold for a Permanent Release, ink for a Full one, dotted for the rest. */
+/* A piece's ring is as free as the piece, and says whether it is a night or a cut: gold for a Permanent record or track,
+   green for a Permanent show, blue for a Full record or track, ink for a Full show, dotted for the rest. */
 .mu .ring {
 	fill: var( --surface );
 	stroke: var( --ink2 );
@@ -733,6 +671,10 @@ a.play:focus {
 	stroke: var( --muted );
 	stroke-dasharray: 2 4;
 }
+
+/* and as the lines are: a Permanent show green, a Full record or track blue (a Full show keeps the ink) */
+.mu.t2.sh .ring { fill: var( --green-wash ); stroke: var( --green ); }
+.mu.t1:not( .sh ) .ring { stroke: var( --blue ); }
 
 .mu.subject .ring { stroke-width: 3; }
 .mu.subject.t2 .ring { stroke-width: 5; }
@@ -752,6 +694,9 @@ a.play:focus {
 	stroke: var( --ink2 );
 	stroke-width: 0.9;
 }
+
+.mu.t2.sh .bead { fill: var( --green ); }
+.mu.t1:not( .sh ) .bead { fill: var( --blue ); }
 
 .mu.t0 .bead {
 	fill: var( --surface );
@@ -861,16 +806,10 @@ a.out:focus { text-decoration: underline; }
 
 #legend { box-sizing: border-box; }
 
-/* ---- narrow: the list under the graph ---- */
+/* ---- narrow. The graph has the whole of the frame: there was a list under it, and the page scrolled ---- */
 @media ( max-width: 760px ) {
-	body { height: auto; min-height: 100%; }
 	main { flex-direction: column; }
-	#stage { flex: none; height: 78vh; height: 78svh; min-height: 460px; }
 	#say { padding: 10px 12px 0; }
-	#panel { width: auto; border-top: 1px solid var( --hair ); border-left: 0; }
-	#drawer { gap: 8px; width: auto; min-height: 36px; border-top: 1px solid var( --hair ); border-left: 0; font-size: 13px; }
-	#drawer .word { display: inline; font-weight: 600; }
-	#drawer .chev { transform: rotate( -90deg ); }        /* under the graph: up to fold it, down to open it */
 	#say h1 { font-size: 18px; }
 	.bar { gap: 6px; padding: 6px 8px; }
 	.bar label { flex: 1 1 0; min-width: 0; }
@@ -878,8 +817,6 @@ a.out:focus { text-decoration: underline; }
 	.bar input { width: 100%; max-width: none; padding: 7px 8px; font-size: 16px; }
 	.bar.game #goal { flex: 1 1 9em; width: auto; min-width: 0; }      /* beside "Find a path to:", not under it */
 	#back { padding: 6px 12px; }
-	#panel h3 { font-size: 12px; }
-	.badge { font-size: 12px; }
 }
 
 /* ---- short: a phone on its side. The graph gets what height there is ---- */
@@ -891,12 +828,7 @@ a.out:focus { text-decoration: underline; }
 /* ---- a finger wants more to land on than a pointer does ---- */
 @media ( pointer: coarse ) {
 	.acts a, .acts button { padding: 8px 12px; font-size: 14px; }
-	#panel .mini { padding: 6px 10px; font-size: 13px; }
-	#panel li { padding: 10px 6px; }
-	#panel td { padding: 10px 6px; }
-	#panel a.play { padding: 5px 7px; border-radius: 14px; }
 	/* The arrow out to a page is small to the eye, and no smaller than a fingertip to the touch. */
-	#panel a.out { display: inline-block; margin: -9px 0 -9px 2px; padding: 9px 12px; font-size: 14px; }
 	#say h1 a.out { display: inline-block; padding: 6px 4px; }
 	.ln .hit { stroke-width: 24; }
 	#say h1 button.turn { padding: 5px 12px; font-size: 13px; }
@@ -904,7 +836,6 @@ a.out:focus { text-decoration: underline; }
 	#legend { bottom: calc( var( --path, 0px ) + 48px ); max-height: calc( 100% - var( --path, 0px ) - 58px ); }
 }
 @media ( pointer: coarse ) and ( min-width: 761px ) {
-	#drawer { width: 32px; }                               /* beside the graph: wide enough for a fingertip */
 }
 
 @media ( prefers-reduced-motion: reduce ) {
@@ -914,7 +845,6 @@ a.out:focus { text-decoration: underline; }
 /* ---- your rabbithole: the walk, top to bottom (Justin, #connectome, 15 Nov 2026) ---- */
 #stage.walking { overflow-y: auto; }
 #stage.walking #g { flex: none; }
-main.walking #panel, main.walking #drawer { display: none; }
 .pk text.note { font: 600 11.5px var( --ui ); fill: var( --ink2 ); stroke-width: 0; }
 .pk text.note.now { fill: var( --play ); }
 g.day text { font: 700 11px var( --ui ); fill: var( --muted ); letter-spacing: .04em; text-transform: uppercase; }
@@ -930,9 +860,14 @@ body.in-rabbithole .bar { display: none; }
 /* In the one shell, while the reader steers (the player's traverse mode off): the search bar, the challenge's bar
    and the way come, as on a page of its own. They stand aside again while the music moves the graph. */
 body.in-rabbithole.steering .bar:not([hidden]) { display: flex; }
+/* One bar (Justin, #connectome, 21 Nov 2026): a shell with the link, the FAQ and the way to PickiPedia on its own
+   bar says so (bar=1), and this page's own is put away, steering or not. The challenge's bar is not that one. */
+body.barless header.bar { display: none !important; }
+/* The song that is playing has no button to play it (connectome.js, playSay). */
+a.play.on-now { display: none; }
 
 /* In the player's dock: the few steps there's room for, and nothing else. */
-body.mini .bar, body.mini #say, body.mini #legend, body.mini #key, body.mini #panel, body.mini #drawer { display: none; }
+body.mini .bar, body.mini #say, body.mini #legend, body.mini #key { display: none; }
 body.mini, body.mini main, body.mini #stage { background: transparent; }
 body.mini #g { cursor: pointer; }
 
@@ -1020,6 +955,10 @@ body.mini #g { cursor: pointer; }
 	margin-right: auto;
 	margin-left: auto;
 }
+/* Under the answers: the way to tell us of a connection nobody wrote down, and the store. The list beside the
+   graph held them until it went (Justin, #connectome, 21 Nov 2026). */
+#faq .faq-tell { max-width: 46em; margin: 0 auto; }
+#faq .faq-tell .foot { margin: 10px 0 0; color: var( --ink2 ); font-size: 12.5px; }
 #faq .faq-top {
 	display: flex;
 	align-items: center;
@@ -1174,7 +1113,7 @@ body.mini #g { cursor: pointer; }
 }
 #g g.fx-pickup circle.fxr { opacity: .7; stroke-dasharray: 3 4; }
 #g g.fx-lead circle.fxr { opacity: .9; animation: fx-breathe 2.4s ease-in-out infinite; }
-#g g.fx-enter circle.fxr { opacity: .9; animation: fx-enter .9s ease-out 1; }
+#g g.fx-enter circle.fxr { opacity: .9; stroke: rgb( 255 140 0 ); animation: fx-enter .9s ease-out 1; }
 #g g.fx-band circle.fxr,
 #g g.fx-flourish circle.fxr,
 #g g.fx-glow circle.fxr {
@@ -1186,6 +1125,12 @@ body.mini #g { cursor: pointer; }
 }
 #g g.fx-band circle.fxr { stroke-width: 3.5; }
 #g.fx-paused circle.fxr { animation-play-state: paused; }
+/* A song begins: pink on its whole band in sight; somebody comes in: orange on them (Justin, #connectome, 23 Nov 2026, 18:30Z) */
+#g circle.fxs { fill: none; pointer-events: none; transform-box: fill-box; transform-origin: center; opacity: 0; }
+#g circle.fxs-start { stroke: rgb( 255 64 160 ); stroke-width: 5; filter: drop-shadow( 0 0 9px rgb( 255 64 160 ) ); animation: fxs-flash 1.6s ease-out 1; }
+#g circle.fxs-enter { stroke: rgb( 255 140 0 ); stroke-width: 5; filter: drop-shadow( 0 0 9px rgb( 255 140 0 ) ); animation: fxs-flash 1.2s ease-out 1; }
+@keyframes fxs-flash { 0% { opacity: 0; transform: scale( .8 ); } 15% { opacity: 1; transform: scale( 1.25 ); } 45% { opacity: .9; transform: scale( 1 ); } 100% { opacity: 0; transform: scale( 1.5 ); } }
+#g text tspan.inst { font-weight: 400; font-size: .86em; opacity: .78; }
 @keyframes fx-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 @keyframes fx-pulse { 0%, 100% { opacity: .45; transform: scale( 1 ); } 50% { opacity: 1; transform: scale( 1.16 ); } }
 @keyframes fx-enter { 0% { opacity: 0; transform: scale( 1.9 ); } 100% { opacity: .9; transform: scale( 1 ); } }
@@ -1206,19 +1151,82 @@ body.mini #g { cursor: pointer; }
 	align-content: start;
 	box-sizing: border-box;
 	padding: 8px 10px;
-	border: 1px solid var( --hair );
+	border: 2px solid var( --ink2 );
 	border-radius: 8px;
-	background: var( --surface );
+	/* see-through, so what it lies on shows through it and reads as under it, not cut off by it (Justin, #connectome,
+	   27 Nov 2026, 02:13Z: "cards on bacon graphs [should] be somewhat transparent. On the relatively rare occasion
+	   when they do overlap something, it looks broken"); whole again while it's pointed at or in use */
+	background: color-mix( in srgb, var( --surface ) 74%, transparent );
+	-webkit-backdrop-filter: blur( 1.5px );
+	backdrop-filter: blur( 1.5px );
+	box-shadow: 0 2px 10px rgba( 0, 0, 0, .08 );
 	color: var( --ink2 );
 	font: 12px/1.3 var( --ui );
 	overflow: hidden;
+	transition: background-color .18s;
 }
+#card:hover, #card:focus-within { background: var( --surface ); }
 #card[hidden] { display: none; }
+/* Beside a wide drawing (a desktop), room between the three lines (Justin, #connectome, 21 Nov 2026, 23:27Z: "some
+   padding between the three written items. Also, let's make the border around the card bolder and more distinct").
+   The picture went 30% bigger with it, and came back down (22 Nov, 00:55Z: "Now the picker card is big enough that
+   it's looking awkward ... Let's reduce the photo size back to where it was, but let the user click it to get a
+   photo in a modal box"): the picture opens #zoom. */
+#card.side .card-does { gap: 7px; }
+#card .card-face { grid-area: pic; align-self: start; display: block; padding: 0; border: 0; border-radius: 50%; background: none; cursor: zoom-in; }
+#card .card-face:focus-visible { outline: 2px solid var( --ink ); outline-offset: 2px; }
+#card .card-face img { display: block; }
+/* The card, closer: the picture big and everything the page's box says, uncut. Over the drawing, which stays as it
+   was under it; a click outside the box, its ×, or Escape puts it away. */
+#zoom {
+	position: absolute;
+	inset: 0;
+	z-index: 8;
+	display: grid;
+	place-items: center;
+	padding: 16px;
+	background: rgba( 20, 16, 22, .55 );
+}
+#zoom[ hidden ] { display: none; }
+#zoom .zoom-box {
+	position: relative;
+	display: grid;
+	grid-template: "pic name" auto "pic inst" auto "pic does" auto "pic page" minmax( 0, 1fr ) / auto minmax( 0, 1fr );
+	gap: 8px 22px;
+	box-sizing: border-box;
+	width: min( 820px, 100% );
+	max-height: 100%;
+	padding: 22px 26px;
+	overflow: auto;
+	border: 2px solid var( --ink2 );
+	border-radius: 10px;
+	background: var( --surface );
+	box-shadow: 0 8px 36px rgba( 0, 0, 0, .35 );
+	color: var( --ink2 );
+	font: 15px/1.5 var( --ui );
+}
+#zoom .zoom-box.nopic { grid-template: "name" auto "inst" auto "does" auto "page" minmax( 0, 1fr ) / minmax( 0, 1fr ); }
+#zoom img { grid-area: pic; align-self: start; width: min( 320px, 40vw ); height: auto; max-height: min( 420px, 70vh ); object-fit: cover; border-radius: 8px; }
+#zoom .zoom-name { grid-area: name; margin: 0; padding-right: 36px; color: var( --ink ); font: 700 26px/1.2 var( --name ); text-decoration: none; }
+#zoom a.zoom-name:hover { text-decoration: underline; }
+#zoom .zoom-inst { grid-area: inst; margin: 0; font-style: italic; }
+#zoom .zoom-does { grid-area: does; display: grid; align-content: start; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
+#zoom .zoom-page { grid-area: page; align-self: start; margin: 10px 0 0; font-size: 13.5px; }
+#zoom .x { position: absolute; top: 8px; right: 10px; width: 40px; height: 40px; border: 0; background: none; color: var( --ink ); font: 28px/1 var( --ui ); cursor: pointer; }
+/* A narrow drawing (a phone): the picture over the words. */
+@media ( max-width: 560px ) {
+	#zoom .zoom-box { grid-template: "pic" auto "name" auto "inst" auto "does" auto "page" auto / minmax( 0, 1fr ); padding: 18px 16px; }
+	#zoom img { justify-self: center; width: min( 260px, 70vw ); max-height: 40vh; }
+	#zoom .zoom-name { font-size: 22px; }
+}
 #card.side { grid-template: "pic name" auto "pic does" minmax( 0, 1fr ) / auto minmax( 0, 1fr ); gap: 4px 10px; }
 #card.tower { grid-template: "pic" auto "name" auto "does" minmax( 0, 1fr ) / minmax( 0, 1fr ); justify-items: center; }
 #card.tower .card-name { font-size: 15px; text-align: center; }
 #card.tower .card-does { justify-self: stretch; }
 #card.nopic { grid-template: "name" auto "does" minmax( 0, 1fr ) / minmax( 0, 1fr ); }
+/* a song's second line: who wrote it, or "traditional" (Justin, #connectome, 23 Nov 2026, 18:30Z) */
+#card.nopic:has( .card-by ) { grid-template: "name" auto "by" auto "does" minmax( 0, 1fr ) / minmax( 0, 1fr ); }
+#card .card-by { grid-area: by; font-style: italic; color: var( --ink ); opacity: .85; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #card img { grid-area: pic; align-self: start; width: 84px; height: 84px; border-radius: 50%; object-fit: cover; }
 /* The name whole, on two lines where one won't hold it (a long single word breaks). */
 #card .card-name { grid-area: name; align-self: center; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; color: var( --link ); font: 600 16px/1.2 var( --name ); text-decoration: none; }
@@ -1237,8 +1245,10 @@ body.mini #g { cursor: pointer; }
 #stage.carded #kept { right: auto; left: 14px; }
 /* In Rabbithole while the music steers, the graph has no headline: Rabbithole's own bar names the song, and the
    card names whoever is taking it (Justin, 20 Nov 2026: "In rabbithole mode, I'm not sure we even need the top bar
-   at all"). It comes back with the search bar when the reader steers. */
-body.shell:not( .steering ) #say { display: none; }
+   at all"). It came back with the search bar when the reader steered, until Justin, #connectome, 21 Nov 2026,
+   23:27Z: "The content in the upper-left (<picker name>, <page> "has played with...") is now obsolete - let's nix
+   it." In Rabbithole it never shows: the card names the one in the middle, the bar names the Oracle. */
+body.shell #say { display: none; }
 /* `compact`: where the ring leaves the corner no more room than it had (cardRoom). */
 #card.compact { gap: 4px 7px; padding: 6px 8px; }
 #card.compact img { width: 44px; height: 44px; }
@@ -1308,9 +1318,6 @@ g.kept-gone path.core, g.kept-gone path.thread { stroke-dasharray: 1.5 4; opacit
 .bar.game[hidden] { display: none; }
 
 /* The top bar's search, put away in a challenge; the game's own "Find a path to:" stays (it had gone with them). */
-body.challenge header.bar label,
-body.challenge header.bar .join { display: none; }
-
 #confetti {
 	position: absolute;
 	inset: 0;
@@ -1647,6 +1654,39 @@ body.in-rabbithole:not(.steering) #path { display: none; }
 	color: var( --link );
 	font-weight: 700;
 }
+/* The two boxes, under "explore" and over the four (Justin, #connectome, 21 Nov 2026). */
+#oracle .find {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	max-width: 46em;
+	margin: 20px auto 0;
+}
+#oracle .find[ hidden ] { display: none; }
+#oracle .find label { flex: 0 1 17em; min-width: 0; }
+#oracle .find input {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 6px 9px;
+	border: 1px solid var( --axis );
+	border-radius: 6px;
+	background: var( --surface );
+	color: var( --ink );
+	font: 600 16px var( --name );
+}
+#oracle .find input::placeholder { color: var( --ink2 ); font-weight: 400; opacity: 1; }
+#oracle .find input:focus-visible { outline: 2px solid var( --link ); outline-offset: 2px; }
+#oracle .find button {
+	padding: 6px 14px;
+	border: 1px solid var( --ink );
+	border-radius: 6px;
+	background: var( --ink );
+	color: var( --surface );
+	font: 700 14px var( --ui );
+	cursor: pointer;
+}
 #oracle .note {
 	margin: 8px 0 0;
 	color: #b3261e;
@@ -1714,3 +1754,16 @@ body.intro #game { display: none; }
 		gap: 8px;
 	}
 }
+
+/* A show's set stones: small gems in each stone's three colours, wherever the show is (tools/set_stones.py) */
+.gems .gem path { stroke: none; }
+/* A cut's chartifacts (chartMark): a leaf of staff paper on the song's circle, with how many. */
+#g .pk .charts .leaf { fill: #fffdf4; stroke: #1b1b1b; stroke-width: 1.3px; }
+#g .pk .charts .staff { fill: none; stroke: #1b1b1b; stroke-width: 1px; }
+#g .pk .charts circle.count-bg { fill: var( --link ); stroke: #fff; stroke-width: 1.5px; }
+#g .pk .charts text.count { fill: #fff; stroke: none; font: 700 10px/1 var( --ui ); }
+#g .pk .charts:hover .leaf { stroke-width: 2px; }
+.gems .gem path.cut { stroke: #1b1b1b; stroke-width: 0.9px; stroke-linejoin: round; }
+.gems .gem:hover path.cut { stroke-width: 1.6px; }
+.gems text.n { font-size: 10px; font-weight: 600; fill: #1b1b1b; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+#path .gems-inline { margin-left: 4px; vertical-align: middle; flex: none; }

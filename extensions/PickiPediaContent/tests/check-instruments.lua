@@ -86,6 +86,14 @@ check( "tucking pulls it back over the name",
 	ins._badge( "fiddle", 18, true ):find( "pp%-instrument%-%-tuck" ) ~= nil )
 check( "and is off by default",
 	ins._badge( "fiddle", 18 ):find( "tuck" ) == nil )
+check( "an icon drawn in black on nothing says so, so night can turn it over",
+	ins._badge( "dobro", 20 ):find( "pp%-instrument%-%-mono" ) ~= nil,
+	ins._badge( "dobro", 20 ) )
+check( "and by the family, not the word: a pennywhistle is a tin whistle",
+	ins._badge( "pennywhistle", 20 ):find( "pp%-instrument%-%-mono" ) ~= nil,
+	ins._badge( "pennywhistle", 20 ) )
+check( "a photographed one does not, since inverting it would make it blue",
+	ins._badge( "5-string banjo", 20 ):find( "mono" ) == nil )
 check( "presentation is carried by classes, not inline style",
 	select( 2, ins._badge( "5-string banjo", 20 ):gsub( 'style="', "" ) ) == 1,
 	ins._badge( "5-string banjo", 20 ) )

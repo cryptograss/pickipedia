@@ -42,7 +42,8 @@ def test_a_page_says_its_names_and_what_it_and_its_talk_page_link():
                 {"url": "https://musicbrainz.org/release/0b4f1d3e-1111-2222-3333-444455556666"},
                 {"url": "https://archive.org/details/bkh2026-03-01.sbd"},
                 {"url": "https://www.discogs.com/release/38267088"}]}]}}
-    names, links, boxed, cats = walk.page_facts(wiki_get, "Bronwyn")
+    names, links, boxed, cats, band = walk.page_facts(wiki_get, "Bronwyn")
+    assert band is False
     assert boxed is False and cats == set()
     # one word is too loose to look anybody up by; the redirect and MusicianInfo's name are full names
     assert names == ["Bronwyn Keith-Hynes", "Bronwyn Keith Hynes"]
@@ -290,7 +291,7 @@ def test_a_box_on_the_page_is_taken_out_before_its_links_are_read():
              "categories": [{"title": "Category:Walk Requested"}],
              "extlinks": [{"url": "https://www.discogs.com/artist/3847115"}, {"url": "https://www.discogs.com/artist/3926070"}]},
             {"title": "Talk:Jack Schneider", "extlinks": [{"url": "https://archive.org/details/js2020-01-01"}]}]}}
-    names, links, boxed, cats = walk.page_facts(wiki_get, "Jack Schneider")
+    names, links, boxed, cats = walk.page_facts(wiki_get, "Jack Schneider")[:4]
     assert cats == {"Category:Walk_Requested"}
     assert boxed and links == {"discogs-artist": ["3847115"], "lma": ["js2020-01-01"]}                # the one said outside the box, and the talk page's
     assert posted[0][1] is True and "Which picker" not in posted[0][0]["text"] and posted[0][0]["title"] == "Jack Schneider"
@@ -658,3 +659,45 @@ def test_the_editor_does_not_save_over_a_revision_made_this_second():
         assert False, "it should have raised"
     except RuntimeError as e:
         assert "edited a moment ago" in str(e) and slept == [2.5] and not [q for m, q in wiki.calls if q["action"] == "edit"]
+
+
+# ---- a band's page in the queue (Justin, #connectome, 27 Nov 2026, 21:27Z) ----
+
+def _band_wiki(text, redirects=()):
+    def wiki_get(q, post=False):
+        return {"query": {"pages": [{"title": "Arkansauce", "redirects": [{"title": r} for r in redirects], "extlinks": [],
+                                     "revisions": [{"slots": {"main": {"content": text}}}]}]}}
+    return wiki_get
+
+
+def test_a_bands_page_is_walked_by_the_bands_name_however_short():
+    text = "{{BandInfo\n|kind=regular\n|billed_as=The Sauce; [[Arkansauce String Band]]\n}}\n{{Band member|Ann One|fiddle}}"
+    names, links, boxed, cats, band = walk.page_facts(_band_wiki(text, ["Sauce"]), "Arkansauce")
+    assert band is True
+    assert names == ["Arkansauce", "Sauce", "The Sauce", "Arkansauce String Band"]   # one word will do for a band; a member is no name of it
+    # an infobox still waiting for a person makes it a band's page, and its other names aren't taken yet
+    waiting = '<proposed by="Blu">\n{{BandInfo|billed_as=The Sauce}}\n</proposed>'
+    assert walk.page_facts(_band_wiki(waiting), "Arkansauce")[0::4] == (["Arkansauce"], True)
+    # and a page that only writes about the template is nobody's band: one word is too loose again
+    assert walk.page_facts(_band_wiki("See <nowiki>{{BandInfo}}</nowiki>."), "Arkansauce")[0::4] == ([], False)
+
+
+def test_a_band_walked_gives_its_sources_and_not_its_name_to_the_tape_reader(tmp_path):
+    cache = str(tmp_path)
+    asked = [("Arkansauce", "2026-11-27T21:30:00Z"), ("A B", "2026-11-27T21:31:00Z")]
+    facts = lambda t: ([t], {}, False, None, t == "Arkansauce")
+    done, _, _ = walk.run(cache, asked, facts, [], look=fake_look(2, 0, 1), stamp=lambda: "2026-11-27T21:40:00Z")
+    walked = json.load(open(os.path.join(cache, "walked.json")))
+    assert done == 2 and walked["Arkansauce"]["band"] is True and "band" not in walked["A B"]
+    assert walked["Arkansauce"]["sources"] == ["discogs 0", "discogs 1", "lma tape0"]      # its records and tapes come in
+    assert walked["Arkansauce"]["names"] == ["Arkansauce"]
+    assert open(os.path.join(cache, "walked_names.txt")).read() == "A B\n"                 # the picker's name only
+
+
+def test_a_band_is_asked_of_archive_org_only_as_the_creator():
+    queries = []
+    look = dict(fake_look(0, 0, 0), ia_search=lambda q, rows: queries.append(q) or ["own1"])
+    sources, _ = walk.walk_one("Water tower", ["Water tower"], {}, set(), look, band=True)
+    assert queries == ['creator:"Water tower" AND (mediatype:etree OR mediatype:audio)'] and sources == ["lma own1"]
+    walk.walk_one("A B", ["A B"], {}, set(), look)
+    assert queries[1] == walk.IA_QUERY.format(name="A B")                    # a picker's, as before

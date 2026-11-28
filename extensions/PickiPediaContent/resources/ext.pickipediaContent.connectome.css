@@ -80,7 +80,7 @@ svg.cc a {
 	font-size: 85%;
 }
 
-/* The legend's keys: the three lines, as the card and the big graph draw them. */
+/* The legend's keys: the five lines, as the card and the big graph draw them. */
 .connectome-card .cc-key {
 	display: inline-block;
 	width: 18px;
@@ -88,10 +88,20 @@ svg.cc a {
 }
 
 .connectome-card .cc-gold {
-	border-top: 4px solid #eda100;
+	border-top: 5px solid #eda100;
+}
+
+.connectome-card .cc-green {
+	margin-left: 6px;
+	border-top: 3px solid #2a9441;
+}
+
+.connectome-card .cc-blue {
+	border-top: 3px solid #2f6fb3;
 }
 
 .connectome-card .cc-ink {
+	margin-left: 6px;
 	border-top: 2px solid #52514e;
 }
 
@@ -122,122 +132,12 @@ svg.cc a {
 	font-size: 80%;
 }
 
-/* The big graph, over the page, when a dot or line is clicked (ext.pickipediaContent.connectome.js). */
-#cc-big {
-	display: none;
-	position: fixed;
-	top: 3vh;
-	right: 3vw;
-	bottom: 3vh;
-	left: 3vw;
-	z-index: 9999;
-	overflow: hidden;
-	border: 1px solid #a2a9b1;
-	border-radius: 8px;
-	background: #fcfcfb;
-	box-shadow: 0 8px 40px rgba( 0, 0, 0, 0.35 );
-}
-
-#cc-big .cc-bar {
-	height: 30px;
-	padding: 0 10px;
-	border-bottom: 1px solid #eaecf0;
-	background: #f8f9fa;
-	font-weight: bold;
-	line-height: 30px;
-}
-
-#cc-big .cc-close {
-	float: right;
-	border: 0;
-	background: none;
-	color: #0b0b0b;
-	font-size: 24px;
-	line-height: 30px;
-	cursor: pointer;
-}
-
-#cc-big iframe {
-	display: block;
-	width: 100%;
-	height: calc( 100% - 31px );
-	border: 0;
-}
-
-/* "Full screen": a button that says so in words, beside the ×. */
-#cc-big .cc-full {
-	float: right;
-	margin: 4px 6px 0 0;
-	padding: 0 8px;
-	border: 1px solid #a2a9b1;
-	border-radius: 4px;
-	background: #fff;
-	color: #202122;
-	font-size: 13px;
-	font-weight: normal;
-	line-height: 20px;
-	cursor: pointer;
-}
-
-#cc-big .cc-full:hover {
-	border-color: #72777d;
-	background: #eaecf0;
-}
-
-#cc-big .cc-full svg {
-	width: 12px;
-	height: 12px;
-	margin-right: 5px;
-	vertical-align: -1px;
-	fill: none;
-	stroke: currentColor;
-	stroke-width: 1.8;
-}
-
-/* Full screen: the browser makes the box the screen's size; its frame and shadow go. */
-#cc-big:fullscreen {
-	border: 0;
-	border-radius: 0;
-	box-shadow: none;
-}
-
 @media screen and ( max-width: 720px ) {
 	.connectome-card {
 		float: none;
 		width: auto;
 		max-width: 360px;
 		margin: 1em auto;
-	}
-
-	/* On a phone the big graph takes the whole screen, and its × is big enough for a thumb. */
-	#cc-big {
-		top: 0;
-		right: 0;
-		bottom: 0;
-		left: 0;
-		border: 0;
-		border-radius: 0;
-	}
-
-	#cc-big .cc-bar {
-		height: 44px;
-		line-height: 44px;
-	}
-
-	#cc-big .cc-close {
-		width: 44px;
-		margin-right: -10px;
-		font-size: 30px;
-		line-height: 44px;
-	}
-
-	#cc-big .cc-full {
-		margin-top: 6px;
-		line-height: 30px;
-	}
-
-	#cc-big iframe {
-		height: calc( 100% - 45px );
 	}
 }
 

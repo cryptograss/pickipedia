@@ -135,7 +135,24 @@
 		color: var( --night-ink );
 	}
 	.toctitle, .toctogglespan, .tocnumber { color: var( --night-soft ); }
-	.suggestions-result-current { background: var( --night-wash ); color: var( --night-ink ); }
+	/* What the search box offers as you type (MonoBook's sidebar, and anywhere else the box is). The
+	   list below it went dark with the boxes above, but every word in it is core's black, said in two
+	   places: each line (jquery.suggestions.less) and the link inside it, four times over
+	   (mediawiki.searchSuggest). Black on night's panel, about 1.2:1 (Justin, 26 Nov 2026). */
+	.suggestions-result,
+	.suggestions .special-query,
+	.suggestions a.mw-searchSuggest-link,
+	.suggestions a.mw-searchSuggest-link:hover,
+	.suggestions a.mw-searchSuggest-link:active,
+	.suggestions a.mw-searchSuggest-link:focus { color: var( --night-ink ); }
+	.suggestions .special-label { color: var( --night-muted ); }
+	/* The line under the pointer or the arrow keys. Day's deep blue is dark enough that night's ink
+	   would be read on it, but it sits oddly on the dark; night's own line does the same work. */
+	.suggestions-result-current { background: var( --night-line ); color: var( --night-ink ); }
+	.suggestions-result-current a.mw-searchSuggest-link,
+	.suggestions-result-current .special-label,
+	.suggestions-result-current .special-query { color: var( --night-ink ); }
+	.suggestions .special-hover { background-color: var( --night-wash ); }
 
 	table.wikitable,
 	table.wikitable > * > tr > td,
@@ -314,6 +331,120 @@
 	.pp-record-box a.new, .pp-song-card a.new, .pp-connectome-card a.new, .connectome-card a.new { color: #a82a22; }
 	.pp-listen-rh, .pp-listen-rh a, .pp-listen-rh span, .plainlinks [style*="background"] span { color: #fff; }
 
+	/* ---- Delivering ----
+	 *
+	 * Special:DeliverOtherContent and its three siblings (DeliverRecord, DeliverVideo,
+	 * DeliverBlueRailroad) are one card, and ext.pickipediaReleases.upload.css paints that card in
+	 * MediaWiki's day palette: #f8f9fa for the card, #fff for a row, #a2a9b1 and #c8ccd1 for the
+	 * lines, #72777d and #54595d for the quieter words. None of it is a template's inline style, so
+	 * the rule that answers a pale ground by its hex never sees it, and by night the page was night's
+	 * pale ink on day's pale card -- "Upload Files" at about 1.1:1 (Justin, 23 Nov 2026).
+	 */
+	.uc-step, .uc-result-card, .uc-draft-info, .dv-col-details {
+		border-color: var( --night-line );
+		background: var( --night-panel );
+		color: var( --night-ink );
+	}
+	.uc-step h3, .uc-result-card h4, .dv-col-details h4 { border-color: var( --night-line ); color: var( --night-ink ); }
+	/* A file waiting to be sent, and a track in an album's running order: a row on the card. */
+	.uc-file-item, .ua-track-row {
+		border-color: var( --night-line );
+		background: var( --night-wash );
+		color: var( --night-ink );
+	}
+	.uc-hint, .uc-file-size, .uc-draft-expires, .uc-required, .ua-track-handle, .ua-track-meta,
+	.dv-col-details .rd-blockheight-date, .dv-col-details .rd-date-converter label { color: var( --night-muted ); }
+	.ua-track-num { color: var( --night-soft ); }
+	/* Where the files are dropped: a dashed outline, not a lit panel. */
+	.uc-dropzone { border-color: var( --night-line ); }
+	.uc-dropzone:hover, .uc-dropzone-active { border-color: var( --night-link ); background: var( --night-wash ); }
+	.uc-progress-bar { background: var( --night-wash ); }
+	/* What it says went well, went wrong, or wants watching: night's own three grounds, as a
+	   message box gets above, with ink light enough to read on them. */
+	.uc-status-success { border-color: #3f7a52; background: var( --night-add ); color: #8fd2a6; }
+	.uc-status-error { border-color: #a5483f; background: var( --night-del ); color: #f2938a; }
+	.uc-status-warning { border-color: #8a7330; background: var( --night-warn ); color: #e3bf72; }
+	.uc-result-card h4 { color: #8fd2a6; }
+	.uc-file-remove { color: #f2938a; }
+
+	/* A draft's page (the ReleaseDraft namespace), where a delivery lands to be looked over before it is
+	   finalised. ext.pickipediaReleases.releaseDraft.css paints it in the same day palette: a white row
+	   for each track, a pale blue band saying "Draft", MediaWiki's greys for the quieter words. */
+	.rd-status-draft { border-color: #3a5a9b; background: #1e2a3d; color: var( --night-link ); }
+	.rd-status-finalizing { border-color: #8a7330; background: var( --night-warn ); color: #e3bf72; }
+	.rd-status-complete { border-color: #3f7a52; background: var( --night-add ); color: #8fd2a6; }
+	.rd-track-row { border-color: var( --night-line ); background: var( --night-wash ); }
+	.rd-finalize-progress, .rd-diag-details, .rd-diag-log, .rd-preview-status, .rd-preview-log,
+	.release-raw-yaml pre {
+		border-color: var( --night-line );
+		background: var( --night-panel );
+		color: var( --night-soft );
+	}
+	.rd-track-num, .rd-progress-log, .rd-diag-meta dd, .rd-diag-row, .rd-diag-details h4,
+	.rd-trim-field label, .rd-trim-preview, .rd-preserve-label { color: var( --night-soft ); }
+	.rd-track-meta, .rd-blockheight-date, .rd-date-converter label, .rd-more-settings summary,
+	.release-raw-yaml summary, .rd-diag-meta dt, .rd-diag-details > summary, .rd-diag-ts,
+	.rd-preview-log-ts { color: var( --night-muted ); }
+	.rd-blockheight-section, .rd-actions, .rd-progress-log div, .rd-diag-row { border-color: var( --night-line ); }
+	/* The stages of finalising: the one being worked and the ones done keep day's strong colours, which
+	   read on either ground. The ones still to come are a chip of night's own. */
+	.rd-stage { border-color: var( --night-line ); background: var( --night-wash ); color: var( --night-muted ); }
+	/* Said again here, because night's selector outranks the day sheet's two classes and would otherwise
+	   flatten the stage being worked and the ones behind it into the same chip. */
+	.rd-stage.rd-stage-done { border-color: #14866d; background: #14866d; color: #fff; }
+	.rd-stage.rd-stage-active { border-color: #36c; background: #36c; color: #fff; }
+	.rd-stage.rd-stage-error { border-color: #d33; background: #d33; color: #fff; }
+	.rd-diag-banner-error { border-color: #a5483f; background: var( --night-del ); color: #f2938a; }
+	.rd-diag-banner-info { border-color: #8a7330; background: var( --night-warn ); color: #e3bf72; }
+	.rd-diag-row-error { background: #3a1f1e; color: #f2938a; }
+	.rd-diag-err { border-color: #a5483f; background: var( --night-del ); color: #f2938a; }
+	.rd-diag-stage { color: var( --night-link ); }
+	.rd-diag-pct, .rd-log-live, .rd-progress-status.rd-status-success { color: #8fd2a6; }
+	.rd-progress-status.rd-status-error { color: #f2938a; }
+	.rd-log-live::before { color: var( --night-link ); }
+
+	/* A release's own table of facts. It is a wikitable too, so night's table rules already reached it;
+	   said here by name as well, so the check below can see that it is answered. */
+	.release-metadata { border-color: var( --night-line ); background: var( --night-panel ); }
+	.release-metadata th, .release-metadata td { border-color: var( --night-line ); }
+	.release-metadata th { background: var( --night-wash ); }
+	.release-metadata td { background: transparent; }
+	.release-validation-error { border-color: #a5483f; background: var( --night-del ); color: #f2938a; }
+
+	/* ---- Invites and attestations ----
+	 *
+	 * Special:CreateInvite and its kin (ManageInvites, CreateAttestation, BulkDeleteUsers) carry no
+	 * stylesheet: each writes its day palette into an inline <style> from PHP
+	 * (OutputPage::addInlineStyle), so neither the rule that answers a template's inline ground by its
+	 * hex nor check-night-grounds.php -- which read only .css files until now -- ever saw them. By
+	 * night "Invite Created!" and the link under it were night's pale ink on day's pale green, about
+	 * 1.3:1 (Justin, 25 Nov 2026). The three grounds become night's own, as a message box's do.
+	 */
+	.mw-createinvite-success, .mw-manageinvites-success, .mw-createattestation-success {
+		border-color: #3f7a52;
+		background: var( --night-add );
+		color: #8fd2a6;
+	}
+	.mw-createinvite-error, .mw-manageinvites-error, .mw-createattestation-error {
+		border-color: #a5483f;
+		background: var( --night-del );
+		color: #f2938a;
+	}
+	/* The invite's link: a <code>, so night's code rule reached its ground, but the sheet's class
+	   outranked it. */
+	.mw-createinvite-invite-link {
+		border: 1px solid var( --night-line );
+		background: var( --night-wash );
+		color: var( --night-ink );
+	}
+	.mw-createinvite-help, .mw-createattestation-help,
+	.mw-manageinvites-status-pending { color: var( --night-muted ); }
+	.mw-manageinvites-status-used { color: var( --night-green ); }
+	/* Day's #800 for an expired invite is 1.5:1 on the dark. */
+	.mw-manageinvites-status-expired { color: #f2938a; }
+	/* A user with an attestation is a pale green row on Special:BulkDeleteUsers. */
+	.mw-bulkdeleteusers-attested { background: var( --night-add ); color: var( --night-ink ); }
+
 	.hls-video-player button, .hls-quality-bar button, .hls-playback-bar button {
 		border: 1px solid var( --night-line ) !important;
 		background: var( --night-wash ) !important;
@@ -384,6 +515,13 @@
 
 	/* A picture drawn in black on nothing (a diagram, an icon) is on a pale ground, not lost in the dark. */
 	.mw-parser-output img[src$=".svg"], .mw-parser-output img[src*=".svg/"] { background: #f1e9db; border-radius: 2px; }
+
+	/* The four instrument icons that are line and silhouette rather than photographs are turned over, so
+	   black art on a dark page becomes light art (Module:Instruments says which: lua/pickipedia/
+	   instruments.lua, MONO). The other seven carry their own colour and are left alone -- an inverted
+	   mandolin is blue. No pale ground here: the grounds themselves were made transparent on 22 Nov 2026,
+	   which is what took the white boxes off the icons by dark in the first place. */
+	.pp-instrument--mono img { filter: invert( 1 ); }
 }
 
 @media screen and ( prefers-color-scheme: dark ) {

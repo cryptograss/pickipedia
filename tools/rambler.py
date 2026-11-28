@@ -215,12 +215,19 @@ MB_BROWSE_PAGES = 3          # 300 releases under one name is plenty to look thr
 DEFAULT_MAX_CANDIDATES = 15  # records read to confirm; each read is 2-3 calls
 
 
+def same_name(a, b):
+    """Whether two names are one, ignoring case and which apostrophe is typed: MusicBrainz writes The Travelin’
+    McCourys, and a wiki page is called The Travelin' McCourys."""
+    plain = lambda s: (s or "").replace("\u2019", "'").replace("\u2018", "'").replace("\u02bc", "'").casefold()
+    return plain(a) == plain(b)
+
+
 def mb_artists_named(name):
     """MusicBrainz artists whose name is exactly name, ignoring case. Two
     people can share a name; both are kept, and the output says so."""
     data = sideman.mb_get("artist", query=f'artist:"{name}"', limit=25)
     return [(a["id"], a["name"]) for a in data.get("artists", [])
-            if a.get("name", "").casefold() == name.casefold()]
+            if same_name(a.get("name", ""), name)]
 
 
 def mb_records_of(mbid):
@@ -245,7 +252,7 @@ def mb_records_of(mbid):
 def discogs_artists_named(name):
     data = sideman.discogs_get("database/search?" + sideman.urlencode({"q": name, "type": "artist", "per_page": 25}))
     return [(str(r["id"]), sideman.strip_discogs_suffix(r["title"])) for r in data.get("results", [])
-            if sideman.strip_discogs_suffix(r.get("title", "")).casefold() == name.casefold()]
+            if same_name(sideman.strip_discogs_suffix(r.get("title", "")), name)]
 
 
 def discogs_records_of(artist_id):

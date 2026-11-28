@@ -55,6 +55,7 @@ from datetime import date
 from html import escape
 
 import connectome_graph
+import set_stones
 from connectome_graph import icon_for
 
 FEATURED_PAGE = 'Cryptograss:Connectome/Featured'
@@ -69,8 +70,10 @@ UA = 'PickiPedia-connectome-card/1.0'
 LISTEN = re.compile(r'\{\{\s*Listen[ _]in[ _]Rabbithole\s*\|\s*([A-Za-z0-9]{20,})\s*[|}]')
 STUDIO_CUT_CID = re.compile(r'\{\{\s*Studio[ _]cut\b[^}]*?\bcid\s*=\s*([A-Za-z0-9]{20,})', re.S)
 
-GOLD = '#eda100'                        # a Permanent Release, and nothing else
-INK2 = '#52514e'                        # a Full Release
+GOLD = '#eda100'                        # a Permanent Release, and nothing else: a studio track
+GREEN = '#2a9441'                       # a Permanent Release that is a night: a show
+BLUE = '#2f6fb3'                        # a Full Release: a studio track
+INK2 = '#52514e'                        # a Full Release that is a show
 SHUT = '#898781'                        # the rest: counted, not vouched for
 PAPER = '#fcfcfb'
 INK = '#0b0b0b'
@@ -222,10 +225,35 @@ class Wiki:
                 text = revs[0]['slots']['main'].get('content', '') if revs else ''
                 cuts = studio_cuts_from(text)
                 writers = writers_from(text)
+                charts = chartifacts_from(text, cuts)
                 for c in cuts:
                     c['writers'] = writers
+                    c['charts'] = charts.get(c['cid'], [])
                 if cuts:
                     out[page['title']] = cuts
+        return out
+
+    def song_authors(self):
+        """Who wrote each song, as its page's {{Song}} says: title (without "Song:") -> its composers as written,
+        or 'traditional' where the page says the tradition carries it (Template:Song: composer=, traditional=yes).
+        A page that says neither is left out: nobody is guessed."""
+        titles, cont = [], {}
+        while True:
+            q = self.api(action='query', list='embeddedin', eititle='Template:Song', eilimit=500,
+                         eifilterredir='nonredirects', **cont)
+            titles += [p['title'] for p in q['query']['embeddedin']]
+            if 'continue' not in q:
+                break
+            cont = {'eicontinue': q['continue']['eicontinue']}
+        out = {}
+        for i in range(0, len(titles), 50):
+            q = self.api(action='query', titles='|'.join(titles[i:i + 50]), prop='revisions', rvprop='content',
+                         rvslots='main', formatversion=2)['query']
+            for page in q.get('pages', []):
+                revs = page.get('revisions') or []
+                said = authors_from(revs[0]['slots']['main'].get('content', '') if revs else '')
+                if said:
+                    out[page['title'][len('Song:'):] if page['title'].startswith('Song:') else page['title']] = said
         return out
 
     def record_artists(self, titles):
@@ -284,6 +312,24 @@ def studio_cuts_from(text):
     return cuts
 
 
+def chartifacts_from(text, cuts=()):
+    """The {{Chartifact}} blocks of a song page, each given to its cut: the cid its `cut=` names, or, where it names
+    none, the page's only studio cut (Template:Chartifact's own rule). On a page of two cuts a chartifact naming
+    neither is no cut's, and is left out. -> {cid: [[section, kind, picker, instrument], ...]}, in page order."""
+    out = {}
+    cids = [c['cid'] for c in cuts if c.get('cid')]
+    for m in re.finditer(r'\{\{\s*Chartifact\b(.*?)\}\}', text, re.S):
+        f = {}
+        for part in m.group(1).split('|'):
+            k, _, v = part.partition('=')
+            if k.strip():
+                f[k.strip()] = re.sub(r'\s+', ' ', v).strip()
+        cid = f.get('cut') or (cids[0] if len(cids) == 1 else '')
+        if cid and f.get('picker'):
+            out.setdefault(cid, []).append([f.get('section', ''), f.get('kind', ''), f['picker'], f.get('instrument', '')])
+    return out
+
+
 def writers_from(text):
     """Who a song page's {{Song|composer=}} says wrote it, as written: "Justin Holmes", "[[A|a]] and B" -> A, B.
     A traditional song has nobody here, and nobody is guessed."""
@@ -292,6 +338,23 @@ def writers_from(text):
         return []
     said = re.sub(r'\[\[([^\]|]*)(?:\|[^\]]*)?\]\]', r'\1', m.group(1))             # a link: the page it names
     return [n.strip() for n in re.split(r'\s*(?:,|;|&|/|\band\b)\s*', said) if n.strip()]
+
+
+def song_key(name):
+    """A song's name as two spellings of it agree: lower case, no accents, letters and digits only ("Barlows Jig" and
+    "Barlow's Jig" are one song)."""
+    plain = ''.join(c for c in unicodedata.normalize('NFKD', (name or '').lower()) if not unicodedata.combining(c))
+    return re.sub(r'[\W_]+', '', plain)
+
+
+def authors_from(text):
+    """Who a song page says wrote it: its composers as written (writers_from), else 'traditional' where its {{Song}}
+    says traditional=yes, else None. The composer is the one the template shows where a page says both."""
+    by = writers_from(text)
+    if by:
+        return by
+    m = re.search(r'\{\{\s*Song\b[^{}]*?\|\s*traditional\s*=\s*(?:yes|true|1)\s*(?:\||\}\})', text, re.I)
+    return 'traditional' if m else None
 
 
 def featured_from(wikitext, today):
@@ -366,8 +429,10 @@ class Store:
         for o, gs in ev.items():
             lst = sorted(gs.values(), key=lambda e: (-e['tier'], -RANK[e['kind']], e['text']))
             with_ = [e for e in lst if e['kind'] != 'record'] or lst     # played with, when they have
-            out[o] = {'list': lst, 'kind': max((e['kind'] for e in lst), key=RANK.get),
-                      'tier': max(e['tier'] for e in with_)}
+            tier = max(e['tier'] for e in with_)
+            out[o] = {'list': lst, 'kind': max((e['kind'] for e in lst), key=RANK.get), 'tier': tier,
+                      # the freest thing they share is a night, and no cut is as free: its line is a show's colour
+                      'show': all(a_show(e) for e in with_ if e['tier'] == tier)}
         return out if y is None else out.get(y)
 
     def path(self, s, t):
@@ -472,16 +537,40 @@ def tip_box(lines, x, y, box):
             f'<text x="{cx:.1f}" y="{ty:.1f}" text-anchor="middle" fill="{INK}">{spans}</text></g>')
 
 
-def strokes_svg(a, b, tier, loose, lit):
-    """A line by what it stands on: gold for a Permanent Release, ink for a Full one, dotted for the rest."""
+# The start of every card's key: the five lines, as the card and the big graph draw them (the classes are in
+# ext.pickipediaContent.connectome.css). Each card ends it with a line of its own.
+KEY_LINES = ('<div class="cc-legend">'
+             '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent</a> track '
+             '<span class="cc-key cc-green"></span> Permanent show: an etree tape, or Creative Commons<br>'
+             '<span class="cc-key cc-blue"></span> Full track '
+             '<span class="cc-key cc-ink"></span> Full show: no DRM '
+             '<span class="cc-key cc-rest"></span> the rest<br>')
+
+
+def hue(tier, show):
+    """The colour of a kind of connection, as the big graph draws it (connectome-core.js, shade; Justin, #connectome,
+    27 Nov 2026, 23:20Z: "more colors to differentiate the various types of connection"): a Permanent track gold, a
+    Permanent show green (28 Nov, 00:52Z: "let's use green instead of ember"), a Full track blue, a Full show ink."""
+    return (GREEN if show else GOLD) if tier == 2 else (INK2 if show else BLUE)
+
+
+def a_show(e):
+    """Whether what two share is a night: a show, or a sit-in on one song of a tape."""
+    return bool(e.get('show')) or e.get('kind') == 'show'
+
+
+def strokes_svg(a, b, tier, loose, lit, show=False):
+    """A line by what it stands on: gold or green for a Permanent Release, blue or ink for a Full one (hue), dotted for
+    the rest. Each kind a little lighter than the one before, so what comes first is seen first; gold a quarter heavier
+    than it was (Justin, 28 Nov 2026, 00:52Z: "make the gold lines a little bolder")."""
     if loose or tier == 0:
         return line_svg(a, b, stroke=SHUT, stroke_width=2 if lit else 1.2, stroke_dasharray='1 5', stroke_linecap='round')
     if tier == 2 and lit:
-        return (line_svg(a, b, stroke=GOLD, stroke_width=8, opacity='.6', stroke_linecap='round')
+        return (line_svg(a, b, stroke=hue(2, show), stroke_width=8, opacity='.6', stroke_linecap='round')
                 + line_svg(a, b, stroke=INK, stroke_width=2, stroke_linecap='round'))
     if tier == 2:
-        return line_svg(a, b, stroke=GOLD, stroke_width=2.2, stroke_linecap='round')
-    return line_svg(a, b, stroke=INK2, stroke_width=2 if lit else 1.2, stroke_linecap='round')
+        return line_svg(a, b, stroke=hue(2, show), stroke_width=2 if show else 2.8, stroke_linecap='round')
+    return line_svg(a, b, stroke=hue(1, show), stroke_width=2 if lit else (1.2 if show else 1.4), stroke_linecap='round')
 
 
 NOTE = ('<circle r="21" fill="%s" stroke="%s" stroke-width="1.5"/>' % (PAPER, INK) +
@@ -660,10 +749,10 @@ def card(center, store, has_page, inst, named=None, made=None, wrote=None):
         return ev[0]['text'] + more
 
     def focus(n):
-        """Click: the big graph, lit on this connection, or on the path when it's two hops."""
-        if n in nb:
-            return attr(viewer(a=center, b=n))
-        return attr(viewer(**{'from': center, 'to': n}))
+        """Click: the big graph, lit on this connection, or on the path when it's two hops. Written as /bacon writes
+        it in the address bar once it is there (?a=&b=, which it reads ?from=&to= as too), so a card's way in is the
+        same address as the graph's own (Justin, #connectome, 26 Nov 2026, 02:15Z: "Same URLs too")."""
+        return attr(viewer(a=center, b=n))
 
     def dot(n, r):
         x, y = pos[n]
@@ -682,10 +771,10 @@ def card(center, store, has_page, inst, named=None, made=None, wrote=None):
     o(f'<a class="cc-bg" href="{attr(viewer(p=center))}" aria-label="{attr("Explore " + center + " in the connectome")}">'
       f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/></a>')
     for n in placed:                                 # the crowd: thin spokes
-        o(strokes(C, pos[n], nb[n]['tier'], False, False))
+        o(strokes(C, pos[n], nb[n]['tier'], False, False, nb[n].get('show', False)))
     for a, b, ev in fedges:
         pa = C if a == center else pos[a]
-        o(strokes(pa, pos[b], ev['tier'] if ev else 0, not ev or ev['kind'] == 'record', True))
+        o(strokes(pa, pos[b], ev['tier'] if ev else 0, not ev or ev['kind'] == 'record', True, bool(ev and ev.get('show'))))
     for n in named:
         x, y = pos[n]
         lx, ly, _ = labels[n]
@@ -719,16 +808,12 @@ def card(center, store, has_page, inst, named=None, made=None, wrote=None):
         s, e = trim(C, (x, y), 23, rad(n) + 2)
         head = n + (f' · {inst[n]}' if n in inst else '')
         o(f'<g class="cc-h"><a href="{focus(n)}">{line(s, e, **{"class": "cc-hit"})}</a>'
-          f'{line(C, (x, y), **{"class": "cc-hi", "stroke": GOLD if nb[n]["tier"] == 2 else INK2, "stroke_width": 3.5})}'
+          f'{line(C, (x, y), **{"class": "cc-hi", "stroke": hue(nb[n]["tier"], nb[n].get("show", False)) if nb[n]["tier"] else INK2, "stroke_width": 3.5})}'
           f'<a href="{focus(n)}">{dot(n, rad(n))}<circle cx="{x:.1f}" cy="{y:.1f}" r="9" fill="transparent"/></a>'
           f'{tip([head, what(n)], x, y)}</g>')
     o('</svg>')
 
-    legend = ('<div class="cc-legend">'
-              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
-              'an etree tape or Creative Commons<br>'
-              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
-              '<span class="cc-key cc-rest"></span> the rest<br>'
+    legend = (KEY_LINES +
               'bigger = more times · hollow = no page yet</div>')
     return (f'<div class="connectome-card" data-picker="{attr(center)}">'
             f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(viewer(p=center))}">⤢ explore</a></div>'
@@ -805,8 +890,8 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
             if e['tier'] == 0:
                 html = line_svg(s, t, stroke=SHUT, stroke_width=1.2, stroke_dasharray='1 5', stroke_linecap='round')
             else:
-                col = GOLD if e['tier'] == 2 else INK2
-                w = 2.2 if e['kind'] == 'track' else 1.2            # the same cut again: solid; a record or a stage: thin
+                col = hue(e['tier'], a_show(e))
+                w = (2.8 if col == GOLD else 2.2) if e['kind'] == 'track' else 1.2      # the same cut again: solid (gold, bolder); a record or a stage: thin
                 html = line_svg(s, t, stroke=col, stroke_width=w, stroke_linecap='round')
             edges.append((x, y, html, e, len(others)))
 
@@ -822,7 +907,9 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
     o(f'<svg xmlns="http://www.w3.org/2000/svg" class="cc" viewBox="{x0:.0f} {y0:.0f} {x1 - x0:.0f} {y1 - y0:.0f}" '
       f'width="100%" font-family="Georgia, serif" font-size="{FS:g}" role="img" '
       f'aria-label="{attr("Who played " + title)}">')
-    whole = viewer(cut=cut["key"]) if cut.get("key") else viewer(s=title)
+    # the cut's graph, as /bacon writes it in the address bar: its song, then its cut (?s=&cut=), not the cut alone,
+    # which the graph would rewrite (Justin, #connectome, 26 Nov 2026, 02:15Z: "Same URLs too")
+    whole = viewer(s=title, cut=cut["key"]) if cut.get("key") else viewer(s=title)
     o(f'<a class="cc-bg" href="{attr(whole)}" aria-label="{attr("Explore " + title + " in the connectome")}">'    # the paper is a way in, too
       f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" fill="{PAPER}"/></a>')
     for _, _, html, _, _ in edges:
@@ -843,7 +930,7 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
           f'text-anchor="middle" fill="{INK}" font-weight="bold">{escape(n)}</text>'
           + (f'<text class="cc-lab" x="{x_lab:.1f}" y="{ry:.1f}" text-anchor="middle" fill="{INK2}" '
              f'font-size="0.62em">{escape(roles[n])}</text>' if roles[n] else '') + '</a>')
-    o(f'<a href="{attr(viewer(cut=cut["key"]) if cut.get("key") else viewer(s=title))}"><g transform="translate({C[0]:.0f} {C[1]:.0f})">{NOTE}</g>'
+    o(f'<a href="{attr(whole)}"><g transform="translate({C[0]:.0f} {C[1]:.0f})">{NOTE}</g>'
       f'<text class="cc-lab" x="{C[0]:.0f}" y="266" text-anchor="middle" fill="{INK}" font-weight="bold" '
       f'font-size="1.25em" stroke-width="5px">{escape(title)}</text></a>')
     if play:
@@ -865,18 +952,14 @@ def song_card(title, cut, cast, store, has_page, inst, play=None, icons=()):
           f'{tip([head, where], x, y)}</g>')
     o('</svg>')
 
-    legend = ('<div class="cc-legend">'
-              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
-              "an etree tape or Creative Commons<br>"
-              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
-              '<span class="cc-key cc-rest"></span> the rest<br>'
+    legend = (KEY_LINES +
               'a solid line: the same cut again · a thin one: a record or a stage</div>')
     record = f'<a href="{attr(cut["page"])}">{escape(cut["title"])}</a>' if cut['page'] else escape(cut['title'])
     which = ', track ' + escape(cut['number']) if cut.get('number') else ''
     took = ', recorded ' + escape(cut['recorded']) if cut.get('recorded') else ''
     playnote = ' The ▶ opens it in Rabbithole.' if play else ''
     return (f'<div class="connectome-card" data-song="{attr(title)}" data-cut="{attr(cut.get("key", ""))}">'
-            f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(viewer(cut=cut["key"]) if cut.get("key") else viewer(s=title))}">⤢ explore</a></div>'
+            f'<div class="cc-head">Connectome <a class="cc-explore" href="{attr(whole)}">⤢ explore</a></div>'
             + ''.join(out) + legend +
             f'<div class="cc-foot">On {record}{which}{took}.{playnote}</div></div>')
 
@@ -977,8 +1060,8 @@ def page_card(title, members, store, has_page, inst, home=HOME):
             if not with_ or e['tier'] == 0:         # only a record shared, or nothing to vouch for it: dotted
                 html = line_svg(s, t, stroke=SHUT, stroke_width=1.2, stroke_dasharray='1 5', stroke_linecap='round')
             else:
-                col = GOLD if e['tier'] == 2 else INK2
-                html = line_svg(s, t, stroke=col, stroke_width=2.2 if e['kind'] == 'track' else 1.4,
+                col = hue(e['tier'], a_show(e))
+                html = line_svg(s, t, stroke=col, stroke_width=(2.8 if col == GOLD else 2.2) if e['kind'] == 'track' else 1.4,
                                 stroke_linecap='round')
             said = e['text'] if with_ else 'on a record: ' + e['text']
             edges.append((x, y, html, dict(e, text=said), len(ev['list'])))
@@ -1043,11 +1126,7 @@ def page_card(title, members, store, has_page, inst, home=HOME):
           f'fill="transparent"/></a>{tip(lines, x, y)}</g>')
     o('</svg>')
 
-    legend = ('<div class="cc-legend">'
-              '<span class="cc-key cc-gold"></span> <a href="/wiki/PickiPedia:Release_Types">Permanent Release</a>: '
-              "an etree tape or Creative Commons<br>"
-              '<span class="cc-key cc-ink"></span> Full Release: no DRM '
-              '<span class="cc-key cc-rest"></span> the rest<br>'
+    legend = (KEY_LINES +
               'a line between two: they played together; dotted: only a record, or the rest · '
               'a hairline from the middle: on this page, and only here'
               '</div>')
@@ -1073,15 +1152,37 @@ def load_whole(db_path):
     db = sqlite3.connect(db_path)
     cols = [c[1] for c in db.execute('PRAGMA table_info(targets)')]
     formats = 'formats' if 'formats' in cols else "''"      # a store built before records kept their formats
+    venue, city = ('venue', 'city') if 'venue' in cols else ("''", "''")     # or before shows kept where they were
+    poster = 'poster' if 'poster' in cols else "''"                           # or their posters
+    bands = 'bands' if 'bands' in cols else "''"                              # or a show page's bands
     whole = {r[0]: {'kind': r[1], 'title': r[2], 'date': r[3], 'artist': r[4], 'grp': r[5],
-                    'formats': [f for f in (r[6] or '').split('; ') if f]}
-             for r in db.execute(f'SELECT id, kind, title, date, artist, grp, {formats} FROM targets')}
+                    'formats': [f for f in (r[6] or '').split('; ') if f], 'venue': r[7] or '', 'city': r[8] or '',
+                    'poster': r[9] or '', 'bands': json.loads(r[10]) if r[10] else []}
+             for r in db.execute(f'SELECT id, kind, title, date, artist, grp, {formats}, {venue}, {city}, {poster}, {bands} '
+                                 'FROM targets')}
     credits = db.execute('SELECT person, roles, target, scope, source FROM credits').fetchall()
     return whole, credits
 
 
-def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()):
+def load_bands(db_path):
+    """The bands the store holds, each with its stints in its page's order (connectome_store.py, band_page); [] from a
+    store made before it kept them."""
+    db = sqlite3.connect(db_path)
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'bands'").fetchone():
+        return []
+    bands = {r[0]: {'band': r[0], 'kind': r[1] or '', 'leader': r[2] or '', 'offshoot_of': r[3] or '',
+                    'billed_as': [b for b in (r[4] or '').split('; ') if b], 'stints': []}
+             for r in db.execute('SELECT name, kind, leader, offshoot_of, billed_as FROM bands ORDER BY name')}
+    for band, member, plays, start, until in db.execute('SELECT band, member, plays, start, until FROM stints ORDER BY n'):
+        if band in bands:
+            bands[band]['stints'].append({'name': member, 'plays': plays or '', 'from': start or '', 'until': until or ''})
+    return list(bands.values())
+
+
+def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=(), bands=()):
     names = {p['a'] for p in pairs} | {p['b'] for p in pairs} | {c[0] for c in credits}   # a credit's spelling joins too
+    # and each band's members and leader, who are pickers whether or not a source has put them on a stage yet
+    names |= {n for b in bands for n in [b.get('leader')] + [s['name'] for s in b.get('stints', [])] if n}
     # and each name a record's artist credit gives, so who made it is known by the wiki's own name
     names |= {n for d in (whole or {}).values() if d.get('kind') == 'record' for n in connectome_graph.credited(d.get('artist', ''))}
     resolved = wiki.resolve(names)
@@ -1089,6 +1190,25 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
     exists = {t for t, ok in resolved.values() if ok}
     tiers = {t: connectome_graph.tier(t, d.get('formats')) for t, d in (whole or {}).items()}
     shows = {t for t, d in (whole or {}).items() if d.get('kind') == 'show'} if whole else None
+    # A band is never a picker (Cryptograss:Bacon graphs/Bands; decided 27 Nov 2026): a name a source wrote down
+    # that is a band's page, or one of the names that page says it is billed as, comes out of the pickers, and
+    # where the source named it is kept with the band. The wiki says what is a band; nothing here guesses one.
+    # A band billed under its leader's name ("Billy Strings" is Billy Strings (band)) leaves the leader a picker:
+    # a name that is anybody's leader or member is a person's.
+    persons = {x.lower() for b in bands for n in [b.get('leader')] + [s['name'] for s in b.get('stints', [])] if n
+               for x in (n, alias.get(n, n))}
+    called = {}
+    for b in bands:
+        for n in [b['band']] + list(b.get('billed_as') or []):
+            if n.lower() not in persons and alias.get(n, n).lower() not in persons:
+                called.setdefault(n.lower(), b['band'])
+    banded = {n: called[k] for n in names for k in (alias.get(n, n).lower(), n.lower()) if k in called}
+    named_on = defaultdict(set)                             # band -> the records and shows a source names it on
+    for c in credits:
+        if c[0] in banded and c[3] != 'none':
+            named_on[banded[c[0]]].add(c[2])
+    pairs = [p for p in pairs if p['a'] not in banded and p['b'] not in banded]
+    credits = [c for c in credits if c[0] not in banded]
     store = Store(pairs, targets, groups, alias, tiers, shows)
 
     # The featured pickers are set aside for now (Justin, #connectome, 15 Nov 2026): the page isn't read.
@@ -1119,7 +1239,8 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                 entry.append({'record': c['record'], 'number': c['number'], 'cid': c['cid'],
                               'recorded': c.get('recorded', ''), 'target': target,
                               'cast': {alias.get(n, n): r for n, r in c['cast'].items()},
-                              'writers': [alias.get(n, n) for n in c.get('writers', [])]})
+                              'writers': [alias.get(n, n) for n in c.get('writers', [])],
+                              'charts': [[sec, kind, alias.get(who, who), inst] for sec, kind, who, inst in c.get('charts', [])]})
             if entry:
                 cutmap[song_title] = entry
         # The recording artist of each cut: the record page's {{Record|artist=}} — the node a route home
@@ -1152,16 +1273,47 @@ def build(pairs, targets, groups, wiki, today, only=None, whole=None, credits=()
                     d['artist'] = alias.get(who[d['title']], who[d['title']])
                 if art.get(d.get('title')):
                     d['art'] = art[d['title']]
+        # A show's poster, in its circle as a record's art is (connectome_store.py, arthel_poster and tape_poster):
+        # a small picture's address as it stands; a wiki file only where the wiki has it, so a poster not yet put
+        # there draws nothing rather than a broken picture.
+        files = sorted({'File:' + d['poster'] for d in whole.values() if d.get('kind') == 'show' and d.get('poster')
+                        and not d['poster'].startswith('https://')})
+        there = {n[len('File:'):] for n, (_, ok) in (wiki.resolve(files) if files else {}).items() if ok}
+        for d in whole.values():
+            p = d.get('poster') if d.get('kind') == 'show' else ''
+            if p and (p.startswith('https://') or p in there):
+                d['art'] = p
         # Who made each record, by the wiki's own names: the recording artist stands first at the end of a
         # song's line (Justin, #connectome, 15 Nov 2026, 07:29Z), and a credit writes "Bronwyn Keith-Hynes"
         # where her page is Bronwyn.
         for t, d in whole.items():
             if d.get('kind') == 'record':
                 d['makers'] = [alias.get(n, n) for n in connectome_graph.credited(d.get('artist', ''))]
+            if d.get('bands'):                                      # a show page's bands, by the wiki's names
+                d['bands'] = [{'title': b.get('title', ''), 'members': [alias.get(n, n) for n in b.get('members', [])]}
+                              for b in d['bands']]
         graph = connectome_graph.export(
             store.pairs, whole, [(alias.get(c[0], c[0]),) + tuple(c[1:]) for c in credits],
             has_page, inst, featured, month, song, pages, today.isoformat(), plays, cutmap, icons,
-            pics=pics)
+            pics=pics,
+            bands=[dict(b, leader=alias.get(b.get('leader'), b.get('leader') or ''),
+                        stints=[dict(s, name=alias.get(s['name'], s['name'])) for s in b.get('stints', [])],
+                        on=sorted(named_on.get(b['band'], ()))) for b in bands])
+        # Who wrote each song, where its page says (Justin, #connectome, 23 Nov 2026, 18:30Z: a song's card says
+        # "by <author(s)>" or "traditional", and its pills the authors "in most situations"): song -> [names], or
+        # 'traditional'. Only songs the graph names: a track's songs, and the cuts'.
+        named = {s for _, _, ev in graph['ties'] for e in ev for s in e[3]} | {c['song'] for c in graph['songcast'].values()}
+        heard_by = wiki.song_authors() if hasattr(wiki, 'song_authors') else {}
+        # keyed by the graph's own name for the song: a store's slug may say "Barlows Jig" for "Barlow's Jig"
+        by_key = {song_key(s): said for s, said in heard_by.items()}
+        graph['authors'] = {s: by_key[song_key(s)] for s in sorted(named) if song_key(s) in by_key}
+        # The places and the acts of the shows, where the wiki has a page for them (Justin, #connectome, 26 Nov 2026,
+        # 02:15Z: "The venue also makes sense to have a bacon vector, at least if it has a pickipedia page"): name ->
+        # its page. A venue or an act with no page is drawn all the same, and goes nowhere.
+        places = {m[9][1] for m in graph['music'] if len(m) > 9 and m[9][1]} | \
+                 {a[0] for acts in graph.get('acts', {}).values() for a in acts if a[0]}
+        placed = wiki.resolve(sorted(n for n in places if not re.search(r'[\[\]{}|#<>]', n))) if places and hasattr(wiki, 'resolve') else {}
+        graph['wikipages'] = {n: page_url(tt) for n, (tt, ok) in sorted(placed.items()) if ok}
         # Song cards: one graph per cut, the page's file carrying each of its cuts in the page's own order
         # (Justin, #connectome, 15 Nov 2026, 01:58Z: each cut displays its own graph).
         songcast = graph.get('songcast') or {}
@@ -1265,11 +1417,14 @@ def main(argv):
     ap.add_argument('--out', required=True)
     ap.add_argument('--only', help='one page title, for trying a card')
     ap.add_argument('--today', help="YYYY-MM-DD; the build's date")
+    ap.add_argument('--arthel', help="arthel's src/data: the shows whose set stones graph.json carries (set_stones.py)")
     a = ap.parse_args(argv)
     today = date.fromisoformat(a.today) if a.today else date.today()
     pairs, targets, groups = load_store(a.db, a.pairs)
     whole, credits = load_whole(a.db)
-    result = build(pairs, targets, groups, Wiki(a.wiki), today, a.only, whole, credits)
+    result = build(pairs, targets, groups, Wiki(a.wiki), today, a.only, whole, credits, load_bands(a.db))
+    if a.arthel and result.get('graph') is not None:
+        set_stones.into(result['graph'], a.arthel)
     write(result, a.out, {'db': os.path.basename(a.db), 'wiki': a.wiki, 'today': today.isoformat()})
     print(f"{len(result['cards'])} cards; "
           f"{len(result.get('song_cards', {}))} song cards; "

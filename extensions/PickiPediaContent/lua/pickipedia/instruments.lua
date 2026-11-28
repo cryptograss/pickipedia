@@ -29,6 +29,17 @@ local ROTATED = {
 	banjo = true, guitar = true, mandolin = true, ukulele = true,
 }
 
+-- Drawn in black on nothing, rather than photographed. Seven of the eleven
+-- icons are pictures of the instrument and carry their own colour; these four
+-- are line and silhouette, and by night they are black art on a dark page --
+-- which is no picture at all. Night turns them over (ext.pickipediaContent
+-- night.less, .pp-instrument--mono), which a photograph cannot survive: an
+-- inverted mandolin is blue. So the module says which are which, because it
+-- is the module that knows which file each icon is.
+local MONO = {
+	autoharp = true, dobro = true, [ "tin whistle" ] = true, vocals = true,
+}
+
 -- Names that do not contain their family's name. A name that does contain it
 -- needs no entry: "5-string banjo", "tenor guitar" and "clawhammer banjo"
 -- are all found without being listed.
@@ -148,6 +159,9 @@ function p._badge( name, size, tuck )
 	end
 	if ROTATED[ family ] then
 		table.insert( classes, "pp-instrument--angled" )
+	end
+	if MONO[ family ] then
+		table.insert( classes, "pp-instrument--mono" )
 	end
 
 	local label = normalise( name )

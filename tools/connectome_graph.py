@@ -11,6 +11,8 @@ graph.json:
             its number everywhere below. The instrument is the wiki's own
             (Primary instrument), or "" when the wiki doesn't say
   music     [id, kind, artist, date, title, tier, source, page]: a record or a show.
+            In the file a row has a ninth item, its cover art, and a show that has them a tenth,
+            [name, venue, city]: its own name, and where it was.
             source is where a reader can check it; page is its wiki page, "" without one
   cast      beside each music: [picker, roles as the source wrote them], who is on it
   music     [key, kind, artist, date, title, tier, source, page, art]: art, the file its Record page's
@@ -33,6 +35,13 @@ graph.json:
             where cryptograss cut it; [] for a show. At the other end of a song's line the recording artist
             stands first, then the writer (Justin, #connectome, 15 Nov 2026, 07:29Z)
   featured  this month's featured pickers (Cryptograss:Connectome/Featured), and month
+  bands     [name, kind, leader, offshoot of, [billed as, ...], [[picker, plays, from, until], ...], [music, ...]]:
+            each band the wiki has a page for, as far as a person has verified it (Cryptograss:Bacon graphs/Bands).
+            name is its page; kind is regular, rotating, pickup or '' where the page doesn't say; leader is a picker,
+            or -1; the stints are its page's {{Band member}} lines in its order, dates as written ('' where no source
+            gives a start, or for someone still in it); the music is where a source names the band itself ("w/ Della
+            Mae"). A stint says who you'd expect to see and is no tie: nothing in `ties` comes from one. The key is
+            absent while the wiki has no band
 
 how:    3 the same track, 2 the same stage, 1 the same record (no source puts them
         on the same track). Only 3 and 2 are "played with".
@@ -61,6 +70,11 @@ from collections import defaultdict
 
 
 PERMANENT = ('arthel:',)
+# A track of our own off the wiki (connectome_store.from_releases): there for the taking by torrent and IPFS, with no
+# DRM, so a Full Release at least. Nothing on the page says its licence, so not Permanent until one does.
+# A video off the wiki is the same (Justin, #connectome, 24 Nov 2026, 19:27Z: "videos can be a source just like audio
+# recordings"): its Release is there by torrent and IPFS.
+RELEASE = ('release:', 'video:')
 ETREE = 'archive.org collection: etree'
 HOW = {'track': 3, 'show': 2, 'record': 1}
 ON_STAGE = {'song', 'song?', 'show', 'stage', 'track', 'release'}   # a credit that puts the picker in the music
@@ -96,6 +110,8 @@ def tier(target_id, formats=()):
     """2 Permanent, 1 Full, 0 not known: see the module's notes."""
     if target_id.startswith(PERMANENT):
         return 2
+    if target_id.startswith(RELEASE):
+        return 1
     if target_id.startswith('lma:'):
         return 2 if ETREE in (formats or ()) else 1
     for f in formats or ():
@@ -114,6 +130,79 @@ def source_url(target_id, sources=()):
     if kind in SOURCE:
         return SOURCE[kind] + ident
     return sorted(sources)[0] if sources else ''
+
+
+def band_short(band):
+    """A band's leader, where its name says one: "Justin Holmes and the Immutable String Band" -> "Justin Holmes"
+    (connectome-core.js bandShort)."""
+    b = (band or '').strip()
+    return re.sub(r'\s+(?:and|&)\s+(?:the|his|her|their)\s.*$', '', b, flags=re.I).strip() or b
+
+
+def lead_of(title, people):
+    """The one of `people` an act's name is: the name itself, its leader's ("... and the X Band"), a name inside it,
+    or the same first and last name ("Justin Holmes" is Justin Myles Holmes). None where it names none of them."""
+    t, short = (title or '').strip().lower(), band_short(title).lower()
+    if not t:
+        return None
+    ends = lambda n: (lambda w: (w[0], w[-1]) if w else ())(n.lower().split())
+    for test in (lambda n: n.lower() == t, lambda n: n.lower() == short,
+                 lambda n: re.search(r'(?<!\w)' + re.escape(n.lower()) + r'(?!\w)', t),
+                 lambda n: ends(n) == ends(short)):
+        hit = [n for n in people if test(n)]
+        if len(hit) == 1:
+            return hit[0]
+    return None
+
+
+def acts_of(targets, used, mid, cast, pid):
+    """Who each show is billed to (Justin, #connectome, 26 Nov 2026, 02:15Z: a show's graph has "the show itself and
+    the two bands, with the main act more prominent"): music index -> [[the act's name, [its pickers], its leader or
+    -1], ...], the main act first. A show page's acts are its {{Ensemble}} blocks, in its order; any other show's is
+    its artist, everyone on stage in it. The main act is the one the billing names, else the first. A show billed
+    to nobody (a video) has none."""
+    out = {}
+    for t in used:
+        d = targets.get(t, {})
+        if d.get('kind') != 'show':
+            continue
+        on = cast.get(t, {})
+        artist = (d.get('artist') or '').strip()
+        bands = [(b.get('title') or (artist if i == 0 else ''), [n for n in b.get('members', []) if n in on and n in pid])
+                 for i, b in enumerate(d.get('bands') or [])]
+        if not bands and artist:
+            bands = [(artist, sorted(n for n in on if n in pid))]
+        bands = [b for b in bands if b[1]]
+        if not bands:
+            continue
+        lead = [lead_of(title, members) for title, members in bands]
+        # the main act: the one the billing calls by its name, else the one with the most of those the billing names
+        # ("Bronwyn Keith-Hynes and Jason Carter" are both in "BKH & JC"), else the first
+        parts = [p for p in credited(artist)[1:] or credited(artist)]
+        billed = lambda n: any(lead_of(p, [n]) for p in parts)
+        main = next((i for i, (title, _) in enumerate(bands) if title.lower() == artist.lower()), None)
+        if main is None:
+            score = [sum(1 for n in ms if billed(n)) for _, ms in bands]
+            main = score.index(max(score)) if max(score) else 0
+        order = [main] + [i for i in range(len(bands)) if i != main]
+        out[str(mid[t])] = [[bands[i][0], [pid[n] for n in bands[i][1]], pid[lead[i]] if lead[i] else -1] for i in order]
+    return dict(sorted(out.items(), key=lambda kv: int(kv[0])))
+
+
+def show_place(target_id, d):
+    """A show's own name, its venue and its town, as [name, venue, city]; None for a record, or a show with none.
+
+    The name is the show's title where that is its own: a cryptograss show's ("Hello Decentralization"). A
+    tape's title is archive.org's sentence ("X Live at Y on Z"), which names nothing the venue and the night
+    don't, so a tape has no name of its own; nor has a show whose title is only its file's.
+    """
+    if d.get('kind') != 'show':
+        return None
+    title = (d.get('title') or '').strip()
+    # a show page's title is the page's ("Show:KyleTuttle-26482267"), no more its own name than a tape's sentence
+    own = title and not target_id.startswith(('lma:', 'wiki:')) and title != target_id.rsplit(':', 1)[-1]
+    place = [title if own else '', d.get('venue') or '', d.get('city') or '']
+    return place if any(place) else None
 
 
 def casts(pairs):
@@ -170,7 +259,7 @@ def icon_for(roles, icons):
 
 
 def export(pairs, targets, credits, has_page, inst, featured, month, song_title, pages, built, plays=None, songcuts=None, icons=(),
-           pics=None):
+           pics=None, bands=()):
     """
     pairs     the store's pairs, each name already as the wiki knows it
     targets   id -> {kind, title, date, artist, grp, formats: [..]}
@@ -179,6 +268,8 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
     song_title(target, track) -> the song's name, as the cards name it
     pages     title -> the wiki page's URL, for record and Song: pages that exist
     plays     song title -> the CID of the track its Song: page plays in Rabbithole
+    bands     [{band, kind, leader, offshoot_of, billed_as, stints: [{name, plays, from, until}], on: [target, ...]}],
+              names as the wiki knows them
     """
     track, stage, record = casts(pairs)
 
@@ -219,7 +310,9 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                         said.append(r)
     names = sorted({n for a, b, _ in best for n in (a, b)} | set(featured)
                    | { p for cast in page_people.values() for p in cast }
-                   | { c['artist'] for cuts in (songcuts or {}).values() for c in cuts if c.get('artist') })
+                   | { c['artist'] for cuts in (songcuts or {}).values() for c in cuts if c.get('artist') }
+                   # a band's members and its leader are pickers here though no source has tied them to anyone yet
+                   | { n for b in bands for n in [b.get('leader')] + [s['name'] for s in b.get('stints', [])] if n })
     pid = {n: i for i, n in enumerate(names)}
     used = sorted({c[3] for c, _ in best.values()} | { t for ts in page_cut.values() for t in ts })
     mid = {t: i for i, t in enumerate(used)}
@@ -253,6 +346,10 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                              # end of the way home, after the recording artist (Justin, #connectome, 15 Nov 2026)
                              'writers': [pid[w] for w in c.get('writers', []) if w in c['cast'] and w in pid],
                              'pickers': pickers}
+            # Its chartifacts, as the song page writes them (Template:Chartifact): [section, kind, picker, instrument]
+            # each. The graph marks the cut's circle where it has any (Justin, #connectome, 22 Nov 2026, 20:12Z).
+            if c.get('charts'):
+                songcast[key]['charts'] = c['charts']
 
     sources, cast = defaultdict(set), defaultdict(dict)
     for person, roles, target, scope, source in credits:
@@ -272,6 +369,9 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         page = pages.get(d.get('title', '')) if t.startswith('arthel:') and d.get('kind') == 'record' else ''
         music.append([t, d.get('kind', ''), d.get('artist', ''), d.get('date', ''), d.get('title', ''),
                       tier(t, d.get('formats')), source_url(t, sources[t]), page or '', d.get('art', '')])
+        place = show_place(t, d)
+        if place:
+            music[-1].append(place)
         # Who made it: its credit's names as the wiki knows them (makers, where the build gives them), each
         # that is a picker here
         mine = [] if d.get('kind') == 'show' else [pid[n] for n in (d['makers'] if 'makers' in d else credited(d.get('artist', '')))
@@ -296,7 +396,11 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
                     played[s] = plays[s]
         ties[(pid[a], pid[b])].append([mid[p['target']], cand[0], round(cand[2], 4), titles])
 
-    return {
+    band_rows = [[b['band'], b.get('kind', ''), pid.get(b.get('leader'), -1), b.get('offshoot_of', ''),
+                  list(b.get('billed_as') or []),
+                  [[pid[s['name']], s.get('plays', ''), s.get('from', ''), s.get('until', '')] for s in b.get('stints', [])],
+                  [mid[t] for t in b.get('on', []) if t in mid]] for b in sorted(bands, key=lambda b: b['band'])]
+    out = {
         'v': 1, 'built': built, 'month': month, 'featured': [pid[f] for f in featured if f in pid],
         # name, has a page, instrument; and, only where their page gives one, the file that is their picture
         'people': [[n, 1 if has_page(n) else 0, inst.get(n, '')] + ([pics[n]] if pics and pics.get(n) else []) for n in names],
@@ -307,7 +411,11 @@ def export(pairs, targets, credits, has_page, inst, featured, month, song_title,
         'songs': dict(sorted(songs.items())),
         'songcast': dict(sorted(songcast.items())),
         'plays': dict(sorted(played.items())),
+        'acts': acts_of(targets, used, mid, cast, pid),
     }
+    if band_rows:
+        out['bands'] = band_rows
+    return out
 
 
 def arthel_pages(pairs, targets, song_title):

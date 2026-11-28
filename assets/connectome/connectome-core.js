@@ -49,8 +49,11 @@ export const TIER_NAME = [ 'not known to be DRM-free', 'Full Release', 'Permanen
 
 export function build( g ) {
 	const people = g.people.map( ( [ name, page, inst, img ], id ) => ( { id, name, page: !!page, inst: inst || '', img: img || '' } ) );
-	const music = g.music.map( ( [ key, kind, artist, date, title, tier, source, page, art ], id ) =>
-		( { id, key, kind, artist, date, title, tier, source, page: page || '', art: art || '', cast: ( g.cast && g.cast[ id ] ) || [] } ) );
+	// A show's tenth item, where it has one: its own name, its venue and its town (tools/connectome_graph.py show_place).
+	const music = g.music.map( ( [ key, kind, artist, date, title, tier, source, page, art, place ], id ) =>
+		( { id, key, kind, artist, date, title, tier, source, page: page || '', art: art || '', cast: ( g.cast && g.cast[ id ] ) || [],
+			stones: ( ( g.stones && g.stones[ id ] ) || [] ).length,       // how many set stones were bought at it (byProminence, loudness)
+			name: ( place && place[ 0 ] ) || '', venue: ( place && place[ 1 ] ) || '', city: ( place && place[ 2 ] ) || '' } ) );
 	const adj = people.map( () => new Map() );
 	for ( const [ a, b, evs ] of g.ties ) {
 		const tie = summarize( a, b, evs.map( ( [ m, how, w, songs ] ) => ( { m, how, w, songs: songs || [] } ) ), music );
@@ -60,7 +63,78 @@ export function build( g ) {
 	const byName = new Map( people.map( ( p ) => [ p.name.toLowerCase(), p.id ] ) );
 	return Object.assign( { people, music, adj, byName, featured: g.featured || [], month: g.month || '', songs: g.songs || {},
 		songcast: g.songcast || {}, plays: g.plays || {}, built: g.built || '',
-		pages: g.pages || {} }, makers( g, music, byName ), pieces( g, people, music ) );   // pages: a page's own graph's pickers, and no tie
+		pages: g.pages || {}, stones: stonesFrom( g ), stonesRead: g.stones_read || null, authors: g.authors || {},
+		acts: actsFrom( g ), wikipages: g.wikipages || {} },
+	makers( g, music, byName ), pieces( g, people, music ) );   // pages: a page's own graph's pickers, and no tie
+}
+
+/**
+ * Who each show is billed to (graph.json acts; tools/connectome_graph.py acts_of): music id -> [{ title, members, lead,
+ * main }], the main act first. `lead`: the picker the act's name names (Kyle Tuttle is Kyle Tuttle's act; "Justin Holmes
+ * and the Immutable String Band" is Justin Myles Holmes's), or null (BKH & JC, Yonder Mountain String Band).
+ */
+function actsFrom( g ) {
+	return new Map( Object.entries( g.acts || {} ).map( ( [ k, acts ] ) => [ Number( k ), acts.map( ( [ title, members, lead ], i ) =>
+		( { title: String( title || '' ), members: members.slice(), lead: lead >= 0 ? lead : null, main: i === 0 } ) ) ] ) );
+}
+
+/** A show's acts, the main one first; [] for a show billed to nobody, or no show. */
+export function actsOf( G, m ) {
+	return ( G.acts && G.acts.get( m ) ) || [];
+}
+
+/**
+ * An act's name past its leader's, for the line under their name: "Justin Holmes and the Immutable String Band", led by
+ * Justin Myles Holmes, says "and the Immutable String Band"; an act that is its leader's own name says ''.
+ */
+export function actRest( title, leader ) {
+	const t = String( title || '' ).trim(), lead = bandShort( t );
+	if ( !t || t.toLowerCase() === String( leader || '' ).toLowerCase() || lead === t ) {
+		return '';
+	}
+	return t.slice( lead.length ).trim();
+}
+
+/**
+ * The set stones beside each show (tools/set_stones.py): music id -> [{ token, set, color, message, favorite,
+ * paid, holder }]. A stone ties nobody to anybody; it is shown wherever its show is (Justin, #connectome, 21 Nov
+ * 2026, 19:41Z: "display them anywhere a show is displayed, including connecting lines").
+ */
+function stonesFrom( g ) {
+	const out = {};
+	for ( const [ m, list ] of Object.entries( g.stones || {} ) ) {
+		out[ m ] = list.map( ( [ token, set, color, message, favorite, paid, holder ] ) =>
+			( { token, set, color: color || [], message: message || '', favorite: favorite || '', paid: paid || '', holder: holder || '' } ) );
+	}
+	return out;
+}
+
+/** arthel's NES palette, in its order (src/build_logic/graphics/palettes.js): a stone's three colours index it. */
+export const NES = [ '#7C7C7C', '#0000FC', '#0000BC', '#4428BC', '#940084', '#A80020', '#A81000', '#881400', '#503000',
+	'#007800', '#006800', '#005800', '#004058', '#000000', '#BCBCBC', '#0078F8', '#0058F8', '#6844FC', '#D800CC', '#E40058',
+	'#F83800', '#E45C10', '#AC7C00', '#00B800', '#00A800', '#00A844', '#008888', '#F8F8F8', '#3CBCFC', '#6888FC', '#9878F8',
+	'#F878F8', '#F85898', '#F87858', '#FCA044', '#F8B800', '#B8F818', '#58D854', '#58F898', '#00E8D8', '#787878', '#FCFCFC',
+	'#A4E4FC', '#B8B8F8', '#D8B8F8', '#F8B8F8', '#F8A4C0', '#F0D0B0', '#FCE0A8', '#F8D878', '#D8F878', '#B8F8B8', '#B8F8D8',
+	'#00FCFC', '#F8D8F8' ];
+
+/** A stone's colour by its index; grey for one the palette hasn't got. */
+export function nes( i ) {
+	return NES[ i ] || NES[ 0 ];
+}
+
+/** The stones of a piece: a show's, and those of the other tapes of its night. A record or a track has none. */
+export function stonesOf( G, piece ) {
+	const pc = G.pieces && G.pieces[ piece ];
+	if ( !pc || pc.kind !== 'show' || !G.stones ) {
+		return [];
+	}
+	return [ pc.m, ...( pc.also || [] ) ].flatMap( ( m ) => G.stones[ m ] || [] );
+}
+
+/** What one stone says, in a line: its set, its favourite, its message, what was paid. */
+export function stoneSays( st ) {
+	return [ 'set ' + ( st.set + 1 ), st.favorite ? 'favourite: ' + st.favorite : '', st.message ? '“' + st.message + '”' : '',
+		st.paid ? st.paid + ' ETH' : '' ].filter( Boolean ).join( ' · ' );
 }
 
 /**
@@ -197,14 +271,82 @@ export function standing( m, how ) {
 	return show ? 2 : ( m.tier === FULL ? 3 : 1 );
 }
 
+/**
+ * What colour a connection is drawn in (Justin, #connectome, 27 Nov 2026, 23:20Z: "let's add more colors to
+ * differentiate the various types of connection. Make sure that the prominence still holds according to priority").
+ * One for each of the four kinds he ranked, in his order, each drawn a little lighter than the one before:
+ *
+ *   'pt'  a Permanent studio track    gold
+ *   'ps'  a Permanent show            green (ember until 28 Nov 2026, 00:52Z: "let's use green instead of ember")
+ *   'ft'  a Full studio track         blue
+ *   'fs'  a Full show                 ink
+ *   't0'  the rest: a track or a show not known to be free, or a record two are only both on: dotted, as before
+ *
+ * Gold still means Permanent and nothing else; green is the Permanent Release that is a night and not a cut.
+ */
+export function shade( m, how ) {
+	if ( how < STAGE || m.tier < FULL ) {
+		return 't0';
+	}
+	const show = m.kind === 'show';
+	return m.tier === PERMANENT ? ( show ? 'ps' : 'pt' ) : ( show ? 'fs' : 'ft' );
+}
+
+/**
+ * A whole tie's colour: that of whatever the two share that comes first (a Permanent track, a Permanent show, a Full
+ * track, a Full show). A line made for a view with
+ * nothing behind it but a tier (a spoke of a show, of a song) says with `show` which it is; one that says nothing is
+ * drawn as a track was.
+ */
+export function tieShade( tie, music ) {
+	if ( !tie || !tie.played ) {
+		return 't0';
+	}
+	const of = ( tie.ev || [] ).filter( ( e ) => e.how >= STAGE ).map( ( e ) => shade( music[ e.m ], e.how ) );
+	if ( of.length ) {
+		return [ 'pt', 'ps', 'ft', 'fs', 't0' ].find( ( x ) => of.includes( x ) );        // the order they come first in
+	}
+	return tie.tier === PERMANENT ? ( tie.show ? 'ps' : 'pt' ) : tie.tier === FULL ? ( tie.show ? 'fs' : 'ft' ) : 't0';
+}
+
+/**
+ * Seats kept out of a name's row (Justin, #connectome, 28 Nov 2026, 00:51Z: "Dee's and Geoff are kinda smushed
+ * together"): a point standing in the row a name is written on, nearer the name's middle than its end and `off`
+ * more, is moved out past that end on its own side; where the frame has no room there, up over the row or down
+ * under it, whichever it was nearer. Moves the points given, and returns how many it moved.
+ *
+ * row: { x, half, y1, y2 }, the name's middle, half its width as written, and the row's top and bottom.
+ */
+export function clearRow( points, row, off, frame ) {
+	let moved = 0;
+	for ( const p of points ) {
+		if ( p.y > row.y1 - 16 && p.y < row.y2 + 16 && Math.abs( p.x - row.x ) < row.half + off ) {
+			const x = row.x + ( p.x >= row.x ? 1 : -1 ) * ( row.half + off );
+			if ( x >= 50 && x <= frame.W - 50 ) {
+				p.x = Math.round( x );
+			} else {
+				p.y = Math.round( p.y < ( row.y1 + row.y2 ) / 2 ? Math.max( 40, row.y1 - 18 ) : Math.min( frame.H - 40, row.y2 + 18 ) );
+			}
+			moved++;
+		}
+	}
+	return moved;
+}
+
 /** A piece's standing: a track's or a show's own; a record whole, where no source says who is on which track, after them all. */
 export function pieceStanding( G, piece ) {
 	const m = G.music[ piece.m ];
 	return piece.kind === 'record' ? 0.2 * m.tier : standing( m, piece.kind === 'show' ? STAGE : TRACK );
 }
 
+/*
+ * Set stones break ties (Justin, #connectome, 22 Nov 2026, 20:12Z: "Set Stones need to be a tie-break in
+ * Cryptograss:Bacon graphs/Priority"): of two things at the same step of the order, the one more set stones were
+ * bought at comes first; of two ties at the same step, the one whose shows carry more stones. Then as before.
+ */
 function byProminence( music ) {
 	return ( x, y ) => ( standing( music[ y.m ], y.how ) - standing( music[ x.m ], x.how ) ) ||
+		( ( music[ y.m ].stones || 0 ) - ( music[ x.m ].stones || 0 ) ) ||
 		( music[ y.m ].tier - music[ x.m ].tier ) ||
 		( roughly( music[ y.m ].date ) - roughly( music[ x.m ].date ) || 0 ) ||
 		( x.m - y.m );
@@ -214,7 +356,7 @@ function byProminence( music ) {
 export function summarize( a, b, ev, music ) {
 	ev.sort( byProminence( music ) );
 	const t = { a, b, ev, w: 0, loose: 0, eff: 0, times: 0, shows: 0, records: 0, tracks: 0, looseRecords: 0, tier: UNKNOWN,
-		rank: 0, played: false };
+		rank: 0, played: false, stones: 0 };
 	let bestLoose = UNKNOWN;
 	for ( const e of ev ) {
 		const m = music[ e.m ];
@@ -230,6 +372,7 @@ export function summarize( a, b, ev, music ) {
 			}
 			t.tier = Math.max( t.tier, m.tier );
 			t.rank = Math.max( t.rank, standing( m, e.how ) );
+			t.stones += m.stones || 0;
 		} else {
 			t.loose += e.w;
 			t.eff += LOOSE * e.w * BOOST[ m.tier ];
@@ -248,10 +391,11 @@ export function summarize( a, b, ev, music ) {
  * How loud a tie is, wherever it's decided who gets named. Playing together comes before only sharing a record;
  * then the best standing of anything the two share (see standing: a Permanent studio track, a Permanent show, a
  * Full studio track, another show, in that order: Justin, #connectome, 15 Nov 2026), however much there is of
- * the rest; then how much of it, by eff. Two who only share a record: the freest such record first.
+ * the rest; then the set stones bought where they played together (the tie-break, byProminence); then how much
+ * of it, by eff. Two who only share a record: the freest such record first.
  */
 export function loudness( tie ) {
-	return tie.rank * 1e6 + ( tie.played ? 0 : tie.tier * 1e5 ) + Math.min( tie.eff, 9e4 );
+	return tie.rank * 1e6 + ( tie.played ? 0 : tie.tier * 1e5 ) + Math.min( tie.stones || 0, 9 ) * 1e4 + Math.min( tie.eff, 9e3 );
 }
 
 export function find( G, name ) {
@@ -412,6 +556,81 @@ export function mutuals( G, a, b ) {
 }
 
 /**
+ * Those of the mutuals who share one show or record with an end, in groups: a way across drawn once for all of
+ * them, not once each (Justin, #connectome, 21 Nov 2026, 01:56Z: "Make this a single line emerging from one side,
+ * then have a pill for the show, and then have it branch into the three (or more) common pickers that the two ends
+ * of the rainbow share, and then back into one line (with another fully shared pill, if one is available)
+ * connecting all the way to the other picker").
+ *
+ * mutuals: as mutuals() gives them ({ id, ta, tb }), loudest first. The biggest group goes first: of every show or
+ * record that `min` or more of them share with one end, the one the most share, and of two as many the one that
+ * comes first (standing(): a Permanent track, a Permanent show, ...); then the same among those left. A group is
+ * at most `most` strong, its loudest; the rest of its company are left, and are not gathered again under that
+ * piece. Each piece is said once: one a group goes by, or says at its far end, is no other group's.
+ *
+ * Returns { groups: [ { side: 'a' | 'b' (the end its piece is shared with), m (the piece, in G.music), say (what
+ * to call it, as an entry of a tie: its one song where all of them share just the one), members: [mutual],
+ * far: null | { m, say } (another piece every one of them shares with the other end), same (all of them share
+ * the group's own piece with the other end too: one stage, or one record, with both) } ], left: [mutual] }.
+ */
+export function trunks( G, mutuals, { min = 2, most = 6, not = [] } = {} ) {
+	const said = new Set( not ), done = new Set();              // pieces said; and ( side, piece ) once gathered
+	const sayOf = ( m, evs ) => {
+		const tracks = evs.every( ( e ) => e.how === TRACK && e.songs.length );
+		const common = tracks ? evs[ 0 ].songs.filter( ( song ) => evs.every( ( e ) => e.songs.includes( song ) ) ) : [];
+		const how = Math.min( ...evs.map( ( e ) => e.how ) );
+		return common.length === 1 ? { m, how: TRACK, songs: common } : { m, how: how >= STAGE ? STAGE : RECORD, songs: [] };
+	};
+	const first = ( x, y ) => ( y.n - x.n ) || ( y.rank - x.rank ) || ( G.music[ y.m ].tier - G.music[ x.m ].tier ) || ( x.side < y.side ? -1 : x.side > y.side ? 1 : 0 ) || ( x.m - y.m );
+	const groups = [];
+	let left = mutuals.slice();
+	for ( ;; ) {
+		const by = new Map();
+		for ( const x of left ) {
+			for ( const [ side, t ] of [ [ 'a', x.ta ], [ 'b', x.tb ] ] ) {
+				for ( const e of t.ev ) {
+					const key = side + e.m;
+					if ( said.has( e.m ) || done.has( key ) ) {
+						continue;
+					}
+					if ( !by.has( key ) ) {
+						by.set( key, { side, m: e.m, members: [], evs: [] } );
+					}
+					const c = by.get( key );
+					if ( c.members[ c.members.length - 1 ] !== x ) {         // a tie may hold a record twice over (a track, and the record whole)
+						c.members.push( x );
+						c.evs.push( e );
+					}
+				}
+			}
+		}
+		const cands = [ ...by.values() ].filter( ( c ) => c.members.length >= min ).map( ( c ) => Object.assign( c, { n: Math.min( most, c.members.length ),
+			rank: standing( G.music[ c.m ], Math.min( ...c.evs.map( ( e ) => e.how ) ) ) } ) ).sort( first );
+		if ( !cands.length ) {
+			break;
+		}
+		const c = cands[ 0 ], members = c.members.slice( 0, most ), evs = c.evs.slice( 0, most );
+		done.add( c.side + c.m );
+		said.add( c.m );
+		// the other end: what every one of them shares with it
+		const other = ( x ) => ( c.side === 'a' ? x.tb : x.ta );
+		const all = other( members[ 0 ] ).ev.map( ( e ) => e.m ).filter( ( m, i, l ) => l.indexOf( m ) === i )
+			.filter( ( m ) => members.every( ( x ) => other( x ).ev.some( ( e ) => e.m === m ) ) );
+		const evOf = ( m ) => members.map( ( x ) => other( x ).ev.find( ( e ) => e.m === m ) );
+		const far = all.filter( ( m ) => !said.has( m ) ).map( ( m ) => ( { m, evs: evOf( m ) } ) )
+			.map( ( o ) => Object.assign( o, { rank: standing( G.music[ o.m ], Math.min( ...o.evs.map( ( e ) => e.how ) ) ) } ) )
+			.sort( ( x, y ) => ( y.rank - x.rank ) || ( G.music[ y.m ].tier - G.music[ x.m ].tier ) || ( x.m - y.m ) )[ 0 ] || null;
+		if ( far ) {
+			said.add( far.m );
+		}
+		groups.push( { side: c.side, m: c.m, say: sayOf( c.m, evs ), members, far: far ? { m: far.m, say: sayOf( far.m, far.evs ) } : null, same: all.includes( c.m ) } );
+		const gone = new Set( members );
+		left = left.filter( ( x ) => !gone.has( x ) );
+	}
+	return { groups, left };
+}
+
+/**
  * The web among some pickers: every tie between two of them who have played together (or, with loose, who share
  * a record), each once, in the order the pickers were given. Round one picker these are the far legs of the
  * two-hop ways from them to their own company: who of the company have played with each other.
@@ -425,6 +644,186 @@ export function among( G, ids, loose = false ) {
 				out.push( { u: ids[ i ], v: ids[ j ], tie } );
 			}
 		}
+	}
+	return out;
+}
+
+/**
+ * The rainbow between two of a show's stage (Justin, #connectome, 27 Nov 2026, 02:13Z: the show "still looks very
+ * bare ... some kind of minimum number of shown connections. Rainbow graphs between the existing pickers might
+ * help?"): each thing the two share besides that show, a strand each. A record is one thing however many of its
+ * tracks they share, and two tapes of one night are one; of its evidence, the freest. Freest first (standing),
+ * then newest, then as the store has them; `most` at most. [{ piece, e, at (its standing) }]
+ */
+export function elsewhere( G, tie, show, most = Infinity ) {
+	const own = G.pieces[ show ].m, best = new Map();
+	for ( const e of tie.ev ) {
+		const piece = G.whole[ e.m ] !== undefined ? G.whole[ e.m ] : pieceFor( G, e );
+		if ( e.m === own || piece === show ) {
+			continue;
+		}
+		const was = best.get( piece );
+		if ( !was || standing( G.music[ e.m ], e.how ) > standing( G.music[ was.m ], was.how ) ) {
+			best.set( piece, e );
+		}
+	}
+	return [ ...best ].map( ( [ piece, e ] ) => ( { piece, e, at: standing( G.music[ e.m ], e.how ), year: +yearOf( G.music[ e.m ].date ) || 0 } ) )
+		.sort( ( x, y ) => ( y.at - x.at ) || ( y.year - x.year ) || ( x.piece - y.piece ) )
+		.slice( 0, most ).map( ( { piece, e, at } ) => ( { piece, e, at } ) );
+}
+
+/** Where each of n strands lies, in steps out from where one line alone would: 0, then 1, -1, 2, -2, ... ; taken: 0 is drawn already. */
+export function besides( n, taken = false ) {
+	const out = [];
+	for ( let i = taken ? 1 : 0; out.length < n; i++ ) {
+		out.push( i === 0 ? 0 : ( i % 2 ? ( i + 1 ) / 2 : -i / 2 ) );
+	}
+	return out;
+}
+
+/**
+ * The bow of a strand k steps of `gap` from a line from A to B that bows `base` (a line's bow: how far its curve
+ * is pulled from the middle of the straight line; its middle stands half that out), square to the straight line;
+ * k > 0 on the side `base` bows to.
+ */
+export function strandBow( A, B, base, k, gap ) {
+	const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot( dx, dy ) || 1;
+	const flip = ( -dy * base.x + dx * base.y ) < 0 ? -1 : 1, nx = flip * -dy / len, ny = flip * dx / len;
+	return { x: base.x + nx * k * 2 * gap, y: base.y + ny * k * 2 * gap };
+}
+
+/** Points along the curve from A to B that bows `bow` (a quadratic: its control point the straight line's middle plus bow), its ends left off. */
+export function curvePoints( A, B, bow, n = 24, end = 0.1 ) {
+	const cx = ( A.x + B.x ) / 2 + bow.x, cy = ( A.y + B.y ) / 2 + bow.y, pts = [];
+	for ( let i = 0; i <= n; i++ ) {
+		const t = end + ( 1 - 2 * end ) * i / n, u = 1 - t;
+		pts.push( { x: u * u * A.x + 2 * u * t * cx + t * t * B.x, y: u * u * A.y + 2 * u * t * cy + t * t * B.y } );
+	}
+	return pts;
+}
+
+/**
+ * Where n strands of a rainbow lie clear of what else is drawn: of the steps out from `base` (besides(), `far` each
+ * way at most), those whose curve crosses none of `boxes` ({ x1, y1, x2, y2 }) and keeps inside a frame W by H, in
+ * turn. A strand with no clear step left is left out (null). taken: step 0 is drawn already.
+ */
+export function clearSteps( A, B, base, n, gap, boxes, { taken = false, far = 6, W = Infinity, H = Infinity } = {} ) {
+	const free = ( k ) => curvePoints( A, B, strandBow( A, B, base, k, gap ) ).every( ( p ) => p.x >= 2 && p.y >= 2 && p.x <= W - 2 && p.y <= H - 2 &&
+		!boxes.some( ( b ) => p.x > b.x1 && p.x < b.x2 && p.y > b.y1 && p.y < b.y2 ) );
+	const steps = besides( taken ? 2 * far : 2 * far + 1, taken ).filter( free );
+	return Array.from( { length: n }, ( _, i ) => ( i < steps.length ? steps[ i ] : null ) );
+}
+
+/**
+ * A lane for n strands between A and B where the way `base` bows has room for fewer: that way lifted to one side of
+ * the straight line or the other, a little further each time, until a lane holds them all; else the one that held
+ * the most, the nearest first (between two of a show's stage, the show and its act and its venue standing between
+ * them: Justin, #connectome, 27 Nov 2026, 08:24Z). Returns { base, steps }, steps as clearSteps gives them.
+ */
+export function clearLane( A, B, base, n, gap, boxes, opts = {} ) {
+	const count = ( steps ) => steps.filter( ( k ) => k !== null ).length;
+	let best = { base, steps: clearSteps( A, B, base, n, gap, boxes, opts ) };
+	const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot( dx, dy ) || 1;
+	for ( let d = 40; count( best.steps ) < n && d <= ( opts.reach || 640 ); d += 40 ) {
+		for ( const side of [ 1, -1 ] ) {
+			const lifted = { x: base.x - side * d * dy / len, y: base.y + side * d * dx / len };
+			const steps = clearSteps( A, B, lifted, n, gap, boxes, opts );
+			if ( count( steps ) > count( best.steps ) ) {
+				best = { base: lifted, steps };
+			}
+		}
+	}
+	return best;
+}
+
+/**
+ * The bow of a line from A, under a box, to B, up past it, swung out round the end of the box on B's side of `mid`
+ * (an x), its middle `pad` past the box's lower corner: from the act under a show to one of its stage sitting up
+ * past the show's name, where no step to either side gets by it (Justin, #connectome, 27 Nov 2026, 08:24Z, at
+ * Dee's: "Why do Kyle and Dom appear to have so few connections?").
+ */
+export function roundEnd( A, B, box, mid, pad = 14 ) {
+	const px = B.x >= mid ? box.x2 + pad : box.x1 - pad, py = box.y2 + 4;
+	return { x: 2 * px - A.x - B.x, y: 2 * py - A.y - B.y };              // a quadratic's middle is half way to its control point
+}
+
+/**
+ * Who of a show's stage sits where round it, so that the most of what they share can be drawn (Justin,
+ * #connectome, 27 Nov 2026, 08:24Z, at Dee's: "Why do Kyle and Dom appear to have so few connections?" They share
+ * seven things besides that night, and not one was drawn: Dom sat up past the show's name, and no strand from
+ * Kyle, under it, could get round it). The seats come as given (start: a seat each), then two trade places while
+ * that lets more be drawn in all, the first such trade first, until none does; so where they were given to sit
+ * (as the picture slides) holds wherever it costs nothing. Those after start's own are fixed at their seats
+ * (fixed: an act's own mark). want( i, j ): how many lines the i-th and the j-th would have between them, in
+ * that order (start's, then fixed's); room( s, t ): how many could lie clear between seats s and t.
+ */
+export function seatsFor( start, fixed, want, room ) {
+	const at = start.concat( fixed ), n = start.length;
+	const wants = at.map( ( _, i ) => at.map( ( __, j ) => ( i < j ? want( i, j ) : 0 ) ) );
+	const drawn = () => {
+		let sum = 0;
+		for ( let i = 0; i < at.length; i++ ) {
+			for ( let j = i + 1; j < at.length; j++ ) {
+				sum += wants[ i ][ j ] > 0 ? Math.min( wants[ i ][ j ], room( at[ i ], at[ j ] ) ) : 0;
+			}
+		}
+		return sum;
+	};
+	let best = drawn();
+	for ( let better = true, pass = 0; better && pass < 20; pass++ ) {
+		better = false;
+		for ( let i = 0; i < n; i++ ) {
+			for ( let j = i + 1; j < n; j++ ) {
+				[ at[ i ], at[ j ] ] = [ at[ j ], at[ i ] ];
+				const now = drawn();
+				if ( now > best ) {
+					best = now;
+					better = true;
+				} else {
+					[ at[ i ], at[ j ] ] = [ at[ j ], at[ i ] ];
+				}
+			}
+		}
+	}
+	return at.slice( 0, n );
+}
+
+/**
+ * A show whose stage shares little besides that night, filled out by `need` more (Justin, #connectome, 27 Nov 2026,
+ * 02:13Z: "some kind of minimum number of shown connections"; 05:15Z, to blu's pick: "I... guess? Can I see a
+ * preview?"): its pickers' own other shows and records, those no one else of the stage is on (what two of them
+ * share is the rainbow's), and never anyone who wasn't on it. By turns from picker to picker in the order given,
+ * each one's freest first, then newest; `per` each at most. A record once, however many of its tracks they're on.
+ * shown: pieces drawn already. [{ id, piece }]
+ */
+export function fillFor( G, stage, show, shown, need, per = 4 ) {
+	const onStage = new Set( stage ), taken = new Set( shown ), out = [];
+	taken.add( show );
+	const queues = stage.map( ( id ) => {
+		const best = new Map();                                       // a record or a night as a whole, at its best for them
+		for ( const p of G.on[ id ] || [] ) {
+			const m = G.music[ G.pieces[ p ].m ], whole = G.whole[ G.pieces[ p ].m ] !== undefined ? G.whole[ G.pieces[ p ].m ] : p;
+			if ( whole === show || G.pieces[ whole ].cast.some( ( q ) => q !== id && onStage.has( q ) ) ) {
+				continue;
+			}
+			const at = standing( m, m.kind === 'show' ? STAGE : TRACK );
+			if ( !best.has( whole ) || at > best.get( whole ).at ) {
+				best.set( whole, { p: whole, at, year: +yearOf( m.date ) || 0 } );
+			}
+		}
+		return [ ...best.values() ].sort( ( x, y ) => ( y.at - x.at ) || ( y.year - x.year ) || ( x.p - y.p ) ).map( ( x ) => x.p );
+	} );
+	for ( let round = 0; round < per && out.length < need; round++ ) {
+		stage.forEach( ( id, i ) => {
+			while ( out.length < need && queues[ i ].length ) {
+				const p = queues[ i ].shift();
+				if ( !taken.has( p ) ) {
+					taken.add( p );
+					out.push( { id, piece: p } );
+					return;
+				}
+			}
+		} );
 	}
 	return out;
 }
@@ -886,13 +1285,84 @@ export function when( date ) {
 	const s = String( date || '' ).trim();
 	let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( s );
 	if ( m && +m[ 2 ] >= 1 && +m[ 2 ] <= 12 ) {
-		return `${ +m[ 3 ] } ${ MONTHS[ +m[ 2 ] - 1 ] } ${ m[ 1 ] }`;
+		// Discogs writes a month with no day as day 00 ("2024-05-00"): "May 2024", not "0 May 2024"
+		return ( +m[ 3 ] ? `${ +m[ 3 ] } ` : '' ) + `${ MONTHS[ +m[ 2 ] - 1 ] } ${ m[ 1 ] }`;
+	}
+	if ( m && m[ 2 ] === '00' && m[ 3 ] === '00' ) {
+		return m[ 1 ];                                               // and a year alone as 2024-00-00
 	}
 	m = /^block (\d+)$/.exec( s );
 	if ( m ) {
 		return 'block ' + m[ 1 ].replace( /\B(?=(\d{3})+(?!\d))/g, ',' );
 	}
 	return s;
+}
+
+/**
+ * A night, said shorter and shorter: "16 Jul 2026", "Jul 2026", "2026". A label that leads with where a show was
+ * gives the place its letters and takes as much of the night as fits beside it; the whole night is in the note. A
+ * date that is not a day of the calendar (a block height) has only the one way to say it.
+ */
+/**
+ * The year a night was, where a show's date says it: its own, or the year an Ethereum block height falls in (arthel
+ * dates its shows by block). After the merge a block is every twelve seconds from 15,537,394 (15 Sep 2022,
+ * 06:42:42Z); before it, the average from the genesis block, which is near enough for a year.
+ * Justin, #connectome, 22 Nov 2026, 21:55Z: "let's not say "block <n>" - in most cases, the year is enough!"
+ */
+export function yearOf( date ) {
+	const s = String( date || '' ).trim();
+	const y = /^(\d{4})(?:-|$)/.exec( s );
+	if ( y ) {
+		return y[ 1 ];
+	}
+	const b = /^block (\d+)$/.exec( s );
+	if ( !b ) {
+		return '';
+	}
+	const n = +b[ 1 ], MERGE = 15537394, AT = 1663224162, GENESIS = 1438269973;
+	const t = n >= MERGE ? AT + ( n - MERGE ) * 12 : GENESIS + n * ( AT - GENESIS ) / MERGE;
+	return String( new Date( t * 1000 ).getUTCFullYear() );
+}
+
+/**
+ * A show's night as a line says it: the day, where its date is a day of the calendar; the year, where arthel dates
+ * it by block (yearOf), in a heading as in a pill (magent, #merch, 23 Nov 2026: "The biggest type on the page still
+ * says block"). `full` says the block after the year, for the record: a show's card and its closer look do.
+ */
+export function night( date, full ) {
+	const day = when( date ), year = /^block /.test( day ) ? yearOf( date ) : '';
+	return year ? ( full ? year + ' · ' + day : year ) : day;
+}
+
+/**
+ * What a show's card and its closer look say, line by line: whose, where, when, its set stones, how many on stage.
+ * The stones come before the count, which the ring says too: a card has room for only so many lines, and it cut a
+ * show's second stone off while the graph drew both gems beside it (magent, #merch, 23 Nov 2026). The card says two
+ * lines of stones at most, the second "and n more" where there are more than two; `all`, the closer look, every one.
+ */
+export function showSays( G, piece, all ) {
+	const m = G.music[ piece.m ], n = naming( G, { m: piece.m, how: STAGE, songs: [] } );
+	const stones = stonesOf( G, piece.id ), said = all || stones.length <= 2 ? stones : stones.slice( 0, 1 );
+	return [ n.band && n.band !== n.who ? n.band : '', n.place, night( m.date, true ),
+		...said.map( ( st ) => '◆ ' + stoneSays( st ) ),
+		said.length < stones.length ? '◆ and ' + ( stones.length - said.length ) + ' more' : '',
+		plural( piece.cast.length, 'picker' ) + ' on stage, of those the sources name' ].filter( Boolean );
+}
+
+/**
+ * A band as a show's pill names it: its leader, where the name is "<leader> and the <band>" (Justin, #connectome,
+ * 22 Nov 2026, 21:55Z: "The band name is crucial ... mine can just be "Justin Holmes" instead of "Justin Holmes and
+ * The Immutable String Band", in order to fit better"). Any other band as it is.
+ */
+export function bandShort( band ) {
+	const b = String( band || '' ).trim();
+	return b.replace( /\s+(?:and|&)\s+(?:the|his|her|their)\s.*$/i, '' ).trim() || b;
+}
+
+export function nights( date ) {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( String( date || '' ).trim() );
+	const whole = when( date );
+	return m && +m[ 2 ] >= 1 && +m[ 2 ] <= 12 ? [ whole, `${ MONTHS[ +m[ 2 ] - 1 ] } ${ m[ 1 ] }`, m[ 1 ] ] : ( whole ? [ whole ] : [] );
 }
 
 export function plural( n, one, many ) {
@@ -943,21 +1413,78 @@ export function naming( G, e ) {
 		// cryptograss's own shows (Justin, #connectome, 15 Nov 2026: by the band, not the show's title).
 		// Any other goes by its own name.
 		const tape = !!m.artist;
-		const who = tape ? m.artist : ( m.title || m.artist );
+		const band = m.artist || '';
+		// And by where it was, where its source says (Justin, #connectome, 21 Nov 2026: "if the name of the show
+		// (festival or if the show itself has a name), city and venue are available, display them in various
+		// relevant places. These are better at evoking memories and observations than just the dates."). A label
+		// leads with the show's own name, else its venue, else its band; the band, the town and the night are in
+		// `sub` and `long`, which go wherever there is room for a line.
+		// Its own name: what the build says is one, or, with no band said, its title, as before.
+		const own = ( m.name && m.name !== band ? m.name : '' ) || ( tape ? '' : m.title || '' );
+		const who = own || m.venue || band;
 		const day = when( m.date );
+		// the town once: a taper's venue often has it already ("Ryman Auditorium, Nashville, TN")
+		const town = ( m.city || '' ).split( ',' )[ 0 ].trim().toLowerCase();
+		const city = town && ( m.venue || '' ).toLowerCase().includes( town ) ? '' : m.city;
+		const place = [ m.venue !== who ? m.venue : '', city ].filter( Boolean ).join( ', ' );
 		// A show says its night wherever it is named, so it is never taken for a band or a picker (Justin,
-		// #connectome, 15 Nov 2026); `day` is kept apart, so a tight spot cuts the name and keeps the night.
-		const dated = [ who, day ].filter( Boolean ).join( ' · ' );
-		return { glyph: 'show', short: dated, brief: dated, who, day,
-			long: tape ? ( m.title && m.title !== who ? m.title : who ) : [ m.artist !== who ? m.artist : '', day ].filter( Boolean ).join( ', ' ),
+		// #connectome, 15 Nov 2026); `day` is kept apart, so a tight spot cuts the name and keeps the night. One
+		// with a name of its own gives up the night first (`named`): no other show has that name.
+		// The pill's words: the band, short, where it isn't the name already; the name; the year (Justin, 22 Nov
+		// 2026, 21:55Z). The rest of the night, block and all, is in `long`.
+		const crew = bandShort( band ), y = yearOf( m.date ), year = y && !who.includes( y ) ? y : '';   // "Festival MY 2023" says its own year
+		const dated = [ crew && crew !== who && band !== who ? crew : '', who === band ? crew : who, year ].filter( Boolean ).join( ' · ' );
+		// `long`, the line under its name: the rest of it. A tape's is archive.org's own sentence ("X Live at Y on
+		// Z"), with the town; any other's is its band, where the name is not the band's, where it was, and its night.
+		// A show whose source says nothing of where it was keeps the line it had: its title, or its night.
+		const sentence = !own && / live at /i.test( m.title || '' );
+		const placeless = !m.name && !m.venue && !m.city;
+		return { glyph: 'show', short: dated, brief: dated, who, day, year, band, crew: crew !== who && band !== who ? crew : '', place, named: !!own,
+			placed: !own && !!m.venue, days: nights( m.date ),
+			long: placeless ? ( tape ? ( m.title && m.title !== who ? m.title : who ) : day ) :
+				( sentence ? [ m.title, city ] : [ who !== band ? band : '', place, day ] ).filter( Boolean ).join( ' · ' ),
 			songs: e.songs };
 	}
 	const record = [ m.artist, m.title ].filter( Boolean ).join( ' – ' ) + ( m.date ? ` (${ when( m.date ) })` : '' );
 	if ( e.how === TRACK && e.songs.length ) {
-		const more = e.songs.length - 1;
-		return { glyph: 'track', short: e.songs[ 0 ] + ( more ? ` +${ more }` : '' ), brief: e.songs[ 0 ], long: record, songs: e.songs };
+		// A song's pill says who wrote it, where its page says, between its name and its "+n" (Justin, #connectome, 23
+		// Nov 2026, 18:30Z: "Let's show the authors' name in song pills in most situations"); `brief` is the song and
+		// its "+n" alone, for a pill with no room for them.
+		const more = e.songs.length - 1, plus = more ? ` +${ more }` : '', by = authorsOf( G, e.songs[ 0 ] );
+		const who = by === null ? '' : ( by === TRAD ? 'trad.' : by.join( ' & ' ) );
+		// and, where the whole name won't go, the surname: "August · Holmes +7"
+		const sur = by === null ? '' : ( by === TRAD ? 'trad.' : by.map( ( n ) => n.trim().split( /\s+/ ).pop() ).join( ' & ' ) );
+		return { glyph: 'track', short: e.songs[ 0 ] + ( who ? ' · ' + who : '' ) + plus, brief: e.songs[ 0 ] + plus, song: e.songs[ 0 ], plus, by: who, sur,
+			long: record, songs: e.songs };
 	}
 	return { glyph: 'record', short: m.title || m.key, brief: m.title || m.key, long: record, songs: e.songs };
+}
+
+/** What the wiki says of a song that the tradition carries (graph.json `authors`). */
+export const TRAD = 'traditional';
+
+/**
+ * Who wrote a song, as its Song page says (graph.json `authors`, tools/connectome_card.py song_authors): their names
+ * as written, TRAD where the page says it is traditional, or null where the page says neither or there is no page.
+ * The graph's own spelling first, then any spelling that agrees (songKey).
+ */
+export function authorsOf( G, song ) {
+	const all = ( G && G.authors ) || {};
+	let said = Object.prototype.hasOwnProperty.call( all, song ) ? all[ song ] : undefined;
+	if ( said === undefined && song ) {
+		const k = songKey( song ), other = Object.keys( all ).find( ( s ) => songKey( s ) === k );
+		said = other === undefined ? undefined : all[ other ];
+	}
+	if ( said === TRAD ) {
+		return TRAD;
+	}
+	return Array.isArray( said ) && said.length ? said.map( String ) : null;
+}
+
+/** A song's line under its name on a card (Justin, 23 Nov 2026, 18:30Z): "by <author(s)>", or "traditional"; '' where nobody says. */
+export function bySays( G, song ) {
+	const by = authorsOf( G, song );
+	return by === null ? '' : ( by === TRAD ? 'traditional' : 'by ' + ( by.length > 2 ? by.slice( 0, -1 ).join( ', ' ) + ' & ' + by[ by.length - 1 ] : by.join( ' & ' ) ) );
 }
 
 /**
@@ -1264,7 +1791,8 @@ export function called( G, piece ) {
 	}
 	if ( piece.kind === 'show' ) {
 		// A band and a night of theirs often have one name. A show always says it is one (Justin, #connectome, 15 Nov 2026).
-		return { glyph: 'show', name: n.who, sub: [ 'live', when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
+		// and whose it was and where, under its name, where the name is not the band's own
+		return { glyph: 'show', name: n.who, sub: [ 'live', n.who !== n.band ? n.band : '', n.place, night( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 	}
 	return { glyph: 'record', name: n.brief, sub: [ m.artist, when( m.date ) ].filter( Boolean ).join( ' · ' ), long: n.long };
 }
@@ -1313,16 +1841,19 @@ export function recordBy( m ) {
  * Everything the boxes up top can find (Justin, #connectome, 15 Nov 2026: not only pickers): every picker by
  * name; every cut of a song the pages state; and every show, record and track that has pickers on it. A name
  * here says what kind of thing it is unless it is a picker, since a band, its record and a night of theirs can
- * all be called the same. A track with a cut of its own is found as the cut. The first to take a name keeps it.
+ * all be called the same. A track with a cut of its own is found as the cut. The first to take a name keeps it;
+ * a show dated by block that finds its name taken says its block as well.
  * Returns [{ label, view }]: view, what go() takes ({ a }, { s, cut } or { m }).
  */
 export function catalogue( G ) {
 	const out = [], taken = new Set();
 	const put = ( label, view ) => {
-		if ( label && !taken.has( label.toLowerCase() ) ) {
-			taken.add( label.toLowerCase() );
-			out.push( { label, view } );
+		if ( !label || taken.has( label.toLowerCase() ) ) {
+			return false;
 		}
+		taken.add( label.toLowerCase() );
+		out.push( { label, view } );
+		return true;
 	};
 	G.people.forEach( ( p ) => put( p.name, { a: p.id } ) );
 	const cut = new Set();
@@ -1336,8 +1867,16 @@ export function catalogue( G ) {
 		if ( !pc.cast.length || ( pc.kind === 'track' && cut.has( pc.song ) ) ) {
 			continue;                                        // folded into another tape of its night; or found as its cut
 		}
-		put( pc.kind === 'show' ? [ c.name, c.sub ].filter( Boolean ).join( ' · ' ) :
-			( pc.kind === 'track' ? c.name + ' · track on ' + c.on : c.name + ' · record' + ( c.sub ? ', ' + c.sub : '' ) ), { m: pc.id } );
+		if ( pc.kind === 'show' ) {
+			// A show dated by block is said by its year (night). Two of one name in one year would be one name here,
+			// and the second never found: it says its block too.
+			const label = [ c.name, c.sub ].filter( Boolean ).join( ' · ' ), day = when( G.music[ pc.m ].date );
+			if ( !put( label, { m: pc.id } ) && /^block /.test( day ) ) {
+				put( label + ' · ' + day, { m: pc.id } );
+			}
+			continue;
+		}
+		put( pc.kind === 'track' ? c.name + ' · track on ' + c.on : c.name + ' · record' + ( c.sub ? ', ' + c.sub : '' ), { m: pc.id } );
 	}
 	return out;
 }
@@ -1615,8 +2154,54 @@ export function arcBow( A, B, h, t1, t2 ) {
 	return { x: ( dy / len ) * k, y: -( dx / len ) * k };
 }
 
+/**
+ * A run of points from the arc that stands h1 over the straight line, at t1 along, to the arc that stands h2, at t2:
+ * a branch leaving a trunk, or coming back to one. It changes arcs over the stretch [ from, to ] of its own length
+ * and keeps to its arc for the rest, so it never leaves the room between the two arcs: no strand outside them is
+ * crossed, and of two branches off one trunk neither crosses the other.
+ */
+export function run( A, B, h1, h2, t1, t2, from = 0, to = 1, n = 16 ) {
+	const pts = [];
+	for ( let i = 0; i <= n; i++ ) {
+		const u = i / n, v = Math.max( 0, Math.min( 1, ( u - from ) / ( ( to - from ) || 1 ) ) ), e = v * v * ( 3 - 2 * v );
+		pts.push( onArc( A, B, h1 + ( h2 - h1 ) * e, t1 + ( t2 - t1 ) * u ) );
+	}
+	return pts;
+}
+
 const hits = ( p, q ) => p.x1 < q.x2 && p.x2 > q.x1 && p.y1 < q.y2 && p.y2 > q.y1;
 const ALONG = [ 0.5, 0.36, 0.64, 0.25, 0.75, 0.43, 0.57, 0.3, 0.7, 0.2, 0.8 ];   // where along its strand a mark may sit, the middle first
+
+const END = 30, GAP = 8, STUB = 34, LAP = 6, FAN = 44;     // a trunk: clear of an end's circle; its length with nothing said on it; how far a fork hides under its pill; the least a branch runs
+/** How far apart a trunk's branches may stand, of the room the frame has to spare: less than plain strands (`fill`), so a group stays one thing. */
+const TOGETHER = 1.35;
+
+/**
+ * Where a trunk forks and where it joins again, between two ends as rainbow() sets them: wa, wb are how wide the
+ * pills on it are at a's end and at b's (0: nothing said there, and the trunk is a stub). Returns null where the
+ * frame is too narrow for a branch each way, else { tF, tJ (how far along the fork and the join are), tM (the
+ * pickers between them), fan (how long a branch runs, to its picker's circle), pa, pb (where each pill's middle
+ * is, along; null with none) }. ina, inb: how far in from each end the trunk's room begins, where a name under the
+ * end reaches further in than the end's own circle.
+ */
+const slot = ( m ) => 2 * m.r + ( m.w ? 26 : 8 );          // a picker of a trunk: their circle, and their name under it
+
+/** Half the room a trunk takes at the rainbow's middle, for its pickers ({ r, w }) one over another where fork() (at) puts them. */
+export function trunkHalf( marks, at ) {
+	return marks.reduce( ( sum, m ) => sum + slot( m ), 0 ) / ( 2 * 4 * at.tM * ( 1 - at.tM ) ) + 4;
+}
+
+export function fork( W, H, la, lb, wa, wb, ina = END, inb = END ) {
+	const { A, B } = ends( W, H, la, lb ), span = B.x - A.x;
+	const x0 = A.x + Math.max( END, ina ) + GAP, x1 = B.x - Math.max( END, inb ) - GAP;
+	const fa = x0 + ( wa ? wa - LAP : STUB ), fb = x1 - ( wb ? wb - LAP : STUB );
+	if ( fb - fa < 2 * FAN + 32 ) {
+		return null;
+	}
+	const at = ( x ) => ( x - A.x ) / span;
+	return { tF: at( fa ), tJ: at( fb ), tM: at( ( fa + fb ) / 2 ), fan: ( fb - fa ) / 2 - 16,
+		pa: wa ? at( x0 + wa / 2 ) : null, pb: wb ? at( x1 - wb / 2 ) : null };
+}
 
 /**
  * Where the strands go, and where on each its marks sit.
@@ -1631,7 +2216,11 @@ const ALONG = [ 0.5, 0.36, 0.64, 0.25, 0.75, 0.43, 0.57, 0.3, 0.7, 0.2, 0.8 ];  
  * fill: with room to spare, how many times further apart the strands may stand to fill the frame.
  *
  * Returns { A, B, taken (every box set down), strands: [ null | { h, side, marks: [{ t, x, y, named, at: 'right' | 'left' | 'under' | null }] } ] }: null
- * for a strand the frame had no room for. A name that would lie on another mark or run off the frame is tried
+ * for a strand the frame had no room for. A strand may be a trunk in place of marks: `group`, { marks: [{ r, w }]
+ * (the pickers it branches into, the first uppermost, each named under their circle), wa, wb (fork()) }. It takes
+ * the room its pickers need one over another, and comes back as { h, side, group: { tF, tJ, tM, pa, pb (each
+ * pill's place: { t, x, y }, or null), rows: [{ t, x, y, h (the arc through both ends that this picker is on),
+ * named, at: 'under' }] } }. A name that would lie on another mark or run off the frame is tried
  * further along the strand and on the mark's other side; with nowhere clear, the mark is set down without it
  * (named: false). Of several marks on one strand, each one's name is tried first on the side away from the others,
  * so the stretch of the strand between them is left in sight.
@@ -1642,6 +2231,14 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 	// With fewer strands than the frame has room for, they stand further apart, up to `fill` times, and fill it:
 	// as far as the fuller side of the straight line allows.
 	const need = [ 0, 0 ];
+	asked = asked.map( ( st ) => {
+		if ( !st.group ) {
+			return st;
+		}
+		const at = fork( W, H, la, lb, st.group.wa, st.group.wb );
+		const c = at ? 4 * at.tM * ( 1 - at.tM ) : 1;             // how high an arc stands where the pickers are, of its height at its middle
+		return Object.assign( {}, st, { marks: [], forked: at, c, half: at ? trunkHalf( st.group.marks, at ) : 0 } );
+	} );
 	asked.forEach( ( st, i ) => {
 		if ( i === 0 ) {
 			need[ 0 ] = need[ 1 ] = st.half;
@@ -1650,7 +2247,7 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 		}
 	} );
 	const wide = Math.max( 1, Math.min( fill, room[ 0 ] / Math.max( 1, need[ 0 ] ), room[ 1 ] / Math.max( 1, need[ 1 ] ) ) );
-	const strands = asked.map( ( st ) => Object.assign( {}, st, { half: st.half * wide } ) );
+	const strands = asked.map( ( st ) => Object.assign( {}, st, { half: st.half * ( st.group ? Math.min( wide, TOGETHER ) : wide ), by: st.group ? Math.min( wide, TOGETHER ) : wide } ) );
 	const edge = [ 0, 0 ];                                   // how far out each side is taken
 	const taken = [];
 	for ( const [ P, nm ] of [ [ A, names.a ], [ B, names.b ] ] ) {
@@ -1666,6 +2263,9 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 	let first = true;
 	const out = strands.map( ( st, i ) => {
 		let side = edge[ 0 ] <= edge[ 1 ] ? 0 : 1, h;
+		if ( st.group && !st.forked ) {
+			return null;
+		}
 		if ( first ) {
 			h = 0;
 		} else {
@@ -1692,6 +2292,49 @@ export function rainbow( { W, H, la, lb, names = {}, strands: asked, top = 18, b
 			return b;
 		};
 		const clear = ( bs ) => bs.every( ( b ) => b.x1 >= 3 && b.x2 <= W - 3 && !taken.some( ( q ) => hits( b, q ) ) );
+		if ( st.group ) {
+			// A trunk: its pickers one over another where it is widest open, each on the arc through both ends
+			// that passes their place, so a branch to them (run()) keeps between the trunk's arc and theirs.
+			const g = st.group, pillBox = ( t, w ) => boxOf( { pill: true, w }, onArc( A, B, sign * h, t ), null );
+			const hit = ( t, w ) => t !== null && !clear( pillBox( t, w ) );
+			let at = st.forked;
+			if ( hit( at.pa, g.wa ) || hit( at.pb, g.wb ) ) {
+				// What it says would lie on a name under an end, which reaches further in than the end's circle:
+				// the trunk's room begins past the name. With no room then, the strand is left out.
+				const past = ( nm ) => ( nm && !nm.side ? nm.w / 2 + 8 : END );
+				at = fork( W, H, la, lb, g.wa, g.wb, hit( at.pa, g.wa ) ? past( names.a ) : END, hit( at.pb, g.wb ) ? past( names.b ) : END );
+				if ( !at || hit( at.pa, g.wa ) || hit( at.pb, g.wb ) ) {
+					return null;
+				}
+			}
+			const pill = ( t, w ) => {
+				if ( t === null ) {
+					return null;
+				}
+				const p = onArc( A, B, sign * h, t );
+				taken.push( ...pillBox( t, w ) );
+				return { t, x: p.x, y: p.y };
+			};
+			const pa = pill( at.pa, g.wa ), pb = pill( at.pb, g.wb );
+			const c = 4 * at.tM * ( 1 - at.tM ), yc = A.y - sign * h * c;
+			const tall = g.marks.reduce( ( sum, m ) => sum + slot( m ), 0 ) * st.by, x = A.x + ( B.x - A.x ) * at.tM;
+			let y = yc - tall / 2;
+			const rows = g.marks.map( ( m ) => {
+				const p = { x, y: y + ( m.r + 4 ) * st.by };
+				y += slot( m ) * st.by;
+				const named = !!m.w && clear( boxOf( m, p, 'under' ) );
+				taken.push( ...boxOf( m, p, named ? 'under' : null ) );
+				return { t: at.tM, x: p.x, y: p.y, h: ( A.y - p.y ) / c, named, at: named ? 'under' : null };
+			} );
+			const out = { h: sign * h, side, marks: [], group: { tF: at.tF, tJ: at.tJ, tM: at.tM, fan: at.fan, pa, pb, rows } };
+			if ( first ) {
+				edge[ 0 ] = edge[ 1 ] = st.half;
+				first = false;
+			} else {
+				edge[ side ] = h + st.half;
+			}
+			return out;
+		}
 		// One mark: anywhere along, each strand starting somewhere else, so the marks fill the frame and don't
 		// stand in a column. More: spread evenly, and all slid together a little either way. `at`: where the
 		// strand's marks belong (a picker's place in a chain), and a little either way of that.
@@ -2063,8 +2706,15 @@ export function keep( g, pickers, musics = [], hubs = [] ) {
 			writers: ( c.writers || [] ).map( P ),
 			pickers: ( c.pickers || [] ).filter( ( p ) => pn.has( p[ 0 ] ) ).map( ( p ) => [ P( p[ 0 ] ), ...p.slice( 1 ) ] )
 		} ) ] ) ),
-		plays: pick( g.plays, ( [ , cid ] ) => cids.has( cid ) )
+		plays: pick( g.plays, ( [ , cid ] ) => cids.has( cid ) ),
+		// a kept show keeps its set stones, as read then; a graph with none is kept as it always was, so its ID stands
+		...stonesKept( g, mn )
 	};
+}
+
+function stonesKept( g, mn ) {
+	const kept = Object.entries( g.stones || {} ).filter( ( [ m ] ) => mn.has( +m ) ).map( ( [ m, list ] ) => [ mn.get( +m ), list ] );
+	return kept.length ? { stones: Object.fromEntries( kept ), stones_read: g.stones_read || null } : {};
 }
 
 /**

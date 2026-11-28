@@ -56,6 +56,7 @@ pipeline {
                     # And what verifying does to them: a claim unwrapped, a
                     # proposed removal taken away.
                     php extensions/PickiPediaVerification/tests/check-verify-strip.php
+                    php extensions/PickiPediaVerification/tests/check-verify-groups.php
 
                     # And the button that reads them. Skipped rather than
                     # failed where the agent has no node: a missing runtime is
@@ -100,6 +101,9 @@ pipeline {
                     # series, the rail, their videos' shapes, and what is kept of magenta's word on a tiding.
                     php tests/check-posts.php
                     php tests/check-night.php
+                    # A pale ground written in a stylesheet of ours is answered by night, or named in the
+                    # list there of what is not yet answered.
+                    php tests/check-night-grounds.php
 
                     # Lua, if the agent has one. Scribunto ships an interpreter
                     # but MediaWiki is not downloaded yet at this stage, so a
@@ -404,15 +408,21 @@ REQS
                             exit "${FETCHED}"
                         fi
 
+                        # The tracks the wiki says are ready (state: production), its videos, its show pages, and its
+                        # band pages as far as a person has verified them (Cryptograss:Bacon graphs/Bands): where the
+                        # wiki doesn't answer, the last list read stands.
+                        timeout 60 "${PY}" connectome_store.py releases --out "${CACHE}/releases.json" || echo "Connectome: the ready tracks weren't read; the last list stands"
+                        touch "${CACHE}/releases.json"
+
                         # The store, built again only when something it's built from has changed.
-                        KEY=$( { cat connectome_store.py recording_credits.py homeplace.py rambler.py lma_lineup.py connectome_sources.txt connectome_names.txt "${CACHE}/walked_sources.txt" "${CACHE}/walked_names.txt"
+                        KEY=$( { cat connectome_store.py recording_credits.py homeplace.py rambler.py lma_lineup.py connectome_sources.txt connectome_names.txt "${CACHE}/walked_sources.txt" "${CACHE}/walked_names.txt" "${CACHE}/releases.json"
                                  git -C "${CACHE}/arthel" rev-parse HEAD
                                  find "${CACHE}/raw" -name '*.json' | sort; } | sha256sum | cut -c1-16 )
                         STORE="${CACHE}/store-${KEY}"
                         if [ ! -f "${STORE}/pairs.json" ]; then
                             rm -rf "${STORE}.part"
                             mkdir -p "${STORE}.part"
-                            "${PY}" connectome_store.py build --raw "${CACHE}/raw" --arthel "${CACHE}/arthel/src/data" --lma-names connectome_names.txt "${CACHE}/walked_names.txt" --out "${STORE}.part/credits.jsonl" --db "${STORE}.part/connectome.sqlite"
+                            "${PY}" connectome_store.py build --raw "${CACHE}/raw" --arthel "${CACHE}/arthel/src/data" --lma-names connectome_names.txt "${CACHE}/walked_names.txt" --releases "${CACHE}/releases.json" --out "${STORE}.part/credits.jsonl" --db "${STORE}.part/connectome.sqlite"
                             "${PY}" connectome_store.py pairs --credits "${STORE}.part/credits.jsonl" --out "${STORE}.part/pairs.json"
                             mv "${STORE}.part" "${STORE}"
                             ls -dt "${CACHE}"/store-* | tail -n +4 | xargs -r rm -rf
@@ -420,7 +430,7 @@ REQS
 
                         # The cards and the big graph's graph.json, from the store and the wiki as it is now; swapped in whole.
                         rm -rf "${CACHE}/cards.part"
-                        "${PY}" connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part"
+                        "${PY}" connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part" --arthel "${CACHE}/arthel/src/data"
                         cp "${STORE}/connectome.sqlite" "${OUT}/connectome.sqlite"
                         if [ -f "${CACHE}/walked.json" ]; then cp "${CACHE}/walked.json" "${OUT}/walked.json"; fi
                         cp "${CACHE}/cards.part/graph.json" "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"

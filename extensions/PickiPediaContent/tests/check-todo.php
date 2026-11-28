@@ -81,6 +81,10 @@ check( 'not a list says so', str_contains( Todo::render( "task: one\n", $hrefFor
 check( 'an empty list is nothing to do', str_contains( Todo::render( '', $hrefFor ), 'Nothing to do.' ) );
 check( 'a message link elsewhere has no Mood to go to',
 	Todo::hrefFrom( '#m-0f132ada', 'Cryptograss:Elsewhere', static fn ( $t ) => null ) === null );
+check( 'a namespaced thread (#interfaces.threads) is linked in magenta',
+	Todo::hrefFrom( '#interfaces.threads', 'Cryptograss:Moods/interfaces/todo', static fn ( $t ) => null )
+	=== 'https://magenta.cryptograss.live/moods/interfaces.threads/' );
+check( 'a namespaced thread to-do list is one too', Todo::isMoodList( 3000, 'Moods/interfaces.threads/todo' ) );
 
 // The live page's list, as it was written (fixture beside this test, when present).
 $live = __DIR__ . '/todo-fixture.yaml';

@@ -4,6 +4,8 @@ Tests for the connectome store. Canned Discogs and MusicBrainz documents shaped
 like the real ones (Julia Belle, discogs 34168519; Safe, Sensible And Sane,
 discogs 35460307); nothing touches the network.
 """
+import json
+
 import connectome_store as S
 
 JULIA = {"id": 34168519, "title": "Julia Belle", "year": 2025, "master_id": 1,
@@ -206,3 +208,298 @@ def test_an_arthel_show_is_its_bands_where_the_id_is_known(tmp_path):
     artist = {r["target"]["title"]: r["target"]["artist"] for r in S.from_arthel(str(tmp_path))}
     assert artist == {"Hello Decentralization": "Justin Holmes and the Immutable String Band",
                       "ETHPrague 2025 First Show": ""}                      # an id nobody has named: no band, no venue
+
+
+def test_a_show_keeps_where_it_was_as_its_source_says(tmp_path):
+    # Justin, #connectome, 21 Nov 2026: "if the name of the show (festival or if the show itself has a name), city
+    # and venue are available, display them in various relevant places."
+    (tmp_path / "shows").mkdir()
+    (tmp_path / "shows" / "0-11908068.yaml").write_text(
+        'title: "Hello Decentralization"\nvenue: "chiva lounge"\nlocality: "Barcelona"\nregion1: "Catalonia"\nregion2: "Spain"\n'
+        'ensemble:\n  "Justin Holmes": ["guitar"]\n  "Leify Green": ["fiddle"]\n')
+    (tmp_path / "shows" / "0-14628177.yaml").write_text('title: "No place said"\nensemble:\n  "Justin Holmes": ["guitar"]\n  "Leify Green": ["fiddle"]\n')
+    where = {r["target"]["title"]: (r["target"]["venue"], r["target"]["city"]) for r in S.from_arthel(str(tmp_path))}
+    assert where == {"Hello Decentralization": ("chiva lounge", "Barcelona, Catalonia"), "No place said": ("", "")}
+    tape = {"metadata": {"identifier": "EastNashGrass2026-07-16", "creator": "East Nash Grass", "date": "2026-07-16",
+                         "venue": " Grey Fox Bluegrass Festival, High Meadow stage ", "coverage": ["Oak Hill, NY"],
+                         "description": "Harry Clark - mandolin"}}
+    target = S.from_lma(tape, ["Harry Clark"])[0]["target"]
+    assert (target["venue"], target["city"]) == ("Grey Fox Bluegrass Festival, High Meadow stage", "Oak Hill, NY")
+    tape["metadata"].update(venue="Unknown", coverage=None)              # a taper's placeholder is not a place
+    target = S.from_lma(tape, ["Harry Clark"])[0]["target"]
+    assert (target["venue"], target["city"]) == ("", "")
+    db = S.to_sqlite(S.from_arthel(str(tmp_path)), str(tmp_path / "s.sqlite"))
+    assert db.execute("SELECT venue, city FROM targets WHERE title = 'Hello Decentralization'").fetchall() == [("chiva lounge", "Barcelona, Catalonia")]
+
+
+def test_a_tape_poster_is_a_file_named_poster_or_flyer_first_then_its_cover_and_never_a_mere_photo():
+    def item(*names):
+        return {"metadata": {"identifier": "ld2016-04-07"},
+                "files": [{"name": n, "source": "original"} for n in names] + [{"name": "x_thumb.jpg", "source": "derivative"}]}
+    url = S.tape_poster(item("IMG_2754.jpeg", "folder.jpg", "FlyerFromJim.jpg"))
+    assert url == "https://iiif.archive.org/image/iiif/3/ld2016-04-07%2FFlyerFromJim.jpg/full/!240,240/0/default.jpg"
+    assert S.tape_poster(item("IMG_2754.jpeg", "Folder.JPG")).endswith("%2FFolder.JPG/full/!240,240/0/default.jpg")
+    assert S.tape_poster(item("IMG_2754.jpeg", "__ia_thumb.jpg", "setlist.jpg")) == ""
+    assert S.tape_poster(item("poster.txt")) == ""
+    assert "%2Fart%2Fcover%20one.png/" in S.tape_poster(item("art/cover one.png"))
+
+
+def test_an_arthel_poster_is_the_wiki_file_named_for_its_show():
+    assert S.arthel_poster("0-21940657", {"poster": "posters/SCHELLINGPOINTRC4.png"}) == "Show poster 0-21940657.png"
+    assert S.arthel_poster("0-20277935", {"poster": "posters/regens-brussels-2024.jpeg"}) == "Show poster 0-20277935.jpeg"
+    assert S.arthel_poster("0-1", {}) == ""
+
+
+def _wiki(pages, people=(), redirects=None):
+    """A wiki that answers the questions fetch_releases asks, from {title: text}: the Release pages, the pages that use
+    {{Show}}, and which names have a person's page (people; redirects: a name -> the page it goes to)."""
+    redirects = redirects or {}
+
+    def get(q):
+        if q.get("list") == "allpages":
+            return {"query": {"allpages": [{"title": t} for t in sorted(pages) if t.startswith("Release:")]}}
+        if q.get("list") == "embeddedin":
+            used = "{{" + q["eititle"][len("Template:"):]
+            return {"query": {"embeddedin": [{"title": t, "ns": 0} for t in sorted(pages) if used in pages[t]]}}
+        if q.get("redirects"):
+            asked = q["titles"].split("|")
+            return {"query": {"redirects": [{"from": n, "to": redirects[n]} for n in asked if n in redirects],
+                              "pages": [{"title": redirects.get(n, n), "ns": 0} if redirects.get(n, n) in people else
+                                        {"title": n, "ns": 0, "missing": True} for n in asked]}}
+        return {"query": {"pages": [{"title": t, "revisions": [{"slots": {"main": {"content": pages[t]}}}]}
+                                    for t in q["titles"].split("|") if t in pages]}}
+    return get
+
+
+# ---- videos and show pages: the wiki's own word on who played together (Justin, #connectome, 24 Nov 2026) ----
+
+def test_a_video_is_read_with_whoever_in_it_has_a_page():
+    pages = {
+        "Release:QmV": "release_type: video\ntitle: Station Inn sit in with\nvenue: Station Inn 12_8_23\nblockheight: 18773279\n"
+                       "performers:\n- Justin Holmes\n- Luke Monday\n- Tristan Scroggins\n",
+        "Release:QmM": "release_type: video\ntitle: A joke\nperformers:\n- Justin Holmes\n- Your mom\n",          # one real name
+        "Release:QmS": "release_type: video\ntitle: Alone\nperformers:\n- Skyler Golden\n",
+        "Release:QmT": "release_type: audio\ntitle: A track\nperformers:\n- Skyler Golden\n- Tristan Scroggins\n",  # not a video
+    }
+    got = S.fetch_releases("https://wiki.example/", get=_wiki(pages, people={"Justin Myles Holmes", "Tristan Scroggins", "Skyler Golden"},
+                                                              redirects={"Justin Holmes": "Justin Myles Holmes"}))
+    assert got == [{"video": "QmV", "title": "Station Inn sit in with", "performers": ["Justin Myles Holmes", "Tristan Scroggins"],
+                    "venue": "Station Inn 12_8_23", "block": "18773279"}]
+
+
+def test_a_show_page_is_read_with_its_ensemble_however_it_is_written():
+    text = """{{Show
+|artists=[[Kyle Tuttle]]
+|venue=[[Dee's Country Cocktail Lounge]]
+|blockheight=26,482,267
+|ensemble=Ann One; Bob Two
+}}
+{{Ensemble
+|Cat Three:fiddle
+|title=Band
+}}
+== Ensemble ==
+* [[Kyle Tuttle]]
+* [[Geoff Saunders|Geoff]]: bass
+* {{Bot_proposes|[[Mary Mair]]: mandolin|by=Magent}}
+
+== When ==
+* [[Not A Picker]]
+"""
+    got = S.show_page("Show:KyleTuttle-26482267", text)
+    assert got == {"show": "Show:KyleTuttle-26482267", "artist": "Kyle Tuttle", "venue": "Dee's Country Cocktail Lounge",
+                   "block": "26482267", "poster": "", "bands": got["bands"], "ensemble": {"Ann One": [], "Bob Two": [], "Cat Three": ["fiddle"], "Kyle Tuttle": [],
+                                                     "Geoff Saunders": ["bass"]}}
+    assert S.show_page("Show:Nobody-1", "{{Show|artists=X|venue=Y|blockheight=1}}") is None     # nobody on stage
+    assert S.show_page("Show:A-1", "{{Show|artists=X|official_poster=File:Dees.jpg}}\n{{Ensemble|Ann}}")["poster"] == "Dees.jpg"
+    two = S.show_page("Show: BronwynAndJason-24401908", """{{Show
+|artists=[[Bronwyn Keith-Hynes]] and [[Jason Carter]]
+|venue=Bayboro Brewing
+|image=Whole thing.jpg
+}}
+{{Ensemble
+|Bronwyn Keith-Hynes
+|Jason Carter
+|title=BKH & JC
+}}
+{{Ensemble
+|Alexa Toro
+|Dani Jaye
+|title=Light the Wire
+}}""")
+    assert two["bands"] == [{"title": "BKH & JC", "members": ["Bronwyn Keith-Hynes", "Jason Carter"]},
+                            {"title": "Light the Wire", "members": ["Alexa Toro", "Dani Jaye"]}]      # each block a band, in order
+    assert two["poster"] == "Whole thing.jpg"
+    assert got["bands"] == [{"title": "Band", "members": ["Cat Three"]},
+                            {"title": "", "members": ["Ann One", "Bob Two", "Kyle Tuttle", "Geoff Saunders"]}]
+    pages = {"Show:KyleTuttle-26482267": text, "User:Someone/Sandbox": "{{Show|artists=Z}}\n{{Ensemble|Zed}}"}
+    got = S.fetch_releases("https://wiki.example/", get=_wiki(pages))
+    assert [r["show"] for r in got] == ["Show:KyleTuttle-26482267"]        # only pages called Show:
+
+
+def test_videos_and_show_pages_put_their_people_on_stage_together():
+    rows = S.from_releases([
+        {"video": "QmV", "title": "Station Inn sit in with", "performers": ["Justin Myles Holmes", "Tristan Scroggins"],
+         "venue": "Station Inn 12_8_23", "block": "18773279"},
+        {"show": "Show:KyleTuttle-26482267", "artist": "Kyle Tuttle", "venue": "Dee's", "block": "26482267",
+         "ensemble": {"Kyle Tuttle": [], "Geoff Saunders": ["bass"]}}])
+    v = [r for r in rows if r["target"]["id"] == "video:QmV"]
+    assert {r["person"] for r in v} == {"Justin Myles Holmes", "Tristan Scroggins"}
+    assert v[0]["target"]["kind"] == "show" and v[0]["target"]["date"] == "block 18773279" and v[0]["scope"] == "show"
+    assert v[0]["source"] == "https://pickipedia.xyz/wiki/Release:QmV"
+    s = [r for r in rows if r["target"]["id"] == "wiki:Show:KyleTuttle-26482267"]
+    assert {r["person"]: r["roles"] for r in s} == {"Kyle Tuttle": [], "Geoff Saunders": ["bass"]}
+    assert s[0]["target"]["artist"] == "Kyle Tuttle" and s[0]["source"] == "https://pickipedia.xyz/wiki/Show:KyleTuttle-26482267"
+    kinds = {(p["a"], p["b"]): p["kind"] for p in S.pairs(rows)}
+    assert kinds == {("Justin Myles Holmes", "Tristan Scroggins"): "show", ("Geoff Saunders", "Kyle Tuttle"): "show"}
+
+
+def test_a_ready_track_is_read_with_its_ensemble_and_its_release_title():
+    pages = {
+        "Release:QmA": "title: Immutable Strings - Reuben's Train (from web3summit 2024)\n",
+        "Release:QmA/Metadata": "State: production\nensemble:\n  Kuba Hejhal: [fiddle]\n  Justin Holmes: [guitar, vocals]\n",
+        "Release:QmB/Metadata": "state: beta\nensemble:\n  Someone: [banjo]\n",            # not ready
+        "Release:QmC/Metadata": "ensemble:\n  Someone: [banjo]\n",                         # no state: alpha
+        "Release:QmD": "title: Paint Exchange\n",
+        "Release:QmD/Metadata": "state: production\ntitle: QmD/Metadata\nensemble:\n  Cory Walker: banjo\n",
+        "Release:QmE/Metadata": "state: production\ntitle: QmE/Metadata\nensemble:\n  Nobody Named: [bass]\n",
+    }
+    got = S.fetch_releases("https://wiki.example/", get=_wiki(pages))
+    assert [r["cid"] for r in got] == ["QmA", "QmD", "QmE"]
+    assert got[0]["title"] == "Immutable Strings - Reuben's Train (from web3summit 2024)"
+    assert got[0]["ensemble"] == {"Kuba Hejhal": ["fiddle"], "Justin Holmes": ["guitar", "vocals"]}
+    assert got[1] == {"cid": "QmD", "title": "Paint Exchange", "ensemble": {"Cory Walker": ["banjo"]}}
+    assert got[2]["title"] == ""                     # its only title is its own path: no name to give it
+
+
+def test_a_ready_track_is_a_record_of_its_own_unless_arthel_holds_the_cut(tmp_path):
+    songs = tmp_path / "songs_and_tunes"
+    songs.mkdir()
+    (songs / "paint-exchange.yaml").write_text("title: Paint Exchange\n")
+    rels = [{"cid": "QmA", "title": "Reuben's Train (live)", "ensemble": {"Kuba Hejhal": ["fiddle"], "Justin Holmes": ["guitar"]}},
+            {"cid": "QmD", "title": "Paint Exchange", "ensemble": {"Cory Walker": ["banjo"]}},
+            {"cid": "QmE", "title": "", "ensemble": {"Nobody Named": ["bass"]}}]
+    rows = S.from_releases(rels, str(tmp_path))
+    assert {r["person"] for r in rows} == {"Kuba Hejhal", "Justin Holmes"}
+    r = rows[0]
+    assert r["target"] == {"kind": "record", "id": "release:QmA", "title": "Reuben's Train (live)", "date": "", "artist": "",
+                           "group": "release:QmA"}
+    assert r["scope"] == "track" and r["tracks"] == [{"position": "", "title": "Reuben's Train (live)"}]
+    assert r["source"] == "https://pickipedia.xyz/wiki/Release:QmA/Metadata"
+    pair = S.pairs(rows)
+    assert len(pair) == 1 and pair[0]["kind"] == "track"
+
+
+# ---- bands: a page, its stints, and the lineups worked out of them (Justin, #connectome, 27 Nov 2026) ----
+
+MCCOURYS = """<proposed by="Blu">
+{{BandInfo
+|kind=regular
+|offshoot_of=Del McCoury Band
+}}
+</proposed>
+== Members ==
+{{Band member|Ronnie McCoury|mandolin|source=https://www.thetravelinmccourys.com/about|checked=2026-11-27}}
+{{Band member|[[Rob McCoury|Robbie]]|banjo}}
+{{Band member|1=Alan Bartram|2=bass}}
+{{Band member|Jason Carter|fiddle|until=2025-02-10|source=https://example.com/story?id=7&x=y}}
+<proposed by="Blu">
+{{Band member|Cody Kilby|guitar|from=2015-11-10}}
+</proposed>
+* {{Bot_proposes|{{Band member|Christian Ward|fiddle|from=2025-02-24}}|by=Blu}}
+{{Band member|Somebody Else|dobro|status=proposed}}
+<proposed by="Re" action="remove">
+{{Band member|Still Here|guitar|from=2019}}
+</proposed>
+"""
+
+
+def test_a_band_page_is_read_only_as_far_as_a_person_has_verified_it():
+    got = S.band_page("The Travelin' McCourys", MCCOURYS)
+    # the infobox still waits for a person, so its kind and what it grew out of aren't read
+    assert (got["band"], got["kind"], got["offshoot_of"], got["billed_as"]) == ("The Travelin' McCourys", "", "", [])
+    # nor a stint in a <proposed> block, in {{Bot_proposes}}, or marked status=proposed; one whose removal is only
+    # proposed still stands
+    assert [s["name"] for s in got["stints"]] == ["Ronnie McCoury", "Rob McCoury", "Alan Bartram", "Jason Carter", "Still Here"]
+    assert got["stints"][0] == {"name": "Ronnie McCoury", "plays": "mandolin", "from": "", "until": "",
+                                "source": "https://www.thetravelinmccourys.com/about", "checked": "2026-11-27"}
+    assert got["stints"][3]["until"] == "2025-02-10" and got["stints"][3]["source"] == "https://example.com/story?id=7&x=y"
+    assert S.band_page("Nobody Yet", '<proposed by="Blu">\n{{BandInfo|kind=regular}}\n{{Band member|Ann}}\n</proposed>') is None
+
+
+def test_a_verified_infobox_says_the_kind_the_leader_and_the_other_names():
+    got = S.band_page("Billy Strings (band)", "{{BandInfo\n|kind=Regular\n|leader=[[Billy Strings]]\n"
+                      "|billed_as=Billy Strings; [[Billy Strings Band]]\n|website=https://x.example/?a=b\n}}")
+    assert (got["kind"], got["leader"], got["billed_as"], got["stints"]) == ("regular", "Billy Strings",
+                                                                          ["Billy Strings", "Billy Strings Band"], [])
+    assert S.band_page("Odd", "{{BandInfo|kind=supergroup}}")["kind"] == ""        # a kind the model doesn't have is not guessed at
+
+
+def test_a_stint_with_a_date_nobody_can_read_is_left_out_and_named():
+    got = S.band_page("A Band", "{{BandInfo}}\n{{Band member|Ann|fiddle|from=2015}}\n{{Band member|Bob|bass|from=November 2015}}\n"
+                      "{{Band member|Cat|banjo|from=2015-13}}\n{{Band member|Dee|guitar|from=2019|until=2017}}\n"
+                      "{{Band member|Eve|mandolin|from=2015-11|until=2015-11-30}}")
+    assert [s["name"] for s in got["stints"]] == ["Ann", "Eve"]
+    assert got["unread"] == ["Bob: November 2015 to ?", "Cat: 2015-13 to ?", "Dee: 2019 to 2017"]
+
+
+def test_a_part_date_is_read_at_its_widest():
+    assert [S.day_from(d) for d in ("", "2015", "2015-11", "2015-11-10")] == ["", "2015-01-01", "2015-11-01", "2015-11-10"]
+    assert [S.day_until(d) for d in ("", "2015", "2015-11", "2015-12", "2015-11-10")] == [
+        "", "2016-01-01", "2015-12-01", "2016-01-01", "2015-11-10"]
+
+
+STINTS = [{"name": "Ronnie", "from": "", "until": ""}, {"name": "Jason", "from": "", "until": "2025-02-10"},
+          {"name": "Cody", "from": "2015-11-10", "until": ""}, {"name": "Christian", "from": "2025-02-24", "until": ""}]
+
+
+def test_lineups_are_worked_out_of_the_stints():
+    assert S.lineups(STINTS) == [("", "2015-11-10", ["Ronnie", "Jason"]),
+                                 ("2015-11-10", "2025-02-10", ["Ronnie", "Jason", "Cody"]),
+                                 ("2025-02-10", "2025-02-24", ["Ronnie", "Cody"]),       # the two weeks between two stories
+                                 ("2025-02-24", "", ["Ronnie", "Cody", "Christian"])]
+    assert S.lineup_at(STINTS, "2014-05-24") == ["Ronnie", "Jason"]
+    assert S.lineup_at(STINTS, "2025-02-10") == ["Ronnie", "Cody"]                      # gone the day the leaving was news
+    assert S.lineup_at(STINTS, "2025-02-24") == ["Ronnie", "Cody", "Christian"]
+    assert S.lineups([]) == []
+
+
+def test_a_change_of_instrument_is_a_second_stint_and_the_same_lineup():
+    stints = [{"name": "Ann", "plays": "fiddle", "from": "2015", "until": "2019"},
+              {"name": "Ann", "plays": "mandolin", "from": "2020", "until": ""},
+              {"name": "Bob", "plays": "bass", "from": "2015", "until": "2017"},
+              {"name": "Bob", "plays": "bass", "from": "2022", "until": ""}]      # left, and came back
+    assert S.lineups(stints) == [("2015-01-01", "2018-01-01", ["Ann", "Bob"]), ("2018-01-01", "2022-01-01", ["Ann"]),
+                                 ("2022-01-01", "", ["Ann", "Bob"])]
+    assert S.lineups([{"name": "Ann", "from": "2001", "until": "2003"}, {"name": "Bob", "from": "2010", "until": ""}]) == [
+        ("2001-01-01", "2004-01-01", ["Ann"]), ("2010-01-01", "", ["Bob"])]       # the years with nobody are no lineup
+
+
+def test_the_wikis_band_pages_come_with_the_ready_tracks_and_put_nobody_on_a_stage(tmp_path):
+    pages = {"The Travelin' McCourys": MCCOURYS, "Arkansauce": "{{BandInfo|kind=regular}}",
+             "Waiting": '<proposed by="Blu">{{BandInfo}}</proposed>'}
+    got = S.fetch_releases("https://wiki.example/", get=_wiki(pages))
+    assert [(b["band"], b["kind"], len(b["stints"])) for b in got] == [("Arkansauce", "regular", 0), ("The Travelin' McCourys", "", 5)]
+    assert S.from_releases(got) == []                                       # a stint is no credit
+    db = S.to_sqlite([], str(tmp_path / "c.sqlite"), got)
+    assert db.execute("SELECT name, kind FROM bands ORDER BY name").fetchall() == [("Arkansauce", "regular"), ("The Travelin' McCourys", "")]
+    on = lambda day: [r[0] for r in db.execute(
+        "SELECT member FROM stints WHERE band = :band AND (from_day = '' OR from_day <= :day) "
+        "AND (until_day = '' OR :day < until_day) ORDER BY n", {"band": "The Travelin' McCourys", "day": day})]
+    assert on("2017-07-03") == ["Ronnie McCoury", "Rob McCoury", "Alan Bartram", "Jason Carter"]
+    assert on("2025-03-01") == ["Ronnie McCoury", "Rob McCoury", "Alan Bartram", "Still Here"]
+
+
+def test_a_verified_bands_members_and_its_names_are_given_to_the_tape_reader(tmp_path):
+    bands = [{"band": "The Band", "billed_as": ["Band, The", "Ann Leader"], "leader": "Ann Leader",
+              "stints": [{"name": "Bob Member"}, {"name": "Cher"}, {"name": "Bob Member"}]},
+             {"band": "Arkansauce", "stints": []}]
+    # a member of one word is too loose; a band billed as its leader doesn't put the leader on the list
+    assert S.band_names(bands) == ["Bob Member", "The Band", "Band, The", "Arkansauce"]
+    (tmp_path / "lma" / "x").mkdir(parents=True)
+    (tmp_path / "lma" / "x" / "tape.json").write_text(json.dumps({"metadata": {
+        "identifier": "tape", "creator": "Somebody", "date": "2020-01-01",
+        "description": "Bob Member - bass\nKyle Tuttle - banjo\nw/ Arkansauce"}}))
+    read = lambda releases: sorted({r["person"] for r in S.build(str(tmp_path), None, ["Kyle Tuttle"], releases)})
+    assert read([]) == ["Kyle Tuttle"]
+    assert read([dict(b, kind="", offshoot_of="") for b in bands]) == ["Arkansauce", "Bob Member", "Kyle Tuttle"]

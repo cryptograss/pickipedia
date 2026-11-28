@@ -15,6 +15,7 @@ def test_an_etree_tape_or_a_cryptograss_record_is_permanent():
     assert cg.tier('lma:SGP2025-07-05', ['archive.org collection: etree']) == 2
     assert cg.tier('lma:x', ['archive.org collection: stringcheeseincident', 'archive.org collection: etree']) == 2
     assert cg.tier('arthel:4masks', []) == 2
+    assert cg.tier('release:QmNogiUdf4xR98WZ3beGCUHJJ9RK9gkd91dsBKereUNVBd', []) == 1
 
 
 def test_a_tape_outside_etree_is_full():
@@ -159,3 +160,71 @@ def test_only_a_cryptograss_records_own_track_plays_in_rabbithole():
     plays = {'Silver 44': 'QmSilver', '01. Silver 44': 'QmTaped', 'Victory': 'QmVictory', 'Unasked': 'QmNo'}
     assert _export(pairs, plays=plays)['plays'] == {'Silver 44': 'QmSilver'}      # not the tape's take, nor another label's record
     assert _export(pairs)['plays'] == {}
+
+
+def test_a_show_says_its_own_name_and_where_it_was_and_a_record_says_neither():
+    # Justin, #connectome, 21 Nov 2026: a show's name, city and venue, where its source has them
+    assert cg.show_place('arthel:show:0-11908068', {'kind': 'show', 'title': 'Hello Decentralization', 'venue': 'chiva lounge',
+                                                    'city': 'Barcelona, Catalonia'}) == ['Hello Decentralization', 'chiva lounge', 'Barcelona, Catalonia']
+    # a tape's title is archive.org's sentence, not a name of its own; a title that is only the file's is none either
+    assert cg.show_place('lma:tape1', {'kind': 'show', 'title': 'SGP Live at Grassfire on 2025-07-05', 'venue': 'Grassfire', 'city': ''}) == ['', 'Grassfire', '']
+    assert cg.show_place('arthel:show:0-14628177', {'kind': 'show', 'title': '0-14628177', 'venue': '', 'city': ''}) is None
+    assert cg.show_place('lma:tape2', {'kind': 'show', 'title': 'SGP Live at Grassfire'}) is None           # a store built before shows kept places
+    assert cg.show_place('arthel:4masks', {'kind': 'record', 'title': '4masks', 'venue': 'x'}) is None
+    targets = dict(TARGETS, **{'lma:tape1': dict(TARGETS['lma:tape1'], venue='Grassfire', city='Boone, NC')})
+    pairs = [pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:tape1'), pair('Kyle Tuttle', 'Molly Tuttle', 'track', 'arthel:4masks', [('u', '', 'silver-44')])]
+    g = cg.export(pairs, targets, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-21')
+    rows = {m[0]: m for m in g['music']}
+    assert rows['lma:tape1'][9] == ['', 'Grassfire', 'Boone, NC'] and len(rows['arthel:4masks']) == 9
+
+
+# ---- who a show is billed to: its acts, the main one first (Justin, #connectome, 26 Nov 2026, 02:15Z) ----
+
+def test_an_act_is_led_by_the_one_its_name_names():
+    people = ['Kyle Tuttle', 'Justin Myles Holmes', 'Bronwyn Keith-Hynes', 'Jason Carter']
+    assert cg.lead_of('Kyle Tuttle', people) == 'Kyle Tuttle'
+    assert cg.lead_of('Justin Holmes and the Immutable String Band', people) == 'Justin Myles Holmes'   # first and last name
+    assert cg.lead_of('Justin Myles Holmes and The Immutable String Band', people) == 'Justin Myles Holmes'
+    assert cg.lead_of('Bronwyn Keith-Hynes and Jason Carter', people) is None                       # two: no one leader
+    assert cg.lead_of('BKH & JC', people) is None
+    assert cg.lead_of('Yonder Mountain String Band', people) is None
+    assert cg.band_short('Justin Holmes & his Band') == 'Justin Holmes'
+
+
+def test_a_shows_acts_are_its_bands_the_main_one_first():
+    targets = {'wiki:Show:B': {'kind': 'show', 'artist': 'Bronwyn Keith-Hynes and Jason Carter',
+                               'bands': [{'title': 'Light the Wire', 'members': ['Alexa Toro']},
+                                         {'title': 'BKH & JC', 'members': ['Bronwyn Keith-Hynes', 'Jason Carter', 'Nobody Here']}]},
+               'lma:t': {'kind': 'show', 'artist': 'Kyle Tuttle', 'bands': []},
+               'video:Q': {'kind': 'show', 'artist': '', 'bands': []},
+               'discogs:1': {'kind': 'record', 'artist': 'Kyle Tuttle'}}
+    cast = {'wiki:Show:B': {'Alexa Toro': [], 'Bronwyn Keith-Hynes': [], 'Jason Carter': []},
+            'lma:t': {'Kyle Tuttle': [], 'Sam Leslie': []}, 'video:Q': {'Sam Leslie': [], 'Kyle Tuttle': []},
+            'discogs:1': {'Kyle Tuttle': []}}
+    pid = {n: i for i, n in enumerate(['Alexa Toro', 'Bronwyn Keith-Hynes', 'Jason Carter', 'Kyle Tuttle', 'Sam Leslie'])}
+    used = ['discogs:1', 'lma:t', 'video:Q', 'wiki:Show:B']
+    mid = {t: i for i, t in enumerate(used)}
+    acts = cg.acts_of(targets, used, mid, cast, pid)
+    # the act whose members the billing names comes first, though the page has it second; who isn't on stage isn't in it
+    assert acts['3'] == [['BKH & JC', [1, 2], -1], ['Light the Wire', [0], -1]]
+    assert acts['1'] == [['Kyle Tuttle', [3, 4], 3]]                  # a taper's tape: its artist, everyone on it
+    assert '2' not in acts and '0' not in acts                         # a video is billed to nobody; a record isn't a show
+
+
+def test_a_band_is_its_stints_and_where_a_source_names_it_and_makes_no_tie():
+    pairs = [pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:tape1')]
+    bands = [{'band': 'The Band', 'kind': 'regular', 'leader': 'Kyle Tuttle', 'offshoot_of': 'An Older Band', 'billed_as': ['Band, The'],
+              'stints': [{'name': 'Kyle Tuttle', 'plays': 'banjo', 'from': '', 'until': ''},
+                         {'name': 'Never Taped', 'plays': 'fiddle', 'from': '2015-11-10', 'until': '2025'}],
+              'on': ['lma:tape1', 'discogs:nowhere']},
+             {'band': 'A Band With A Page Only', 'stints': []}]
+    g = cg.export(pairs, TARGETS, [], lambda n: True, {}, [], '2026-11', cc.song, {}, '2026-11-27', bands=bands)
+    names = [p[0] for p in g['people']]
+    assert names == ['Kyle Tuttle', 'Molly Tuttle', 'Never Taped']             # a member is a picker, tied to anyone or not
+    assert g['bands'] == [['A Band With A Page Only', '', -1, '', [], [], []],
+                          ['The Band', 'regular', 0, 'An Older Band', ['Band, The'],
+                           [[0, 'banjo', '', ''], [2, 'fiddle', '2015-11-10', '2025']],
+                           [[m[0] for m in g['music']].index('lma:tape1')]]]    # only music the graph holds
+    assert len(g['ties']) == 1                                                  # a stint ties nobody to anybody
+    assert 'bands' not in _export(pairs)                                        # and with no band, nothing is added
+

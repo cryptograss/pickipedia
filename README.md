@@ -116,3 +116,8 @@ Custom extensions go in `extensions/`
 
 - Production: https://pickipedia.xyz
 - [Semantic MediaWiki docs](https://www.semantic-mediawiki.org/)
+
+## License
+
+This repository is under the Rabbithole Bacon License — see [LICENSE.MD](LICENSE.MD).
+

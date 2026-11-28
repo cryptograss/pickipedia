@@ -14,6 +14,15 @@ trigger Artificial Dumb only." So a walk is plain lookups, the same for whoever 
                Requested back on the page walks it again (see "The queue" below).
   names        the page's title, its {{MusicianInfo}} name=, and the titles of the redirects to it; only names of two
                words or more, since one word ("Bronwyn") is too loose to look anybody up by.
+  a band       a band's page ({{BandInfo}} or a {{Band member}} line on it) is walked as any other, by the band's
+               name (Justin, #connectome, 27 Nov 2026, 21:27Z: "let's be sure that [[Category:Walk Requested]] works
+               for bands"). Its names are its title, the redirects to it and, where a person has verified them,
+               the names its infobox says it is billed as; a band's name may be one word (Arkansauce). The sites
+               hold a band as an artist like any other, so its records come in the same way; of archive.org's
+               items only those the band is the creator of, since a band's name is often plain words. Its
+               names are not given to the tape reader by the walk: the store gives the reader a band's names and
+               its members' once a person has verified the band's page (connectome_store.band_names), and until
+               then a band walked would be read off every tape of its own as one more picker.
   links        Discogs releases and artists, MusicBrainz releases and artists, and archive.org items linked from the
                page or its talk page, taken as they are. That is how a person says which "Frank Evans" is meant.
                A link that is only inside a {{Which picker}} box is the question, not the answer, and isn't taken.
@@ -54,9 +63,10 @@ line); walked.json says which. With no login nothing moves, and a page is still 
 in the category, as before.
 
 What a walk finds goes into the cache, never into git, each line saying which request added it:
-  walked.json          page -> {"requested", "by", "walked", "names", "sources", "notes", "asks", "box", "category"}
+  walked.json          page -> {"requested", "by", "walked", "names", "sources", "notes", "asks", "box", "category"},
+                       and "band": true for a band's page
   walked_sources.txt   the sources, in connectome_sources.txt's shape, under a comment naming the page and the times
-  walked_names.txt     the names, for the LMA reader
+  walked_names.txt     the names, for the LMA reader (a picker's page's; not a band's)
 """
 import argparse
 import datetime
@@ -69,6 +79,7 @@ import time
 from urllib.parse import urlencode
 from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
+import connectome_store
 import recording_credits as sideman
 import rambler
 
@@ -97,6 +108,11 @@ IA_QUERY = ('("{name}" AND (mediatype:etree OR (mediatype:audio AND collection:t
 IA_SEARCH = "https://archive.org/advancedsearch.php"
 USER_AGENT = "pickipedia-connectome-walk/0.1 (https://pickipedia.xyz; Artificial Dumb)"
 IA_INTERVAL = 1.0
+# A band's page: only what the band itself is the creator of, tapes and its own uploads. A band's name is often plain
+# words, and archive.org finds them anywhere in a tape's notes: of 87 items naming "Water tower", 13 are the band's
+# and 74 are other acts' (27 Nov 2026), a venue's name among them. A band named on somebody else's tape is read there
+# by the tape reader, when that tape comes in by its own road.
+IA_BAND_QUERY = 'creator:"{name}" AND (mediatype:etree OR mediatype:audio)'
 _last_ia = [0.0]
 
 
@@ -240,6 +256,7 @@ LINKS = (
     (re.compile(r"musicbrainz\.org/artist/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"), "mb-artist"),
     (re.compile(r"archive\.org/details/([A-Za-z0-9._-]+)"), "lma"),
 )
+BAND_PAGE = re.compile(r"\{\{\s*(?:BandInfo|Band[ _]member)\s*[|}]", re.I)
 MUSICIAN_NAME = re.compile(r"\{\{\s*MusicianInfo\b[^{}]*?\|\s*name\s*=\s*([^|}\n]+)", re.I)
 
 
@@ -318,12 +335,13 @@ def without_boxes(text):
 
 def page_facts(wiki_get, title):
     """The names to look the page's picker up by, what the page and its talk page link, whether the page asks
-    which picker it is already, and which of the walk's two categories it is in (a set of their names). The artists a {{Which picker}} box lists are links on the page too, and they are the
+    which picker it is already, which of the walk's two categories it is in (a set of their names), and whether
+    it is a band's page. The artists a {{Which picker}} box lists are links on the page too, and they are the
     question: with a box on it, the page's links are those it has without the box (the wiki parses it so)."""
     data = wiki_get({"action": "query", "titles": f"{title}|Talk:{title}", "prop": "redirects|extlinks|revisions|categories",
                      "rvprop": "content", "rvslots": "main", "rdlimit": "max", "ellimit": "max",
                      "clcategories": f"{CATEGORY}|{WALKED}", "cllimit": "max"})
-    names, urls, boxed, cats = [title], [], False, set()
+    names, urls, boxed, cats, band = [title], [], False, set(), False
     for p in data.get("query", {}).get("pages", []):
         if p.get("title") != title:
             urls += [e.get("url", "") for e in p.get("extlinks", [])]
@@ -341,13 +359,16 @@ def page_facts(wiki_get, title):
         m = MUSICIAN_NAME.search(text)
         if m:
             names.append(m.group(1).strip())
+        if BAND_PAGE.search(NOT_WIKITEXT.sub("", text)):
+            band = True
+            names += (connectome_store.band_page(title, text) or {}).get("billed_as", [])
     seen, kept = set(), []
     for n in names:
         n = " ".join(n.replace("_", " ").split())
-        if len(n.split()) >= 2 and n.casefold() not in seen:
+        if (band or len(n.split()) >= 2) and n and n.casefold() not in seen:
             seen.add(n.casefold())
             kept.append(n)
-    return kept, linked(urls), boxed, cats
+    return kept, linked(urls), boxed, cats, band
 
 
 # ---------------------------------------------------------------------------
@@ -439,11 +460,12 @@ def lookup_artists(site, names, linked_ids, named, notes, asks=None, about=None)
     return list(dict.fromkeys(out))
 
 
-def walk_one(title, names, links, known, look, asks=None, clock=time.monotonic):
+def walk_one(title, names, links, known, look, asks=None, clock=time.monotonic, band=False):
     """One walk: the sources to add, newest first, at most CAP of each kind past those known, and what was noted.
 
     look: {"discogs_named", "discogs_releases", "mb_named", "mb_releases", "ia_search"}, the lookups (tests swap them),
     and, where given, "discogs_about" and "mb_about". asks: a list the walk's questions are added to (candidates()).
+    band: the page is a band's, and archive.org is asked only for what the band is the creator of (IA_BAND_QUERY).
     An artist is asked about once a walk, however many of the page's names find them (re's review, 20 Nov 2026: a
     page with two redirects asked three times over), and none is asked about once ABOUT_BUDGET seconds have gone
     on it: those are listed without their details.
@@ -499,7 +521,7 @@ def walk_one(title, names, links, known, look, asks=None, clock=time.monotonic):
     lines = []
     for name in names:
         try:
-            lines += [f"lma {i}" for i in look["ia_search"](IA_QUERY.format(name=name.replace('"', "")), 100)]
+            lines += [f"lma {i}" for i in look["ia_search"]((IA_BAND_QUERY if band else IA_QUERY).format(name=name.replace('"', "")), 100)]
         except Exception as e:
             notes.append(f"archive.org: {name}: {e}")
     n = add(lines, CAP["lma"])
@@ -625,7 +647,7 @@ def write_files(cache, walked):
         src.append(f"# {t}: " + (f"put in the category {w['requested']}" if w.get("by", "category") == "category"
                                   else "asked for by hand") + f", walked {w['walked']}")
         src += w["sources"]
-        for n in w["names"]:
+        for n in ([] if w.get("band") else w["names"]):       # a band's names reach the reader by its verified page
             if n.casefold() not in seen:
                 seen.add(n.casefold())
                 names.append(n)
@@ -652,15 +674,18 @@ def run(cache, asked, facts, known_paths, budget=None, look=LOOKUPS, clock=time.
         if budget is not None and clock() - start >= budget:
             break
         try:
-            names, links, boxed, cats = four(facts(title))
+            said = tuple(facts(title))
+            names, links, boxed, cats = four(said)
         except Exception as e:
             report.append(f"{title}: not walked, the wiki didn't answer ({e}); next run")
             continue
         known = known_sources(known_paths) | {s for t, w in walked.items() if t != title for s in w["sources"]}
         asks = []
-        sources, notes = walk_one(title, names, links, known, look, asks, clock)
+        sources, notes = walk_one(title, names, links, known, look, asks, clock, band=len(said) > 4 and bool(said[4]))
         walked[title] = {"requested": requested, "by": by, "walked": stamp(), "names": names, "sources": sources,
                          "notes": notes}
+        if len(said) > 4 and said[4]:
+            walked[title]["band"] = True
         if asks:
             walked[title]["asks"] = asks
             settle_box(title, walked[title], boxed, links, prepend, stamp)

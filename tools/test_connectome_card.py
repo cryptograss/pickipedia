@@ -1,6 +1,8 @@
 """Tests for connectome_card.py: the card on a musician's page, from the connectome store."""
 import hashlib
 import os
+import pathlib
+import re
 import sys
 from datetime import date
 
@@ -209,24 +211,40 @@ def test_the_build_knows_who_made_a_record_by_the_wikis_own_name(tmp_path):
     assert card.index('>Bronwyn</text></a>') < card.index('>Allen Cooke</text></a>') < card.index('>Ann Picker</text></a>')
 
 
-def test_a_card_is_gold_for_permanent_ink_for_full_and_dotted_for_the_rest():
-    targets = dict(TARGETS, **{'discogs:2': ('Looser', '2016', 'Else')})
+def test_a_card_is_gold_or_green_for_permanent_blue_or_ink_for_full_and_dotted_for_the_rest():
+    targets = dict(TARGETS, **{'discogs:2': ('Looser', '2016', 'Else'), 'lma:show2': ('Off Etree', '2024-01-01', 'A Band')})
     pairs = [pair('K', 'Tape', 'show', 'lma:show1'), pair('K', 'Disc', 'track', 'discogs:1', [('u', '1', 'Song')]),
-             pair('K', 'Unknown', 'track', 'discogs:2', [('u', '1', 'Other')])]
-    tiers = {'lma:show1': 2, 'discogs:1': 1, 'discogs:2': 0}
+             pair('K', 'Unknown', 'track', 'discogs:2', [('u', '1', 'Other')]),
+             pair('K', 'Cut', 'track', 'arthel:4masks', [('u', '', 'silver-44')]), pair('K', 'Loose', 'show', 'lma:show2')]
+    tiers = {'lma:show1': 2, 'discogs:1': 1, 'discogs:2': 0, 'arthel:4masks': 2, 'lma:show2': 1}
     store = cc.Store(pairs, targets, {t: t for t in targets}, {}, tiers)
     assert store.evidence('K', 'Tape')['tier'] == 2 and store.evidence('K', 'Disc')['tier'] == 1
+    assert store.evidence('K', 'Tape')['show'] and not store.evidence('K', 'Cut')['show']
+    # a Permanent cut and a Permanent night between the same two: the cut's colour, as it comes first
+    both = cc.Store(pairs + [pair('K', 'Tape', 'track', 'arthel:4masks', [('u', '', 'silver-44')])], targets, {t: t for t in targets}, {}, tiers)
+    assert not both.evidence('K', 'Tape')['show']
+    assert [cc.hue(2, False), cc.hue(2, True), cc.hue(1, False), cc.hue(1, True)] == [cc.GOLD, cc.GREEN, cc.BLUE, cc.INK2]
 
     def spoke(html, name):                                                # the lines drawn before this picker's dot
         return html[:html.index('>' + name + ' ')]
 
-    for name, colour in (('Tape', cc.GOLD), ('Disc', cc.INK2)):
+    for name, colour in (('Cut', cc.GOLD), ('Tape', cc.GREEN), ('Disc', cc.BLUE), ('Loose', cc.INK2)):
         html = cc.card('K', cc.Store([p for p in pairs if name in (p['a'], p['b'])], targets, {t: t for t in targets}, {}, tiers),
                        lambda n: True, {})
         assert f'stroke="{colour}"' in html and 'stroke-dasharray="1 5"' not in html
-    html = cc.card('K', cc.Store(pairs[2:], targets, {t: t for t in targets}, {}, tiers), lambda n: True, {})
+    # each kind lighter than the one before, and gold a step further ahead ("make the gold lines a little bolder")
+    heavy = [float(re.search(rf'stroke="{colour}" stroke-width="([\d.]+)"', cc.strokes_svg((0, 0), (9, 0), tier, False, False, show)).group(1))
+             for tier, show, colour in ((2, False, cc.GOLD), (2, True, cc.GREEN), (1, False, cc.BLUE), (1, True, cc.INK2))]
+    assert heavy == sorted(heavy, reverse=True) and len(set(heavy)) == 4 and heavy[0] == 2.8 and heavy[0] - heavy[1] > heavy[1] - heavy[2]
+    # the key's marks are classes of the card's stylesheet: each one it names is there, in the colour the lines are
+    css = (pathlib.Path(__file__).parent.parent / 'extensions/PickiPediaContent/resources/ext.pickipediaContent.connectome.css').read_text()
+    for cls in re.findall(r'cc-key (cc-\w+)', cc.KEY_LINES):
+        assert f'.connectome-card .{cls} {{' in css
+    assert 'cc-green' in cc.KEY_LINES and f'solid {cc.GREEN};' in css and f'solid {cc.GOLD};' in css and f'solid {cc.BLUE};' in css
+    html = cc.card('K', cc.Store(pairs[2:3], targets, {t: t for t in targets}, {}, tiers), lambda n: True, {})
     assert 'stroke-dasharray="1 5"' in html and f'stroke="{cc.GOLD}"' not in html
-    assert 'Permanent Release' in html and 'Full Release' in html         # the legend names the tiers
+    for said in ('Permanent</a> track', 'Permanent show', 'Full track', 'Full show'):       # the key names the four kinds
+        assert said in html
 
 
 def test_a_store_with_no_tiers_given_draws_a_tape_full_not_permanent():
@@ -480,7 +498,8 @@ def test_build_builds_a_song_card_for_a_song_page_and_names_it_like_the_wiki_doe
     assert 'August' in card
     # the CID goes in the links (data-cut, the explore href, the paper, the centre's link, the play chip), not the text
     assert card.count('QmSongCid') == 5 and card.count('href="/rabbithole/?track=QmSongCid"') == 1
-    assert '?cut=QmSongCid' in card                                          # the explore link opens this cut's graph
+    assert '"/bacon?s=August&amp;cut=QmSongCid"' in card                      # the explore link opens this cut's graph,
+    assert '?cut=' not in card                                               # written as /bacon's own address writes it
     assert 'Justin Myles Holmes' in card and 'guitar; vocals' in card
     cc.write(result, str(tmp_path), {})
     want = hashlib.md5('Song:August'.encode()).hexdigest() + '.html'
@@ -721,3 +740,126 @@ def test_a_cuts_writer_comes_through_the_build_by_the_wikis_own_name():
     g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 15), None, song_whole(), [])['graph']
     names = [p[0] for p in g['people']]
     assert g['songcast']['QmCutOne']['writers'] == [names.index('Justin Myles Holmes')]
+
+
+def test_a_chartifact_belongs_to_the_cut_it_names_or_the_page_s_only_cut():
+    one = ("{{Studio cut\n|record=4masks\n|cid=QmA\n|Harry Clark=mandolin\n}}\n"
+           "{{Chartifact\n|section=third A part\n|picker= Harry Clark\n|kind= break\n|instrument= mandolin\n}}\n"
+           "{{Chartifact\n|section= second B part \n|kind=break\n|picker=Kyle Tuttle\n|instrument=5-string banjo\n|cut=QmB\n}}\n"
+           "{{Chartifact\n|section=tag\n|instrument=fiddle\n}}\n")
+    cuts = cc.studio_cuts_from(one)
+    assert cc.chartifacts_from(one, cuts) == {"QmA": [["third A part", "break", "Harry Clark", "mandolin"]],
+                                               "QmB": [["second B part", "break", "Kyle Tuttle", "5-string banjo"]]}
+    two = one.replace("{{Chartifact", "{{Studio cut\n|record=Other\n|cid=QmC\n}}\n{{Chartifact", 1)
+    # two cuts on the page: one naming no cut is no cut's
+    assert cc.chartifacts_from(two, cc.studio_cuts_from(two)) == {"QmB": [["second B part", "break", "Kyle Tuttle", "5-string banjo"]]}
+
+
+# ---- who wrote a song: its card says "by" them or "traditional" (Justin, #connectome, 23 Nov 2026, 18:30Z) ----
+
+def test_a_songs_authors_are_its_composer_or_the_tradition():
+    assert cc.authors_from('{{Song\n|composer=Justin Holmes\n}}') == ['Justin Holmes']
+    assert cc.authors_from('{{Song\n|status=proposed\n|traditional=yes\n}}') == 'traditional'
+    assert cc.authors_from('{{Song|traditional = Yes}}') == 'traditional'
+    assert cc.authors_from('{{Song\n|composer=Justin Holmes\n|traditional=yes\n}}') == ['Justin Holmes']   # as the template shows it
+    assert cc.authors_from('{{Song\n|status=proposed\n}}') is None                                         # nobody guessed
+    assert cc.authors_from('{{Song\n|traditional=\n}}') is None
+    assert cc.authors_from('Traditional, says the prose. {{Song}}') is None
+
+
+def test_song_authors_are_read_off_every_page_with_a_song_block():
+    class Api(cc.Wiki):
+        def api(self, **q):
+            if q.get('list') == 'embeddedin':
+                assert q['eititle'] == 'Template:Song'
+                return {'query': {'embeddedin': [{'title': 'Song:August'}, {'title': 'Song:Drowsy Maggie'}, {'title': 'Song:Victory'}]}}
+            text = {'Song:August': '{{Song\n|composer=Justin Holmes\n}}', 'Song:Drowsy Maggie': '{{Song\n|traditional=yes\n}}',
+                    'Song:Victory': '{{Song\n|status=proposed\n}}'}
+            return {'query': {'pages': [{'title': t, 'revisions': [{'slots': {'main': {'content': x}}}]} for t, x in text.items()]}}
+
+    assert Api('https://example.test/').song_authors() == {'August': ['Justin Holmes'], 'Drowsy Maggie': 'traditional'}
+
+
+def test_the_graph_carries_the_authors_of_the_songs_it_names():
+    pairs = [pair('Kyle Tuttle', 'Justin Holmes', 'track', 'arthel:4masks', [('u', '', 'august'), ('u', '', 'barlows-jig')])]
+    whole = {'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []}}
+    wiki = FakeWiki(pages={'Kyle Tuttle', '4masks'}, musicians=['Kyle Tuttle'])
+    wiki.song_authors = lambda: {'August': ['Justin Holmes'], "Barlow's Jig": ['Justin Holmes'], 'Elsewhere': 'traditional'}
+    g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 13), None, whole, [])['graph']
+    named = {s for _, _, ev in g['ties'] for e in ev for s in e[3]}
+    assert named == {'August', 'Barlows Jig'}
+    assert g['authors'] == {'August': ['Justin Holmes'], 'Barlows Jig': ['Justin Holmes']}   # by the graph's own spelling; Elsewhere isn't in it
+
+
+def test_the_graph_says_which_venues_and_acts_have_a_page():
+    pairs = [pair('Kyle Tuttle', 'Sam Leslie', 'show', 'wiki:Show:K')]
+    whole = {'wiki:Show:K': {'kind': 'show', 'title': 'Show:K', 'date': 'block 1', 'artist': 'Kyle Tuttle', 'grp': 'wiki:Show:K',
+                             'formats': [], 'venue': "Dee's Country Cocktail Lounge", 'city': '', 'poster': '',
+                             'bands': [{'title': '', 'members': ['Kyle Tuttle', 'Sam Leslie']}]}}
+    wiki = FakeWiki(pages={'Kyle Tuttle', 'Sam Leslie', "Dee's Country Cocktail Lounge"}, musicians=['Kyle Tuttle'])
+    credits = [('Kyle Tuttle', '', 'wiki:Show:K', 'show', 'u'), ('Sam Leslie', 'bass', 'wiki:Show:K', 'show', 'u')]
+    g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 26), None, whole, credits)['graph']
+    names = [p[0] for p in g['people']]
+    k = [i for i, m in enumerate(g['music']) if m[0] == 'wiki:Show:K'][0]
+    assert g['acts'][str(k)] == [['Kyle Tuttle', [names.index('Kyle Tuttle'), names.index('Sam Leslie')], names.index('Kyle Tuttle')]]
+    assert "Dee's Country Cocktail Lounge" in g['wikipages'] and 'Kyle Tuttle' in g['wikipages']
+
+
+def test_a_band_named_in_a_source_is_the_band_and_never_a_picker():
+    pairs = [pair('Kyle Tuttle', 'Della Mae', 'show', 'lma:show1'), pair('Kyle Tuttle', 'Molly Tuttle', 'show', 'lma:show1'),
+             pair('Della Mae', 'Molly Tuttle', 'show', 'lma:show1'), pair('Kyle Tuttle', 'The Dellas', 'record', 'discogs:1'),
+             pair('Kyle Tuttle', 'Molly Tuttle', 'track', 'arthel:4masks', [('u', '', 'silver-44')])]
+    whole = {'lma:show1': {'kind': 'show', 'title': 'Kyle Live', 'date': '2025-07-05', 'artist': 'Sam Grisman Project',
+                           'grp': 'lma:show1', 'formats': []},
+             'discogs:1': {'kind': 'record', 'title': 'Some Record', 'date': '2015', 'artist': 'Somebody', 'grp': 'discogs:1',
+                           'formats': []},
+             'arthel:4masks': {'kind': 'record', 'title': '4masks', 'date': '', 'artist': '', 'grp': 'arthel:4masks', 'formats': []}}
+    credits = [('Kyle Tuttle', 'banjo', 'lma:show1', 'show', 'u'), ('Molly Tuttle', 'guitar', 'lma:show1', 'show', 'u'),
+               ('della mae', '', 'lma:show1', 'show', 'u'), ('The Dellas', '', 'discogs:1', 'release', 'v'),
+               ('Della Mae', '', 'arthel:4masks', 'none', 'w')]      # named there, and not as playing ("a Della Mae cover")
+    wiki = FakeWiki(redirects={'The Dellas': 'Della Mae', 'Kimber': 'Kimber Ludiker'},
+                    pages={'Kyle Tuttle', 'Molly Tuttle', 'Della Mae', 'Kimber Ludiker'}, musicians=['Kyle Tuttle'])
+    bands = [{'band': 'Della Mae', 'kind': 'regular', 'leader': '', 'offshoot_of': '', 'billed_as': ['della mae'],
+              'stints': [{'name': 'Kimber', 'plays': 'fiddle', 'from': '', 'until': ''}]}]
+    result = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 27), None, whole, credits, bands)
+    g = result['graph']
+    names = [p[0] for p in g['people']]
+    assert names == ['Kimber Ludiker', 'Kyle Tuttle', 'Molly Tuttle']       # the band is out; its member is in, by her page's name
+    assert [(names[a], names[b]) for a, b, _ in g['ties']] == [('Kyle Tuttle', 'Molly Tuttle')]
+    music = [m[0] for m in g['music']]
+    # where a source names it: the show. Not the record nobody else here is on, nor where it is named and not playing
+    assert 'arthel:4masks' in music and 'discogs:1' not in music
+    assert g['bands'] == [['Della Mae', 'regular', -1, '', ['della mae'], [[0, 'fiddle', '', '']], [music.index('lma:show1')]]]
+    assert 'Della Mae' not in result['cards']['Kyle Tuttle']                # nor on anybody's card
+    before = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 27), None, whole, credits)['graph']
+    assert 'Della Mae' in [p[0] for p in before['people']] and 'bands' not in before    # with no band page, as it was
+
+
+def test_the_bands_are_read_back_from_the_store_and_an_older_store_has_none(tmp_path):
+    import sqlite3
+    import connectome_store
+    bands = [{'band': 'The Band', 'kind': 'regular', 'leader': 'Ann', 'offshoot_of': '', 'billed_as': ['Band', 'Them'],
+              'stints': [{'name': 'Ann', 'plays': 'fiddle', 'from': '2015', 'until': '', 'source': 'u', 'checked': '2026-11-27'},
+                         {'name': 'Bob', 'plays': 'bass', 'from': '', 'until': '2019-03'}]}]
+    connectome_store.to_sqlite([], str(tmp_path / 'c.sqlite'), bands).close()
+    assert cc.load_bands(str(tmp_path / 'c.sqlite')) == [
+        {'band': 'The Band', 'kind': 'regular', 'leader': 'Ann', 'offshoot_of': '', 'billed_as': ['Band', 'Them'],
+         'stints': [{'name': 'Ann', 'plays': 'fiddle', 'from': '2015', 'until': ''},
+                    {'name': 'Bob', 'plays': 'bass', 'from': '', 'until': '2019-03'}]}]
+    sqlite3.connect(str(tmp_path / 'old.sqlite')).execute('CREATE TABLE targets (id TEXT)').connection.commit()
+    assert cc.load_bands(str(tmp_path / 'old.sqlite')) == []
+
+
+def test_a_band_billed_as_its_leader_leaves_the_leader_a_picker():
+    pairs = [pair('Billy Strings', 'Jarrod Walker', 'show', 'lma:show1'), pair('Billy Strings Band', 'Jarrod Walker', 'show', 'lma:show1')]
+    whole = {'lma:show1': {'kind': 'show', 'title': 'Live', 'date': '2025-07-05', 'artist': 'Billy Strings', 'grp': 'lma:show1',
+                           'formats': []}}
+    credits = [('Billy Strings', 'guitar', 'lma:show1', 'show', 'u'), ('Jarrod Walker', 'mandolin', 'lma:show1', 'show', 'u')]
+    wiki = FakeWiki(pages={'Billy Strings', 'Jarrod Walker', 'Billy Strings (band)'})
+    bands = [{'band': 'Billy Strings (band)', 'kind': 'regular', 'leader': 'Billy Strings', 'offshoot_of': '',
+              'billed_as': ['Billy Strings', 'Billy Strings Band'], 'stints': [{'name': 'Jarrod Walker', 'plays': 'mandolin', 'from': '', 'until': ''}]}]
+    g = cc.build(pairs, TARGETS, GROUPS, wiki, date(2026, 11, 27), None, whole, credits, bands)['graph']
+    names = [p[0] for p in g['people']]
+    assert names == ['Billy Strings', 'Jarrod Walker']                      # the leader stays; "Billy Strings Band" is the band
+    assert g['bands'][0][:3] == ['Billy Strings (band)', 'regular', 0]
+    assert [(names[a], names[b]) for a, b, _ in g['ties']] == [('Billy Strings', 'Jarrod Walker')]

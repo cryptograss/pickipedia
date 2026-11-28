@@ -12,7 +12,7 @@ use PPFrame;
  *
  * Marks a single bot-proposed claim, whatever shape that claim takes.
  *
- *     <proposed by="Magent" source="stationinn.com">
+ *     <proposed by="Magent" source="stationinn.com" note="the 2019 setlist">
  *     {{Show|artists=Billy Strings|venue=The Station Inn|blockheight=24140272}}
  *     </proposed>
  *
@@ -104,6 +104,10 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 
 		$by = isset( $args['by'] ) ? trim( $args['by'] ) : '';
 		$source = isset( $args['source'] ) ? trim( $args['source'] ) : '';
+		// What the proposer says about the claim, for the person verifying it:
+		// where in the source to look, or "supporting text" for words that
+		// only explain the page and cite nothing (Justin, 10 Nov).
+		$note = isset( $args['note'] ) ? trim( $args['note'] ) : '';
 		// action="remove": a proposal that this goes, not that it is so. It
 		// stays on the page, struck through, so the person verifying sees
 		// what would be lost; verifying it takes it away (SpecialVerifyBotEdits).
@@ -137,6 +141,9 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 		if ( $source !== '' ) {
 			$attributes['data-source'] = $source;
 		}
+		if ( $note !== '' ) {
+			$attributes['data-note'] = $note;
+		}
 		if ( $removal ) {
 			$attributes['data-pv-action'] = 'remove';
 		}
@@ -147,7 +154,7 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 		}
 		$open .= '>';
 
-		return $open . $html . self::badge( $by, $source, $removal ) . '</' . $element . '>';
+		return $open . $html . self::badge( $by, $source, $removal, $note ) . '</' . $element . '>';
 	}
 
 	/**
@@ -168,9 +175,11 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 	 *
 	 * @param string $by Proposer, possibly empty.
 	 * @param string $source Source hint, possibly empty.
+	 * @param bool $removal Whether this proposes a removal.
+	 * @param string $note The proposer's note, possibly empty.
 	 * @return string HTML.
 	 */
-	private static function badge( string $by, string $source, bool $removal = false ): string {
+	private static function badge( string $by, string $source, bool $removal = false, string $note = '' ): string {
 		$label = wfMessage( $removal ? 'pickipediaverification-removal-badge' : 'pickipediaverification-proposed-badge' )->text();
 		$badge = '<sup class="pv-proposed__badge">[' . htmlspecialchars( $label ) . ']</sup>';
 
@@ -184,6 +193,10 @@ class ParserHooks implements ParserFirstCallInitHook, BeforePageDisplayHook {
 			? wfMessage( 'pickipediaverification-proposed-byline' )->params( $by )->text()
 			: wfMessage( 'pickipediaverification-proposed-byline-source' )
 				->params( $by, $source )->text() );
+
+		if ( $note !== '' ) {
+			$byline .= ' · ' . $note;
+		}
 
 		return $badge . '<span class="pv-proposed__byline">'
 			. htmlspecialchars( $byline ) . '</span>';

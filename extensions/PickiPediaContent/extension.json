@@ -90,6 +90,17 @@
 				"ext.pickipediaContent.connectome.js"
 			]
 		},
+		"ext.pickipediaContent.showPage": {
+			"scripts": [
+				"ext.pickipediaContent.showPage.js"
+			],
+			"styles": [
+				"ext.pickipediaContent.showPage.css"
+			],
+			"dependencies": [
+				"mediawiki.util"
+			]
+		},
 		"ext.pickipediaContent.chartifactButton": {
 			"scripts": [
 				"ext.pickipediaContent.chartifactButton.js"
