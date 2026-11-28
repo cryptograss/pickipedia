@@ -309,6 +309,30 @@ export function tieShade( tie, music ) {
 	return tie.tier === PERMANENT ? ( tie.show ? 'ps' : 'pt' ) : tie.tier === FULL ? ( tie.show ? 'fs' : 'ft' ) : 't0';
 }
 
+/**
+ * Seats kept out of a name's row (Justin, #connectome, 28 Nov 2026, 00:51Z: "Dee's and Geoff are kinda smushed
+ * together"): a point standing in the row a name is written on, nearer the name's middle than its end and `off`
+ * more, is moved out past that end on its own side; where the frame has no room there, up over the row or down
+ * under it, whichever it was nearer. Moves the points given, and returns how many it moved.
+ *
+ * row: { x, half, y1, y2 }, the name's middle, half its width as written, and the row's top and bottom.
+ */
+export function clearRow( points, row, off, frame ) {
+	let moved = 0;
+	for ( const p of points ) {
+		if ( p.y > row.y1 - 16 && p.y < row.y2 + 16 && Math.abs( p.x - row.x ) < row.half + off ) {
+			const x = row.x + ( p.x >= row.x ? 1 : -1 ) * ( row.half + off );
+			if ( x >= 50 && x <= frame.W - 50 ) {
+				p.x = Math.round( x );
+			} else {
+				p.y = Math.round( p.y < ( row.y1 + row.y2 ) / 2 ? Math.max( 40, row.y1 - 18 ) : Math.min( frame.H - 40, row.y2 + 18 ) );
+			}
+			moved++;
+		}
+	}
+	return moved;
+}
+
 /** A piece's standing: a track's or a show's own; a record whole, where no source says who is on which track, after them all. */
 export function pieceStanding( G, piece ) {
 	const m = G.music[ piece.m ];
