@@ -701,3 +701,159 @@ def test_a_band_is_asked_of_archive_org_only_as_the_creator():
     assert queries == ['creator:"Water tower" AND (mediatype:etree OR mediatype:audio)'] and sources == ["lma own1"]
     walk.walk_one("A B", ["A B"], {}, set(), look)
     assert queries[1] == walk.IA_QUERY.format(name="A B")                    # a picker's, as before
+
+
+# ---------------------------------------------------------------------------
+# MusicBrainz says which Discogs artist
+# ---------------------------------------------------------------------------
+
+WT, OTHER = "c2bef72b-4711-4be7-af27-95c89df2b564", "deadbeef-0000-0000-0000-000000000000"
+THREE = [("4278481", "Water Tower"), ("2496713", "Water Tower"), ("4604789", "Water Tower")]
+
+
+def towers(mb=((WT, "Water Tower"),), mb_links=("2496713",), asked=None):
+    def mb_discogs(mbid):
+        if asked is not None:
+            asked.append(mbid)
+        if isinstance(mb_links, Exception):
+            raise mb_links
+        return list(mb_links)
+    return {"discogs_named": lambda name: list(THREE), "discogs_releases": lambda a: [f"discogs {a}00", f"discogs {a}01"],
+            "mb_named": lambda name: list(mb), "mb_releases": lambda a: ["mb a9408b4c-fbee-4341-a907-91c5e02ab4c5"],
+            "ia_search": lambda q, rows: [], "discogs_about": lambda a: {"releases": 1}, "mb_about": lambda a: {"releases": 1},
+            "mb_discogs": mb_discogs}
+
+
+def test_musicbrainz_says_which_of_several_discogs_artists_is_meant():
+    asks = []
+    sources, notes = walk.walk_one("Water tower", ["Water tower"], {}, set(), towers(), asks, band=True)
+    assert sources == ["discogs 249671300", "discogs 249671301", "mb a9408b4c-fbee-4341-a907-91c5e02ab4c5"]
+    assert asks == []                                                # nothing left to ask a person
+    assert notes[0] == ("Discogs: 3 artists named Water tower; walked https://www.discogs.com/artist/2496713, "
+                        "the one MusicBrainz's artist of that name links")
+    assert notes[1:3] == ["Discogs: 2 added of 2 found", "MusicBrainz: 1 added of 1 found"]
+
+
+def test_musicbrainz_says_nothing_it_cannot_say_plainly():
+    asked = lambda look: (lambda asks: (walk.walk_one("Water tower", ["Water tower"], {}, set(), look, asks), asks)[1])([])
+    was_asked = lambda asks: [(a["site"], len(a["candidates"])) for a in asks]
+    # it links a Discogs artist who isn't one of the three of that name: not taken, and the question stands
+    assert was_asked(asked(towers(mb_links=("999",)))) == [("Discogs", 3)]
+    # it links two of the three, or none: the question stands
+    assert was_asked(asked(towers(mb_links=("2496713", "4604789")))) == [("Discogs", 3)]
+    assert was_asked(asked(towers(mb_links=()))) == [("Discogs", 3)]
+    # MusicBrainz has two of the name itself: neither is asked for a link, and both sites ask
+    seen = []
+    two = towers(mb=((WT, "Water Tower"), (OTHER, "Water Tower")), asked=seen)
+    assert was_asked(asked(two)) == [("Discogs", 3), ("MusicBrainz", 2)] and seen == []
+    # MusicBrainz down for the link: the question stands, and the walk says why
+    sources, notes = walk.walk_one("Water tower", ["Water tower"], {}, set(), towers(mb_links=OSError("503")))
+    assert not any(s.startswith("discogs") for s in sources) and f"MusicBrainz: artist {WT}: 503" in notes
+
+
+def test_musicbrainz_is_asked_for_its_link_only_when_discogs_has_several_and_once_a_walk():
+    seen = []
+    look = towers(asked=seen)
+    look["discogs_named"] = lambda name: THREE[1:2]                  # Discogs has the one: nothing to settle
+    walk.walk_one("Water tower", ["Water tower"], {}, set(), look)
+    assert seen == []
+    walk.walk_one("Water tower", ["Water tower"], {"discogs-artist": ["4278481"]}, set(), towers(asked=seen))
+    assert seen == []                                                # the page says which: a person's word stands
+    walk.walk_one("Water tower", ["Water tower", "Water Tower Band", "WT"], {}, set(), towers(asked=seen))
+    assert seen == [WT]                                      # three names, each with three on Discogs: asked once
+
+
+def test_a_person_linking_the_musicbrainz_artist_is_enough_for_it_to_say_which():
+    look = towers(mb=((WT, "Water Tower"), (OTHER, "Water Tower")))
+    asks = []
+    sources, _ = walk.walk_one("Water tower", ["Water tower"], {"mb-artist": [WT]}, set(), look, asks)
+    assert "discogs 249671300" in sources and asks == []
+
+
+def test_the_discogs_artists_a_musicbrainz_page_links():
+    page = {"relations": [{"type": "discogs", "url": {"resource": "https://www.discogs.com/artist/2496713"}},
+                          {"type": "official homepage", "url": {"resource": "https://www.watertowerband.com/"}},
+                          {"type": "discogs", "url": {"resource": "https://www.discogs.com/artist/2496713"}},
+                          {"type": "member of band", "artist": {"name": "Kenny Feinstein"}},
+                          {"type": "discogs", "url": {"resource": "https://www.discogs.com/label/77"}}]}
+    calls = []
+    get = lambda path, **params: (calls.append((path, params)), page)[1]
+    assert walk.mb_discogs_artists(WT, get) == ["2496713"]
+    assert calls == [(f"artist/{WT}", {"inc": "url-rels"})]
+
+
+# ---------------------------------------------------------------------------
+# The log, as a page
+# ---------------------------------------------------------------------------
+
+def a_store(tmp_path, rows):
+    import sqlite3
+    db = str(tmp_path / "connectome.sqlite")
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE targets (id TEXT)")
+    con.execute("CREATE TABLE credits (person TEXT, target TEXT)")
+    for target, people in rows.items():
+        con.execute("INSERT INTO targets VALUES (?)", (target,))
+        con.executemany("INSERT INTO credits VALUES (?, ?)", [(p, target) for p in people])
+    con.commit()
+    con.close()
+    return db
+
+
+def test_the_log_says_of_each_source_whether_it_is_waiting_fetched_or_read(tmp_path):
+    raw = tmp_path / "raw"
+    for d in ("discogs", "mb", "lma/2026"):
+        (raw / d).mkdir(parents=True)
+    (raw / "mb" / "aaaa.json").write_text("{}")
+    (raw / "lma" / "2026" / "tape[1].json").write_text("{}")         # a name glob would read as a pattern
+    (raw / "lma" / "2026" / "tape2.json").write_text("{}")
+    db = a_store(tmp_path, {"lma:tape2": ["Water tower", "Joe Craven", "Joe Craven"], "discogs:7": []})
+    states = walk.source_states(["discogs 7", "discogs 8", "mb aaaa", "lma tape[1]", "lma tape2", "lma tape3"], str(raw), db)
+    assert states == [("discogs 7", "read", []), ("discogs 8", "waiting", []), ("mb aaaa", "fetched", []),
+                      ("lma tape[1]", "fetched", []), ("lma tape2", "read", ["Joe Craven", "Water tower"]),
+                      ("lma tape3", "waiting", [])]
+    assert walk.source_states(["discogs 8"], None, None) == [("discogs 8", "", [])]      # nothing known, nothing claimed
+
+
+def test_the_log_is_a_page_of_every_walk_the_newest_first_with_its_question(tmp_path):
+    walked = {
+        "Water tower": {"requested": "2026-11-28T00:56:08Z", "walked": "2026-11-28T01:02:46Z", "by": "category", "band": True,
+                        "names": ["Water tower"], "sources": ["lma tape2", "mb aaaa"],
+                        "notes": ["Discogs: 3 artists named Water tower; a link to one on the page or its talk page says which"],
+                        "asks": [{"site": "Discogs", "name": "Water tower", "found": 3, "candidates": [
+                            {"url": "https://www.discogs.com/artist/2496713", "name": "Water Tower", "releases": 6,
+                             "years": [2012, 2026], "titles": ["Fly Around", "<b>Stickerville</b>"]},
+                            {"url": "https://www.discogs.com/artist/4604789", "name": "Water Tower", "releases": 1, "years": [2012, 2012]}]}],
+                        "box": {"state": "wanted", "note": "no login for the wiki in this build; the candidates are in asks"}},
+        "Sam O'Leslie": {"requested": "2026-11-24T00:32:36Z", "walked": "2026-11-24T00:36:20Z", "by": "hand",
+                         "names": ["Sam O'Leslie", "Sam <i>Leslie</i>"], "sources": [], "notes": ["archive.org: 0 added of 0 found"],
+                         "category": {"state": "moved to Walked", "at": "2026-11-24T00:36:21Z", "rev": 5}},
+    }
+    db = a_store(tmp_path, {"lma:tape2": ["Water tower"]})
+    page = walk.log_page(walked, None, db, written="2026-11-28T02:00:00Z")
+    assert page.index(">Water tower</a>") < page.index("Sam O&#x27;Leslie</a>")           # the newest first
+    assert 'href="https://pickipedia.xyz/wiki/Water_tower"' in page and '<span class="tag">band</span>' in page
+    assert "6 min 38 s later" in page and "Asked for by hand" in page
+    assert "<b>Which Water tower is this?</b> Discogs has 3." in page
+    assert "6 releases, 2012 to 2026, Fly Around; &lt;b&gt;Stickerville&lt;/b&gt;" in page and "1 release, 2012</li>" in page
+    assert "The question, as a box on the page: wanted (no login for the wiki in this build" in page
+    assert "The page was not moved to Category:Walked: that walk had no login for the wiki." in page
+    assert "<b>2 sources added</b>: 1 read into the store." in page and "1 name read off them: Water tower." in page
+    assert 'href="https://archive.org/details/tape2"' in page and 'href="https://musicbrainz.org/release/aaaa"' in page
+    assert "Looked up as: Sam O&#x27;Leslie; Sam &lt;i&gt;Leslie&lt;/i&gt;." in page and "<i>" not in page
+    assert "The page&#x27;s category" not in page and "The page's category: moved to Walked." in page
+    assert "No sources added." in page and page.count("<h2>") == 2
+    assert walk.log_page({}, written="x").count("<h2>") == 0 and "0 walks" in walk.log_page({}, written="x")
+
+
+def test_log_writes_the_page_and_walks_nobody(tmp_path, monkeypatch, capsys):
+    (tmp_path / "walked.json").write_text(json.dumps({"A B": {"requested": "2026-11-28T00:00:00Z", "walked": "2026-11-28T00:01:00Z",
+                                                              "names": ["A B"], "sources": ["discogs 9"], "notes": []}}))
+    monkeypatch.setattr(walk, "wiki_getter", lambda wiki: (_ for _ in ()).throw(AssertionError("the wiki was asked")))
+    monkeypatch.setattr(walk, "requests", lambda get: (_ for _ in ()).throw(AssertionError("the category was read")))
+    out = tmp_path / "walked.html"
+    assert walk.main(["x", "--cache", str(tmp_path), "--log", str(out), "--raw", str(tmp_path / "raw")]) == 0
+    assert "the log of 1 walks is written" in capsys.readouterr().out
+    assert ">A B</a>" in out.read_text() and "1 waiting to be fetched" in out.read_text()
+    (tmp_path / "walked.json").unlink()
+    assert walk.main(["x", "--cache", str(tmp_path), "--log", str(out)]) == 0 and "0 walks" in out.read_text()

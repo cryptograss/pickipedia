@@ -37,7 +37,14 @@ trigger Artificial Dumb only." So a walk is plain lookups, the same for whoever 
                12 items of their own, none in etree or the Tapers Section). A name only
                mentioned outside those two collections, in a radio show's playlist or a podcast, isn't enough.
 
-Two or more artists of one name on a site, and none linked: nothing from that site, and the walk says so. At most CAP
+Two or more artists of one name on Discogs, and none linked: MusicBrainz is asked. Where it has the one artist of
+that name (or the page links one), and that artist's own MusicBrainz page links one of those Discogs artists, that
+is the one walked: MusicBrainz saying which, as a link on the page does (Justin, #connectome.walk, 28 Nov 2026:
+"I requested one for Water Tower and it didn't seem to do anything"; Discogs has three Water Towers, and
+MusicBrainz's Water Tower links Discogs artist 2496713). A Discogs artist it links who is not one of those of the
+name is not taken.
+
+Otherwise, two or more artists of one name on a site, and none linked: nothing from that site, and the walk says so. At most CAP
 of each kind, and nothing the store's sources already have. Who played on what is for the readers to say
 (connectome_store.py), as for any other source.
 
@@ -62,6 +69,12 @@ is, and so is one whose request shares its line with other words (the wiki's gat
 line); walked.json says which. With no login nothing moves, and a page is still walked once for each time it was put
 in the category, as before.
 
+The log (Justin, #connectome.walk, 28 Nov 2026: "Where are those logs kept? I'd like to read them more
+frequently"). `--log FILE` writes every walk there is as one page a person can read, the newest first, and walks
+nobody: what was asked and when, what each site answered, the question a walk is still asking and whether it
+reached the page, and for each source whether it has been fetched and how many names the store read off it. The
+build writes it after the store, beside walked.json: https://pickipedia.xyz/assets/connectome/walked.html
+
 What a walk finds goes into the cache, never into git, each line saying which request added it:
   walked.json          page -> {"requested", "by", "walked", "names", "sources", "notes", "asks", "box", "category"},
                        and "band": true for a band's page
@@ -70,13 +83,16 @@ What a walk finds goes into the cache, never into git, each line saying which re
 """
 import argparse
 import datetime
+import glob
+import html
 import http.cookiejar
 import json
 import os
 import re
+import sqlite3
 import sys
 import time
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
 import connectome_store
@@ -419,6 +435,16 @@ def mb_about(mbid, get):
             "titles": list(dict.fromkeys(r.get("title", "") for r in rel if r.get("title")))[:TITLES_SHOWN]}
 
 
+def mb_discogs_artists(mbid, get):
+    """The Discogs artists a MusicBrainz artist's own page links (its URL relationships), each once."""
+    out = []
+    for rel in get(f"artist/{mbid}", inc="url-rels").get("relations", []):
+        m = LINKS[1][0].search((rel.get("url") or {}).get("resource", ""))
+        if m and m.group(1) not in out:
+            out.append(m.group(1))
+    return out
+
+
 def candidates(site, name, found, about):
     """The question a site's several artists of one name make: {"site", "name", "found", "candidates"}, each
     candidate {"url", "name"} with what `about` says of them (walk_one's: once an artist, within the walk's
@@ -437,9 +463,11 @@ def candidates(site, name, found, about):
     return {"site": site, "name": name, "found": len(found), "candidates": out}
 
 
-def lookup_artists(site, names, linked_ids, named, notes, asks=None, about=None):
+def lookup_artists(site, names, linked_ids, named, notes, asks=None, about=None, said=None):
     """The artists to walk on one site: the linked ones, or else, for each name, the one artist of that name. Where
-    a name has several and nothing is linked, the question goes into asks (candidates())."""
+    a name has several and nothing is linked, the question goes into asks (candidates()), unless said() names
+    exactly one of them: said is asked only then, and returns the ids of this site's artists that another site's
+    artist of the name links, and that site's name (walk_one: MusicBrainz, for Discogs)."""
     if linked_ids:
         return list(linked_ids)
     out = []
@@ -452,6 +480,13 @@ def lookup_artists(site, names, linked_ids, named, notes, asks=None, about=None)
         if len(found) == 1:
             out.append(found[0][0])
         elif found:
+            ids, by = said() if said else ([], "")
+            told = [i for i, _ in found if str(i) in ids]
+            if len(told) == 1:
+                out.append(told[0])
+                notes.append(f"{site}: {len(found)} artists named {name}; walked {SITES[site][1]}{told[0]}, "
+                             f"the one {by}'s artist of that name links")
+                continue
             notes.append(f"{site}: {len(found)} artists named {name}; a link to one on the page or its talk page says which")
             if asks is not None and site in SITES:
                 asks.append(candidates(site, name, found, about))
@@ -507,10 +542,37 @@ def walk_one(title, names, links, known, look, asks=None, clock=time.monotonic, 
 
     add([f"discogs {i}" for i in links.get("discogs", [])] + [f"mb {i}" for i in links.get("mb", [])] +
         [f"lma {i}" for i in links.get("lma", [])], LINKS_CAP)
-    for site, key, named, releases in (("Discogs", "discogs", look["discogs_named"], look["discogs_releases"]),
-                                       ("MusicBrainz", "mb", look["mb_named"], look["mb_releases"])):
+    # MusicBrainz is asked who first, so that it can say which of several Discogs artists is meant (said). Its
+    # notes and questions are kept aside, and its candidates asked about after Discogs', so what a walk reports,
+    # adds and spends its ABOUT_BUDGET on stays in the order Discogs, MusicBrainz.
+    mb_notes, mb_asks, linked_from_mb = [], None if asks is None else [], []
+    mb_artists = lookup_artists("MusicBrainz", names, links.get("mb-artist", []), look["mb_named"], mb_notes, mb_asks)
+
+    def said():
+        if look.get("mb_discogs") and not linked_from_mb:
+            ids = []
+            for artist in mb_artists:
+                try:
+                    ids += look["mb_discogs"](artist)
+                except Exception as e:                       # MusicBrainz down for this: the question is asked
+                    mb_notes.append(f"MusicBrainz: artist {artist}: {e}")
+            linked_from_mb.append(ids)
+        return (linked_from_mb[0] if linked_from_mb else []), "MusicBrainz"
+
+    discogs_artists = lookup_artists("Discogs", names, links.get("discogs-artist", []), look["discogs_named"], notes,
+                                     asks, once("discogs"), said)
+    for site, key, artists, releases in (("Discogs", "discogs", discogs_artists, look["discogs_releases"]),
+                                         ("MusicBrainz", "mb", mb_artists, look["mb_releases"])):
         lines = []
-        for artist in lookup_artists(site, names, links.get(key + "-artist", []), named, notes, asks, once(key)):
+        if key == "mb":
+            notes += mb_notes
+            about = once("mb")
+            for ask in mb_asks or []:
+                for c in ask["candidates"] if about else []:
+                    c.update(about(c["url"].rsplit("/", 1)[1]))
+            if asks is not None:
+                asks += mb_asks
+        for artist in artists:
             try:
                 lines += releases(artist)
             except Exception as e:                           # a site down today: the next request walks it
@@ -537,6 +599,7 @@ LOOKUPS = {
     "ia_search": ia_search,
     "discogs_about": lambda a: discogs_about(a, sideman.discogs_get),
     "mb_about": lambda a: mb_about(a, sideman.mb_get),
+    "mb_discogs": lambda a: mb_discogs_artists(a, sideman.mb_get),
 }
 
 
@@ -775,6 +838,126 @@ def box_says(w):
     return f"; Which picker box: {box['state']}" + (f" (revision {box['rev']})" if box.get("rev") else "") + (f" ({box['note']})" if box.get("note") else "")
 
 
+# ---------------------------------------------------------------------------
+# The log, as a page
+# ---------------------------------------------------------------------------
+
+SOURCE_URL = {"discogs": "https://www.discogs.com/release/", "mb": "https://musicbrainz.org/release/",
+              "lma": "https://archive.org/details/"}
+LOG_NAMES_SHOWN = 12
+LOG_STYLE = """
+:root { color-scheme: light dark; }
+body { font: 16px/1.5 system-ui, sans-serif; max-width: 46rem; margin: 0 auto; padding: 1rem; }
+h1 { font-size: 1.5rem; margin-bottom: 0; } h2 { font-size: 1.15rem; margin: 2rem 0 .2rem; border-top: 1px solid #8886; padding-top: 1rem; }
+p, ul { margin: .3rem 0; } ul { padding-left: 1.3rem; } small, .when { opacity: .75; }
+.tag { font-size: .75rem; border: 1px solid; border-radius: 1rem; padding: 0 .5rem; vertical-align: middle; }
+.waits { border-left: 4px solid #c77700; padding-left: .6rem; }
+summary { cursor: pointer; } li.none { opacity: .7; }
+"""
+
+
+def source_states(sources, raw, db):
+    """[(source line, "waiting" | "fetched" | "read", the names the store read off it)] for a walk's sources: a
+    source is fetched when the cache has its file, and read when the store has a row for it. raw: the cache's raw
+    directory, or None; db: the store's connectome.sqlite, or None. Without them nothing is claimed ("")."""
+    names = {}
+    if db and os.path.exists(db):
+        con = sqlite3.connect(db)
+        try:
+            for line in sources:
+                kind, ident = line.split(" ", 1)
+                target = f"{kind}:{ident}"
+                if con.execute("SELECT 1 FROM targets WHERE id = ?", (target,)).fetchone():
+                    names[line] = [r[0] for r in con.execute(
+                        "SELECT DISTINCT person FROM credits WHERE target = ? ORDER BY person", (target,))]
+        finally:
+            con.close()
+    out = []
+    for line in sources:
+        kind, ident = line.split(" ", 1)
+        if line in names:
+            state = "read"
+        elif not raw:
+            state = ""
+        elif (glob.glob(os.path.join(raw, "lma", "*", glob.escape(ident) + ".json")) if kind == "lma" else
+              os.path.exists(os.path.join(raw, kind, ident + ".json"))):
+            state = "fetched"
+        else:
+            state = "waiting"
+        out.append((line, state, names.get(line, [])))
+    return out
+
+
+def log_page(walked, raw=None, db=None, wiki="https://pickipedia.xyz/", written=None):
+    """Every walk in walked.json as one HTML page, the newest first. Everything a site or a page said is escaped."""
+    e = html.escape
+    page_url = lambda t: wiki.rstrip("/") + "/wiki/" + quote(t.replace(" ", "_"), safe=":/()',")
+    link = lambda url, text: f'<a href="{e(url, quote=True)}">{e(text)}</a>'
+    some = lambda n, one, many=None: f"{n} {one if n == 1 else many or one + 's'}"
+    out = ["<!doctype html>", '<html lang="en"><head><meta charset="utf-8">',
+           '<meta name="viewport" content="width=device-width, initial-scale=1">',
+           "<title>The walk's log</title>", f"<style>{LOG_STYLE}</style></head><body>",
+           "<h1>The walk's log</h1>",
+           f'<p class="when">{some(len(walked), "walk")}, the newest first; written {e(written or now_iso())} by the wiki\'s build '
+           f'(every five minutes). A page is walked when it is put in {link(page_url("Category:Walk Requested"), "Category:Walk Requested")}. '
+           f'The same, for a machine: {link("walked.json", "walked.json")}.</p>']
+    for title in sorted(walked, key=lambda t: (walked[t].get("walked", ""), t), reverse=True):
+        w = walked[title]
+        out.append(f'<h2>{link(page_url(title), title)}' + (' <span class="tag">band</span>' if w.get("band") else "") + "</h2>")
+        if w.get("by", "category") == "category":
+            took = since(w["requested"], w["walked"])
+            out.append(f'<p class="when">Put in the category {e(w["requested"])}; walked {e(w["walked"])}, '
+                       f'{int(took // 60)} min {int(took % 60)} s later.</p>')
+        else:
+            out.append(f'<p class="when">Asked for by hand; walked {e(w["walked"])}.</p>')
+        if len(w.get("names", [])) > 1:
+            out.append("<p>Looked up as: " + e("; ".join(w["names"])) + ".</p>")
+        out.append("<ul>" + "".join(f"<li>{e(n)}</li>" for n in w.get("notes", [])) + "</ul>")
+        for ask in [a for a in w.get("asks", []) if a.get("candidates")]:
+            rows = []
+            for c in ask["candidates"]:
+                years = c.get("years") or []
+                about = [some(c["releases"], "release")] if "releases" in c else []
+                about += [str(years[0]) if years[0] == years[-1] else f"{years[0]} to {years[-1]}"] if years else []
+                about += [c["says"]] if c.get("says") else []
+                about += ["; ".join(c["titles"])] if c.get("titles") else []
+                rows.append(f'<li>{link(c["url"], c["url"])}' + (": " + e(", ".join(about)) if about else "") + "</li>")
+            out.append(f'<div class="waits"><p><b>Which {e(ask["name"])} is this?</b> {e(ask["site"])} has {ask["found"]}. '
+                       f"A link to the right one, on the page or its talk page, answers it; then put the page back in "
+                       f"Walk Requested.</p><ul>{''.join(rows)}</ul></div>")
+        box, cat = w.get("box"), w.get("category")
+        if box:
+            out.append(f'<p>The question, as a box on the page: {e(box["state"])}' +
+                       (f' ({e(box["note"])})' if box.get("note") else "") + ".</p>")
+        if cat:
+            out.append(f'<p>The page\'s category: {e(cat["state"])}' + (f' ({e(cat["note"])})' if cat.get("note") else "") + ".</p>")
+        elif w.get("by", "category") == "category":
+            out.append("<p>The page was not moved to Category:Walked: that walk had no login for the wiki.</p>")
+        states = source_states(w.get("sources", []), raw, db)
+        if not states:
+            out.append("<p>No sources added.</p>")
+            continue
+        count = lambda s: sum(1 for _, state, _ in states if state == s)
+        people = sorted({n for _, _, names in states for n in names})
+        said = [f"{count('read')} read into the store"] if db else []
+        said += [f"{count('fetched')} fetched, nothing read into the store",
+                 f"{count('waiting')} waiting to be fetched"] if raw else []
+        out.append(f"<p><b>{some(len(states), 'source')} added</b>" + (": " + "; ".join(said) if said else "") + ".</p>")
+        if db:
+            out.append(f"<p>{some(len(people), 'name')} read off them" +
+                       (": " + e("; ".join(people[:LOG_NAMES_SHOWN])) +
+                        (f"; and {len(people) - LOG_NAMES_SHOWN} more" if len(people) > LOG_NAMES_SHOWN else "") if people else "") + ".</p>")
+        rows = []
+        for line, state, names in states:
+            kind, ident = line.split(" ", 1)
+            what = {"read": some(len(names), "name"), "fetched": "fetched, nothing read", "waiting": "waiting to be fetched", "": ""}[state]
+            rows.append(f'<li class="{"none" if state != "read" or not names else "has"}">{link(SOURCE_URL[kind] + ident, line)}'
+                        + (f" <small>{e(what)}</small>" if what else "") + "</li>")
+        out.append(f"<details><summary>The {some(len(states), 'source')}</summary><ul>{''.join(rows)}</ul></details>")
+    out.append("</body></html>")
+    return "\n".join(out) + "\n"
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description="Walk whoever is in Category:Walk Requested (Artificial Dumb).")
     ap.add_argument("--cache", required=True, help="the connectome cache: walked.json and the walked_* files go here")
@@ -786,8 +969,17 @@ def main(argv):
                     help="walk this page now, in the category or not (repeatable)")
     ap.add_argument("--no-edit", action="store_true",
                     help="write nothing to the wiki, login or not: no Which picker box, and no page moved to Walked")
+    ap.add_argument("--log", metavar="FILE", help="write every walk in the cache as a page a person can read, and walk nobody")
+    ap.add_argument("--raw", metavar="DIR", help="with --log: the cache's raw directory, to say which sources are fetched")
+    ap.add_argument("--db", metavar="FILE", help="with --log: the store's connectome.sqlite, to say what was read off each source")
     args = ap.parse_args(argv[1:])
     os.makedirs(args.cache, exist_ok=True)
+    if args.log:
+        path = os.path.join(args.cache, "walked.json")
+        walked = json.load(open(path)) if os.path.exists(path) else {}
+        _write(args.log, log_page(walked, args.raw, args.db, args.wiki))
+        print(f"Connectome walk: the log of {len(walked)} walks is written")
+        return 0
     wiki_get = wiki_getter(args.wiki)
     user, password = os.environ.get(BOT_USER, ""), os.environ.get(BOT_PASSWORD, "")
     prepend = wiki_editor(args.wiki, user, password) if user and password and not args.no_edit else None

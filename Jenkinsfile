@@ -433,6 +433,9 @@ REQS
                         "${PY}" connectome_card.py --db "${STORE}/connectome.sqlite" --pairs "${STORE}/pairs.json" --wiki https://pickipedia.xyz/ --out "${CACHE}/cards.part" --arthel "${CACHE}/arthel/src/data"
                         cp "${STORE}/connectome.sqlite" "${OUT}/connectome.sqlite"
                         if [ -f "${CACHE}/walked.json" ]; then cp "${CACHE}/walked.json" "${OUT}/walked.json"; fi
+                        # The walk's log as a page a person can read (Justin, #connectome.walk, 28 Nov 2026): every
+                        # walk, what each site answered, and what the store read off each source. No network.
+                        "${PY}" connectome_walk.py --cache "${CACHE}" --log "${OUT}/walked.html" --raw "${CACHE}/raw" --db "${STORE}/connectome.sqlite" || echo "Connectome: the walk's log wasn't written; the build goes on"
                         cp "${CACHE}/cards.part/graph.json" "${CACHE}/cards.part/pairs.json" "${CACHE}/cards.part/names.json" "${CACHE}/cards.part/cards.json" "${OUT}/"
                         rm -rf "${OUT}/cards"
                         mv "${CACHE}/cards.part/cards" "${OUT}/cards"
