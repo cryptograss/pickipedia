@@ -405,32 +405,6 @@ class Hooks implements BeforePageDisplayHook, ParserFirstCallInitHook, GetUserPe
 			|| ( $action === 'view' && $out->getUser()->isRegistered() ) ) {
 			$out->addModules( [ 'ext.pickipediaContent.chartifactButton' ] );
 		}
-		self::addShowPage( $out );
-	}
-
-	/**
-	 * A show page is drawn as a poster (ext.pickipediaContent.showPage.js).
-	 *
-	 * "Show:" is a prefix in the main namespace, not a namespace of its own:
-	 * the convention predates any thought of one, and the pages are named
-	 * Show:<Artist>-<blockheight>. The styles come with the script rather than
-	 * before it on purpose -- they hide the wiki's own chrome, and a reader
-	 * whose JavaScript never arrives should keep the page they can read.
-	 *
-	 * This replaced the pickipedia-show gadget (Justin, #connectome, 26 Nov
-	 * 2026). While MediaWiki:Gadgets-definition still names that gadget both
-	 * load, and whichever runs first builds the hero; neither builds a second.
-	 *
-	 * @param \MediaWiki\Output\OutputPage $out
-	 */
-	private static function addShowPage( $out ): void {
-		$title = $out->getTitle();
-		if ( !$title || $title->getNamespace() !== NS_MAIN
-			|| $out->getRequest()->getVal( 'action', 'view' ) !== 'view'
-			|| strpos( $title->getText(), 'Show:' ) !== 0 ) {
-			return;
-		}
-		$out->addModules( [ 'ext.pickipediaContent.showPage' ] );
 	}
 
 	/**
